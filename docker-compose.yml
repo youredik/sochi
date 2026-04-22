@@ -1,0 +1,88 @@
+services:
+  # Yandex Database — локальный single-node вариант для разработки.
+  # КРИТИЧНО: internal == external ports, потому что YDB Driver discovery
+  # возвращает host:internal_port как endpoint. Если порты разные (напр. 2236:2136),
+  # то с `hostname: localhost` клиент получит `localhost:2136` и попадёт в ЧУЖОЙ
+  # YDB-контейнер другого проекта, висящий на host-порту 2136 (проверено и
+  # задокументировано 2026-04-23 — см. project_ydb_specifics.md).
+  # Сдвиг +100 от дефолтов — чтобы не конфликтовать с другими локальными YDB.
+  # YDB_USE_IN_MEMORY_PDISKS=true — данные в RAM, мгновенный старт, не для prod.
+  ydb:
+    image: ydbplatform/local-ydb:25.3.1.25
+    hostname: localhost
+    platform: linux/amd64
+    ports:
+      - '2235:2235'
+      - '2236:2236'
+      - '8865:8865'
+    environment:
+      - GRPC_TLS_PORT=2235
+      - GRPC_PORT=2236
+      - MON_PORT=8865
+      - YDB_USE_IN_MEMORY_PDISKS=true
+      - YDB_DEFAULT_LOG_LEVEL=NOTICE
+    healthcheck:
+      test: ['CMD-SHELL', '/ydb -e grpc://localhost:2236 -d /local --no-discovery sql -s "SELECT 1"']
+      interval: 10s
+      start_period: 20s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./schema:/schema:ro
+      - ydb_data:/ydb_data
+
+  # MinIO — S3-совместимое хранилище (локальная замена Yandex Object Storage).
+  # Host-порты: 9100 S3 API, 9101 web UI (http://localhost:9101, minioadmin/minioadmin).
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    ports:
+      - '9100:9000'
+      - '9101:9001'
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:9000/minio/health/live || exit 1']
+      interval: 10s
+      start_period: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - minio_data:/data
+
+  # Mailpit — локальный SMTP перехватчик (замена Yandex Postbox в dev).
+  # Host-порты: 1125 SMTP, 8125 web UI (http://localhost:8125 — смотреть отправленные письма).
+  mailpit:
+    image: axllent/mailpit:v1.29
+    ports:
+      - '1125:1025'
+      - '8125:8025'
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O- http://localhost:8025/api/v1/info || exit 1']
+      interval: 10s
+      start_period: 3s
+      timeout: 3s
+      retries: 3
+
+  # MinIO bucket bootstrap — одноразовый контейнер, создаёт бакет 'horeca-files' после старта MinIO.
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/horeca-files &&
+      mc anonymous set none local/horeca-files &&
+      echo 'MinIO bucket ready: horeca-files'
+      "
+    restart: 'no'
+
+volumes:
+  ydb_data:
+  minio_data:

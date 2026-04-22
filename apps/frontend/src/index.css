@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+
+:root {
+	--font-sans: 'Geist Variable', system-ui, -apple-system, sans-serif;
+}
+
+html,
+body,
+#root {
+	min-height: 100vh;
+}
+
+body {
+	font-family: var(--font-sans);
+	@apply bg-neutral-950 text-neutral-100 antialiased;
+}

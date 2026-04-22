@@ -1,0 +1,164 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"files": {
+		"includes": [
+			"apps/**",
+			"packages/**",
+			"!**/*.gen.ts",
+			"!apps/frontend/src/components/ui",
+			"!!**/dist"
+		],
+		"ignoreUnknown": true
+	},
+	"formatter": {
+		"indentStyle": "tab",
+		"lineWidth": 100
+	},
+	"linter": {
+		"rules": {
+			"recommended": true,
+			"correctness": {
+				"useImportExtensions": "off",
+				"noUnresolvedImports": "error",
+				"noPrivateImports": "error",
+				"noUndeclaredDependencies": "error"
+			},
+			"suspicious": {
+				"noImportCycles": "error",
+				"noDeprecatedImports": "error"
+			},
+			"nursery": {
+				"noFloatingPromises": "error",
+				"noMisusedPromises": "error",
+				"useAwaitThenable": "error",
+				"useExhaustiveSwitchCases": "error",
+				"useNullishCoalescing": "warn"
+			}
+		},
+		"domains": {
+			"react": "all",
+			"types": "all",
+			"project": "all",
+			"test": "all"
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["apps/backend/src/**"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"paths": {
+									"react": "Backend не зависит от React.",
+									"react-dom": "Backend не зависит от React."
+								},
+								"patterns": [
+									{
+										"group": ["@tanstack/react-*", "radix-ui", "radix-ui/*"],
+										"message": "Backend не зависит от frontend-библиотек."
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": ["apps/frontend/src/**"],
+			"linter": {
+				"rules": {
+					"nursery": {
+						"noLeakedRender": "error"
+					},
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"paths": {
+									"pino": "Frontend — чистый SPA. Серверные зависимости запрещены.",
+									"@hono/node-server": "Frontend — чистый SPA. Серверные зависимости запрещены.",
+									"better-auth": "Frontend использует better-auth/react, не серверный better-auth."
+								},
+								"patterns": [
+									{
+										"group": ["@ydbjs/*"],
+										"message": "Frontend — чистый SPA. Серверный SDK (@ydbjs/*) запрещён."
+									},
+									{
+										"group": ["node:*"],
+										"message": "Frontend — чистый SPA. Node.js built-in модули запрещены."
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": ["packages/shared/src/**"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"paths": {
+									"hono": "Shared-пакет не зависит от app-specific пакетов.",
+									"better-auth": "Shared-пакет не зависит от app-specific пакетов.",
+									"pino": "Shared-пакет не зависит от app-specific пакетов.",
+									"react": "Shared-пакет не зависит от app-specific пакетов.",
+									"react-dom": "Shared-пакет не зависит от app-specific пакетов."
+								},
+								"patterns": [
+									{
+										"group": ["@ydbjs/*", "@hono/*", "hono/*", "better-auth/*"],
+										"message": "Shared-пакет не зависит от app-specific пакетов."
+									},
+									{
+										"group": ["@tanstack/react-*", "radix-ui", "radix-ui/*"],
+										"message": "Shared-пакет не зависит от frontend-библиотек."
+									},
+									{
+										"group": ["node:*"],
+										"message": "Shared-пакет не зависит от Node.js built-in модулей."
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": ["**/*.test.ts", "**/*.test.tsx"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noNonNullAssertion": "off"
+					}
+				}
+			}
+		}
+	],
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "single",
+			"semicolons": "asNeeded"
+		}
+	}
+}

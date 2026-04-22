@@ -1,0 +1,387 @@
+-- =============================================================================
+-- HoReCa SaaS — initial schema
+-- Version: 0001
+-- Date: 2026-04-23
+-- Target: YDB 25.3 (local) and Yandex Managed Service for YDB (serverless)
+-- =============================================================================
+--
+-- Conventions:
+--   * All table and column names are camelCase, singular form.
+--     Better Auth models (user, session, account, verification, organization,
+--     member, invitation) match BA schema 1:1 — adapter works without mapping.
+--     Domain models (property, room, booking, guest, …) follow the same style
+--     for consistency across the codebase.
+--   * IDs are typeid strings (base32, 26 chars with prefix): usr_, ses_, org_, …
+--   * tenantId is first in PK for domain tables → physical partitioning by tenant.
+--   * Better Auth uses Datetime (seconds since epoch) because BA factory passes JS Date.
+--   * Domain tables use Timestamp (microseconds) for finer-grained auditing.
+--   * Money is Decimal(22, 9). Never float.
+--
+-- =============================================================================
+
+-- =============================================================================
+-- DOMAIN 1. Better Auth + multi-tenancy
+-- Schema matches Better Auth 1.6.x defaults 1:1.
+-- TTL on session / verification expiresAt ⇒ YDB auto-cleans expired rows.
+-- =============================================================================
+
+-- 1.1. user — application users (owners, staff).
+-- Columns match Better Auth 1.6 user model 1:1 — any extra columns (e.g. super-admin flag,
+-- legacy links) live in separate tables to avoid adapter/schema mismatches.
+CREATE TABLE IF NOT EXISTS `user` (
+    id              Utf8 NOT NULL,
+    name            Utf8 NOT NULL,
+    email           Utf8 NOT NULL,
+    emailVerified   Bool,
+    image           Utf8,
+    createdAt       Datetime NOT NULL,
+    updatedAt       Datetime NOT NULL,
+    PRIMARY KEY (id),
+    INDEX idxUserEmail GLOBAL UNIQUE SYNC ON (email)
+);
+
+-- 1.1.a. superAdmin — optional escalation table (empty on MVP; used by tooling).
+-- Kept out of the `user` table to not pollute Better Auth's model.
+CREATE TABLE IF NOT EXISTS superAdmin (
+    userId      Utf8 NOT NULL,
+    grantedAt   Timestamp NOT NULL,
+    grantedBy   Utf8,
+    PRIMARY KEY (userId)
+);
+
+-- 1.2. session — active sessions (cookie-based).
+CREATE TABLE IF NOT EXISTS session (
+    id                      Utf8 NOT NULL,
+    userId                  Utf8 NOT NULL,
+    activeOrganizationId    Utf8,
+    token                   Utf8 NOT NULL,
+    expiresAt               Datetime NOT NULL,
+    ipAddress               Utf8,
+    userAgent               Utf8,
+    createdAt               Datetime NOT NULL,
+    updatedAt               Datetime NOT NULL,
+    PRIMARY KEY (id),
+    INDEX idxSessionToken GLOBAL UNIQUE SYNC ON (token),
+    INDEX idxSessionUserId GLOBAL SYNC ON (userId)
+)
+WITH (
+    TTL = Interval("PT0S") ON expiresAt
+);
+
+-- 1.3. account — Better Auth credential providers (email+password on MVP).
+CREATE TABLE IF NOT EXISTS account (
+    id                      Utf8 NOT NULL,
+    userId                  Utf8 NOT NULL,
+    accountId               Utf8 NOT NULL,
+    providerId              Utf8 NOT NULL,
+    accessToken             Utf8,
+    refreshToken            Utf8,
+    accessTokenExpiresAt    Datetime,
+    refreshTokenExpiresAt   Datetime,
+    scope                   Utf8,
+    idToken                 Utf8,
+    password                Utf8,
+    createdAt               Datetime NOT NULL,
+    updatedAt               Datetime NOT NULL,
+    PRIMARY KEY (id),
+    INDEX idxAccountUserId GLOBAL SYNC ON (userId),
+    INDEX idxAccountProvider GLOBAL UNIQUE SYNC ON (providerId, accountId)
+);
+
+-- 1.4. verification — email verification / password reset tokens.
+CREATE TABLE IF NOT EXISTS verification (
+    id          Utf8 NOT NULL,
+    identifier  Utf8 NOT NULL,
+    value       Utf8 NOT NULL,
+    expiresAt   Datetime NOT NULL,
+    createdAt   Datetime,
+    updatedAt   Datetime,
+    PRIMARY KEY (id),
+    INDEX idxVerificationIdentifier GLOBAL SYNC ON (identifier)
+)
+WITH (
+    TTL = Interval("PT0S") ON expiresAt
+);
+
+-- 1.5. organization — our tenants. organization.id is tenantId everywhere else.
+-- KEEP 1:1 with Better Auth organization model on MVP: it emits only
+-- name/slug/logo/metadata/createdAt on create (no updatedAt). Adding custom
+-- NOT NULL columns here breaks the adapter (it doesn't know to populate them).
+-- HoReCa-specific tenant data (inn, taxForm, plan, DPA consent, trial, dedicated DB)
+-- lives in the separate `organizationProfile` table below.
+CREATE TABLE IF NOT EXISTS organization (
+    id         Utf8 NOT NULL,
+    name       Utf8 NOT NULL,
+    slug       Utf8 NOT NULL,
+    logo       Utf8,
+    metadata   Utf8,
+    createdAt  Datetime NOT NULL,
+    PRIMARY KEY (id),
+    INDEX idxOrganizationSlug GLOBAL UNIQUE SYNC ON (slug)
+);
+
+-- 1.5.a. organizationProfile — HoReCa-specific tenant metadata.
+-- 1:1 with organization.id. Populated by our own flow after BA creates the org.
+CREATE TABLE IF NOT EXISTS organizationProfile (
+    organizationId       Utf8 NOT NULL,
+    inn                  Utf8,
+    taxForm              Utf8,
+    dedicatedDatabaseUrl Utf8,
+    dpaVersion           Utf8,
+    dpaAcceptedAt        Timestamp,
+    dpaAcceptedIp        Utf8,
+    plan                 Utf8 NOT NULL,
+    trialEndsAt          Timestamp,
+    createdAt            Timestamp NOT NULL,
+    updatedAt            Timestamp NOT NULL,
+    PRIMARY KEY (organizationId)
+);
+
+-- 1.6. member — user membership in organization with role.
+CREATE TABLE IF NOT EXISTS member (
+    id              Utf8 NOT NULL,
+    organizationId  Utf8 NOT NULL,
+    userId          Utf8 NOT NULL,
+    role            Utf8 NOT NULL,
+    createdAt       Datetime NOT NULL,
+    PRIMARY KEY (id),
+    INDEX idxMemberOrganizationId GLOBAL SYNC ON (organizationId),
+    INDEX idxMemberUserId GLOBAL SYNC ON (userId),
+    INDEX idxMemberUnique GLOBAL UNIQUE SYNC ON (organizationId, userId)
+);
+
+-- 1.7. invitation — pending invites to organizations.
+CREATE TABLE IF NOT EXISTS invitation (
+    id              Utf8 NOT NULL,
+    organizationId  Utf8 NOT NULL,
+    email           Utf8 NOT NULL,
+    role            Utf8,
+    status          Utf8 NOT NULL,
+    expiresAt       Datetime NOT NULL,
+    inviterId       Utf8 NOT NULL,
+    createdAt       Datetime NOT NULL,
+    PRIMARY KEY (id),
+    INDEX idxInvitationEmail GLOBAL SYNC ON (email),
+    INDEX idxInvitationOrganizationId GLOBAL SYNC ON (organizationId)
+);
+
+-- =============================================================================
+-- DOMAIN 2. PMS core (property, room, rate plan, booking, guest)
+-- All tables carry tenantId first in PK for physical partitioning by tenant.
+-- =============================================================================
+
+-- 2.1. property — physical accommodation objects (guest house / mini-hotel).
+CREATE TABLE IF NOT EXISTS property (
+    tenantId            Utf8 NOT NULL,
+    id                  Utf8 NOT NULL,
+    name                Utf8 NOT NULL,
+    address             Utf8 NOT NULL,
+    city                Utf8 NOT NULL,
+    timezone            Utf8 NOT NULL,
+    classificationId    Utf8,
+    isActive            Bool NOT NULL,
+    createdAt           Timestamp NOT NULL,
+    updatedAt           Timestamp NOT NULL,
+    PRIMARY KEY (tenantId, id),
+    INDEX idxPropertyTenantActive GLOBAL SYNC ON (tenantId, isActive)
+);
+
+-- 2.2. roomType — logical categories of rooms (Standard Double, Suite).
+CREATE TABLE IF NOT EXISTS roomType (
+    tenantId        Utf8 NOT NULL,
+    id              Utf8 NOT NULL,
+    propertyId      Utf8 NOT NULL,
+    name            Utf8 NOT NULL,
+    description     Utf8,
+    maxOccupancy    Uint8 NOT NULL,
+    baseBeds        Uint8 NOT NULL,
+    extraBeds       Uint8 NOT NULL,
+    areaSqm         Uint16,
+    createdAt       Timestamp NOT NULL,
+    updatedAt       Timestamp NOT NULL,
+    PRIMARY KEY (tenantId, id),
+    INDEX idxRoomTypeTenantProperty GLOBAL SYNC ON (tenantId, propertyId)
+);
+
+-- 2.3. room — concrete rooms.
+CREATE TABLE IF NOT EXISTS room (
+    tenantId    Utf8 NOT NULL,
+    id          Utf8 NOT NULL,
+    propertyId  Utf8 NOT NULL,
+    roomTypeId  Utf8 NOT NULL,
+    number      Utf8 NOT NULL,
+    floor       Int16,
+    isActive    Bool NOT NULL,
+    notes       Utf8,
+    createdAt   Timestamp NOT NULL,
+    updatedAt   Timestamp NOT NULL,
+    PRIMARY KEY (tenantId, id),
+    INDEX idxRoomTenantPropertyActive GLOBAL SYNC ON (tenantId, propertyId, isActive)
+);
+
+-- 2.4. ratePlan — rate configurations for room types.
+-- pricing JSON structure:
+-- {
+--   "basePrice": "5000.00",
+--   "weekendMultiplier": 1.2,
+--   "seasonalOverrides": [
+--     { "from": "2026-06-01", "to": "2026-08-31", "price": "8000.00" }
+--   ]
+-- }
+CREATE TABLE IF NOT EXISTS ratePlan (
+    tenantId            Utf8 NOT NULL,
+    id                  Utf8 NOT NULL,
+    propertyId          Utf8 NOT NULL,
+    roomTypeId          Utf8 NOT NULL,
+    name                Utf8 NOT NULL,
+    isDefault           Bool NOT NULL,
+    isRefundable        Bool NOT NULL,
+    cancellationHours   Int16,
+    mealsIncluded       Utf8,
+    pricing             Json NOT NULL,
+    currency            Utf8 NOT NULL,
+    createdAt           Timestamp NOT NULL,
+    updatedAt           Timestamp NOT NULL,
+    PRIMARY KEY (tenantId, id),
+    INDEX idxRatePlanTenantRoomType GLOBAL SYNC ON (tenantId, roomTypeId)
+);
+
+-- 2.5. booking — the core of PMS.
+-- status:  'pending' | 'confirmed' | 'checkedIn' | 'checkedOut' | 'cancelled' | 'noShow'
+-- source:  'direct' | 'yandexTravel' | 'ostrovok' | 'avito' | 'walkIn'
+CREATE TABLE IF NOT EXISTS booking (
+    tenantId        Utf8 NOT NULL,
+    id              Utf8 NOT NULL,
+    propertyId      Utf8 NOT NULL,
+    roomId          Utf8 NOT NULL,
+    ratePlanId      Utf8 NOT NULL,
+    primaryGuestId  Utf8 NOT NULL,
+    checkIn         Date NOT NULL,
+    checkOut        Date NOT NULL,
+    status          Utf8 NOT NULL,
+    source          Utf8 NOT NULL,
+    externalId      Utf8,
+    guestsCount     Uint8 NOT NULL,
+    totalAmount     Decimal(22, 9) NOT NULL,
+    paidAmount      Decimal(22, 9) NOT NULL,
+    currency        Utf8 NOT NULL,
+    notes           Utf8,
+    createdAt       Timestamp NOT NULL,
+    updatedAt       Timestamp NOT NULL,
+    createdBy       Utf8 NOT NULL,
+    PRIMARY KEY (tenantId, id),
+    INDEX idxBookingTenantRoomDates GLOBAL SYNC ON (tenantId, roomId, checkIn),
+    INDEX idxBookingTenantPropertyDates GLOBAL SYNC ON (tenantId, propertyId, checkIn),
+    INDEX idxBookingTenantStatus GLOBAL SYNC ON (tenantId, status),
+    INDEX idxBookingSourceExternal GLOBAL SYNC ON (source, externalId)
+);
+
+-- 2.6. guest — guest personal info (manual input on MVP, no scans).
+-- documentType: 'ruPassport' | 'foreignPassport' | 'ruDriverLicense' | 'militaryId'
+CREATE TABLE IF NOT EXISTS guest (
+    tenantId             Utf8 NOT NULL,
+    id                   Utf8 NOT NULL,
+    lastName             Utf8 NOT NULL,
+    firstName            Utf8 NOT NULL,
+    middleName           Utf8,
+    birthDate            Date,
+    citizenship          Utf8 NOT NULL,
+    documentType         Utf8 NOT NULL,
+    documentSeries       Utf8,
+    documentNumber       Utf8 NOT NULL,
+    documentIssuedBy     Utf8,
+    documentIssuedDate   Date,
+    registrationAddress  Utf8,
+    phone                Utf8,
+    email                Utf8,
+    notes                Utf8,
+    createdAt            Timestamp NOT NULL,
+    updatedAt            Timestamp NOT NULL,
+    PRIMARY KEY (tenantId, id),
+    INDEX idxGuestTenantLastName GLOBAL SYNC ON (tenantId, lastName),
+    INDEX idxGuestTenantDocument GLOBAL SYNC ON (tenantId, documentNumber)
+);
+
+-- =============================================================================
+-- DOMAIN 3. Infrastructure (job, webhookInbox, migrationReport, consentLog)
+-- =============================================================================
+
+-- 3.1. job — outbox-pattern queue. Cloud Function timer polls status='pending'.
+-- status: 'pending' | 'running' | 'done' | 'failed' | 'dead'
+-- type:   'mvdSubmit' | 'yookassaRefund' | 'otaSync' | 'sendEmail'
+CREATE TABLE IF NOT EXISTS job (
+    status        Utf8 NOT NULL,
+    scheduledAt   Timestamp NOT NULL,
+    id            Utf8 NOT NULL,
+    tenantId      Utf8 NOT NULL,
+    type          Utf8 NOT NULL,
+    payload       Json NOT NULL,
+    attempts      Uint8 NOT NULL,
+    maxAttempts   Uint8 NOT NULL,
+    lastError     Utf8,
+    nextRetryAt   Timestamp,
+    lockedAt      Timestamp,
+    lockedBy      Utf8,
+    createdAt     Timestamp NOT NULL,
+    updatedAt     Timestamp NOT NULL,
+    PRIMARY KEY (status, scheduledAt, id),
+    INDEX idxJobTenantType GLOBAL SYNC ON (tenantId, type, status)
+);
+
+-- 3.2. webhookInbox — idempotency store for incoming webhooks.
+CREATE TABLE IF NOT EXISTS webhookInbox (
+    provider         Utf8 NOT NULL,
+    idempotencyKey   Utf8 NOT NULL,
+    tenantId         Utf8,
+    eventType        Utf8 NOT NULL,
+    payload          Json NOT NULL,
+    processedAt      Timestamp,
+    error            Utf8,
+    receivedAt       Timestamp NOT NULL,
+    PRIMARY KEY (provider, idempotencyKey),
+    INDEX idxWebhookInboxProcessedAt GLOBAL SYNC ON (processedAt)
+);
+
+-- 3.3. migrationReport — journal of submissions to MVD.
+-- reportType: 'arrival' | 'departure'
+-- status: 'pending' | 'submitted' | 'accepted' | 'rejected'
+CREATE TABLE IF NOT EXISTS migrationReport (
+    tenantId      Utf8 NOT NULL,
+    id            Utf8 NOT NULL,
+    bookingId     Utf8 NOT NULL,
+    guestId       Utf8 NOT NULL,
+    reportType    Utf8 NOT NULL,
+    status        Utf8 NOT NULL,
+    externalRef   Utf8,
+    submittedAt   Timestamp,
+    responseBody  Json,
+    error         Utf8,
+    createdAt     Timestamp NOT NULL,
+    updatedAt     Timestamp NOT NULL,
+    PRIMARY KEY (tenantId, id),
+    INDEX idxMigrationReportTenantBooking GLOBAL SYNC ON (tenantId, bookingId),
+    INDEX idxMigrationReportTenantStatus GLOBAL SYNC ON (tenantId, status)
+);
+
+-- 3.4. consentLog — immutable record of personal data processing consents (152-FZ).
+-- subjectType: 'user' | 'guest'
+-- consentType: 'dpaAcceptance' | 'marketing' | 'cookies'
+CREATE TABLE IF NOT EXISTS consentLog (
+    id               Utf8 NOT NULL,
+    subjectType      Utf8 NOT NULL,
+    subjectId        Utf8 NOT NULL,
+    tenantId         Utf8,
+    consentType      Utf8 NOT NULL,
+    consentVersion   Utf8 NOT NULL,
+    textSnapshot     Utf8 NOT NULL,
+    ipAddress        Utf8 NOT NULL,
+    userAgent        Utf8,
+    grantedAt        Timestamp NOT NULL,
+    revokedAt        Timestamp,
+    PRIMARY KEY (id),
+    INDEX idxConsentLogSubject GLOBAL SYNC ON (subjectType, subjectId)
+);
+
+-- =============================================================================
+-- END of 0001_init.yql — 17 tables, all camelCase + singular.
+-- =============================================================================

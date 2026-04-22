@@ -1,0 +1,18 @@
+{
+	"$schema": "https://unpkg.com/knip@6/schema.json",
+	"workspaces": {
+		"apps/backend": {
+			"includeEntryExports": true,
+			"project": ["src/**/*.ts"],
+			"ignore": ["src/tests/**"]
+		},
+		"apps/frontend": {
+			"project": ["src/**/*.{ts,tsx}"],
+			"ignore": ["src/components/ui/**", "src/tests/**"]
+		},
+		"packages/shared": {
+			"project": ["src/**/*.ts"],
+			"includeEntryExports": true
+		}
+	}
+}

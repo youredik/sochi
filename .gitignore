@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+.output/
+
+# IDE / editors
+.vscode/
+.idea/
+.DS_Store
+
+# Tests
+coverage/
+.stryker-tmp/
+reports/
+playwright-report/
+test-results/
+.vitest-attachments/
+
+# Docker data volumes (for reference — real ones are in Docker-managed volumes)
+ydb_data/
+minio_data/
+
+# Terraform (when we get there)
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+planfile
+
+# Misc
+*.log
+.DS_Store

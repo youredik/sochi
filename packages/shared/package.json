@@ -1,0 +1,45 @@
+{
+	"name": "@horeca/shared",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		},
+		"./ids": {
+			"types": "./src/ids.ts",
+			"default": "./src/ids.ts"
+		},
+		"./schemas": {
+			"types": "./src/schemas.ts",
+			"default": "./src/schemas.ts"
+		}
+	},
+	"publishConfig": {
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			},
+			"./ids": {
+				"types": "./dist/ids.d.ts",
+				"default": "./dist/ids.js"
+			},
+			"./schemas": {
+				"types": "./dist/schemas.d.ts",
+				"default": "./dist/schemas.js"
+			}
+		}
+	},
+	"files": ["src", "dist", "package.json"],
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json"
+	},
+	"dependencies": {
+		"libphonenumber-js": "^1.12.41",
+		"typeid-js": "1.2.0",
+		"zod": "^4.3.6"
+	}
+}
