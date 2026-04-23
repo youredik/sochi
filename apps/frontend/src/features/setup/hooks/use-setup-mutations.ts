@@ -90,3 +90,98 @@ export function useCreateRoom() {
 		},
 	})
 }
+
+/**
+ * Create the first rate plan + seed 30 days of rate + availability.
+ *
+ * Booking creation (M5e.1) requires all three: a sellable plan, a price
+ * per date (backend `booking.service.create` looks up rate for each
+ * night), and an availability row with `allotment >= sold + 1`. Without
+ * seeding, the grid has nothing rentable and the user can't create a
+ * single booking.
+ *
+ * 30-day forward window (not 365) — enough for onboarding-demo; admin
+ * rate-management UI in a later phase handles real seasonal pricing.
+ *
+ * Parallel POSTs for rate + availability — independent resources, no
+ * ordering constraint on the server side.
+ */
+export function useCreateRatePlan(propertyId: string | null, roomTypeId: string | null) {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: async (input: { code: string; name: string; nightlyRub: number }) => {
+			if (!roomTypeId || !propertyId)
+				throw { message: 'Нет roomTypeId — шаг типа номеров не завершён' }
+
+			// 1. Create the plan (defaults: refundable, no meals, 24h cancel)
+			const planRes = await api.api.v1['rate-plans'].$post({
+				json: {
+					roomTypeId,
+					name: input.name,
+					code: input.code,
+					isDefault: true,
+					isRefundable: true,
+					cancellationHours: 24,
+					mealsIncluded: 'none',
+					minStay: 1,
+					maxStay: 365,
+				},
+			})
+			if (!planRes.ok) {
+				const body = (await planRes.json().catch(() => null)) as { error?: unknown } | null
+				throw extractError(body?.error ?? { message: `HTTP ${planRes.status}` })
+			}
+			const planBody = (await planRes.json()) as { data: { id: string } }
+			const ratePlanId = planBody.data.id
+
+			// 2. Seed 30-day forward rate + availability in parallel
+			const today = new Date()
+			const rates = Array.from({ length: 30 }, (_, i) => {
+				const d = new Date(today)
+				d.setUTCDate(today.getUTCDate() + i)
+				return {
+					date: d.toISOString().slice(0, 10),
+					amount: String(BigInt(input.nightlyRub) * 1_000_000n), // RUB → micros
+					currency: 'RUB' as const,
+				}
+			})
+			// Pull inventoryCount from the freshly-created roomType cache if available;
+			// fall back to 1 which matches our wizard default and is a safe
+			// lower bound (cannot accidentally over-allocate).
+			const cachedRoomType = queryClient
+				.getQueryData<Array<{ id: string; inventoryCount: number }>>(['roomTypes', propertyId])
+				?.find((rt) => rt.id === roomTypeId)
+			const allotment = cachedRoomType?.inventoryCount ?? 1
+			const availability = rates.map((r) => ({ date: r.date, allotment }))
+
+			const [rateRes, availRes] = await Promise.all([
+				api.api.v1['rate-plans'][':ratePlanId'].rates.$post({
+					param: { ratePlanId },
+					json: { rates },
+				}),
+				api.api.v1['room-types'][':roomTypeId'].availability.$post({
+					param: { roomTypeId },
+					json: { rates: availability },
+				}),
+			])
+			if (!rateRes.ok || !availRes.ok) {
+				throw {
+					message: 'Не удалось заполнить цены и доступность на 30 дней вперёд',
+					code: 'RATE_OR_AVAILABILITY_SEED_FAILED',
+				}
+			}
+
+			return { id: ratePlanId }
+		},
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({ queryKey: ['ratePlans'] })
+			await queryClient.invalidateQueries({ queryKey: ['rates'] })
+			await queryClient.invalidateQueries({ queryKey: ['availability'] })
+			toast.success('Тариф создан, цены на 30 дней заполнены')
+		},
+		onError: (err: { code?: string; message: string }) => {
+			logger.warn('ratePlan.create failed', { code: err.code, message: err.message })
+			toast.error(err.message)
+		},
+	})
+}

@@ -21,7 +21,7 @@ export function RoomsStep() {
 	const roomTypeId = useWizardStore((s) => s.roomTypeId)
 	const roomsCreated = useWizardStore((s) => s.roomsCreated)
 	const incRooms = useWizardStore((s) => s.incRooms)
-	const goTo = useWizardStore((s) => s.goTo)
+	const finishRooms = useWizardStore((s) => s.finishRooms)
 	const createRoom = useCreateRoom()
 
 	const form = useForm({
@@ -78,10 +78,10 @@ export function RoomsStep() {
 				variant="outline"
 				size="lg"
 				className="w-full"
-				onClick={() => goTo('done')}
+				onClick={finishRooms}
 				disabled={roomsCreated === 0}
 			>
-				Завершить настройку
+				Далее — тариф
 			</Button>
 		</div>
 	)

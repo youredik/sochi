@@ -55,8 +55,9 @@ setup('authenticate owner + complete setup wizard', async ({ page }) => {
 
 	// --- Wizard step 3: Rooms ---
 	await expect(page.getByLabel('Номер')).toBeVisible()
-	// Adversarial: finish button disabled when 0 rooms created.
-	await expect(page.getByRole('button', { name: /Завершить настройку/ })).toBeDisabled()
+	// Adversarial: "Далее — тариф" button disabled when 0 rooms created
+	// (can't advance until at least one room exists).
+	await expect(page.getByRole('button', { name: /Далее — тариф/ })).toBeDisabled()
 	// Add one room without floor (floor optional — important adversarial).
 	await page.getByLabel('Номер').fill('101')
 	await page.getByRole('button', { name: /Добавить номер/ }).click()
@@ -67,8 +68,18 @@ setup('authenticate owner + complete setup wizard', async ({ page }) => {
 	await page.getByRole('button', { name: /Добавить номер/ }).click()
 	await expect(page.getByText(/Добавлено: 2/)).toBeVisible()
 
-	// Finish — lands on tenant dashboard.
+	// Advance from rooms → ratePlan step.
+	await page.getByRole('button', { name: /Далее — тариф/ }).click()
+
+	// --- Wizard step 4: Rate plan ---
+	await expect(page.getByLabel('Название тарифа')).toBeVisible()
+	// Defaults (BAR / Базовый тариф / 5000₽) — submit as-is to cover
+	// the happy path; variants/overrides belong in rate-management UI.
+	await expect(page.getByLabel('Код')).toHaveValue('BAR')
+	await expect(page.getByLabel('Цена за ночь, ₽')).toHaveValue('5000')
 	await page.getByRole('button', { name: /Завершить настройку/ }).click()
+
+	// Finish — lands on tenant dashboard (now with property + ratePlan + 30-day rate/availability seeded).
 	await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/?$/)
 	await expect(page.getByRole('heading', { name: orgName })).toBeVisible()
 

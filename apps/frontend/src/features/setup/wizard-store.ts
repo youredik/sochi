@@ -14,17 +14,20 @@ import { create } from 'zustand'
  * explicitly cancels. Not persisted to localStorage for the reason above.
  */
 
-type WizardStep = 'property' | 'roomType' | 'rooms' | 'done'
+type WizardStep = 'property' | 'roomType' | 'rooms' | 'ratePlan' | 'done'
 
 interface WizardState {
 	step: WizardStep
 	propertyId: string | null
 	roomTypeId: string | null
 	roomsCreated: number
+	ratePlanId: string | null
 	goTo: (step: WizardStep) => void
 	setPropertyId: (id: string) => void
 	setRoomTypeId: (id: string) => void
 	incRooms: (n?: number) => void
+	finishRooms: () => void
+	setRatePlanId: (id: string) => void
 	reset: () => void
 }
 
@@ -33,6 +36,7 @@ const INITIAL = {
 	propertyId: null,
 	roomTypeId: null,
 	roomsCreated: 0,
+	ratePlanId: null,
 }
 
 export const useWizardStore = create<WizardState>((set) => ({
@@ -41,15 +45,18 @@ export const useWizardStore = create<WizardState>((set) => ({
 	setPropertyId: (id) => set({ propertyId: id, step: 'roomType' }),
 	setRoomTypeId: (id) => set({ roomTypeId: id, step: 'rooms' }),
 	incRooms: (n = 1) => set((s) => ({ roomsCreated: s.roomsCreated + n })),
+	finishRooms: () => set({ step: 'ratePlan' }),
+	setRatePlanId: (id) => set({ ratePlanId: id, step: 'done' }),
 	reset: () => set(INITIAL),
 }))
 
 /** Ordered steps for progress indicator rendering. */
-export const WIZARD_STEPS: WizardStep[] = ['property', 'roomType', 'rooms', 'done']
+export const WIZARD_STEPS: WizardStep[] = ['property', 'roomType', 'rooms', 'ratePlan', 'done']
 
 export const STEP_LABELS: Record<WizardStep, string> = {
 	property: 'Гостиница',
 	roomType: 'Тип номеров',
 	rooms: 'Номера',
+	ratePlan: 'Тариф',
 	done: 'Готово',
 }

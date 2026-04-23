@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { PropertyStep } from './steps/property-step'
+import { RatePlanStep } from './steps/rate-plan-step'
 import { RoomTypeStep } from './steps/room-type-step'
 import { RoomsStep } from './steps/rooms-step'
 import { STEP_LABELS, useWizardStore, WIZARD_STEPS } from './wizard-store'
@@ -41,6 +42,7 @@ export function WizardShell() {
 				{step === 'property' ? <PropertyStep /> : null}
 				{step === 'roomType' ? <RoomTypeStep /> : null}
 				{step === 'rooms' ? <RoomsStep /> : null}
+				{step === 'ratePlan' ? <RatePlanStep /> : null}
 			</div>
 		</main>
 	)

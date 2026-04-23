@@ -11,12 +11,36 @@ describe('wizard-store', () => {
 	})
 
 	describe('initial state (exact-value)', () => {
-		it('starts on property step with no IDs and zero rooms', () => {
+		it('starts on property step with no IDs, zero rooms, no rate plan', () => {
 			const s = useWizardStore.getState()
 			expect(s.step).toBe('property')
 			expect(s.propertyId).toBeNull()
 			expect(s.roomTypeId).toBeNull()
 			expect(s.roomsCreated).toBe(0)
+			expect(s.ratePlanId).toBeNull()
+		})
+	})
+
+	describe('4-step flow (property → roomType → rooms → ratePlan → done)', () => {
+		it('finishRooms from rooms step advances to ratePlan (not done)', () => {
+			const store = useWizardStore.getState()
+			store.setPropertyId('prop_x')
+			store.setRoomTypeId('rmt_x')
+			store.incRooms()
+			store.finishRooms()
+			expect(useWizardStore.getState().step).toBe('ratePlan')
+		})
+
+		it('setRatePlanId advances to done + stores id', () => {
+			const store = useWizardStore.getState()
+			store.setPropertyId('prop_x')
+			store.setRoomTypeId('rmt_x')
+			store.incRooms()
+			store.finishRooms()
+			store.setRatePlanId('rp_abc')
+			const s = useWizardStore.getState()
+			expect(s.ratePlanId).toBe('rp_abc')
+			expect(s.step).toBe('done')
 		})
 	})
 
@@ -56,17 +80,20 @@ describe('wizard-store', () => {
 	})
 
 	describe('reset (adversarial)', () => {
-		it('reset from rooms step nukes all progress back to property', () => {
+		it('reset from ratePlan step nukes all progress back to property', () => {
 			const store = useWizardStore.getState()
 			store.setPropertyId('prop_abc')
 			store.setRoomTypeId('rmt_def')
 			store.incRooms(7)
+			store.finishRooms()
+			store.setRatePlanId('rp_xyz')
 			store.reset()
 			const s = useWizardStore.getState()
 			expect(s.step).toBe('property')
 			expect(s.propertyId).toBeNull()
 			expect(s.roomTypeId).toBeNull()
 			expect(s.roomsCreated).toBe(0)
+			expect(s.ratePlanId).toBeNull()
 		})
 
 		it('reset from done step also returns to property', () => {
