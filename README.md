@@ -81,6 +81,39 @@ docker compose logs -f mailpit
 docker compose up -d && ./scripts/apply-schema.sh
 ```
 
+## Automated gates
+
+Проверки запускаются автоматически git-хуками (`lefthook.yml`) —
+отдельно разбивать не нужно, коммит / push сам их вызовет.
+
+**pre-commit** (быстрые, без DB):
+- `pnpm biome check` — форматирование + линтинг
+- `pnpm sherif` — monorepo version consistency
+- `pnpm typecheck` — TS strict (3 проекта)
+- `pnpm knip` — dead exports / unused files
+- `pnpm depcruise` — архитектурные правила (no-cross-domain, routes→service→repo DAG)
+
+**pre-push** (полные, требуют локального YDB):
+- `pnpm test` — vitest full suite (unit + integration vs real YDB)
+- `pnpm build` — production bundle (shared tsc + frontend vite)
+- `pnpm smoke` — **comprehensive E2E smoke** через `scripts/smoke.ts`
+
+### `pnpm smoke` — что именно проверяет
+
+In-process прогон через реальный Hono app + реальный YDB. Стартует CDC
+consumer, создаёт 2 tenants, полную доменную цепочку (property → roomType
+→ ratePlan → rate → availability), прогоняет 7 бронирующих сценариев
+(idempotency cached replay, 422 на diff body, external-ID dedup, 5-state
+machine checkIn→checkOut, cancel returns inventory, markNoShow
+irreversible, overbooking race `Promise.all`), cross-tenant adversarials,
+CDC activity population, tourism-tax quarterly report aggregate.
+
+Exit 0 только если все 20+ assertions прошли. Скрипт воспроизводимый —
+повторный запуск на том же коде снова green (idempotent cleanup).
+
+Требует запущенного `docker compose up ydb` + applied migrations
+(`pnpm migrate`).
+
 ## Что дальше
 
 Следующие шаги (см. memory):

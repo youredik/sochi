@@ -74,10 +74,12 @@ describe('buildActivitiesFromEvent (pure)', () => {
 	const base = { tenantId: 'org_abc', id: 'book_123' }
 
 	test('[D5] INSERT (newImage only) → one `created` activity', () => {
+		// YDB CDC contract: newImage does NOT include PK columns. They're in `key`.
+		// Our booking compound PK: [tenantId, propertyId, checkIn, id].
 		const event: CdcEvent = {
 			key: ['org_abc', 'prop_1', '2027-07-01', 'book_123'],
 			update: { status: 'confirmed' },
-			newImage: { ...base, status: 'confirmed', amount: 1000, createdBy: 'usr_1' },
+			newImage: { status: 'confirmed', amount: 1000, createdBy: 'usr_1' },
 		}
 		const acts = buildActivitiesFromEvent(event, 'booking')
 		expect(acts).toHaveLength(1)
@@ -88,11 +90,9 @@ describe('buildActivitiesFromEvent (pure)', () => {
 			activityType: 'created',
 			actorUserId: 'usr_1',
 		})
-		// diffJson.fields should NOT include tenantId/id (stripped by rowImage).
 		const diff = acts[0]?.diffJson as { fields: Record<string, unknown> }
-		expect(diff.fields.tenantId).toBeUndefined()
-		expect(diff.fields.id).toBeUndefined()
 		expect(diff.fields.amount).toBe(1000)
+		expect(diff.fields.status).toBe('confirmed')
 	})
 
 	test('[D6] DELETE (oldImage only) → one `deleted` activity', () => {
@@ -165,31 +165,41 @@ describe('buildActivitiesFromEvent (pure)', () => {
 		expect(buildActivitiesFromEvent(event, 'booking')).toEqual([])
 	})
 
-	test('[D10] missing id/tenantId in image → empty result (no attribution possible)', () => {
+	test('[D10] missing key components → empty result (no attribution possible)', () => {
+		// PK in YDB CDC is in `key[]`, not in newImage. Validate guards:
 		const missingBoth: CdcEvent = { key: [], newImage: { status: 'x' } }
 		expect(buildActivitiesFromEvent(missingBoth, 'booking')).toEqual([])
 
-		const missingTenant: CdcEvent = { key: [], newImage: { id: 'book_1', status: 'x' } }
-		expect(buildActivitiesFromEvent(missingTenant, 'booking')).toEqual([])
-
-		const missingId: CdcEvent = { key: [], newImage: { tenantId: 'org_1', status: 'x' } }
+		// booking PK[3]=id; key with 3 components is missing the id slot.
+		const missingId: CdcEvent = {
+			key: ['org_1', 'prop_1', '2027-07-01'],
+			newImage: { status: 'x' },
+		}
 		expect(buildActivitiesFromEvent(missingId, 'booking')).toEqual([])
+
+		// Empty string in tenant slot → treated as missing.
+		const emptyTenant: CdcEvent = {
+			key: ['', 'prop_1', '2027-07-01', 'book_1'],
+			newImage: { status: 'x' },
+		}
+		expect(buildActivitiesFromEvent(emptyTenant, 'booking')).toEqual([])
 	})
 
 	test('[D11] actor resolution: updatedBy → createdBy → "system"', () => {
+		const bookingKey = ['org_abc', 'prop_1', '2027-07-01', 'book_123']
 		const withUpdatedBy: CdcEvent = {
-			key: [],
-			newImage: { ...base, status: 'x', updatedBy: 'u1', createdBy: 'u2' },
+			key: bookingKey,
+			newImage: { status: 'x', updatedBy: 'u1', createdBy: 'u2' },
 		}
 		expect(buildActivitiesFromEvent(withUpdatedBy, 'booking')[0]?.actorUserId).toBe('u1')
 
 		const withCreatedByOnly: CdcEvent = {
-			key: [],
-			newImage: { ...base, status: 'x', createdBy: 'u2' },
+			key: bookingKey,
+			newImage: { status: 'x', createdBy: 'u2' },
 		}
 		expect(buildActivitiesFromEvent(withCreatedByOnly, 'booking')[0]?.actorUserId).toBe('u2')
 
-		const anonymous: CdcEvent = { key: [], newImage: { ...base, status: 'x' } }
+		const anonymous: CdcEvent = { key: bookingKey, newImage: { status: 'x' } }
 		expect(buildActivitiesFromEvent(anonymous, 'booking')[0]?.actorUserId).toBe('system')
 	})
 })
@@ -237,10 +247,13 @@ describe('buildActivitiesFromEvent — property-based', () => {
 	const recordArb = fc.string({ minLength: 1, maxLength: 30 })
 
 	pbTest.prop([tenantArb, recordArb, imageArb])(
-		'[DP3] every emitted activity carries tenantId + recordId from the image',
-		(tenantId, recordId, extra) => {
-			const image = { ...extra, tenantId, id: recordId }
-			const event: CdcEvent = { key: [], newImage: image }
+		'[DP3] every emitted activity carries tenantId + recordId from the PK key array',
+		(tenantId, recordId, image) => {
+			// Booking compound PK: [tenantId, propertyId, checkIn, id].
+			const event: CdcEvent = {
+				key: [tenantId, 'prop_any', '2030-01-01', recordId],
+				newImage: image,
+			}
 			const acts = buildActivitiesFromEvent(event, 'booking')
 			for (const a of acts) {
 				expect(a.tenantId).toBe(tenantId)

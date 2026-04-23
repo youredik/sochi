@@ -1,3 +1,6 @@
+// MUST be the first import — installs BigInt#toJSON before any response
+// serialization can observe the default (which throws).
+import './patches.ts'
 import { Hono } from 'hono'
 import { contextStorage } from 'hono/context-storage'
 import { cors } from 'hono/cors'
@@ -71,12 +74,22 @@ const bookingCdcConsumer = startCdcConsumer(driver, {
 // Graceful shutdown: SIGTERM (Serverless Container / K8s) drains the CDC
 // loop before the process exits so in-flight activity INSERTs commit and
 // the topic cursor advances cleanly (no message replay on restart).
-const shutdown = async (signal: NodeJS.Signals) => {
-	logger.info({ signal }, 'shutdown: stopping CDC consumers + YDB driver')
+/**
+ * Graceful shutdown — drains in-flight CDC consumers so activity INSERTs
+ * commit cleanly and the topic cursor advances before the process exits
+ * (no message replay on restart). Exported for smoke/E2E harnesses that
+ * need programmatic teardown in addition to SIGTERM/SIGINT delivery.
+ */
+export async function stopApp(): Promise<void> {
+	logger.info('shutdown: stopping CDC consumers + YDB driver')
 	await bookingCdcConsumer.stop()
 }
-process.once('SIGTERM', shutdown)
-process.once('SIGINT', shutdown)
+process.once('SIGTERM', () => {
+	void stopApp()
+})
+process.once('SIGINT', () => {
+	void stopApp()
+})
 
 const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
 	.map((o) => o.trim())

@@ -23,7 +23,8 @@
 		"infra:down": "docker compose down",
 		"infra:reset": "docker compose down -v && docker compose up -d && pnpm migrate",
 		"infra:verify": "./scripts/verify-infra.sh",
-		"migrate": "node --env-file-if-exists=.env apps/backend/src/db/apply-migrations.ts"
+		"migrate": "node --env-file-if-exists=.env apps/backend/src/db/apply-migrations.ts",
+		"smoke": "node --env-file-if-exists=.env scripts/smoke.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.12",

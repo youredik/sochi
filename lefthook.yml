@@ -26,7 +26,19 @@ pre-commit:
       glob: "*.{ts,tsx}"
       run: pnpm depcruise
 
+# pre-push gates all run in sequence. Any failure blocks the push — this is
+# our only safety net while GitHub CI is disabled.
+#   tests  — full vitest suite (unit + integration, 258+ against real YDB)
+#   build  — prod bundle (frontend vite + shared tsc), catches type-safe
+#            regressions that dev-mode tsx silently papers over
+#   smoke  — end-to-end HTTP scenario (auth → domain → booking lifecycle →
+#            CDC → activity → tourism tax report → cross-tenant adversarial →
+#            overbooking race), validates the wired production code path
 pre-push:
   jobs:
     - name: tests
       run: pnpm test
+    - name: build
+      run: pnpm build
+    - name: smoke
+      run: pnpm smoke

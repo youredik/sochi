@@ -72,22 +72,46 @@ export function diffFields(
 	return out
 }
 
-/** Strip `id` + `tenantId` from row image → leaves domain-meaningful fields. */
-function rowImage(image: Record<string, unknown>): Record<string, unknown> {
-	const { id: _id, tenantId: _t, ...rest } = image
-	return rest
-}
-
 /**
- * Derive activities (pure) from ONE CDC event on a booking-like row where
- * `id` + `tenantId` are top-level columns.
+ * Derive activities (pure) from ONE CDC event.
+ *
+ * YDB CDC contract (verified 2026-04 from ydb.tech/docs/en/concepts/cdc):
+ *   > "JSON object fields containing column names and values (newImage,
+ *   > oldImage, and update & reset in UPDATES mode), do not include the
+ *   > columns that are primary key components."
+ *
+ * So for booking (compound PK `[tenantId, propertyId, checkIn, id]`) we
+ * extract identity from `event.key[]` — NOT from newImage/oldImage — then
+ * diff the image bodies for fieldChange/statusChange events.
  *
  * Produces:
- *   INSERT → one `created` activity with `diffJson = { fields: <row> }`.
+ *   INSERT → one `created` activity with `diffJson = { fields: <newImage> }`.
  *   UPDATE → if `status` changed, one `statusChange` + zero-N `fieldChange`
  *            for OTHER fields; else only `fieldChange` rows.
- *   DELETE → one `deleted` activity with `diffJson = { fields: <row> }`.
+ *   DELETE → one `deleted` activity with `diffJson = { fields: <oldImage> }`.
+ *
+ * Per-objectType PK schema:
+ *   booking: key[0]=tenantId, key[3]=id (compound PK, 4 components)
+ *   others (single-PK): key[0]=tenantId or key[0]=id (not yet wired)
  */
+function extractIdentity(
+	event: CdcEvent,
+	objectType: ActivityObjectType,
+): { tenantId: string; recordId: string } | null {
+	const key = event.key ?? []
+	if (objectType === 'booking') {
+		const tenantId = key[0] === undefined ? '' : String(key[0])
+		const recordId = key[3] === undefined ? '' : String(key[3])
+		if (!tenantId || !recordId) return null
+		return { tenantId, recordId }
+	}
+	// Single-PK domains (future): `(tenantId, id)` → key[0]=tenantId, key[1]=id.
+	const tenantId = key[0] === undefined ? '' : String(key[0])
+	const recordId = key[1] === undefined ? '' : String(key[1])
+	if (!tenantId || !recordId) return null
+	return { tenantId, recordId }
+}
+
 export function buildActivitiesFromEvent(
 	event: CdcEvent,
 	objectType: ActivityObjectType,
@@ -96,12 +120,9 @@ export function buildActivitiesFromEvent(
 	const isDelete = !event.newImage && !!event.oldImage
 	const isUpdate = !!event.oldImage && !!event.newImage
 
-	const image = (event.newImage ?? event.oldImage) as Record<string, unknown> | undefined
-	if (!image) return []
-
-	const tenantId = String(image.tenantId ?? '')
-	const recordId = String(image.id ?? '')
-	if (!tenantId || !recordId) return []
+	const identity = extractIdentity(event, objectType)
+	if (!identity) return []
+	const { tenantId, recordId } = identity
 
 	const actorUserId = String(
 		(event.newImage?.updatedBy as string | undefined) ??
@@ -117,7 +138,7 @@ export function buildActivitiesFromEvent(
 			{
 				...base,
 				activityType: 'created' satisfies ActivityType,
-				diffJson: { fields: rowImage(event.newImage) },
+				diffJson: { fields: event.newImage },
 			},
 		]
 	}
@@ -127,7 +148,7 @@ export function buildActivitiesFromEvent(
 			{
 				...base,
 				activityType: 'deleted' satisfies ActivityType,
-				diffJson: { fields: rowImage(event.oldImage) },
+				diffJson: { fields: event.oldImage },
 			},
 		]
 	}
