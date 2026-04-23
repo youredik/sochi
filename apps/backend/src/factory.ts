@@ -1,4 +1,6 @@
+import type { MemberRole } from '@horeca/shared'
 import { createFactory } from 'hono/factory'
+import type { PinoLogger } from 'hono-pino'
 import type { auth } from './auth.ts'
 
 type BaseSession = (typeof auth.$Infer.Session)['session']
@@ -13,10 +15,13 @@ type BaseSession = (typeof auth.$Infer.Session)['session']
 type SessionWithOrg = BaseSession & { activeOrganizationId: string | null }
 
 type AuthUser = (typeof auth.$Infer.Session)['user']
-type MemberRole = 'owner' | 'manager' | 'staff'
 
 export type AppEnv = {
 	Variables: {
+		/** Per-request ID, set by Hono `requestId()` middleware. Echoed in `X-Request-Id` response header. */
+		requestId: string
+		/** Per-request pino child logger with `reqId` binding. Set by hono-pino middleware. */
+		logger: PinoLogger
 		/** Authenticated user. Set by authMiddleware. */
 		user: AuthUser
 		/** Current session with organization plugin extension. Set by authMiddleware. */

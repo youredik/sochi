@@ -45,13 +45,11 @@ export type RoomUpdateInput = z.infer<typeof roomUpdateInput>
 export const roomIdParam = z.object({ id: idSchema('room') })
 
 export const roomPropertyParam = z.object({ propertyId: idSchema('property') })
-export const roomRoomTypeParam = z.object({ roomTypeId: idSchema('roomType') })
 
 export const roomListParams = z.object({
 	includeInactive: z.coerce.boolean().optional().default(false),
 	roomTypeId: idSchema('roomType').optional(),
 })
-export type RoomListParams = z.infer<typeof roomListParams>
 
 export type Room = {
 	id: string

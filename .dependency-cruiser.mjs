@@ -26,14 +26,21 @@ export default {
 		},
 
 		// === Domain isolation ===
+		// Domains must not import RUNTIME code from each other. Type-only imports
+		// are allowed for the parent-service DI pattern (room.service imports
+		// `type { RoomTypeService }` to receive an injected instance via factory),
+		// so `dependencyTypesNot: ['type-only']` excludes them. Runtime
+		// cross-domain imports still fail this rule with an error.
 		{
 			name: 'no-cross-domain',
-			comment: 'Domains must not import from other domains directly.',
+			comment:
+				'Domains must not import runtime code from other domains — use type-only imports for DI wiring.',
 			severity: 'error',
 			from: { path: '^apps/backend/src/domains/([^/]+)/' },
 			to: {
 				path: '^apps/backend/src/domains/([^/]+)/',
 				pathNot: '^apps/backend/src/domains/$1/',
+				dependencyTypesNot: ['type-only'],
 			},
 		},
 

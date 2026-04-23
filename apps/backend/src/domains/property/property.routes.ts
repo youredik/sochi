@@ -6,6 +6,7 @@ import {
 	propertyUpdateInput,
 } from '@horeca/shared'
 import { Hono } from 'hono'
+import { NotFoundError } from '../../errors/domain.ts'
 import type { AppEnv } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
@@ -30,9 +31,7 @@ export function createPropertyRoutes(f: PropertyFactory) {
 		.get('/:id', zValidator('param', propertyIdParam), async (c) => {
 			const { id } = c.req.valid('param')
 			const item = await service.getById(c.var.tenantId, id)
-			if (!item) {
-				return c.json({ error: { code: 'NOT_FOUND', message: 'Property not found' } }, 404)
-			}
+			if (!item) throw new NotFoundError('Property', id)
 			return c.json({ data: item }, 200)
 		})
 		.post('/', zValidator('json', propertyCreateInput), async (c) => {
@@ -48,18 +47,14 @@ export function createPropertyRoutes(f: PropertyFactory) {
 				const { id } = c.req.valid('param')
 				const patch = c.req.valid('json')
 				const updated = await service.update(c.var.tenantId, id, patch)
-				if (!updated) {
-					return c.json({ error: { code: 'NOT_FOUND', message: 'Property not found' } }, 404)
-				}
+				if (!updated) throw new NotFoundError('Property', id)
 				return c.json({ data: updated }, 200)
 			},
 		)
 		.delete('/:id', zValidator('param', propertyIdParam), async (c) => {
 			const { id } = c.req.valid('param')
 			const ok = await service.delete(c.var.tenantId, id)
-			if (!ok) {
-				return c.json({ error: { code: 'NOT_FOUND', message: 'Property not found' } }, 404)
-			}
+			if (!ok) throw new NotFoundError('Property', id)
 			return c.json({ data: { success: true } }, 200)
 		})
 }

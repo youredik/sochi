@@ -1,15 +1,8 @@
 import type { RoomCreateInput, RoomUpdateInput } from '@horeca/shared'
+import { PropertyNotFoundError, RoomTypeNotFoundError } from '../../errors/domain.ts'
 import type { PropertyService } from '../property/property.service.ts'
 import type { RoomTypeService } from '../roomType/roomType.service.ts'
-import { PropertyNotFoundError } from '../roomType/roomType.service.ts'
 import type { RoomRepo } from './room.repo.ts'
-
-export class RoomTypeNotFoundError extends Error {
-	constructor(id: string) {
-		super(`Room type not found: ${id}`)
-		this.name = 'RoomTypeNotFoundError'
-	}
-}
 
 /**
  * Room service.
@@ -72,5 +65,3 @@ export function createRoomService(
 		delete: (tenantId: string, id: string) => repo.delete(tenantId, id),
 	}
 }
-
-export type RoomService = ReturnType<typeof createRoomService>

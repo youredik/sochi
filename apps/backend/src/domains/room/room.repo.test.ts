@@ -18,8 +18,9 @@
  */
 import { newId } from '@horeca/shared'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { RoomNumberTakenError } from '../../errors/domain.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
-import { createRoomRepo, RoomNumberTakenError } from './room.repo.ts'
+import { createRoomRepo } from './room.repo.ts'
 
 // Use real typed IDs so zod input schemas that enforce typeid format pass.
 // These are fixture values, not real FK references — room.repo itself does not

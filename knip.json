@@ -1,5 +1,8 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
+	"ignoreDependencies": [
+		"pino-pretty"
+	],
 	"workspaces": {
 		"apps/backend": {
 			"includeEntryExports": true,
@@ -7,8 +10,7 @@
 			"ignore": ["src/tests/**"]
 		},
 		"apps/frontend": {
-			"project": ["src/**/*.{ts,tsx}"],
-			"ignore": ["src/components/ui/**", "src/tests/**"]
+			"project": ["src/**/*.{ts,tsx}"]
 		},
 		"packages/shared": {
 			"project": ["src/**/*.ts"],

@@ -42,7 +42,6 @@ export const propertyIdParam = z.object({
 export const propertyListParams = z.object({
 	includeInactive: z.coerce.boolean().optional().default(false),
 })
-export type PropertyListParams = z.infer<typeof propertyListParams>
 
 /** Property as returned by API. */
 export type Property = {

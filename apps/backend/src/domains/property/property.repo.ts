@@ -1,14 +1,9 @@
 import type { Property, PropertyCreateInput, PropertyUpdateInput } from '@horeca/shared'
 import { newId } from '@horeca/shared'
-import { Optional } from '@ydbjs/value/optional'
-import { TextType, Timestamp } from '@ydbjs/value/primitive'
 import type { sql as SQL } from '../../db/index.ts'
+import { NULL_TEXT, toTs, tsFromIso } from '../../db/ydb-helpers.ts'
 
 type SqlInstance = typeof SQL
-
-// YDB rejects raw JS null in tagged templates — see project_ydb_specifics.md.
-// Preallocate typed nulls for each nullable column.
-const NULL_TEXT = new Optional(null, new TextType())
 
 /**
  * Raw YDB row shape. `createdAt`/`updatedAt` come back as JS Date from the SDK
@@ -82,11 +77,7 @@ export function createPropertyRepo(sql: SqlInstance) {
 		async create(tenantId: string, input: PropertyCreateInput): Promise<Property> {
 			const id = newId('property')
 			const now = new Date()
-			// createdAt/updatedAt columns are Timestamp (microsecond precision).
-			// @ydbjs/value infers a plain JS Date as `Datetime` (second precision),
-			// which silently truncates ms before the value reaches YDB. Wrap in
-			// `Timestamp` to preserve ms in both the stored value and the returned object.
-			const nowTs = new Timestamp(now)
+			const nowTs = toTs(now)
 			const timezone = input.timezone ?? 'Europe/Moscow'
 			await sql`
 				UPSERT INTO property (
@@ -142,8 +133,8 @@ export function createPropertyRepo(sql: SqlInstance) {
 					updatedAt: new Date().toISOString(),
 				}
 
-				const createdAtTs = new Timestamp(new Date(merged.createdAt))
-				const updatedAtTs = new Timestamp(new Date(merged.updatedAt))
+				const createdAtTs = tsFromIso(merged.createdAt)
+				const updatedAtTs = tsFromIso(merged.updatedAt)
 				const classificationId = merged.classificationId ?? NULL_TEXT
 				await tx`
 					UPSERT INTO property (

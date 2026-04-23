@@ -1,13 +1,9 @@
 import type { RoomType, RoomTypeCreateInput, RoomTypeUpdateInput } from '@horeca/shared'
 import { newId } from '@horeca/shared'
-import { Optional } from '@ydbjs/value/optional'
-import { Int32Type, TextType, Timestamp } from '@ydbjs/value/primitive'
 import type { sql as SQL } from '../../db/index.ts'
+import { NULL_INT32, NULL_TEXT, toNumber, toTs, tsFromIso } from '../../db/ydb-helpers.ts'
 
 type SqlInstance = typeof SQL
-
-const NULL_TEXT = new Optional(null, new TextType())
-const NULL_INT32 = new Optional(null, new Int32Type())
 
 type RoomTypeRow = {
 	tenantId: string
@@ -23,11 +19,6 @@ type RoomTypeRow = {
 	isActive: boolean
 	createdAt: Date
 	updatedAt: Date
-}
-
-function toNumber(v: number | bigint | null): number | null {
-	if (v === null) return null
-	return typeof v === 'bigint' ? Number(v) : v
 }
 
 function rowToRoomType(r: RoomTypeRow): RoomType {
@@ -90,9 +81,7 @@ export function createRoomTypeRepo(sql: SqlInstance) {
 		): Promise<RoomType> {
 			const id = newId('roomType')
 			const now = new Date()
-			// See property.repo.ts: wrap in Timestamp to preserve ms precision;
-			// @ydbjs/value infers plain Date as `Datetime` (seconds) and truncates.
-			const nowTs = new Timestamp(now)
+			const nowTs = toTs(now)
 			const description = input.description ?? NULL_TEXT
 			const areaSqm = input.areaSqm ?? NULL_INT32
 			await sql`
@@ -159,8 +148,8 @@ export function createRoomTypeRepo(sql: SqlInstance) {
 				}
 				const description = merged.description ?? NULL_TEXT
 				const areaSqm = merged.areaSqm ?? NULL_INT32
-				const createdAtTs = new Timestamp(new Date(merged.createdAt))
-				const updatedAtTs = new Timestamp(new Date(merged.updatedAt))
+				const createdAtTs = tsFromIso(merged.createdAt)
+				const updatedAtTs = tsFromIso(merged.updatedAt)
 				await tx`
 					UPSERT INTO roomType (
 						\`tenantId\`, \`id\`, \`propertyId\`, \`name\`, \`description\`,

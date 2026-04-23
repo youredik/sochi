@@ -1,9 +1,8 @@
+import { type MemberRole, memberRoleSchema } from '@horeca/shared'
 import { sql } from '../db/index.ts'
 import { factory } from '../factory.ts'
 
-type MemberRole = 'owner' | 'manager' | 'staff'
-
-const VALID_ROLES = new Set<MemberRole>(['owner', 'manager', 'staff'])
+const VALID_ROLES = new Set<MemberRole>(memberRoleSchema.options)
 
 /**
  * Requires an active organization on the session and that the current user

@@ -1,22 +1,11 @@
 import type { Room, RoomCreateInput, RoomUpdateInput } from '@horeca/shared'
 import { newId } from '@horeca/shared'
 import { YDBError } from '@ydbjs/error'
-import { Optional } from '@ydbjs/value/optional'
-import { Int32Type, TextType, Timestamp } from '@ydbjs/value/primitive'
 import type { sql as SQL } from '../../db/index.ts'
+import { NULL_INT32, NULL_TEXT, toNumber, toTs, tsFromIso } from '../../db/ydb-helpers.ts'
+import { RoomNumberTakenError } from '../../errors/domain.ts'
 
 type SqlInstance = typeof SQL
-
-const NULL_TEXT = new Optional(null, new TextType())
-const NULL_INT32 = new Optional(null, new Int32Type())
-
-/** Thrown when a UNIQUE index violation hits, e.g. duplicate (property, number). */
-export class RoomNumberTakenError extends Error {
-	constructor(number: string) {
-		super(`Room number already taken in this property: ${number}`)
-		this.name = 'RoomNumberTakenError'
-	}
-}
 
 /**
  * YDB PRECONDITION_FAILED status code (issueCode 2012 "Conflict with existing key").
@@ -40,11 +29,6 @@ type RoomRow = {
 	notes: string | null
 	createdAt: Date
 	updatedAt: Date
-}
-
-function toNumber(v: number | bigint | null): number | null {
-	if (v === null) return null
-	return typeof v === 'bigint' ? Number(v) : v
 }
 
 function rowToRoom(r: RoomRow): Room {
@@ -130,9 +114,7 @@ export function createRoomRepo(sql: SqlInstance) {
 		): Promise<Room> {
 			const id = newId('room')
 			const now = new Date()
-			// See property.repo.ts: wrap in Timestamp to preserve ms precision;
-			// @ydbjs/value infers plain Date as `Datetime` (seconds) and truncates.
-			const nowTs = new Timestamp(now)
+			const nowTs = toTs(now)
 			const floor = input.floor ?? NULL_INT32
 			const notes = input.notes ?? NULL_TEXT
 			try {
@@ -201,8 +183,8 @@ export function createRoomRepo(sql: SqlInstance) {
 					}
 					const floor = merged.floor ?? NULL_INT32
 					const notes = merged.notes ?? NULL_TEXT
-					const createdAtTs = new Timestamp(new Date(merged.createdAt))
-					const updatedAtTs = new Timestamp(new Date(merged.updatedAt))
+					const createdAtTs = tsFromIso(merged.createdAt)
+					const updatedAtTs = tsFromIso(merged.updatedAt)
 					try {
 						await tx`
 							UPSERT INTO room (

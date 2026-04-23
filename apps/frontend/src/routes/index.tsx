@@ -1,24 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
-
-type HealthResponse = {
-	status: 'ok' | 'degraded'
-	ydb: { connected: boolean; error?: string }
-	time: string
-}
+import { API_URL, api } from '../lib/api'
 
 export const Route = createFileRoute('/')({
 	component: HomePage,
 })
 
 function HomePage() {
-	const health = useQuery<HealthResponse>({
+	const health = useQuery({
 		queryKey: ['health', 'db'],
 		queryFn: async () => {
-			const res = await fetch(`${API_URL}/health/db`)
-			return (await res.json()) as HealthResponse
+			const res = await api.health.db.$get()
+			return res.json()
 		},
 		refetchInterval: 5_000,
 	})

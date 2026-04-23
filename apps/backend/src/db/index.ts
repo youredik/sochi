@@ -7,8 +7,10 @@ import { driver } from './driver.ts'
  *
  * Interpolated values are auto-bound as typed DECLARE parameters — no manual
  * placeholder management needed.
+ *
+ * Callers needing `YDBError` / `driver` directly import from `@ydbjs/error` and
+ * `./driver.ts` respectively — no re-exports here to keep the module boundary narrow.
  */
 export const sql = query(driver)
 
-export { YDBError } from '@ydbjs/error'
-export { closeDriver, driver, readyDriver } from './driver.ts'
+export { closeDriver, readyDriver } from './driver.ts'

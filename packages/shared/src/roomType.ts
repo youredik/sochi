@@ -50,7 +50,6 @@ export const roomTypePropertyParam = z.object({
 export const roomTypeListParams = z.object({
 	includeInactive: z.coerce.boolean().optional().default(false),
 })
-export type RoomTypeListParams = z.infer<typeof roomTypeListParams>
 
 /** RoomType as returned by API. */
 export type RoomType = {

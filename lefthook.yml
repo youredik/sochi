@@ -1,5 +1,8 @@
-# Pre-commit hooks — fast checks on staged files only.
-# Full pipeline (depcruise, knip, typecheck, test) runs in CI.
+# Git hooks. GitHub CI is temporarily disabled, so these are our only
+# automated gates — they MUST catch regressions before push.
+#
+# pre-commit: fast static checks (no DB), parallel where safe.
+# pre-push:   test suite (requires local YDB), runs once per push.
 
 pre-commit:
   parallel: true
@@ -10,3 +13,20 @@ pre-commit:
 
     - name: sherif
       run: pnpm sherif
+
+    - name: typecheck
+      glob: "*.{ts,tsx}"
+      run: pnpm typecheck
+
+    - name: knip
+      glob: "*.{ts,tsx,json}"
+      run: pnpm knip
+
+    - name: depcruise
+      glob: "*.{ts,tsx}"
+      run: pnpm depcruise
+
+pre-push:
+  jobs:
+    - name: tests
+      run: pnpm test

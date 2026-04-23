@@ -1,17 +1,7 @@
 import type { RoomTypeCreateInput, RoomTypeUpdateInput } from '@horeca/shared'
+import { PropertyNotFoundError } from '../../errors/domain.ts'
 import type { PropertyService } from '../property/property.service.ts'
 import type { RoomTypeRepo } from './roomType.repo.ts'
-
-/**
- * Thrown by `create` when the target property does not exist in the caller's
- * tenant. Routes translate this into 404 on the property resource.
- */
-export class PropertyNotFoundError extends Error {
-	constructor(propertyId: string) {
-		super(`Property not found: ${propertyId}`)
-		this.name = 'PropertyNotFoundError'
-	}
-}
 
 /**
  * RoomType service. Validates the parent property belongs to the current
