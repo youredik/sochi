@@ -2,6 +2,7 @@ import type { AnyFieldApi } from '@tanstack/react-form'
 import type { ComponentProps } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { formatErrors } from './format-errors.ts'
 
 /**
  * TanStack-Form-backed text input with accessible label + error.
@@ -79,17 +80,4 @@ export function TextField({ field, label, description, type = 'text', ...rest }:
 			) : null}
 		</div>
 	)
-}
-
-/** TanStack Form errors are `ValidationError[]` — string | { message } | Zod issue. */
-function formatErrors(errors: AnyFieldApi['state']['meta']['errors']): string {
-	return errors
-		.map((e) => {
-			if (typeof e === 'string') return e
-			if (e && typeof e === 'object' && 'message' in e && typeof e.message === 'string') {
-				return e.message
-			}
-			return 'Ошибка валидации'
-		})
-		.join(', ')
 }
