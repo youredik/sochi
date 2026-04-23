@@ -31,6 +31,10 @@
 		"./ratePlan": {
 			"types": "./src/ratePlan.ts",
 			"default": "./src/ratePlan.ts"
+		},
+		"./rate": {
+			"types": "./src/rate.ts",
+			"default": "./src/rate.ts"
 		}
 	},
 	"publishConfig": {
@@ -62,6 +66,10 @@
 			"./ratePlan": {
 				"types": "./dist/ratePlan.d.ts",
 				"default": "./dist/ratePlan.js"
+			},
+			"./rate": {
+				"types": "./dist/rate.d.ts",
+				"default": "./dist/rate.js"
 			}
 		}
 	},

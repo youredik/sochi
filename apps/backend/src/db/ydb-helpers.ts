@@ -1,5 +1,5 @@
 import { Optional } from '@ydbjs/value/optional'
-import { Int32Type, TextType, Timestamp } from '@ydbjs/value/primitive'
+import { Int32Type, TextType, Timestamp, Date as YdbDate } from '@ydbjs/value/primitive'
 
 /**
  * Shared YDB type helpers for repo layer.
@@ -42,4 +42,49 @@ export function toTs(d: Date): Timestamp {
 /** Convert an ISO-8601 string back into a YDB `Timestamp`. Used on update() paths. */
 export function tsFromIso(iso: string): Timestamp {
 	return new Timestamp(new Date(iso))
+}
+
+/**
+ * Convert an ISO-8601 `YYYY-MM-DD` string into a YDB `Date` (calendar day).
+ *
+ * Why the wrap: plain JS Date inference in `@ydbjs/value` is `Datetime`
+ * (seconds), which YDB rejects for `Date`-typed columns with
+ * `ERROR(1030): Type annotation`. Add the wrap or the INSERT fails.
+ * See `project_ydb_specifics.md` #10 for the empirical lesson.
+ */
+export function dateFromIso(iso: string): YdbDate {
+	return new YdbDate(new Date(iso))
+}
+
+/**
+ * Money helpers — we store amounts as `Int64` "micros" (× 10^6) because
+ * @ydbjs/value 6.x has no Decimal wrapper (see `project_ydb_specifics.md`
+ * #13). 1 RUB = 1_000_000 micros. Follows Google Ads / Google Cloud Billing
+ * / Stripe conventions.
+ */
+const MICROS_PER_UNIT = 1_000_000n
+
+/** Convert a decimal string like "1234.56" or "0.000001" to Int64 micros. */
+export function decimalToMicros(decimal: string): bigint {
+	if (!/^-?\d+(\.\d+)?$/.test(decimal)) {
+		throw new Error(`Invalid decimal string: ${decimal}`)
+	}
+	const negative = decimal.startsWith('-')
+	const abs = negative ? decimal.slice(1) : decimal
+	const [whole, fraction = ''] = abs.split('.') as [string, string?]
+	// Pad/truncate fraction to exactly 6 digits (round towards zero on truncation).
+	const fracPadded = `${fraction}000000`.slice(0, 6)
+	const micros = BigInt(whole) * MICROS_PER_UNIT + BigInt(fracPadded)
+	return negative ? -micros : micros
+}
+
+/** Convert Int64 micros to a decimal string with up to 6 fractional digits. */
+export function microsToDecimal(micros: bigint): string {
+	const negative = micros < 0n
+	const abs = negative ? -micros : micros
+	const whole = abs / MICROS_PER_UNIT
+	const fraction = abs % MICROS_PER_UNIT
+	const fractionStr =
+		fraction === 0n ? '' : `.${fraction.toString().padStart(6, '0').replace(/0+$/, '')}`
+	return `${negative ? '-' : ''}${whole}${fractionStr}`
 }

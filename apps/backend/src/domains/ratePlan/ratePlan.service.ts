@@ -55,3 +55,5 @@ export function createRatePlanService(
 		delete: (tenantId: string, id: string) => repo.delete(tenantId, id),
 	}
 }
+
+export type RatePlanService = ReturnType<typeof createRatePlanService>

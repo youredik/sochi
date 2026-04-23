@@ -11,8 +11,8 @@
  * property-based tests for Rate.compute(), Availability.allotment() etc.
  */
 import { fc, test } from '@fast-check/vitest'
-import { describe, expect } from 'vitest'
-import { toNumber } from './ydb-helpers.ts'
+import { describe, expect, test as vitestTest } from 'vitest'
+import { decimalToMicros, microsToDecimal, toNumber } from './ydb-helpers.ts'
 
 describe('toNumber', () => {
 	test('returns null for null input (identity on null)', () => {
@@ -48,4 +48,47 @@ describe('toNumber', () => {
 			expect(toNumber(n)).toBe(toNumber(BigInt(n)))
 		},
 	)
+})
+
+describe('micros ↔ decimal conversion', () => {
+	vitestTest('exact-value boundaries', () => {
+		expect(decimalToMicros('0')).toBe(0n)
+		expect(decimalToMicros('1')).toBe(1_000_000n)
+		expect(decimalToMicros('1.5')).toBe(1_500_000n)
+		expect(decimalToMicros('1234.567890')).toBe(1_234_567_890n)
+		expect(decimalToMicros('0.000001')).toBe(1n)
+		expect(decimalToMicros('-42.5')).toBe(-42_500_000n)
+		// Excess precision truncates (does not round).
+		expect(decimalToMicros('0.0000019')).toBe(1n)
+
+		expect(microsToDecimal(0n)).toBe('0')
+		expect(microsToDecimal(1_000_000n)).toBe('1')
+		expect(microsToDecimal(1_500_000n)).toBe('1.5')
+		expect(microsToDecimal(1_234_567_890n)).toBe('1234.56789')
+		expect(microsToDecimal(1n)).toBe('0.000001')
+		expect(microsToDecimal(-42_500_000n)).toBe('-42.5')
+	})
+
+	vitestTest('rejects invalid decimal strings', () => {
+		expect(() => decimalToMicros('abc')).toThrow(/Invalid decimal/)
+		expect(() => decimalToMicros('1.2.3')).toThrow(/Invalid decimal/)
+		expect(() => decimalToMicros('')).toThrow(/Invalid decimal/)
+		expect(() => decimalToMicros('1e5')).toThrow(/Invalid decimal/) // no scientific notation
+	})
+
+	test.prop([
+		fc
+			.tuple(
+				fc.integer({ min: -1_000_000_000, max: 1_000_000_000 }),
+				fc.integer({ min: 0, max: 999_999 }),
+			)
+			.map(([whole, frac]) => {
+				const fracStr = frac.toString().padStart(6, '0').replace(/0+$/, '')
+				return fracStr.length > 0 ? `${whole}.${fracStr}` : `${whole}`
+			}),
+	])('roundtrip: micros → decimal → micros is identity for representable values', (s) => {
+		const micros = decimalToMicros(s)
+		const back = microsToDecimal(micros)
+		expect(decimalToMicros(back)).toBe(micros)
+	})
 })

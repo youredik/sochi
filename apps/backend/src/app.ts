@@ -9,6 +9,8 @@ import { auth } from './auth.ts'
 import { sql } from './db/index.ts'
 import { createPropertyFactory } from './domains/property/property.factory.ts'
 import { createPropertyRoutes } from './domains/property/property.routes.ts'
+import { createRateFactory } from './domains/rate/rate.factory.ts'
+import { createRateRoutes } from './domains/rate/rate.routes.ts'
 import { createRatePlanFactory } from './domains/ratePlan/ratePlan.factory.ts'
 import { createRatePlanRoutes } from './domains/ratePlan/ratePlan.routes.ts'
 import { createRoomFactory } from './domains/room/room.factory.ts'
@@ -32,6 +34,7 @@ const propertyFactory = createPropertyFactory(sql)
 const roomTypeFactory = createRoomTypeFactory(sql, propertyFactory.service)
 const roomFactory = createRoomFactory(sql, propertyFactory.service, roomTypeFactory.service)
 const ratePlanFactory = createRatePlanFactory(sql, propertyFactory.service, roomTypeFactory.service)
+const rateFactory = createRateFactory(sql, ratePlanFactory.service)
 
 const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
 	.map((o) => o.trim())
@@ -98,6 +101,7 @@ const routes = app
 	.route('/api/v1', createRoomTypeRoutes(roomTypeFactory))
 	.route('/api/v1', createRoomRoutes(roomFactory))
 	.route('/api/v1', createRatePlanRoutes(ratePlanFactory))
+	.route('/api/v1', createRateRoutes(rateFactory))
 	.get('/health', (c) =>
 		c.json(
 			{

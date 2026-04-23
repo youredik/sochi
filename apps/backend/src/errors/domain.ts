@@ -65,3 +65,11 @@ export class RatePlanCodeTakenError extends ConflictError {
 		this.name = 'RatePlanCodeTakenError'
 	}
 }
+
+/** Parent ratePlan missing or in wrong tenant. Surfaced by rate service. */
+export class RatePlanNotFoundError extends NotFoundError {
+	constructor(ratePlanId: string) {
+		super('RatePlan', ratePlanId)
+		this.name = 'RatePlanNotFoundError'
+	}
+}
