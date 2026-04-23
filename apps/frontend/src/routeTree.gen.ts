@@ -9,50 +9,206 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AppOSelectRouteImport } from './routes/_app.o-select'
+import { Route as AppOOrgSlugRouteImport } from './routes/_app.o.$orgSlug'
+import { Route as AppOOrgSlugIndexRouteImport } from './routes/_app.o.$orgSlug.index'
 
-const IndexRoute = IndexRouteImport.update({
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOSelectRoute = AppOSelectRouteImport.update({
+  id: '/o-select',
+  path: '/o-select',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOOrgSlugRoute = AppOOrgSlugRouteImport.update({
+  id: '/o/$orgSlug',
+  path: '/o/$orgSlug',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOOrgSlugIndexRoute = AppOOrgSlugIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppOOrgSlugRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof AppIndexRoute
+  '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
+  '/signup': typeof SignupRoute
+  '/o-select': typeof AppOSelectRoute
+  '/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
+  '/signup': typeof SignupRoute
+  '/o-select': typeof AppOSelectRoute
+  '/': typeof AppIndexRoute
+  '/o/$orgSlug': typeof AppOOrgSlugIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
+  '/signup': typeof SignupRoute
+  '/_app/o-select': typeof AppOSelectRoute
+  '/_app/': typeof AppIndexRoute
+  '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/_app/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/privacy'
+    | '/signup'
+    | '/o-select'
+    | '/o/$orgSlug'
+    | '/o/$orgSlug/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/login' | '/privacy' | '/signup' | '/o-select' | '/' | '/o/$orgSlug'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/login'
+    | '/privacy'
+    | '/signup'
+    | '/_app/o-select'
+    | '/_app/'
+    | '/_app/o/$orgSlug'
+    | '/_app/o/$orgSlug/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
+  SignupRoute: typeof SignupRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/o-select': {
+      id: '/_app/o-select'
+      path: '/o-select'
+      fullPath: '/o-select'
+      preLoaderRoute: typeof AppOSelectRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/o/$orgSlug': {
+      id: '/_app/o/$orgSlug'
+      path: '/o/$orgSlug'
+      fullPath: '/o/$orgSlug'
+      preLoaderRoute: typeof AppOOrgSlugRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/o/$orgSlug/': {
+      id: '/_app/o/$orgSlug/'
+      path: '/'
+      fullPath: '/o/$orgSlug/'
+      preLoaderRoute: typeof AppOOrgSlugIndexRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
     }
   }
 }
 
+interface AppOOrgSlugRouteChildren {
+  AppOOrgSlugIndexRoute: typeof AppOOrgSlugIndexRoute
+}
+
+const AppOOrgSlugRouteChildren: AppOOrgSlugRouteChildren = {
+  AppOOrgSlugIndexRoute: AppOOrgSlugIndexRoute,
+}
+
+const AppOOrgSlugRouteWithChildren = AppOOrgSlugRoute._addFileChildren(
+  AppOOrgSlugRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppOSelectRoute: typeof AppOSelectRoute
+  AppIndexRoute: typeof AppIndexRoute
+  AppOOrgSlugRoute: typeof AppOOrgSlugRouteWithChildren
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppOSelectRoute: AppOSelectRoute,
+  AppIndexRoute: AppIndexRoute,
+  AppOOrgSlugRoute: AppOOrgSlugRouteWithChildren,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
+  SignupRoute: SignupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
