@@ -30,7 +30,7 @@ abstract class ConflictError extends DomainError {
 
 /** `(tenantId, propertyId, number)` UNIQUE index violation on `room`. */
 export class RoomNumberTakenError extends ConflictError {
-	readonly code = 'ROOM_NUMBER_TAKEN'
+	override readonly code = 'ROOM_NUMBER_TAKEN'
 	constructor(number: string) {
 		super(`Room number already taken in this property: ${number}`)
 		this.name = 'RoomNumberTakenError'

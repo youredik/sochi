@@ -1,5 +1,6 @@
 import { YDBError } from '@ydbjs/error'
 import { Hono } from 'hono'
+import { contextStorage } from 'hono/context-storage'
 import { cors } from 'hono/cors'
 import { requestId } from 'hono/request-id'
 import { pinoLogger } from 'hono-pino'
@@ -33,8 +34,14 @@ const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
 	.map((o) => o.trim())
 	.filter((o) => o.length > 0)
 
-// Request ID must run FIRST so every subsequent middleware (including the
-// pino logger) can read `c.var.requestId`. Echoed as `X-Request-Id` header.
+// contextStorage MUST be the very first middleware — it snapshots `c.var` into
+// an AsyncLocalStorage so deeply-nested code (repos, background tasks spawned
+// during a request) can read `requestId`/`tenantId`/`logger` without threading
+// them through every parameter. See `src/context.ts`.
+app.use('*', contextStorage())
+
+// Request ID runs next so every subsequent middleware (pino logger, services)
+// can read `c.var.requestId`. Echoed as `X-Request-Id` response header.
 app.use('*', requestId())
 
 // Structured request/response logging with per-request child logger in c.var.logger.

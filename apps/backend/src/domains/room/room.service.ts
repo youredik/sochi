@@ -41,7 +41,7 @@ export function createRoomService(
 			}
 			return repo.listByProperty(tenantId, propertyId, {
 				includeInactive: opts.includeInactive ?? false,
-				roomTypeId: opts.roomTypeId,
+				...(opts.roomTypeId ? { roomTypeId: opts.roomTypeId } : {}),
 			})
 		},
 

@@ -120,16 +120,22 @@ export function createPropertyRepo(sql: SqlInstance) {
 				if (!row) return null
 				const current = rowToProperty(row)
 
-				// Nullable-field patch rule: treat `undefined` as "no change",
-				// `null` as "explicit clear". Plain `??` fails to distinguish them.
+				// Patch semantics: `undefined` = "no change", `null` = "explicit clear"
+				// (only for nullable fields). With `exactOptionalPropertyTypes` we must
+				// build `merged` field-by-field — spread would leak `undefined` into
+				// required fields.
 				const nextClassificationId: string | null =
 					'classificationId' in patch && patch.classificationId !== undefined
 						? patch.classificationId
 						: current.classificationId
 				const merged: Property = {
 					...current,
-					...patch,
+					name: patch.name ?? current.name,
+					address: patch.address ?? current.address,
+					city: patch.city ?? current.city,
+					timezone: patch.timezone ?? current.timezone,
 					classificationId: nextClassificationId,
+					isActive: patch.isActive ?? current.isActive,
 					updatedAt: new Date().toISOString(),
 				}
 

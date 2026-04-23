@@ -150,7 +150,11 @@ function buildWhere(wheres: CleanedWhere[]): { clause: string; params: unknown[]
 			}
 			const idx = params.length
 			params.push(val)
-			condition = `\`${field}\` ${opMap[op] ?? '='} $p${idx}`
+			// `op` can technically be undefined in the Where type even after `Required`
+			// (exactOptionalPropertyTypes keeps `| undefined`). Default to eq — BA never
+			// emits undefined here, but we defend at the boundary.
+			const sqlOp = op ? (opMap[op] ?? '=') : '='
+			condition = `\`${field}\` ${sqlOp} $p${idx}`
 		}
 
 		if (i > 0) parts.push(w.connector === 'OR' ? ' OR ' : ' AND ')
@@ -257,12 +261,18 @@ function buildCrudAdapter(q: SqlInstance): CustomAdapter {
 			const selectSql = `SELECT * FROM \`${model}\` WHERE \`id\` = $p0`
 			const [rows] = await execQuery(q, selectSql, [id])
 			const row = rows[0]
-			// biome-ignore lint/suspicious/noExplicitAny: CustomAdapter generic <T> requires cast
-			if (!row) return data as any
-			// biome-ignore lint/suspicious/noExplicitAny: CustomAdapter generic <T> requires cast
-			return convertRow(row) as any
+			// BA `CustomAdapter.create<T>` promises to return T (the input shape).
+			// We can only surface the normalized row; cast through `unknown` is the
+			// honest pattern — narrower than `as any` (no method proliferation) but
+			// explicit about the type-level limitation in BA's polymorphic adapter.
+			if (!row) return data
+			return convertRow(row) as unknown as typeof data
 		},
 
+		// @ts-expect-error Better Auth `CustomAdapter.findOne<T>` promises to return T
+		// (caller's row type), but our generic converter returns Record<string, unknown>.
+		// Known SDK limitation — BA's polymorphic adapter interface cannot be satisfied
+		// from a type-erased row mapper.
 		async findOne({ model, where }) {
 			const viewHint = resolveViewHint(model, where)
 			const viewClause = viewHint ? ` VIEW ${viewHint}` : ''
@@ -274,10 +284,10 @@ function buildCrudAdapter(q: SqlInstance): CustomAdapter {
 				idempotent: true,
 			})
 			if (!rows[0]) return null
-			// biome-ignore lint/suspicious/noExplicitAny: CustomAdapter generic <T> requires cast
-			return convertRow(rows[0]) as any
+			return convertRow(rows[0])
 		},
 
+		// @ts-expect-error Same as findOne: CustomAdapter.findMany<T> expects T[].
 		async findMany({ model, where, limit, sortBy, offset }) {
 			let viewClause = ''
 			if (where && where.length > 0) {
@@ -299,8 +309,7 @@ function buildCrudAdapter(q: SqlInstance): CustomAdapter {
 				idempotent: true,
 			})
 			const out = rows ?? []
-			// biome-ignore lint/suspicious/noExplicitAny: CustomAdapter generic <T> requires cast
-			return out.map(convertRow) as any
+			return out.map(convertRow)
 		},
 
 		async count({ model, where }) {
@@ -314,6 +323,7 @@ function buildCrudAdapter(q: SqlInstance): CustomAdapter {
 			return typeof cnt === 'bigint' ? Number(cnt) : Number(cnt ?? 0)
 		},
 
+		// @ts-expect-error Same as findOne: CustomAdapter.update<T> expects T | null.
 		async update({ model, where, update: updateData }) {
 			const viewHint = resolveViewHint(model, where)
 			const viewClause = viewHint ? ` VIEW ${viewHint}` : ''
@@ -335,8 +345,7 @@ function buildCrudAdapter(q: SqlInstance): CustomAdapter {
 				id,
 			])
 			if (!updatedRows[0]) return null
-			// biome-ignore lint/suspicious/noExplicitAny: CustomAdapter generic <T> requires cast
-			return convertRow(updatedRows[0]) as any
+			return convertRow(updatedRows[0])
 		},
 
 		async updateMany({ model, where, update: updateData }) {

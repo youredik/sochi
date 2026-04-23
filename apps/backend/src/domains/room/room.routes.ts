@@ -37,9 +37,11 @@ export function createRoomRoutes(f: RoomFactory) {
 			async (c) => {
 				const { propertyId } = c.req.valid('param')
 				const { includeInactive, roomTypeId } = c.req.valid('query')
+				// Under exactOptionalPropertyTypes we must omit `roomTypeId` instead of
+				// passing `undefined` — the listByProperty signature declares it optional.
 				const items = await service.listByProperty(c.var.tenantId, propertyId, {
 					includeInactive,
-					roomTypeId,
+					...(roomTypeId ? { roomTypeId } : {}),
 				})
 				return c.json({ data: items }, 200)
 			},
