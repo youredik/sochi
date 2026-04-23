@@ -24,7 +24,8 @@
 		"infra:reset": "docker compose down -v && docker compose up -d && pnpm migrate",
 		"infra:verify": "./scripts/verify-infra.sh",
 		"migrate": "node --env-file-if-exists=.env apps/backend/src/db/apply-migrations.ts",
-		"smoke": "node --env-file-if-exists=.env scripts/smoke.ts"
+		"smoke": "node --env-file-if-exists=.env scripts/smoke.ts",
+		"smoke:fresh": "pnpm infra:reset && pnpm smoke"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.12",

@@ -114,6 +114,21 @@ Exit 0 только если все 20+ assertions прошли. Скрипт в
 Требует запущенного `docker compose up ydb` + applied migrations
 (`pnpm migrate`).
 
+### `pnpm smoke:fresh` — regression from absolute zero
+
+`pnpm smoke:fresh` = `infra:reset` (docker compose down -v + up + migrate)
++ `smoke`. Проверяет, что весь стек поднимается с пустого места:
+
+- wipe YDB volume
+- fresh YDB container
+- все 5 миграций применяются (включая CDC changefeed + consumer
+  `activity_writer` в migration 0005)
+- CDC consumer регистрируется и читает топик
+- 21 assertions smoke проходят end-to-end
+
+Запускайте **перед каждым крупным PR** если трогали migrations, schema,
+или CDC wiring. Полная проверка ≈ 30 секунд на локальной машине.
+
 ## Что дальше
 
 Следующие шаги (см. memory):
