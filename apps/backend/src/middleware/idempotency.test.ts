@@ -30,6 +30,14 @@
  *     [IM9] Stored record matches the response BODY AND STATUS exactly
  *           (including non-2xx — cache the error responses too if they come
  *           back via our onError handler).
+ *    [IM10] Error response cached: handler throws DomainError → onError
+ *           writes 4xx with body; middleware stores exactly that; replay
+ *           returns the same 4xx WITHOUT re-running the handler. Honors
+ *           IETF §2.6 "respond with the result of the previously completed
+ *           operation, success OR an error".
+ *    [IM11] PK separation — DIFFERENT key in the same tenant → fresh run
+ *           (key is second dimension of compound PK; covered implicitly by
+ *           IM1/IM2 using fresh keys, but explicit assertion here).
  *
  * Requires local YDB (migration 0004 creates the `idempotencyKey` table).
  */
@@ -95,6 +103,14 @@ describe('idempotencyMiddleware', { tags: ['db'], timeout: 30_000 }, () => {
 			.post('/echo2', async (c) => {
 				const body = await c.req.json()
 				return c.json(await handler(body), 201)
+			})
+			.post('/fail', async (c) => {
+				// Always throws BookingNotFoundError → onError maps to 404.
+				// Used by [IM10] to verify error-response caching + replay.
+				await c.req.json()
+				handler(null)
+				const { BookingNotFoundError } = await import('../errors/domain.ts')
+				throw new BookingNotFoundError('book_nonexistent')
 			})
 			.get('/ping', async (c) => {
 				handler(null)
@@ -245,5 +261,40 @@ describe('idempotencyMiddleware', { tags: ['db'], timeout: 30_000 }, () => {
 		const bodyB = rowB?.responseBody as { echoed: { who: string } }
 		expect(bodyA.echoed.who).toBe('A')
 		expect(bodyB.echoed.who).toBe('B')
+	})
+
+	test('[IM10] error response (4xx) is cached; replay returns same 4xx without re-run', async () => {
+		const { app, handler } = mkApp(TENANT_A)
+		const key = mkKey()
+
+		// First call — handler throws BookingNotFoundError → onError maps to 404.
+		const first = await post(app, '/fail', { attempt: 1 }, key)
+		expect(first.status).toBe(404)
+		const firstBody = (await first.json()) as { error: { code: string } }
+		expect(firstBody.error.code).toBe('NOT_FOUND')
+		expect(handler).toHaveBeenCalledTimes(1)
+
+		// Replay with same key + same body → cached 404 returned; handler NOT re-run.
+		const replay = await post(app, '/fail', { attempt: 1 }, key)
+		expect(replay.status).toBe(404)
+		expect(await replay.json()).toEqual(firstBody)
+		expect(handler).toHaveBeenCalledTimes(1)
+
+		// Stored record has the 404 status + error body — IETF §2.6 honored.
+		const stored = await repo.find(TENANT_A, key)
+		expect(stored?.responseStatus).toBe(404)
+		expect(stored?.responseBody).toEqual(firstBody)
+	})
+
+	test('[IM11] same tenant + DIFFERENT key → independent runs (PK key-dimension separation)', async () => {
+		const { app, handler } = mkApp(TENANT_A)
+		const key1 = mkKey()
+		const key2 = mkKey()
+		await post(app, '/echo', { same: 'body' }, key1)
+		await post(app, '/echo', { same: 'body' }, key2)
+		// Handler ran TWICE — distinct keys mean distinct stored rows.
+		expect(handler).toHaveBeenCalledTimes(2)
+		expect(await repo.find(TENANT_A, key1)).not.toBeNull()
+		expect(await repo.find(TENANT_A, key2)).not.toBeNull()
 	})
 })
