@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { BookingCreateDialog } from '../../bookings/components/booking-create-dialog'
+import { BookingEditDialog } from '../../bookings/components/booking-edit-dialog'
 import { useGridData } from '../hooks/use-grid-data'
 import { styleFor } from '../lib/booking-palette'
 import { addDays, iterateDates, todayIso } from '../lib/date-range'
@@ -22,8 +23,10 @@ interface ClickedCell {
  *   - 15-day default window (Bnovo 2026 default; 30-day / adaptive modes
  *     deferred until user-tested)
  *   - Today column highlighted (Cloudbeds-style visual anchor)
- *   - Booking bands overlayed as absolute-positioned chips spanning their
- *     nights (checkIn .. checkOut-1 inclusive). Mews 2026 palette.
+ *   - Booking bands are grid-column-span cells (NOT absolute overlays)
+ *     with `aria-colspan={N}` and `grid-column: span N` — 2026 canonical
+ *     APG pattern (React Aria + AG Grid). Band at checkIn position, next
+ *     (N-1) empty-cell slots skipped in render. Mews 2026 palette.
  *
  * a11y: `role="grid"` with `aria-rowcount`/`aria-colcount` per W3C ARIA
  * APG; rowheader cells (roomType name) + columnheader row (dates). Full
@@ -42,6 +45,7 @@ export function Chessboard() {
 	const windowTo = useMemo(() => addDays(windowFrom, WINDOW_DAYS - 1), [windowFrom])
 	const dates = useMemo(() => iterateDates(windowFrom, windowTo), [windowFrom, windowTo])
 	const [clickedCell, setClickedCell] = useState<ClickedCell | null>(null)
+	const [editingBookingId, setEditingBookingId] = useState<string | null>(null)
 
 	const { propertyId, propertyName, roomTypes, bookings, isLoading, isError } = useGridData(
 		windowFrom,
@@ -140,67 +144,102 @@ export function Chessboard() {
 							</div>
 						))}
 
-						{/* Room-type rows */}
-						{roomTypes.map((rt, rowIdx) => (
-							<div key={rt.id} role="row" aria-rowindex={rowIdx + 2} className="contents">
-								<div
-									className="border-border bg-background sticky left-0 z-10 border-r border-b p-2 font-medium"
-									role="rowheader"
-									aria-colindex={1}
-								>
-									<div>{rt.name}</div>
-									<div className="text-muted-foreground text-[10px]">
-										{rt.inventoryCount} {rt.inventoryCount === 1 ? 'номер' : 'номеров'}
+						{/* Room-type rows. Band cells use grid-column span + aria-colspan
+						    — 2026 canonical APG pattern (React Aria, AG Grid 2026).
+						    NOT absolute-positioned overlays (legacy pattern that (a) leaks
+						    gridcell focus targets onto neighboring dates breaking screen-
+						    reader navigation per Sarah Higley 2026, and (b) confuses
+						    Playwright hit-testing in sticky-header grids). */}
+						{roomTypes.map((rt, rowIdx) => {
+							const rowBookings = bookings.filter((b) => b.roomTypeId === rt.id)
+							const bandByStart = new Map<
+								number,
+								{
+									id: string
+									status: (typeof rowBookings)[number]['status']
+									checkIn: string
+									checkOut: string
+									span: number
+									truncatedLeft: boolean
+									truncatedRight: boolean
+								}
+							>()
+							const covered = new Set<number>()
+							for (const b of rowBookings) {
+								const pos = bandPosition(b, windowFrom, windowTo)
+								if (!pos) continue
+								const span = pos.colEnd - pos.colStart
+								bandByStart.set(pos.colStart, {
+									id: b.id,
+									status: b.status,
+									checkIn: b.checkIn,
+									checkOut: b.checkOut,
+									span,
+									truncatedLeft: pos.truncatedLeft,
+									truncatedRight: pos.truncatedRight,
+								})
+								for (let i = pos.colStart; i < pos.colEnd; i++) covered.add(i)
+							}
+
+							return (
+								<div key={rt.id} role="row" aria-rowindex={rowIdx + 2} className="contents">
+									<div
+										className="border-border bg-background sticky left-0 z-10 border-r border-b p-2 font-medium"
+										role="rowheader"
+										aria-colindex={1}
+									>
+										<div>{rt.name}</div>
+										<div className="text-muted-foreground text-[10px]">
+											{rt.inventoryCount} {rt.inventoryCount === 1 ? 'номер' : 'номеров'}
+										</div>
 									</div>
-								</div>
-								{dates.map((d, colIdx) => (
-									<button
-										key={d}
-										type="button"
-										className={`border-border hover:bg-muted/60 focus-visible:ring-ring relative h-10 border-b text-left transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none ${
-											colIdx === todayIdx ? 'bg-blue-50' : ''
-										}`}
-										role="gridcell"
-										aria-colindex={colIdx + 2}
-										aria-label={`Создать бронирование: ${rt.name}, ${d}`}
-										data-cell-room-type-id={rt.id}
-										data-cell-date={d}
-										onClick={() =>
-											setClickedCell({ roomTypeId: rt.id, roomTypeName: rt.name, date: d })
+									{dates.map((d, colIdx) => {
+										const band = bandByStart.get(colIdx)
+										if (band) {
+											const style = styleFor(band.status)
+											return (
+												<button
+													key={`band-${band.id}`}
+													type="button"
+													className={`focus-visible:ring-ring border-border flex h-10 items-center overflow-hidden border-b px-2 text-[11px] focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none ${style.bg} ${style.text}`}
+													style={{ gridColumn: `span ${band.span}` }}
+													role="gridcell"
+													aria-colindex={colIdx + 2}
+													aria-colspan={band.span}
+													aria-label={`${style.label}, ${band.checkIn} — ${band.checkOut}. Открыть действия.`}
+													data-booking-id={band.id}
+													onClick={() => setEditingBookingId(band.id)}
+												>
+													<span className="truncate">
+														{band.truncatedLeft ? '…' : ''}
+														{style.label}
+														{band.truncatedRight ? '…' : ''}
+													</span>
+												</button>
+											)
 										}
-									/>
-								))}
-								{/* Booking bands overlay for this row */}
-								{bookings
-									.filter((b) => b.roomTypeId === rt.id)
-									.map((b) => {
-										const pos = bandPosition(b, windowFrom, windowTo)
-										if (!pos) return null
-										const style = styleFor(b.status)
+										if (covered.has(colIdx)) return null // already spanned by band
 										return (
-											<div
-												key={b.id}
-												className={`absolute my-1 flex items-center overflow-hidden rounded px-2 text-[11px] ${style.bg} ${style.text}`}
-												style={{
-													gridColumnStart: pos.colStart + 2,
-													gridColumnEnd: pos.colEnd + 2,
-													gridRow: rowIdx + 2,
-													height: '28px',
-												}}
+											<button
+												key={d}
+												type="button"
+												className={`border-border hover:bg-muted/60 focus-visible:ring-ring h-10 border-b text-left transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none ${
+													colIdx === todayIdx ? 'bg-blue-50' : ''
+												}`}
 												role="gridcell"
-												aria-label={`${style.label}, ${b.checkIn} — ${b.checkOut}`}
-												data-booking-id={b.id}
-											>
-												<span className="truncate">
-													{pos.truncatedLeft ? '…' : ''}
-													{style.label}
-													{pos.truncatedRight ? '…' : ''}
-												</span>
-											</div>
+												aria-colindex={colIdx + 2}
+												aria-label={`Создать бронирование: ${rt.name}, ${d}`}
+												data-cell-room-type-id={rt.id}
+												data-cell-date={d}
+												onClick={() =>
+													setClickedCell({ roomTypeId: rt.id, roomTypeName: rt.name, date: d })
+												}
+											/>
 										)
 									})}
-							</div>
-						))}
+								</div>
+							)
+						})}
 					</div>
 				</div>
 			)}
@@ -215,6 +254,19 @@ export function Chessboard() {
 					roomTypeId={clickedCell.roomTypeId}
 					roomTypeName={clickedCell.roomTypeName}
 					checkIn={clickedCell.date}
+					windowFrom={windowFrom}
+					windowTo={windowTo}
+				/>
+			) : null}
+
+			{editingBookingId ? (
+				<BookingEditDialog
+					open={true}
+					onOpenChange={(open) => {
+						if (!open) setEditingBookingId(null)
+					}}
+					bookingId={editingBookingId}
+					propertyId={propertyId}
 					windowFrom={windowFrom}
 					windowTo={windowTo}
 				/>
