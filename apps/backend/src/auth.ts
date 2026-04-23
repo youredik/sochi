@@ -4,7 +4,13 @@ import { organization } from 'better-auth/plugins/organization'
 import { ac, manager, owner, staff } from './access-control.ts'
 import { ydbAdapter } from './db/better-auth-adapter.ts'
 import { sql } from './db/index.ts'
+import { toTs } from './db/ydb-helpers.ts'
 import { env } from './env.ts'
+
+/** 14-day trial for newly created organizations. Defined here (not in a magic
+ *  number) so billing code downstream reads the same constant. */
+const TRIAL_DAYS = 14
+const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000
 
 /**
  * Better Auth instance for HoReCa.
@@ -87,6 +93,37 @@ export const auth = betterAuth({
 			organizationLimit: 5,
 			invitationExpiresIn: 7 * 24 * 60 * 60,
 			cancelPendingInvitationsOnReInvite: true,
+			organizationHooks: {
+				/**
+				 * Auto-populate `organizationProfile` 1:1 with the new organization.
+				 *
+				 * BA's `organization` table holds only the public fields it needs
+				 * (name/slug/logo/createdAt/id). Every HoReCa-specific attribute —
+				 * `plan`, `trialEndsAt`, `dpaAcceptedAt`, `inn`, `taxForm`, … —
+				 * lives on `organizationProfile` and must exist for billing /
+				 * compliance / downstream feature code to read a row by tenantId.
+				 *
+				 * Running here (not in a cron) guarantees the profile row exists
+				 * the moment the org does. Previously flagged as blocker in
+				 * `project_organization_profile_todo.md` — resolved.
+				 *
+				 * NB: UPSERT is idempotent. If BA ever retries createOrganization
+				 * for the same id we don't want a duplicate PK violation.
+				 */
+				afterCreateOrganization: async ({ organization: org }) => {
+					const now = new Date()
+					const trialEndsAt = new Date(now.getTime() + TRIAL_MS)
+					await sql`
+						UPSERT INTO organizationProfile (
+							\`organizationId\`, \`plan\`, \`trialEndsAt\`,
+							\`createdAt\`, \`updatedAt\`
+						) VALUES (
+							${org.id}, ${'free'}, ${toTs(trialEndsAt)},
+							${toTs(now)}, ${toTs(now)}
+						)
+					`
+				},
+			},
 		}),
 	],
 	advanced: {
