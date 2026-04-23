@@ -236,4 +236,69 @@ describe('rate.repo', { tags: ['db'], timeout: 30_000 }, () => {
 			expect(r?.amount).toBe(c.out)
 		}
 	})
+
+	test('tenant isolation: deleteOne from wrong tenant returns false, row intact', async () => {
+		await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, RP_A, {
+			rates: [{ date: '2027-04-10', amount: '1000', currency: 'RUB' }],
+		})
+		trackCells(TENANT_A, PROP_A, RT_A, RP_A, ['2027-04-10'])
+
+		expect(await repo.deleteOne(TENANT_B, PROP_A, RT_A, RP_A, '2027-04-10')).toBe(false)
+		// Own-tenant row still there.
+		expect((await repo.getOne(TENANT_A, PROP_A, RT_A, RP_A, '2027-04-10'))?.amount).toBe('1000')
+	})
+
+	test('PK separation on ratePlanId: different rate plans, same (tenant/property/roomType/date)', async () => {
+		await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, RP_A, {
+			rates: [{ date: '2027-05-20', amount: '5000', currency: 'RUB' }],
+		})
+		await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, RP_B, {
+			rates: [{ date: '2027-05-20', amount: '4200', currency: 'RUB' }],
+		})
+		trackCells(TENANT_A, PROP_A, RT_A, RP_A, ['2027-05-20'])
+		trackCells(TENANT_A, PROP_A, RT_A, RP_B, ['2027-05-20'])
+
+		const a = await repo.getOne(TENANT_A, PROP_A, RT_A, RP_A, '2027-05-20')
+		const b = await repo.getOne(TENANT_A, PROP_A, RT_A, RP_B, '2027-05-20')
+		expect(a?.amount).toBe('5000')
+		expect(b?.amount).toBe('4200')
+	})
+
+	test('listRange: empty tenant with pre-seeded noise returns []', async () => {
+		await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, RP_A, {
+			rates: [{ date: '2027-06-01', amount: '3000', currency: 'RUB' }],
+		})
+		trackCells(TENANT_A, PROP_A, RT_A, RP_A, ['2027-06-01'])
+
+		const empty = await repo.listRange(
+			'org_nothing000000000000000000',
+			'prop_nothing00000000000000000',
+			'rmt_nothing000000000000000000',
+			'rp_nothing0000000000000000000',
+			{ from: '2027-06-01', to: '2027-06-01' },
+		)
+		expect(empty).toEqual([])
+	})
+
+	test('currency coverage: non-RUB values roundtrip (USD, EUR)', async () => {
+		const [usd] = await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, RP_A, {
+			rates: [{ date: '2027-07-04', amount: '99.99', currency: 'USD' }],
+		})
+		const [eur] = await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, RP_A, {
+			rates: [{ date: '2027-07-05', amount: '50', currency: 'EUR' }],
+		})
+		trackCells(TENANT_A, PROP_A, RT_A, RP_A, ['2027-07-04', '2027-07-05'])
+		expect(usd?.currency).toBe('USD')
+		expect(usd?.amount).toBe('99.99')
+		expect(eur?.currency).toBe('EUR')
+		expect(eur?.amount).toBe('50')
+	})
+
+	test('zero amount edge: "0" roundtrips as "0" (complementary / promo rate)', async () => {
+		const [row] = await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, RP_A, {
+			rates: [{ date: '2027-08-01', amount: '0', currency: 'RUB' }],
+		})
+		trackCells(TENANT_A, PROP_A, RT_A, RP_A, ['2027-08-01'])
+		expect(row?.amount).toBe('0')
+	})
 })
