@@ -13,5 +13,6 @@ export const HTTP_STATUS_MAP: Record<string, ContentfulStatusCode> = {
 	VALIDATION_ERROR: 400,
 	CONFLICT: 409,
 	ROOM_NUMBER_TAKEN: 409,
+	RATE_PLAN_CODE_TAKEN: 409,
 	FORBIDDEN: 403,
 }

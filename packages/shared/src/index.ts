@@ -1,5 +1,6 @@
 export * from './ids.ts'
 export * from './property.ts'
+export * from './ratePlan.ts'
 export * from './room.ts'
 export * from './roomType.ts'
 export * from './schemas.ts'

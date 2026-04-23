@@ -27,6 +27,10 @@
 		"./room": {
 			"types": "./src/room.ts",
 			"default": "./src/room.ts"
+		},
+		"./ratePlan": {
+			"types": "./src/ratePlan.ts",
+			"default": "./src/ratePlan.ts"
 		}
 	},
 	"publishConfig": {
@@ -54,6 +58,10 @@
 			"./room": {
 				"types": "./dist/room.d.ts",
 				"default": "./dist/room.js"
+			},
+			"./ratePlan": {
+				"types": "./dist/ratePlan.d.ts",
+				"default": "./dist/ratePlan.js"
 			}
 		}
 	},

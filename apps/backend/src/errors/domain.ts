@@ -52,3 +52,16 @@ export class RoomTypeNotFoundError extends NotFoundError {
 		this.name = 'RoomTypeNotFoundError'
 	}
 }
+
+/**
+ * `(tenantId, propertyId, code)` uniqueness violation on `ratePlan`.
+ * App-level enforcement (see `project_ydb_specifics.md` #12 — YDB won't let
+ * us add UNIQUE indexes after CREATE TABLE, so we SELECT-before-UPSERT in tx).
+ */
+export class RatePlanCodeTakenError extends ConflictError {
+	override readonly code = 'RATE_PLAN_CODE_TAKEN'
+	constructor(code: string) {
+		super(`Rate plan code already taken in this property: ${code}`)
+		this.name = 'RatePlanCodeTakenError'
+	}
+}
