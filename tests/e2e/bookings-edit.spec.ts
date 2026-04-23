@@ -252,19 +252,63 @@ test.describe('booking-edit dialog', () => {
 		await expect(dialog.getByRole('button', { name: 'Не заехал' })).toHaveCount(0)
 	})
 
-	test('cross-tenant: PATCH on well-formed non-existent booking id → 404', async ({ page }) => {
-		// Well-formed typeid (book_{26 base32}) — passes Zod validator → hits
-		// booking.routes.ts:77 → BookingNotFoundError (404). The tenant filter
-		// also turns "exists in another tenant" into 404 (no enumeration leak).
-		const res = await page.request.patch(
-			'http://localhost:3000/api/v1/bookings/book_00000000000000000000000000/cancel',
-			{
-				data: { reason: 'probe' },
-				headers: { 'content-type': 'application/json' },
-			},
-		)
-		expect(res.status()).toBe(404)
-		const body = (await res.json()) as { error?: { code?: string } }
-		expect(body.error?.code).toBe('NOT_FOUND')
+	// Cross-tenant enum coverage: probe ALL 4 PATCH routes, not just one.
+	// A missing tenant-filter on ANY of the 4 handlers would leak bookings
+	// across tenants. Testing one representative (/cancel) hides bugs in
+	// /check-in, /check-out, /no-show — violates strict-tests enum rule.
+	const BOGUS_ID = 'book_00000000000000000000000000'
+	test.describe('cross-tenant: 404 on every PATCH transition (enum coverage)', () => {
+		test('PATCH /cancel on well-formed non-existent id → 404 NOT_FOUND', async ({ page }) => {
+			const res = await page.request.patch(
+				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}/cancel`,
+				{ data: { reason: 'probe' }, headers: { 'content-type': 'application/json' } },
+			)
+			expect(res.status()).toBe(404)
+			const body = (await res.json()) as { error?: { code?: string } }
+			expect(body.error?.code).toBe('NOT_FOUND')
+		})
+
+		test('PATCH /check-in on well-formed non-existent id → 404 NOT_FOUND', async ({ page }) => {
+			const res = await page.request.patch(
+				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}/check-in`,
+				{ data: {}, headers: { 'content-type': 'application/json' } },
+			)
+			expect(res.status()).toBe(404)
+			const body = (await res.json()) as { error?: { code?: string } }
+			expect(body.error?.code).toBe('NOT_FOUND')
+		})
+
+		test('PATCH /check-out on well-formed non-existent id → 404 NOT_FOUND', async ({ page }) => {
+			// check-out has no body — server accepts empty
+			const res = await page.request.patch(
+				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}/check-out`,
+				{ headers: { 'content-type': 'application/json' } },
+			)
+			expect(res.status()).toBe(404)
+			const body = (await res.json()) as { error?: { code?: string } }
+			expect(body.error?.code).toBe('NOT_FOUND')
+		})
+
+		test('PATCH /no-show on well-formed non-existent id → 404 NOT_FOUND', async ({ page }) => {
+			const res = await page.request.patch(
+				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}/no-show`,
+				{ data: {}, headers: { 'content-type': 'application/json' } },
+			)
+			expect(res.status()).toBe(404)
+			const body = (await res.json()) as { error?: { code?: string } }
+			expect(body.error?.code).toBe('NOT_FOUND')
+		})
+
+		test('GET /bookings/:id on well-formed non-existent id → 404 NOT_FOUND', async ({
+			page,
+		}) => {
+			// Also probe the read path (edit dialog opens via this endpoint).
+			const res = await page.request.get(
+				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}`,
+			)
+			expect(res.status()).toBe(404)
+			const body = (await res.json()) as { error?: { code?: string } }
+			expect(body.error?.code).toBe('NOT_FOUND')
+		})
 	})
 })

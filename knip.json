@@ -8,6 +8,7 @@
 		"tw-animate-css",
 		"shadcn"
 	],
+	"ignoreExportsUsedInFile": true,
 	"workspaces": {
 		"apps/backend": {
 			"includeEntryExports": true,
@@ -23,7 +24,8 @@
 			"project": ["tests/**/*.ts"]
 		},
 		"packages/shared": {
-			"project": ["src/**/*.ts"]
+			"project": ["src/**/*.ts"],
+			"includeEntryExports": true
 		}
 	}
 }
