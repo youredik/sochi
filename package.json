@@ -21,9 +21,9 @@
 		"depcruise": "depcruise --config .dependency-cruiser.mjs apps/ packages/",
 		"infra:up": "docker compose up -d",
 		"infra:down": "docker compose down",
-		"infra:reset": "docker compose down -v && docker compose up -d && ./scripts/apply-schema.sh",
-		"infra:schema": "./scripts/apply-schema.sh",
-		"infra:verify": "./scripts/verify-infra.sh"
+		"infra:reset": "docker compose down -v && docker compose up -d && pnpm migrate",
+		"infra:verify": "./scripts/verify-infra.sh",
+		"migrate": "node --env-file-if-exists=.env apps/backend/src/db/apply-migrations.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.12",
