@@ -27,7 +27,12 @@
 import { fc, test as pbTest } from '@fast-check/vitest'
 import type { RatePlan } from '@horeca/shared'
 import { describe, expect, test } from 'vitest'
-import { computeCancellationFeeSnapshot, computeNoShowFeeSnapshot } from './booking.service.ts'
+import {
+	computeCancellationFeeSnapshot,
+	computeNoShowFeeSnapshot,
+	computeTourismTax,
+	deriveRegistrationStatus,
+} from './booking.service.ts'
 
 function mkRp(over: Partial<RatePlan> = {}): RatePlan {
 	return {
@@ -249,4 +254,110 @@ describe('computeNoShowFeeSnapshot — property-based', () => {
 			expect(snap.policyVersion).toBe(policy.updatedAt)
 		},
 	)
+})
+
+// ----------------------------------------------------------------------------
+// M4e: tourism tax (НК РФ ст.418.5) + registration status derivation
+// ----------------------------------------------------------------------------
+
+describe('computeTourismTax (НК РФ ст.418.5) — example-based', () => {
+	test('[TT1] Sochi 2026 rate 200 bps on 2 nights × 5000 ₽ → 2% proportional', () => {
+		// 2 nights × 5000₽ = 10_000₽ = 10_000_000_000 micros. 2% → 200_000_000 micros (200₽).
+		// Floor: 100₽ × 2 = 200_000_000 micros. Proportional == floor → returns either.
+		const tax = computeTourismTax(10_000_000_000n, 200, 2)
+		expect(tax).toBe(200_000_000n)
+	})
+
+	test('[TT2] low-base booking: floor kicks in (min ₽100/night)', () => {
+		// 2 nights × 1000₽ = 2_000_000_000 micros. 2% → 40_000_000 micros (40₽).
+		// Floor: 100₽ × 2 = 200_000_000 micros (200₽). Floor wins.
+		const tax = computeTourismTax(2_000_000_000n, 200, 2)
+		expect(tax).toBe(200_000_000n)
+	})
+
+	test('[TT3] high-base booking: proportional wins over floor', () => {
+		// 3 nights × 20_000₽ = 60_000_000_000 micros. 2% → 1_200_000_000 micros (1200₽).
+		// Floor: 100₽ × 3 = 300_000_000 micros. Proportional wins.
+		const tax = computeTourismTax(60_000_000_000n, 200, 3)
+		expect(tax).toBe(1_200_000_000n)
+	})
+
+	test('[TT4] rateBps=null (property not configured) → 0n, floor NOT applied', () => {
+		expect(computeTourismTax(10_000_000_000n, null, 5)).toBe(0n)
+	})
+
+	test('[TT5] nightsCount=0 (same-day booking) → 0n', () => {
+		expect(computeTourismTax(10_000_000_000n, 200, 0)).toBe(0n)
+	})
+
+	test('[TT6] rateBps=0 with non-zero nights → floor still applies (literal НК reading)', () => {
+		// Intentional: a municipality that explicitly sets 0% still imposes the
+		// federal ₽100/night floor. Operator must opt-out via rateBps=null.
+		expect(computeTourismTax(10_000_000_000n, 0, 3)).toBe(300_000_000n)
+	})
+
+	test('[TT7] 2027 rate 300 bps (federal roadmap) — future-proof', () => {
+		// 10 nights × 10_000₽ = 100_000_000_000. 3% → 3_000_000_000 micros.
+		expect(computeTourismTax(100_000_000_000n, 300, 10)).toBe(3_000_000_000n)
+	})
+})
+
+const rateBpsArb = fc.integer({ min: 0, max: 500 }) // 0..5% per federal roadmap
+const nightsArb = fc.integer({ min: 1, max: 365 })
+
+describe('computeTourismTax — property-based', () => {
+	pbTest.prop([totalMicrosArb, rateBpsArb, nightsArb])(
+		'[TTP1] result is ALWAYS max(proportional, floor) when rateBps !== null',
+		(base, rateBps, nights) => {
+			const tax = computeTourismTax(base, rateBps, nights)
+			const proportional = (base * BigInt(rateBps)) / 10_000n
+			const floor = 100_000_000n * BigInt(nights)
+			expect(tax).toBe(proportional > floor ? proportional : floor)
+		},
+	)
+
+	pbTest.prop([totalMicrosArb, nightsArb])(
+		'[TTP2] rateBps=null invariant: tax is ALWAYS 0n, regardless of base/nights',
+		(base, nights) => {
+			expect(computeTourismTax(base, null, nights)).toBe(0n)
+		},
+	)
+
+	pbTest.prop([totalMicrosArb, rateBpsArb])(
+		'[TTP3] nightsCount ≤ 0 invariant: tax is ALWAYS 0n (no stay → no liability)',
+		(base, rateBps) => {
+			expect(computeTourismTax(base, rateBps, 0)).toBe(0n)
+			expect(computeTourismTax(base, rateBps, -1)).toBe(0n)
+		},
+	)
+
+	pbTest.prop([totalMicrosArb, rateBpsArb, nightsArb])(
+		'[TTP4] monotonicity in nights: doubling nights ≥ previous tax (floor scales or prop unchanged)',
+		(base, rateBps, nights) => {
+			const tax1 = computeTourismTax(base, rateBps, nights)
+			const tax2 = computeTourismTax(base, rateBps, nights * 2)
+			expect(tax2 >= tax1).toBe(true)
+		},
+	)
+})
+
+describe('deriveRegistrationStatus', () => {
+	test('[DR1] RU citizenship → notRequired', () => {
+		expect(deriveRegistrationStatus('RU')).toBe('notRequired')
+	})
+	test('[DR2] RUS (ISO alpha-3) — currently treated as foreign (spec calls alpha-2 default)', () => {
+		// This is a known limitation: we normalize to uppercase but don't
+		// map alpha-3 → alpha-2. Admin UI validates alpha-2 for RU on input.
+		// Test documents the current behavior so any future fix is intentional.
+		expect(deriveRegistrationStatus('RUS')).toBe('pending')
+	})
+	test('[DR3] case-insensitive for RU', () => {
+		expect(deriveRegistrationStatus('ru')).toBe('notRequired')
+		expect(deriveRegistrationStatus('Ru')).toBe('notRequired')
+	})
+	test('[DR4] every non-RU citizenship → pending', () => {
+		for (const code of ['US', 'DE', 'CN', 'KZ', 'BY', 'FR', 'JP', 'IT', 'ES']) {
+			expect(deriveRegistrationStatus(code)).toBe('pending')
+		}
+	})
 })

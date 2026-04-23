@@ -7,6 +7,8 @@ import type {
 	BookingStatus,
 	BookingTimeSlice,
 	RatePlan,
+	TourismTaxReport,
+	TourismTaxReportParams,
 } from '@horeca/shared'
 import { decimalToMicros } from '../../db/ydb-helpers.ts'
 import {
@@ -92,6 +94,42 @@ export function computeNoShowFeeSnapshot(
 }
 
 /**
+ * Russian tourism-tax compute per НК РФ ст.418.5 (verified 2026-04):
+ *
+ *   tax = max(accommodationBaseMicros * rateBps / 10000, minPerNight * nights)
+ *
+ * `minPerNight` = ₽100 = `100_000_000` micros (federal floor). Sochi 2026
+ * rateBps = 200 (2%); federal roadmap 2026→2029: 2% → 3% → 4% → 5% (we
+ * persist bps per-property so changing the rate is an UPDATE, not a
+ * migration).
+ *
+ * Returns 0n when the property has no rate configured (rateBps === null) —
+ * unconfigured = not applicable (e.g. properties outside the tourist-tax
+ * zone). If configured as 0 bps, the floor still kicks in for the "minimum
+ * charge even on below-threshold rates" case per a literal reading of the
+ * code — so we gate on `rateBps === null` specifically.
+ */
+const MIN_TAX_PER_NIGHT_MICROS = 100_000_000n // ₽100
+
+export function computeTourismTax(
+	accommodationBaseMicros: bigint,
+	rateBps: number | null,
+	nightsCount: number,
+): bigint {
+	if (rateBps === null) return 0n
+	if (nightsCount <= 0) return 0n
+	const proportional = (accommodationBaseMicros * BigInt(rateBps)) / 10_000n
+	const floor = MIN_TAX_PER_NIGHT_MICROS * BigInt(nightsCount)
+	return proportional > floor ? proportional : floor
+}
+
+/** Derive registration flow per primary guest's citizenship.
+ *  'RU' citizenship → `'notRequired'`; foreign → `'pending'` (awaiting МВД). */
+export function deriveRegistrationStatus(citizenship: string): 'notRequired' | 'pending' {
+	return citizenship.toUpperCase() === 'RU' ? 'notRequired' : 'pending'
+}
+
+/**
  * Booking service. Validates cross-domain parents (property/roomType/ratePlan),
  * builds the price snapshot (`timeSlices[]`) from `rate` rows, computes
  * tourism tax, then delegates the atomic inventory+booking write to the repo.
@@ -170,16 +208,15 @@ export function createBookingService(
 
 			const totalMicros = timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
 
+			const nightsCount = nights.length
 			return repo.create(tenantId, propertyId, input, {
 				actorUserId,
 				timeSlices,
 				cancellationFee: computeCancellationFeeSnapshot(totalMicros, rp, input.checkIn),
 				noShowFee: computeNoShowFeeSnapshot(totalMicros, rp),
 				tourismTaxBaseMicros: totalMicros,
-				// TODO(M4e): fetch property.tourismTaxRateBps + apply min ₽100/night floor.
-				tourismTaxMicros: 0n,
-				// TODO(M4e): derive from primaryGuest.citizenship (non-RU ⇒ 'pending').
-				registrationStatus: 'notRequired',
+				tourismTaxMicros: computeTourismTax(totalMicros, prop.tourismTaxRateBps, nightsCount),
+				registrationStatus: deriveRegistrationStatus(input.guestSnapshot.citizenship),
 				rklCheckResult: 'unchecked',
 			})
 		},
@@ -209,5 +246,40 @@ export function createBookingService(
 			input: BookingMarkNoShowInput,
 			actorUserId: string,
 		) => repo.markNoShow(tenantId, id, input.reason ?? null, actorUserId),
+
+		/**
+		 * Aggregate tourism-tax liability for quarterly fiscal reporting.
+		 *
+		 * - Filters by booking.checkIn within `[from, to]`; checkIn is the
+		 *   fiscal event date (stay is delivered starting then). NK RF §418
+		 *   doesn't explicitly standardize — common practice is to attribute
+		 *   to the stay's commencement date; we follow that.
+		 * - Excludes `cancelled` bookings — they never accrued tax
+		 *   (markNoShow DOES retain liability per domain decision; see
+		 *   booking.repo.markNoShow docstring).
+		 */
+		getTourismTaxReport: async (
+			tenantId: string,
+			propertyId: string,
+			input: TourismTaxReportParams,
+		): Promise<TourismTaxReport> => {
+			const prop = await propertyService.getById(tenantId, propertyId)
+			if (!prop) throw new PropertyNotFoundError(propertyId)
+			const bookings = await repo.listByProperty(tenantId, propertyId, {
+				from: input.from,
+				to: input.to,
+			})
+			const included = bookings.filter((b) => b.status !== 'cancelled')
+			const tax = included.reduce((acc, b) => acc + BigInt(b.tourismTaxMicros), 0n)
+			const base = included.reduce((acc, b) => acc + BigInt(b.tourismTaxBaseMicros), 0n)
+			return {
+				propertyId,
+				from: input.from,
+				to: input.to,
+				bookingsCount: included.length,
+				tourismTaxMicros: tax.toString(),
+				accommodationBaseMicros: base.toString(),
+			}
+		},
 	}
 }

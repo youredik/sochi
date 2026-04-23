@@ -1,5 +1,6 @@
 import { Optional } from '@ydbjs/value/optional'
 import {
+	DateType,
 	Int32Type,
 	Json,
 	JsonType,
@@ -49,6 +50,20 @@ const NULL_JSON = new Optional(null, new JsonType())
  */
 export function timestampOpt(value: Date | null): Optional<TimestampType> {
 	return value === null ? NULL_TIMESTAMP : new Optional(new Timestamp(value), new TimestampType())
+}
+
+/** Typed null for nullable `Date` (calendar-day) columns. */
+const NULL_DATE = new Optional(null, new DateType())
+
+/**
+ * Bind a YYYY-MM-DD string (or null) to a nullable `Date` column. Wraps via
+ * `new YdbDate(...)` — bare JS Date inference is `Datetime` (seconds), which
+ * YDB rejects for `Date` columns with `ERROR(1030): Type annotation`. See
+ * `project_ydb_specifics.md` #10 + #14.
+ */
+export function dateOpt(ymd: string | null | undefined): Optional<DateType> {
+	if (ymd === null || ymd === undefined) return NULL_DATE
+	return new Optional(new YdbDate(new Date(`${ymd}T00:00:00Z`)), new DateType())
 }
 
 /**

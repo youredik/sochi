@@ -164,6 +164,27 @@ export type BookingMarkNoShowInput = z.infer<typeof bookingMarkNoShowInput>
 export const bookingIdParam = z.object({ id: idSchema('booking') })
 export const bookingPropertyParam = z.object({ propertyId: idSchema('property') })
 
+/**
+ * GET /properties/:propertyId/reports/tourism-tax?from=YYYY-MM-DD&to=YYYY-MM-DD.
+ * Quarterly-report shape: caller picks the fiscal window, service aggregates.
+ * Excludes `status === 'cancelled'` bookings (those never accrued tax).
+ */
+export const tourismTaxReportParams = z
+	.object({ from: dateSchema, to: dateSchema })
+	.refine((v) => v.from <= v.to, 'from must be <= to')
+export type TourismTaxReportParams = z.infer<typeof tourismTaxReportParams>
+
+export type TourismTaxReport = {
+	propertyId: string
+	from: string
+	to: string
+	bookingsCount: number
+	/** Aggregated tax liability in Int64 micros, serialized as decimal string. */
+	tourismTaxMicros: string
+	/** Sum of accommodation bases (tax was computed off this). */
+	accommodationBaseMicros: string
+}
+
 /** GET /properties/:propertyId/bookings — optional filters. */
 export const bookingListParams = z
 	.object({

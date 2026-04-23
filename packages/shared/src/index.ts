@@ -1,6 +1,7 @@
 export * from './activity.ts'
 export * from './availability.ts'
 export * from './booking.ts'
+export * from './guest.ts'
 export * from './ids.ts'
 export * from './property.ts'
 export * from './rate.ts'

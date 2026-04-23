@@ -11,6 +11,8 @@ import { createAvailabilityFactory } from './domains/availability/availability.f
 import { createAvailabilityRoutes } from './domains/availability/availability.routes.ts'
 import { createBookingFactory } from './domains/booking/booking.factory.ts'
 import { createBookingRoutes } from './domains/booking/booking.routes.ts'
+import { createGuestFactory } from './domains/guest/guest.factory.ts'
+import { createGuestRoutes } from './domains/guest/guest.routes.ts'
 import { createPropertyFactory } from './domains/property/property.factory.ts'
 import { createPropertyRoutes } from './domains/property/property.routes.ts'
 import { createRateFactory } from './domains/rate/rate.factory.ts'
@@ -50,6 +52,7 @@ const bookingFactory = createBookingFactory(
 	ratePlanFactory.service,
 )
 const activityFactory = createActivityFactory(sql)
+const guestFactory = createGuestFactory(sql)
 const idempotency = idempotencyMiddleware(createIdempotencyRepo(sql))
 
 // CDC consumer — populates the polymorphic `activity` table by diffing
@@ -125,6 +128,7 @@ const routes = app
 	.route('/api/v1', createAvailabilityRoutes(availabilityFactory))
 	.route('/api/v1', createBookingRoutes(bookingFactory, idempotency))
 	.route('/api/v1', createActivityRoutes(activityFactory))
+	.route('/api/v1', createGuestRoutes(guestFactory, idempotency))
 	.get('/health', (c) =>
 		c.json(
 			{

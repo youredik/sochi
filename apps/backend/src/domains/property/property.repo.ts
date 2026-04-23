@@ -1,7 +1,7 @@
 import type { Property, PropertyCreateInput, PropertyUpdateInput } from '@horeca/shared'
 import { newId } from '@horeca/shared'
 import type { sql as SQL } from '../../db/index.ts'
-import { NULL_TEXT, toTs, tsFromIso } from '../../db/ydb-helpers.ts'
+import { NULL_INT32, NULL_TEXT, toNumber, toTs, tsFromIso } from '../../db/ydb-helpers.ts'
 
 type SqlInstance = typeof SQL
 
@@ -17,6 +17,7 @@ type PropertyRow = {
 	city: string
 	timezone: string
 	classificationId: string | null
+	tourismTaxRateBps: number | bigint | null
 	isActive: boolean
 	createdAt: Date
 	updatedAt: Date
@@ -31,6 +32,7 @@ function rowToProperty(r: PropertyRow): Property {
 		city: r.city as Property['city'],
 		timezone: r.timezone,
 		classificationId: r.classificationId,
+		tourismTaxRateBps: toNumber(r.tourismTaxRateBps),
 		isActive: r.isActive,
 		createdAt: r.createdAt.toISOString(),
 		updatedAt: r.updatedAt.toISOString(),
@@ -79,13 +81,15 @@ export function createPropertyRepo(sql: SqlInstance) {
 			const now = new Date()
 			const nowTs = toTs(now)
 			const timezone = input.timezone ?? 'Europe/Moscow'
+			const tourismTaxRateBps = input.tourismTaxRateBps ?? null
+			const tourismTaxRateBind = tourismTaxRateBps ?? NULL_INT32
 			await sql`
 				UPSERT INTO property (
 					\`tenantId\`, \`id\`, \`name\`, \`address\`, \`city\`, \`timezone\`,
-					\`isActive\`, \`createdAt\`, \`updatedAt\`
+					\`tourismTaxRateBps\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
 				) VALUES (
 					${tenantId}, ${id}, ${input.name}, ${input.address}, ${input.city}, ${timezone},
-					${true}, ${nowTs}, ${nowTs}
+					${tourismTaxRateBind}, ${true}, ${nowTs}, ${nowTs}
 				)
 			`
 			return {
@@ -96,6 +100,7 @@ export function createPropertyRepo(sql: SqlInstance) {
 				city: input.city,
 				timezone,
 				classificationId: null,
+				tourismTaxRateBps,
 				isActive: true,
 				createdAt: now.toISOString(),
 				updatedAt: now.toISOString(),
@@ -128,6 +133,10 @@ export function createPropertyRepo(sql: SqlInstance) {
 					'classificationId' in patch && patch.classificationId !== undefined
 						? patch.classificationId
 						: current.classificationId
+				const nextTourismTaxRateBps: number | null =
+					'tourismTaxRateBps' in patch && patch.tourismTaxRateBps !== undefined
+						? patch.tourismTaxRateBps
+						: current.tourismTaxRateBps
 				const merged: Property = {
 					...current,
 					name: patch.name ?? current.name,
@@ -135,6 +144,7 @@ export function createPropertyRepo(sql: SqlInstance) {
 					city: patch.city ?? current.city,
 					timezone: patch.timezone ?? current.timezone,
 					classificationId: nextClassificationId,
+					tourismTaxRateBps: nextTourismTaxRateBps,
 					isActive: patch.isActive ?? current.isActive,
 					updatedAt: new Date().toISOString(),
 				}
@@ -142,13 +152,14 @@ export function createPropertyRepo(sql: SqlInstance) {
 				const createdAtTs = tsFromIso(merged.createdAt)
 				const updatedAtTs = tsFromIso(merged.updatedAt)
 				const classificationId = merged.classificationId ?? NULL_TEXT
+				const tourismTaxRateBind = merged.tourismTaxRateBps ?? NULL_INT32
 				await tx`
 					UPSERT INTO property (
 						\`tenantId\`, \`id\`, \`name\`, \`address\`, \`city\`, \`timezone\`,
-						\`classificationId\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
+						\`classificationId\`, \`tourismTaxRateBps\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
 					) VALUES (
 						${tenantId}, ${id}, ${merged.name}, ${merged.address}, ${merged.city}, ${merged.timezone},
-						${classificationId}, ${merged.isActive}, ${createdAtTs}, ${updatedAtTs}
+						${classificationId}, ${tourismTaxRateBind}, ${merged.isActive}, ${createdAtTs}, ${updatedAtTs}
 					)
 				`
 				return merged

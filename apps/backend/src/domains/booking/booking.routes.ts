@@ -7,6 +7,7 @@ import {
 	bookingListParams,
 	bookingMarkNoShowInput,
 	bookingPropertyParam,
+	tourismTaxReportParams,
 } from '@horeca/shared'
 import { Hono } from 'hono'
 import { BookingNotFoundError } from '../../errors/domain.ts'
@@ -105,6 +106,17 @@ export function createBookingRoutes(f: BookingFactory, idempotency: IdempotencyM
 				const updated = await service.markNoShow(c.var.tenantId, id, input, c.var.user.id)
 				if (!updated) throw new BookingNotFoundError(id)
 				return c.json({ data: updated }, 200)
+			},
+		)
+		.get(
+			'/properties/:propertyId/reports/tourism-tax',
+			zValidator('param', bookingPropertyParam),
+			zValidator('query', tourismTaxReportParams),
+			async (c) => {
+				const { propertyId } = c.req.valid('param')
+				const params = c.req.valid('query')
+				const report = await service.getTourismTaxReport(c.var.tenantId, propertyId, params)
+				return c.json({ data: report }, 200)
 			},
 		)
 }
