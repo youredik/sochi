@@ -4,7 +4,11 @@ import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
 import { type ApiError, errorFromResponse } from '../../../lib/api-errors.ts'
 import { logger } from '../../../lib/logger.ts'
-import { type BookingTransition, nextStatus } from '../lib/booking-transitions.ts'
+import {
+	applyOptimisticStatusUpdate,
+	type BookingTransition,
+	nextStatus,
+} from '../lib/booking-transitions.ts'
 
 /**
  * Read + 4 PATCH state-transition mutations for M5e.2 edit dialog.
@@ -101,7 +105,7 @@ function useTransitionMutation<Vars>(
 			const targetStatus = nextStatus(deps.currentStatus, transition)
 			queryClient.setQueryData<BookingShape[]>(
 				gridKey,
-				prevGrid.map((b) => (b.id === deps.bookingId ? { ...b, status: targetStatus } : b)),
+				applyOptimisticStatusUpdate(prevGrid, deps.bookingId, targetStatus),
 			)
 			if (prevBooking) {
 				queryClient.setQueryData<BookingShape>(bookingKey, {

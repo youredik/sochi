@@ -1,6 +1,7 @@
 import type { BookingStatus } from '@horeca/shared'
 import { describe, expect, it } from 'vitest'
 import {
+	applyOptimisticStatusUpdate,
 	availableTransitions,
 	type BookingTransition,
 	isTerminal,
@@ -148,6 +149,81 @@ describe('labelForTransition — exact-value Russian copy', () => {
 			// Label must contain Cyrillic — English/empty would be a missed i18n.
 			expect(label).toMatch(/[а-яА-ЯёЁ]/)
 		}
+	})
+})
+
+describe('applyOptimisticStatusUpdate — pure cache transform', () => {
+	const band = (id: string, status: BookingStatus) =>
+		({
+			id,
+			status,
+			roomTypeId: 'rmt_1',
+			checkIn: '2026-05-01',
+			checkOut: '2026-05-02',
+		}) as const
+
+	it('flips status on matching id; other bands untouched (exact shape)', () => {
+		const prev = [band('b1', 'confirmed'), band('b2', 'in_house'), band('b3', 'confirmed')]
+		const out = applyOptimisticStatusUpdate(prev, 'b2', 'checked_out')
+		expect(out).toEqual([
+			band('b1', 'confirmed'),
+			band('b2', 'checked_out'),
+			band('b3', 'confirmed'),
+		])
+	})
+
+	it('pure: input array is NOT mutated (React Query structural-sharing invariant)', () => {
+		const prev = [band('b1', 'confirmed')] as const
+		const lengthBefore = prev.length
+		const refBefore = prev[0]
+		applyOptimisticStatusUpdate(prev, 'b1', 'cancelled')
+		expect(prev).toHaveLength(lengthBefore)
+		expect(prev[0]).toBe(refBefore) // same reference — snapshot stability
+		expect(prev[0]?.status).toBe('confirmed') // untouched value
+	})
+
+	it('returns a new array (referentially distinct) even on no-match (cache re-render invariant)', () => {
+		const prev = [band('b1', 'confirmed')] as const
+		const out = applyOptimisticStatusUpdate(prev, 'b_not_present', 'cancelled')
+		expect(out).toEqual(prev)
+		expect(out).not.toBe(prev) // new array reference — triggers re-render
+	})
+
+	it('adversarial: id collision on EVERY matching element (should only be one in practice, but hunt the bug)', () => {
+		// If the same id accidentally appears twice, BOTH get updated (not just first).
+		// This is a loud-fail behavior: if the caller ever has a dedup bug, the
+		// map semantic still produces consistent output rather than silent skip.
+		const prev = [band('dup', 'confirmed'), band('dup', 'confirmed')]
+		const out = applyOptimisticStatusUpdate(prev, 'dup', 'cancelled')
+		expect(out[0]?.status).toBe('cancelled')
+		expect(out[1]?.status).toBe('cancelled')
+	})
+
+	it.each([
+		['confirmed', 'in_house'],
+		['confirmed', 'cancelled'],
+		['confirmed', 'no_show'],
+		['in_house', 'checked_out'],
+		['in_house', 'cancelled'],
+	] as const)('handles every valid transition target: %s → %s', (from, to) => {
+		const out = applyOptimisticStatusUpdate([band('b1', from)], 'b1', to)
+		expect(out[0]?.status).toBe(to)
+	})
+
+	it('empty list → empty list (edge-case: band query returned nothing yet)', () => {
+		expect(applyOptimisticStatusUpdate([], 'b1', 'cancelled')).toEqual([])
+	})
+
+	it('preserves all non-status fields on the updated band (checkIn, checkOut, roomTypeId untouched)', () => {
+		const prev = [band('b1', 'confirmed')]
+		const out = applyOptimisticStatusUpdate(prev, 'b1', 'in_house')
+		expect(out[0]).toEqual({
+			id: 'b1',
+			status: 'in_house',
+			roomTypeId: 'rmt_1',
+			checkIn: '2026-05-01',
+			checkOut: '2026-05-02',
+		})
 	})
 })
 

@@ -23,8 +23,7 @@
 			"project": ["tests/**/*.ts"]
 		},
 		"packages/shared": {
-			"project": ["src/**/*.ts"],
-			"includeEntryExports": true
+			"project": ["src/**/*.ts"]
 		}
 	}
 }

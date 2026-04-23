@@ -102,3 +102,25 @@ export function nextStatus(status: BookingStatus, transition: BookingTransition)
 			return 'no_show'
 	}
 }
+
+/**
+ * Apply an optimistic status update to a grid booking list. Used by the
+ * transition mutation hooks' `onMutate` callback to flip a band's
+ * palette instantly before the server responds.
+ *
+ * Contract:
+ *   - Pure — input arrays are never mutated (React Query structural
+ *     sharing + rollback depend on snapshot stability).
+ *   - Missing id → no-op, returns a fresh copy (don't throw — race with
+ *     simultaneous invalidation may remove the band between read and
+ *     setQueryData). Callers must pass a fresh snapshot each time.
+ *   - Same-status update → still returns a new array (cache updates
+ *     need a referentially new value to trigger re-render).
+ */
+export function applyOptimisticStatusUpdate<B extends { id: string; status: BookingStatus }>(
+	previous: readonly B[],
+	bookingId: string,
+	newStatus: BookingStatus,
+): B[] {
+	return previous.map((b) => (b.id === bookingId ? { ...b, status: newStatus } : b))
+}
