@@ -49,6 +49,17 @@
 	},
 	"overrides": [
 		{
+			"includes": ["apps/frontend/src/features/chessboard/**"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"useSemanticElements": "off",
+						"useFocusableInteractive": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["apps/backend/src/**"],
 			"linter": {
 				"rules": {

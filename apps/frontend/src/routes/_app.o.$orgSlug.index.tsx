@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { api } from '../lib/api.ts'
 
 /**
@@ -48,14 +48,20 @@ function TenantHome() {
 			</p>
 
 			<section className="mt-10 grid gap-4 sm:grid-cols-2">
-				<div className="border-border bg-card rounded-lg border p-6">
-					<h2 className="text-muted-foreground text-sm font-medium">Шахматка</h2>
-					<p className="text-muted-foreground mt-2 text-sm">Появится в следующей фазе (M5d).</p>
-				</div>
-				<div className="border-border bg-card rounded-lg border p-6">
-					<h2 className="text-muted-foreground text-sm font-medium">Объекты размещения</h2>
+				<Link
+					to="/o/$orgSlug/grid"
+					params={{ orgSlug: organization.slug }}
+					className="border-border bg-card hover:border-primary rounded-lg border p-6 transition-colors"
+				>
+					<h2 className="font-medium">Шахматка</h2>
 					<p className="text-muted-foreground mt-2 text-sm">
-						Гостиница создана. Следующая фаза (M5d) добавит шахматку бронирований.
+						Посмотреть 15-дневное окно бронирований по типам номеров.
+					</p>
+				</Link>
+				<div className="border-border bg-card rounded-lg border p-6">
+					<h2 className="text-muted-foreground text-sm font-medium">Бронирования</h2>
+					<p className="text-muted-foreground mt-2 text-sm">
+						Создание и редактирование — в следующей фазе (M5e).
 					</p>
 				</div>
 			</section>

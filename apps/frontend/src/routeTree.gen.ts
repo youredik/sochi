@@ -18,6 +18,7 @@ import { Route as AppOSelectRouteImport } from './routes/_app.o-select'
 import { Route as AppOOrgSlugRouteImport } from './routes/_app.o.$orgSlug'
 import { Route as AppOOrgSlugIndexRouteImport } from './routes/_app.o.$orgSlug.index'
 import { Route as AppOOrgSlugSetupRouteImport } from './routes/_app.o.$orgSlug.setup'
+import { Route as AppOOrgSlugGridRouteImport } from './routes/_app.o.$orgSlug.grid'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -63,6 +64,11 @@ const AppOOrgSlugSetupRoute = AppOOrgSlugSetupRouteImport.update({
   path: '/setup',
   getParentRoute: () => AppOOrgSlugRoute,
 } as any)
+const AppOOrgSlugGridRoute = AppOOrgSlugGridRouteImport.update({
+  id: '/grid',
+  path: '/grid',
+  getParentRoute: () => AppOOrgSlugRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/o-select': typeof AppOSelectRoute
   '/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
 }
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/o-select': typeof AppOSelectRoute
   '/': typeof AppIndexRoute
+  '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/o/$orgSlug': typeof AppOOrgSlugIndexRoute
 }
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/_app/o-select': typeof AppOSelectRoute
   '/_app/': typeof AppIndexRoute
   '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/_app/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/_app/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/_app/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
 }
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/o-select'
     | '/o/$orgSlug'
+    | '/o/$orgSlug/grid'
     | '/o/$orgSlug/setup'
     | '/o/$orgSlug/'
   fileRoutesByTo: FileRoutesByTo
@@ -113,6 +123,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/o-select'
     | '/'
+    | '/o/$orgSlug/grid'
     | '/o/$orgSlug/setup'
     | '/o/$orgSlug'
   id:
@@ -124,6 +135,7 @@ export interface FileRouteTypes {
     | '/_app/o-select'
     | '/_app/'
     | '/_app/o/$orgSlug'
+    | '/_app/o/$orgSlug/grid'
     | '/_app/o/$orgSlug/setup'
     | '/_app/o/$orgSlug/'
   fileRoutesById: FileRoutesById
@@ -200,15 +212,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugSetupRouteImport
       parentRoute: typeof AppOOrgSlugRoute
     }
+    '/_app/o/$orgSlug/grid': {
+      id: '/_app/o/$orgSlug/grid'
+      path: '/grid'
+      fullPath: '/o/$orgSlug/grid'
+      preLoaderRoute: typeof AppOOrgSlugGridRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
+    }
   }
 }
 
 interface AppOOrgSlugRouteChildren {
+  AppOOrgSlugGridRoute: typeof AppOOrgSlugGridRoute
   AppOOrgSlugSetupRoute: typeof AppOOrgSlugSetupRoute
   AppOOrgSlugIndexRoute: typeof AppOOrgSlugIndexRoute
 }
 
 const AppOOrgSlugRouteChildren: AppOOrgSlugRouteChildren = {
+  AppOOrgSlugGridRoute: AppOOrgSlugGridRoute,
   AppOOrgSlugSetupRoute: AppOOrgSlugSetupRoute,
   AppOOrgSlugIndexRoute: AppOOrgSlugIndexRoute,
 }
