@@ -18,6 +18,7 @@ export const ID_PREFIXES = {
 	ratePlan: 'rp',
 	booking: 'book',
 	guest: 'gst',
+	activity: 'act',
 	job: 'job',
 	webhook: 'wh',
 	migrationReport: 'mvd',

@@ -73,3 +73,47 @@ export class RatePlanNotFoundError extends NotFoundError {
 		this.name = 'RatePlanNotFoundError'
 	}
 }
+
+/** Parent booking missing or in wrong tenant. */
+export class BookingNotFoundError extends NotFoundError {
+	constructor(bookingId: string) {
+		super('Booking', bookingId)
+		this.name = 'BookingNotFoundError'
+	}
+}
+
+/**
+ * Requested date range has no availability row, is stop-sold, or insufficient
+ * `allotment - sold` for +1 booking. Raised by booking.create() before any
+ * UPSERT so the tx can be rolled back cleanly.
+ */
+export class NoInventoryError extends ConflictError {
+	override readonly code = 'NO_INVENTORY'
+	constructor(details: string) {
+		super(`No inventory available: ${details}`)
+		this.name = 'NoInventoryError'
+	}
+}
+
+/**
+ * Attempt to transition a booking through a forbidden edge (e.g. cancel a
+ * no-show, check-in a cancelled booking, mark no-show on checked-out). The
+ * 5-state machine is terminal at `cancelled`/`checked_out`/`no_show`; `no_show`
+ * additionally forbids reverse transitions (fraud protection).
+ */
+export class InvalidBookingTransitionError extends ConflictError {
+	override readonly code = 'INVALID_BOOKING_TRANSITION'
+	constructor(from: string, to: string) {
+		super(`Cannot transition booking from '${from}' to '${to}'`)
+		this.name = 'InvalidBookingTransitionError'
+	}
+}
+
+/** UNIQUE `(tenantId, propertyId, externalId)` violation (OTA retry with different body). */
+export class BookingExternalIdTakenError extends ConflictError {
+	override readonly code = 'BOOKING_EXTERNAL_ID_TAKEN'
+	constructor(externalId: string) {
+		super(`Booking with externalId already exists in this property: ${externalId}`)
+		this.name = 'BookingExternalIdTakenError'
+	}
+}

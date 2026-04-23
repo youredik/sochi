@@ -1,5 +1,13 @@
 import { Optional } from '@ydbjs/value/optional'
-import { Int32Type, TextType, Timestamp, Date as YdbDate } from '@ydbjs/value/primitive'
+import {
+	Int32Type,
+	Json,
+	JsonType,
+	TextType,
+	Timestamp,
+	TimestampType,
+	Date as YdbDate,
+} from '@ydbjs/value/primitive'
 
 /**
  * Shared YDB type helpers for repo layer.
@@ -22,6 +30,41 @@ export const NULL_TEXT = new Optional(null, new TextType())
 
 /** Typed null for nullable `Int32` columns. */
 export const NULL_INT32 = new Optional(null, new Int32Type())
+
+/** Typed null for nullable `Timestamp` columns. */
+export const NULL_TIMESTAMP = new Optional(null, new TimestampType())
+
+/**
+ * Typed null for nullable `Json` columns. Consumed internally by `toJson` —
+ * NOT exported: external callers should use `toJson(null)` which returns this
+ * singleton. Keeping the module's public surface minimal.
+ */
+const NULL_JSON = new Optional(null, new JsonType())
+
+/**
+ * Bind a `Date` value (or null) to a nullable `Timestamp` column (µs precision).
+ * Bare `${date}` inference is `Datetime` and does NOT match a nullable
+ * `Timestamp` column; YDB rejects with "Expected optional, ... but got:".
+ * See `project_ydb_specifics.md` #14 for when to prefer this over UPSERT.
+ */
+export function timestampOpt(value: Date | null): Optional<TimestampType> {
+	return value === null ? NULL_TIMESTAMP : new Optional(new Timestamp(value), new TimestampType())
+}
+
+/**
+ * Wrap a JS object as a YDB `Json` primitive (server stores it as serialized
+ * text — there's no struct inference for Json columns). Returns NULL_JSON if
+ * the input is `null` or `undefined`.
+ *
+ * BigInt support: JS `JSON.stringify` throws on bigint by default; we serialize
+ * them as decimal strings. Consumers on the read side must reconstruct them
+ * with `BigInt(...)` for fields they know are bigint (e.g. Int64 micros
+ * embedded in snapshots).
+ */
+export function toJson(value: unknown): Json | typeof NULL_JSON {
+	if (value === null || value === undefined) return NULL_JSON
+	return new Json(JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)))
+}
 
 /** Normalize a YDB integer column value to a JS `number`. Throws on unsafe bigint. */
 export function toNumber(v: number | bigint | null): number | null {
