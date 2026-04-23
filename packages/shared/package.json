@@ -15,6 +15,10 @@
 		"./schemas": {
 			"types": "./src/schemas.ts",
 			"default": "./src/schemas.ts"
+		},
+		"./property": {
+			"types": "./src/property.ts",
+			"default": "./src/property.ts"
 		}
 	},
 	"publishConfig": {
@@ -30,6 +34,10 @@
 			"./schemas": {
 				"types": "./dist/schemas.d.ts",
 				"default": "./dist/schemas.js"
+			},
+			"./property": {
+				"types": "./dist/property.d.ts",
+				"default": "./dist/property.js"
 			}
 		}
 	},
