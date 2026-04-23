@@ -25,6 +25,7 @@
 		"@ydbjs/core": "6.1.1",
 		"@ydbjs/error": "6.0.5",
 		"@ydbjs/query": "6.1.0",
+		"@ydbjs/topic": "6.1.2",
 		"@ydbjs/value": "6.0.6",
 		"better-auth": "^1.6.8",
 		"hono": "^4.12.14",

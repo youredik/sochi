@@ -1,0 +1,23 @@
+-- =============================================================================
+-- Migration 0005 — Register `activity_writer` consumer on the booking CDC topic
+-- =============================================================================
+--
+-- The in-process CDC consumer (apps/backend/src/workers/cdc-consumer.ts) reads
+-- the `booking/booking_events` topic under consumer name `activity_writer`.
+-- YDB requires the consumer to be declared BEFORE the reader attaches — per
+-- migration-order convention, we add it here, not at runtime, so:
+--   1. Reproducible: `down -v` + migrate → reader works on first boot
+--   2. Immutable: checksum-tracked; not created-if-not-exists in app code
+--
+-- Path format: `<tableName>/<changefeedName>`. YDB creates each changefeed as
+-- a topic child under the table's scheme path. Verified against stankoff-v2
+-- migrations (e.g. `ALTER TOPIC \`channelMember/channel_member_feed\` ADD
+-- CONSUMER ...`) + YDB docs 2026-04.
+--
+-- Server-tier caveat (memory `project_ydb_specifics.md`): on YDB Serverless
+-- the topic `retention_period` MAX is 24h (verified empirically by stankoff-v2
+-- Round 3 Agent 2 on preprod, Apr 2026). Our CHANGEFEED in 0004 declares 72h
+-- which works on Dedicated + local Docker; deploying to Serverless requires
+-- shrinking to 24h via a future ALTER TOPIC migration.
+
+ALTER TOPIC `booking/booking_events` ADD CONSUMER `activity_writer`;

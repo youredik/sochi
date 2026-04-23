@@ -27,4 +27,4 @@ export const sql = query(driver, {
 	},
 })
 
-export { closeDriver, readyDriver } from './driver.ts'
+export { closeDriver, driver, readyDriver } from './driver.ts'

@@ -1,3 +1,4 @@
+export * from './activity.ts'
 export * from './availability.ts'
 export * from './booking.ts'
 export * from './ids.ts'

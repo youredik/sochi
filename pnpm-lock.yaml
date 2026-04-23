@@ -59,6 +59,9 @@ importers:
       '@ydbjs/query':
         specifier: 6.1.0
         version: 6.1.0
+      '@ydbjs/topic':
+        specifier: 6.1.2
+        version: 6.1.2
       '@ydbjs/value':
         specifier: 6.0.6
         version: 6.0.6
@@ -1270,6 +1273,10 @@ packages:
     resolution: {integrity: sha512-RBvrY4tBFgTDLfoOy3Qn5QTiwvhqs0C92T+GpI99SGIXK9sqcUiURyA5RtECUdLsESAnwjOq1feruP4Yoe2TuA==}
     engines: {node: '>=20.19.0', npm: '>=10'}
 
+  '@ydbjs/topic@6.1.2':
+    resolution: {integrity: sha512-KVPev0hpaqDC6yxKhN/U4jy9r6cUQ4gwmVpSbGMU0x24N5aW1Cwc12P2x0m22m8tlA9q+TSauFAZdzBFIoy1tQ==}
+    engines: {node: '>=20.19.0', npm: '>=10'}
+
   '@ydbjs/value@6.0.6':
     resolution: {integrity: sha512-m70NwnuV91qIFlbw+Go6x+Kcnph7tr+wWdxp0fYSnhRNXLoRa/gv8Jy7YI1wg92sROywJirrMTzuHjB/wUKyNw==}
     engines: {node: '>=20.19.0', npm: '>=10'}
@@ -2339,6 +2346,9 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  xstate@5.30.0:
+    resolution: {integrity: sha512-mIzIuMjtYVkqXq9dUzYQoag7b/dF1CBS/yhliuPLfR0FwKPC18HiUivb/crcqY2gknhR8gJEhnppLg6ubQ0gGw==}
+
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
@@ -3269,6 +3279,19 @@ snapshots:
       '@ydbjs/debug': 6.0.5
       '@ydbjs/error': 6.0.5
       nice-grpc: 2.1.15
+
+  '@ydbjs/topic@6.1.2':
+    dependencies:
+      '@bufbuild/protobuf': 2.10.1
+      '@ydbjs/api': 6.0.6
+      '@ydbjs/core': 6.1.1
+      '@ydbjs/debug': 6.0.5
+      '@ydbjs/error': 6.0.5
+      '@ydbjs/retry': 6.2.0
+      '@ydbjs/value': 6.0.6
+      ms: 2.1.3
+      nice-grpc: 2.1.15
+      xstate: 5.30.0
 
   '@ydbjs/value@6.0.6':
     dependencies:
@@ -4237,6 +4260,8 @@ snapshots:
       strip-ansi: 6.0.1
 
   wrappy@1.0.2: {}
+
+  xstate@5.30.0: {}
 
   y18n@5.0.8: {}
 
