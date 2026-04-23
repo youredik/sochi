@@ -42,7 +42,7 @@ LISTING=$(docker compose exec -T ydb /ydb \
     scheme ls /local 2>/dev/null | tr -s ' \t\r\n' '\n')
 
 EXPECTED=(user superAdmin session account verification organization organizationProfile member invitation
-          property roomType room ratePlan booking guest
+          property roomType room ratePlan availability rate booking guest
           job webhookInbox migrationReport consentLog)
 
 MISSING=()

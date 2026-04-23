@@ -187,6 +187,9 @@ CREATE TABLE IF NOT EXISTS property (
 );
 
 -- 2.2. roomType — logical categories of rooms (Standard Double, Suite).
+-- ARI-model: bookings attach to roomType, not to a specific physical room.
+-- `inventoryCount` = total physical rooms of this type; used as the default
+-- allotment when initializing the availability calendar for a date range.
 CREATE TABLE IF NOT EXISTS roomType (
     tenantId        Utf8 NOT NULL,
     id              Utf8 NOT NULL,
@@ -197,6 +200,8 @@ CREATE TABLE IF NOT EXISTS roomType (
     baseBeds        Uint8 NOT NULL,
     extraBeds       Uint8 NOT NULL,
     areaSqm         Uint16,
+    inventoryCount  Uint16 NOT NULL,
+    isActive        Bool NOT NULL,
     createdAt       Timestamp NOT NULL,
     updatedAt       Timestamp NOT NULL,
     PRIMARY KEY (tenantId, id),
@@ -219,61 +224,110 @@ CREATE TABLE IF NOT EXISTS room (
     INDEX idxRoomTenantPropertyActive GLOBAL SYNC ON (tenantId, propertyId, isActive)
 );
 
--- 2.4. ratePlan — rate configurations for room types.
--- pricing JSON structure:
--- {
---   "basePrice": "5000.00",
---   "weekendMultiplier": 1.2,
---   "seasonalOverrides": [
---     { "from": "2026-06-01", "to": "2026-08-31", "price": "8000.00" }
---   ]
--- }
+-- 2.4. ratePlan — rate plan definition (metadata: name, policies, restrictions).
+-- Prices themselves live in the `rate` table (per-date values). This matches
+-- the OTA/Booking.com ARI convention: RatePlan = conditions, Rate = amounts.
+-- code:             short identifier exposed to OTAs (e.g. 'BAR', 'NR', 'FLEX')
+-- isRefundable:     false → non-refundable
+-- cancellationHours free cancellation allowed if this many hours before check-in
+-- mealsIncluded:    'none' | 'breakfast' | 'halfBoard' | 'fullBoard'
+-- minStay/maxStay:  default LOS restrictions (can be overridden per-date in availability)
 CREATE TABLE IF NOT EXISTS ratePlan (
     tenantId            Utf8 NOT NULL,
     id                  Utf8 NOT NULL,
     propertyId          Utf8 NOT NULL,
     roomTypeId          Utf8 NOT NULL,
     name                Utf8 NOT NULL,
+    code                Utf8 NOT NULL,
     isDefault           Bool NOT NULL,
     isRefundable        Bool NOT NULL,
     cancellationHours   Int16,
     mealsIncluded       Utf8,
-    pricing             Json NOT NULL,
+    minStay             Uint8 NOT NULL,
+    maxStay             Uint8,
+    isActive            Bool NOT NULL,
     currency            Utf8 NOT NULL,
     createdAt           Timestamp NOT NULL,
     updatedAt           Timestamp NOT NULL,
     PRIMARY KEY (tenantId, id),
-    INDEX idxRatePlanTenantRoomType GLOBAL SYNC ON (tenantId, roomTypeId)
+    INDEX idxRatePlanTenantRoomType GLOBAL SYNC ON (tenantId, roomTypeId),
+    INDEX idxRatePlanTenantCode GLOBAL SYNC ON (tenantId, code)
+);
+
+-- 2.4.a. availability — ARI allotment + restrictions per (property, roomType, date).
+-- Single source of truth for "how many units can still be sold on date X".
+-- `sold` is decremented atomically when a booking is created (serializable tx).
+-- `allotment - sold` = effective availability; stored separately so channel
+-- managers can override allotment without losing booking counts.
+-- PK order: tenant → property → roomType → date keeps date LAST so inserts
+-- don't hit a single partition head (YDB best practice for time-series PKs).
+CREATE TABLE IF NOT EXISTS availability (
+    tenantId            Utf8 NOT NULL,
+    propertyId          Utf8 NOT NULL,
+    roomTypeId          Utf8 NOT NULL,
+    date                Date NOT NULL,
+    allotment           Uint16 NOT NULL,
+    sold                Uint16 NOT NULL,
+    minStay             Uint8,
+    maxStay             Uint8,
+    closedToArrival     Bool NOT NULL,
+    closedToDeparture   Bool NOT NULL,
+    stopSell            Bool NOT NULL,
+    createdAt           Timestamp NOT NULL,
+    updatedAt           Timestamp NOT NULL,
+    PRIMARY KEY (tenantId, propertyId, roomTypeId, date)
+);
+
+-- 2.4.b. rate — per-date price for (property, roomType, ratePlan).
+-- Push-model (ARI): written when ratePlan is created and mutated by the
+-- revenue manager / channel manager. No implicit fallback — if a date has
+-- no row, it's not sellable for that rate plan.
+CREATE TABLE IF NOT EXISTS rate (
+    tenantId     Utf8 NOT NULL,
+    propertyId   Utf8 NOT NULL,
+    roomTypeId   Utf8 NOT NULL,
+    ratePlanId   Utf8 NOT NULL,
+    date         Date NOT NULL,
+    amount       Decimal(22, 9) NOT NULL,
+    currency     Utf8 NOT NULL,
+    createdAt    Timestamp NOT NULL,
+    updatedAt    Timestamp NOT NULL,
+    PRIMARY KEY (tenantId, propertyId, roomTypeId, ratePlanId, date)
 );
 
 -- 2.5. booking — the core of PMS.
+-- ARI-model: booking is tied to roomType (the sellable unit). A specific
+-- physical room (`assignedRoomId`) is chosen at check-in time or by an
+-- auto-assignment job the day before arrival.
 -- status:  'pending' | 'confirmed' | 'checkedIn' | 'checkedOut' | 'cancelled' | 'noShow'
 -- source:  'direct' | 'yandexTravel' | 'ostrovok' | 'avito' | 'walkIn'
 CREATE TABLE IF NOT EXISTS booking (
-    tenantId        Utf8 NOT NULL,
-    id              Utf8 NOT NULL,
-    propertyId      Utf8 NOT NULL,
-    roomId          Utf8 NOT NULL,
-    ratePlanId      Utf8 NOT NULL,
-    primaryGuestId  Utf8 NOT NULL,
-    checkIn         Date NOT NULL,
-    checkOut        Date NOT NULL,
-    status          Utf8 NOT NULL,
-    source          Utf8 NOT NULL,
-    externalId      Utf8,
-    guestsCount     Uint8 NOT NULL,
-    totalAmount     Decimal(22, 9) NOT NULL,
-    paidAmount      Decimal(22, 9) NOT NULL,
-    currency        Utf8 NOT NULL,
-    notes           Utf8,
-    createdAt       Timestamp NOT NULL,
-    updatedAt       Timestamp NOT NULL,
-    createdBy       Utf8 NOT NULL,
+    tenantId         Utf8 NOT NULL,
+    id               Utf8 NOT NULL,
+    propertyId       Utf8 NOT NULL,
+    roomTypeId       Utf8 NOT NULL,
+    ratePlanId       Utf8 NOT NULL,
+    assignedRoomId   Utf8,
+    primaryGuestId   Utf8 NOT NULL,
+    checkIn          Date NOT NULL,
+    checkOut         Date NOT NULL,
+    status           Utf8 NOT NULL,
+    source           Utf8 NOT NULL,
+    externalId       Utf8,
+    guestsCount      Uint8 NOT NULL,
+    totalAmount      Decimal(22, 9) NOT NULL,
+    paidAmount       Decimal(22, 9) NOT NULL,
+    currency         Utf8 NOT NULL,
+    notes            Utf8,
+    createdAt        Timestamp NOT NULL,
+    updatedAt        Timestamp NOT NULL,
+    createdBy        Utf8 NOT NULL,
     PRIMARY KEY (tenantId, id),
-    INDEX idxBookingTenantRoomDates GLOBAL SYNC ON (tenantId, roomId, checkIn),
+    INDEX idxBookingTenantRoomTypeDates GLOBAL SYNC ON (tenantId, roomTypeId, checkIn),
     INDEX idxBookingTenantPropertyDates GLOBAL SYNC ON (tenantId, propertyId, checkIn),
     INDEX idxBookingTenantStatus GLOBAL SYNC ON (tenantId, status),
-    INDEX idxBookingSourceExternal GLOBAL SYNC ON (source, externalId)
+    INDEX idxBookingSourceExternal GLOBAL SYNC ON (source, externalId),
+    INDEX idxBookingAssignedRoom GLOBAL SYNC ON (tenantId, assignedRoomId, checkIn)
 );
 
 -- 2.6. guest — guest personal info (manual input on MVP, no scans).
