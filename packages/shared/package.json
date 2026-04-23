@@ -19,6 +19,10 @@
 		"./property": {
 			"types": "./src/property.ts",
 			"default": "./src/property.ts"
+		},
+		"./roomType": {
+			"types": "./src/roomType.ts",
+			"default": "./src/roomType.ts"
 		}
 	},
 	"publishConfig": {
@@ -38,6 +42,10 @@
 			"./property": {
 				"types": "./dist/property.d.ts",
 				"default": "./dist/property.js"
+			},
+			"./roomType": {
+				"types": "./dist/roomType.d.ts",
+				"default": "./dist/roomType.js"
 			}
 		}
 	},
