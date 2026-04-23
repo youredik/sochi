@@ -118,7 +118,14 @@ app.use(
 		allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 		// `traceparent`/`tracestate` prepare us for OpenTelemetry W3C context propagation;
 		// `x-request-id` so frontends can correlate their own UUIDs if they choose.
-		allowHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'traceparent', 'tracestate'],
+		allowHeaders: [
+			'Content-Type',
+			'Authorization',
+			'x-request-id',
+			'traceparent',
+			'tracestate',
+			'Idempotency-Key',
+		],
 		exposeHeaders: ['X-Request-Id'],
 		maxAge: 86400,
 	}),

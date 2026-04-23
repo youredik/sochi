@@ -1,9 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { BookingCreateDialog } from '../../bookings/components/booking-create-dialog'
 import { useGridData } from '../hooks/use-grid-data'
 import { styleFor } from '../lib/booking-palette'
 import { addDays, iterateDates, todayIso } from '../lib/date-range'
 import { bandPosition } from '../lib/layout'
+
+interface ClickedCell {
+	roomTypeId: string
+	roomTypeName: string
+	date: string
+}
 
 /**
  * Reservation grid — rooms (roomType rows) × dates (columns).
@@ -34,8 +41,9 @@ export function Chessboard() {
 	const [windowFrom, setWindowFrom] = useState(todayIso)
 	const windowTo = useMemo(() => addDays(windowFrom, WINDOW_DAYS - 1), [windowFrom])
 	const dates = useMemo(() => iterateDates(windowFrom, windowTo), [windowFrom, windowTo])
+	const [clickedCell, setClickedCell] = useState<ClickedCell | null>(null)
 
-	const { propertyName, roomTypes, bookings, isLoading, isError } = useGridData(
+	const { propertyId, propertyName, roomTypes, bookings, isLoading, isError } = useGridData(
 		windowFrom,
 		windowTo,
 	)
@@ -146,14 +154,20 @@ export function Chessboard() {
 									</div>
 								</div>
 								{dates.map((d, colIdx) => (
-									<div
+									<button
 										key={d}
-										className={`border-border relative border-b ${
+										type="button"
+										className={`border-border hover:bg-muted/60 focus-visible:ring-ring relative h-10 border-b text-left transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none ${
 											colIdx === todayIdx ? 'bg-blue-50' : ''
 										}`}
 										role="gridcell"
 										aria-colindex={colIdx + 2}
-										aria-label={`${rt.name}, ${d}`}
+										aria-label={`Создать бронирование: ${rt.name}, ${d}`}
+										data-cell-room-type-id={rt.id}
+										data-cell-date={d}
+										onClick={() =>
+											setClickedCell({ roomTypeId: rt.id, roomTypeName: rt.name, date: d })
+										}
 									/>
 								))}
 								{/* Booking bands overlay for this row */}
@@ -190,6 +204,21 @@ export function Chessboard() {
 					</div>
 				</div>
 			)}
+
+			{clickedCell ? (
+				<BookingCreateDialog
+					open={true}
+					onOpenChange={(open) => {
+						if (!open) setClickedCell(null)
+					}}
+					propertyId={propertyId}
+					roomTypeId={clickedCell.roomTypeId}
+					roomTypeName={clickedCell.roomTypeName}
+					checkIn={clickedCell.date}
+					windowFrom={windowFrom}
+					windowTo={windowTo}
+				/>
+			) : null}
 		</main>
 	)
 }
