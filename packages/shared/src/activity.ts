@@ -43,6 +43,13 @@ export type Activity = {
 	id: string
 	activityType: ActivityType
 	actorUserId: string
+	/**
+	 * Super-admin who was acting as `actorUserId` at event-time, or `null` when
+	 * `actorUserId` performed the action themselves. Audit-log UI must render
+	 * "{actor} (impersonated by {impersonator})" whenever non-null. See
+	 * Pigment Engineering 2026-04-08 pattern referenced in migration 0006.
+	 */
+	impersonatorUserId: string | null
 	diffJson: unknown
 }
 

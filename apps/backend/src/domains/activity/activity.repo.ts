@@ -1,7 +1,7 @@
 import type { Activity, ActivityObjectType, ActivityType } from '@horeca/shared'
 import { newId } from '@horeca/shared'
 import type { sql as SQL } from '../../db/index.ts'
-import { toJson, toTs } from '../../db/ydb-helpers.ts'
+import { NULL_TEXT, toJson, toTs } from '../../db/ydb-helpers.ts'
 
 type SqlInstance = typeof SQL
 
@@ -13,6 +13,7 @@ type ActivityRow = {
 	id: string
 	activityType: string
 	actorUserId: string
+	impersonatorUserId: string | null
 	diffJson: unknown
 }
 
@@ -25,6 +26,7 @@ function rowToActivity(r: ActivityRow): Activity {
 		id: r.id,
 		activityType: r.activityType as ActivityType,
 		actorUserId: r.actorUserId,
+		impersonatorUserId: r.impersonatorUserId,
 		diffJson: r.diffJson,
 	}
 }
@@ -35,6 +37,8 @@ export type ActivityInsertInput = {
 	recordId: string
 	activityType: ActivityType
 	actorUserId: string
+	/** Present when a super-admin was acting as `actorUserId`. Default null. */
+	impersonatorUserId?: string | null
 	diffJson: unknown
 }
 
@@ -54,13 +58,17 @@ export function createActivityRepo(sql: SqlInstance) {
 			const id = newId('activity')
 			const now = new Date()
 			const nowTs = toTs(now)
+			const impersonatorUserId = input.impersonatorUserId ?? null
+			// YDB `@ydbjs/query` rejects bare JS null → bind via typed `NULL_TEXT`
+			// when absent. Present value binds as plain string (auto-inferred Utf8).
+			const impersonatorBind = impersonatorUserId === null ? NULL_TEXT : impersonatorUserId
 			await sql`
 				UPSERT INTO activity (
 					\`tenantId\`, \`objectType\`, \`recordId\`, \`createdAt\`, \`id\`,
-					\`activityType\`, \`actorUserId\`, \`diffJson\`
+					\`activityType\`, \`actorUserId\`, \`impersonatorUserId\`, \`diffJson\`
 				) VALUES (
 					${input.tenantId}, ${input.objectType}, ${input.recordId}, ${nowTs}, ${id},
-					${input.activityType}, ${input.actorUserId}, ${toJson(input.diffJson)}
+					${input.activityType}, ${input.actorUserId}, ${impersonatorBind}, ${toJson(input.diffJson)}
 				)
 			`
 			return {
@@ -71,6 +79,7 @@ export function createActivityRepo(sql: SqlInstance) {
 				id,
 				activityType: input.activityType,
 				actorUserId: input.actorUserId,
+				impersonatorUserId,
 				diffJson: input.diffJson,
 			}
 		},
