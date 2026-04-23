@@ -1,7 +1,7 @@
 /**
  * Booking service — pure-function unit tests for fee snapshot computation.
  *
- * Business invariants:
+ * Business invariants (example-based):
  *   [F1] Non-refundable plan → 100% fee, no dueDate, policyCode='nonRefundable'
  *   [F2] Refundable+cancellationHours → 100% fee, dueDate = checkIn minus
  *        cancellationHours (UTC), policyCode='flexible'
@@ -12,7 +12,19 @@
  *   [F6] No-show fee is ALWAYS 100%, ALWAYS null dueDate, policyCode='standardNoShow'
  *   [F7] Boundary: cancellationHours=0 → dueDate = checkIn date itself
  *   [F8] Large cancellationHours crosses calendar day boundary correctly
+ *
+ * Property-based (fuzz over the input space — catches boundary classes that
+ * example-based tests miss):
+ *   [FP1] Non-refundable branch: ANY (total, rp, date) → fee=total,
+ *         dueDate=null, code='nonRefundable', currency+version pass-through.
+ *   [FP2] Flexible branch: ANY (total, hours∈[0,720], date) → fee=total,
+ *         dueDate = date minus hours (UTC, date-resolution), code='flexible'.
+ *   [FP3] No-show: ANY (total, rp) → fee=total, dueDate=null,
+ *         code='standardNoShow', independent of isRefundable / hours.
+ *   [FP4] policyVersion is always `ratePlan.updatedAt` verbatim — no mutation.
  */
+
+import { fc, test as pbTest } from '@fast-check/vitest'
 import type { RatePlan } from '@horeca/shared'
 import { describe, expect, test } from 'vitest'
 import { computeCancellationFeeSnapshot, computeNoShowFeeSnapshot } from './booking.service.ts'
@@ -118,4 +130,123 @@ describe('booking.service — computeNoShowFeeSnapshot', () => {
 		expect(snap.amountMicros).toBe(0n)
 		expect(snap.policyCode).toBe('standardNoShow')
 	})
+})
+
+// ----------------------------------------------------------------------------
+// Property-based fuzz tests — cover the input space beyond hand-rolled examples.
+// ----------------------------------------------------------------------------
+
+/** Money micros under Int64 max, sized for realistic hotel bookings. */
+const totalMicrosArb = fc.bigInt({ min: 0n, max: 900_000_000_000_000n })
+
+/** ISO-4217 currency — any valid 3-letter uppercase ASCII is acceptable shape-wise. */
+const currencyArb = fc
+	.string({ minLength: 3, maxLength: 3, unit: 'grapheme-ascii' })
+	.map((s) => s.toUpperCase().replace(/[^A-Z]/g, 'X'))
+
+const MS_PER_DAY = 86_400_000
+
+/** ISO-8601 datetime string, preserved verbatim by the snapshot functions. */
+// fast-check 4.x `fc.date({min,max})` intermittently produces out-of-range
+// dates under certain seeds (empirically caught: a seed that ignored max and
+// drove toISOString into the extended-year branch, e.g. "+275761-...").
+// Integer-over-epoch-ms avoids the sharp edge — millisecond granularity is
+// narrow enough for invariant tests.
+const updatedAtArb = fc
+	.integer({
+		min: Date.parse('2024-01-01T00:00:00Z'),
+		max: Date.parse('2030-12-31T23:59:59Z'),
+	})
+	.map((ms) => new Date(ms).toISOString())
+
+/** YYYY-MM-DD within a sane booking horizon. */
+const checkInDateArb = fc
+	.integer({
+		min: Math.floor(Date.parse('2026-01-01T00:00:00Z') / MS_PER_DAY),
+		max: Math.floor(Date.parse('2030-12-31T00:00:00Z') / MS_PER_DAY),
+	})
+	.map((day) => new Date(day * MS_PER_DAY).toISOString().slice(0, 10))
+
+/** cancellationHours ∈ [0, 720] per ratePlanSchema (max 30 days). */
+const cancellationHoursArb = fc.integer({ min: 0, max: 720 })
+
+/**
+ * Arbitrary FeePolicySource-shaped input (only the 4 fields the compute
+ * functions actually read). Fuzz over refundable × (null | hours ∈ [0,720]).
+ */
+const policySourceArb = fc.record({
+	isRefundable: fc.boolean(),
+	cancellationHours: fc.oneof(cancellationHoursArb, fc.constant(null)),
+	currency: currencyArb,
+	updatedAt: updatedAtArb,
+})
+
+describe('computeCancellationFeeSnapshot — property-based', () => {
+	pbTest.prop([totalMicrosArb, currencyArb, updatedAtArb, checkInDateArb])(
+		'[FP1] non-refundable branch invariants hold for ALL inputs',
+		(total, currency, updatedAt, checkIn) => {
+			const rp = mkRp({ isRefundable: false, cancellationHours: null, currency, updatedAt })
+			const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
+			expect(snap.amountMicros).toBe(total)
+			expect(snap.dueDate).toBeNull()
+			expect(snap.policyCode).toBe('nonRefundable')
+			expect(snap.currency).toBe(currency)
+			expect(snap.policyVersion).toBe(updatedAt)
+		},
+	)
+
+	pbTest.prop([totalMicrosArb, cancellationHoursArb, currencyArb, updatedAtArb, checkInDateArb])(
+		'[FP2] flexible branch: dueDate = checkIn minus cancellationHours (UTC day)',
+		(total, hours, currency, updatedAt, checkIn) => {
+			const rp = mkRp({
+				isRefundable: true,
+				cancellationHours: hours,
+				currency,
+				updatedAt,
+			})
+			const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
+			expect(snap.amountMicros).toBe(total)
+			expect(snap.policyCode).toBe('flexible')
+			expect(snap.currency).toBe(currency)
+			expect(snap.policyVersion).toBe(updatedAt)
+			// Recompute the expected dueDate using the same UTC-arithmetic the
+			// implementation uses — fuzz guards against day/month/year rollover.
+			const expected = new Date(`${checkIn}T00:00:00Z`)
+			expected.setUTCHours(expected.getUTCHours() - hours)
+			expect(snap.dueDate).toBe(expected.toISOString().slice(0, 10))
+		},
+	)
+
+	pbTest.prop([totalMicrosArb, policySourceArb, checkInDateArb])(
+		'[FP4] policyVersion ALWAYS equals ratePlan.updatedAt verbatim',
+		(total, policy, checkIn) => {
+			const rp = mkRp(policy)
+			const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
+			expect(snap.policyVersion).toBe(policy.updatedAt)
+		},
+	)
+
+	pbTest.prop([totalMicrosArb, policySourceArb, checkInDateArb])(
+		'[FP-invariant] amountMicros is ALWAYS exactly totalMicros (never partial)',
+		(total, policy, checkIn) => {
+			const rp = mkRp(policy)
+			const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
+			expect(snap.amountMicros).toBe(total)
+		},
+	)
+})
+
+describe('computeNoShowFeeSnapshot — property-based', () => {
+	pbTest.prop([totalMicrosArb, policySourceArb])(
+		'[FP3] ALL inputs produce fee=total, dueDate=null, code=standardNoShow',
+		(total, policy) => {
+			const rp = mkRp(policy)
+			const snap = computeNoShowFeeSnapshot(total, rp)
+			expect(snap.amountMicros).toBe(total)
+			expect(snap.dueDate).toBeNull()
+			expect(snap.policyCode).toBe('standardNoShow')
+			expect(snap.currency).toBe(policy.currency)
+			expect(snap.policyVersion).toBe(policy.updatedAt)
+		},
+	)
 })
