@@ -28,7 +28,7 @@ export function RoomTypeStep() {
 		// see property-step for rationale on skipping client validators.
 		onSubmit: async ({ value }) => {
 			const created = await createRoomType.mutateAsync(value)
-			setRoomTypeId(created.id)
+			setRoomTypeId(created.id, value.inventoryCount)
 		},
 	})
 

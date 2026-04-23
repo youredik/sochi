@@ -16,10 +16,10 @@ import { useWizardStore } from '../wizard-store'
  * UI (not in the wizard).
  */
 export function RatePlanStep() {
-	const propertyId = useWizardStore((s) => s.propertyId)
 	const roomTypeId = useWizardStore((s) => s.roomTypeId)
+	const roomTypeInventoryCount = useWizardStore((s) => s.roomTypeInventoryCount)
 	const setRatePlanId = useWizardStore((s) => s.setRatePlanId)
-	const createRatePlan = useCreateRatePlan(propertyId, roomTypeId)
+	const createRatePlan = useCreateRatePlan(roomTypeId, roomTypeInventoryCount)
 
 	const form = useForm({
 		defaultValues: {

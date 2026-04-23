@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
 import { logger } from '../../../lib/logger.ts'
+import { buildSeedPayload } from '../lib/seed.ts'
 
 /**
  * Create mutations for the setup wizard. Each invalidates its own list
@@ -106,12 +107,19 @@ export function useCreateRoom() {
  * Parallel POSTs for rate + availability — independent resources, no
  * ordering constraint on the server side.
  */
-export function useCreateRatePlan(propertyId: string | null, roomTypeId: string | null) {
+export function useCreateRatePlan(roomTypeId: string | null, inventoryCount: number | null) {
 	const queryClient = useQueryClient()
 	return useMutation({
 		mutationFn: async (input: { code: string; name: string; nightlyRub: number }) => {
-			if (!roomTypeId || !propertyId)
+			if (!roomTypeId) {
 				throw { message: 'Нет roomTypeId — шаг типа номеров не завершён' }
+			}
+			if (inventoryCount === null) {
+				throw {
+					code: 'WIZARD_MISSING_INVENTORY',
+					message: 'Количество номеров не передано — начните мастер заново.',
+				}
+			}
 
 			// 1. Create the plan (defaults: refundable, no meals, 24h cancel)
 			const planRes = await api.api.v1['rate-plans'].$post({
@@ -134,37 +142,40 @@ export function useCreateRatePlan(propertyId: string | null, roomTypeId: string 
 			const planBody = (await planRes.json()) as { data: { id: string } }
 			const ratePlanId = planBody.data.id
 
-			// 2. Seed 30-day forward rate + availability in parallel
-			const today = new Date()
-			const rates = Array.from({ length: 30 }, (_, i) => {
-				const d = new Date(today)
-				d.setUTCDate(today.getUTCDate() + i)
-				return {
-					date: d.toISOString().slice(0, 10),
-					amount: String(BigInt(input.nightlyRub) * 1_000_000n), // RUB → micros
-					currency: 'RUB' as const,
-				}
+			// 2. Build seeding payload via pure helper (unit-tested: money
+			//    precision via BigInt, UTC-anchored dates, consecutive-day
+			//    invariant, allotment/days adversarial guards).
+			//    `inventoryCount` snapshotted on the wizard store at step 2
+			//    — fail-loud above if it's null rather than silent ??1
+			//    fallback (which would silently under-seed allotment and
+			//    cause mysterious overbooking 422s later).
+			const { rates, availability } = buildSeedPayload({
+				nightlyRub: input.nightlyRub,
+				allotment: inventoryCount,
+				days: 30,
 			})
-			// Pull inventoryCount from the freshly-created roomType cache if available;
-			// fall back to 1 which matches our wizard default and is a safe
-			// lower bound (cannot accidentally over-allocate).
-			const cachedRoomType = queryClient
-				.getQueryData<Array<{ id: string; inventoryCount: number }>>(['roomTypes', propertyId])
-				?.find((rt) => rt.id === roomTypeId)
-			const allotment = cachedRoomType?.inventoryCount ?? 1
-			const availability = rates.map((r) => ({ date: r.date, allotment }))
 
 			const [rateRes, availRes] = await Promise.all([
 				api.api.v1['rate-plans'][':ratePlanId'].rates.$post({
 					param: { ratePlanId },
-					json: { rates },
+					json: {
+						// amount as string-of-bigint to match backend wire convention;
+						// `buildSeedPayload` guarantees this shape (see lib/seed.ts).
+						rates: rates.map((r) => ({ date: r.date, amount: r.amount, currency: r.currency })),
+					},
 				}),
 				api.api.v1['room-types'][':roomTypeId'].availability.$post({
 					param: { roomTypeId },
-					json: { rates: availability },
+					json: { rates: availability.map((a) => ({ date: a.date, allotment: a.allotment })) },
 				}),
 			])
 			if (!rateRes.ok || !availRes.ok) {
+				// KNOWN-WEAKNESS: partial-seed failure has no compensating
+				// rollback (would require DELETE for whichever succeeded).
+				// For this wizard flow the failure is rare and owner sees
+				// the toast — next attempt can recreate with fresh code
+				// suffix. Refactor to tx-wrapping server endpoint is the
+				// proper fix; noted in memory.
 				throw {
 					message: 'Не удалось заполнить цены и доступность на 30 дней вперёд',
 					code: 'RATE_OR_AVAILABILITY_SEED_FAILED',

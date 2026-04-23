@@ -25,7 +25,7 @@ describe('wizard-store', () => {
 		it('finishRooms from rooms step advances to ratePlan (not done)', () => {
 			const store = useWizardStore.getState()
 			store.setPropertyId('prop_x')
-			store.setRoomTypeId('rmt_x')
+			store.setRoomTypeId('rmt_x', 1)
 			store.incRooms()
 			store.finishRooms()
 			expect(useWizardStore.getState().step).toBe('ratePlan')
@@ -34,7 +34,7 @@ describe('wizard-store', () => {
 		it('setRatePlanId advances to done + stores id', () => {
 			const store = useWizardStore.getState()
 			store.setPropertyId('prop_x')
-			store.setRoomTypeId('rmt_x')
+			store.setRoomTypeId('rmt_x', 1)
 			store.incRooms()
 			store.finishRooms()
 			store.setRatePlanId('rp_abc')
@@ -52,11 +52,12 @@ describe('wizard-store', () => {
 			expect(s.step).toBe('roomType')
 		})
 
-		it('setRoomTypeId advances to rooms step + stores id', () => {
+		it('setRoomTypeId advances to rooms step + stores id + snapshots inventoryCount', () => {
 			useWizardStore.getState().setPropertyId('prop_123')
-			useWizardStore.getState().setRoomTypeId('rmt_456')
+			useWizardStore.getState().setRoomTypeId('rmt_456', 5)
 			const s = useWizardStore.getState()
 			expect(s.roomTypeId).toBe('rmt_456')
+			expect(s.roomTypeInventoryCount).toBe(5)
 			expect(s.step).toBe('rooms')
 		})
 	})
@@ -83,7 +84,7 @@ describe('wizard-store', () => {
 		it('reset from ratePlan step nukes all progress back to property', () => {
 			const store = useWizardStore.getState()
 			store.setPropertyId('prop_abc')
-			store.setRoomTypeId('rmt_def')
+			store.setRoomTypeId('rmt_def', 1)
 			store.incRooms(7)
 			store.finishRooms()
 			store.setRatePlanId('rp_xyz')
@@ -99,7 +100,7 @@ describe('wizard-store', () => {
 		it('reset from done step also returns to property', () => {
 			const store = useWizardStore.getState()
 			store.setPropertyId('prop_abc')
-			store.setRoomTypeId('rmt_def')
+			store.setRoomTypeId('rmt_def', 1)
 			store.goTo('done')
 			store.reset()
 			expect(useWizardStore.getState().step).toBe('property')

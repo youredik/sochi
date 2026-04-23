@@ -20,11 +20,18 @@ interface WizardState {
 	step: WizardStep
 	propertyId: string | null
 	roomTypeId: string | null
+	/**
+	 * Snapshotted `inventoryCount` from the roomType-create response — the
+	 * ratePlan step needs it to seed availability allotment. Keeping it
+	 * on the store (not re-reading from TQ cache) means the ratePlan
+	 * mutation doesn't depend on a query that may or may not be active.
+	 */
+	roomTypeInventoryCount: number | null
 	roomsCreated: number
 	ratePlanId: string | null
 	goTo: (step: WizardStep) => void
 	setPropertyId: (id: string) => void
-	setRoomTypeId: (id: string) => void
+	setRoomTypeId: (id: string, inventoryCount: number) => void
 	incRooms: (n?: number) => void
 	finishRooms: () => void
 	setRatePlanId: (id: string) => void
@@ -35,6 +42,7 @@ const INITIAL = {
 	step: 'property' as WizardStep,
 	propertyId: null,
 	roomTypeId: null,
+	roomTypeInventoryCount: null,
 	roomsCreated: 0,
 	ratePlanId: null,
 }
@@ -43,7 +51,8 @@ export const useWizardStore = create<WizardState>((set) => ({
 	...INITIAL,
 	goTo: (step) => set({ step }),
 	setPropertyId: (id) => set({ propertyId: id, step: 'roomType' }),
-	setRoomTypeId: (id) => set({ roomTypeId: id, step: 'rooms' }),
+	setRoomTypeId: (id, inventoryCount) =>
+		set({ roomTypeId: id, roomTypeInventoryCount: inventoryCount, step: 'rooms' }),
 	incRooms: (n = 1) => set((s) => ({ roomsCreated: s.roomsCreated + n })),
 	finishRooms: () => set({ step: 'ratePlan' }),
 	setRatePlanId: (id) => set({ ratePlanId: id, step: 'done' }),

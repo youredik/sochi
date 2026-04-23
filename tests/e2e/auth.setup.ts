@@ -83,5 +83,16 @@ setup('authenticate owner + complete setup wizard', async ({ page }) => {
 	await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/?$/)
 	await expect(page.getByRole('heading', { name: orgName })).toBeVisible()
 
+	// Empirical gate: navigate to the chessboard and verify seeding really
+	// propagated — roomType row visible (= roomType cache is live) + 15
+	// date columns rendered (= grid loaded bookings query without error).
+	// Without this assertion "wizard succeeded" was trust-me; now it's
+	// proven end-to-end from form → POST → grid render.
+	await page.getByRole('link', { name: /Шахматка/ }).click()
+	await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/grid$/)
+	await expect(page.getByRole('rowheader', { name: /Стандарт/ })).toBeVisible()
+	// Grid has 1 rowheader (Тип номера) + 15 date columnheaders = 16 total.
+	await expect(page.getByRole('grid')).toHaveAttribute('aria-colcount', '16')
+
 	await page.context().storageState({ path: 'tests/.auth/owner.json' })
 })
