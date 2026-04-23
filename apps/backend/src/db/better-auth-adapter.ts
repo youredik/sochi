@@ -1,9 +1,18 @@
+import type { SQL as SQLTag, TX as TXTag } from '@ydbjs/query'
 import { unsafe } from '@ydbjs/query'
 import { Optional } from '@ydbjs/value/optional'
 import { BoolType, DatetimeType, TextType } from '@ydbjs/value/primitive'
 import type { CleanedWhere, CustomAdapter } from 'better-auth/adapters'
 import { createAdapterFactory } from 'better-auth/adapters'
 import type { sql as SQL } from './index.ts'
+
+/**
+ * Either the top-level `sql` QueryClient or a transaction-scoped `tx` handle
+ * from `sql.begin(async (tx) => …)`. Only the tagged-template call + `.isolation()`
+ * + `.idempotent()` methods are exercised; `.begin()` is deliberately NOT used
+ * inside this file — that's the outer `ydbAdapter` factory's job.
+ */
+type SqlOrTx = SQLTag | TXTag
 
 /**
  * Custom Better Auth adapter for YDB.
@@ -174,7 +183,7 @@ function buildWhere(wheres: CleanedWhere[]): { clause: string; params: unknown[]
  * @ydbjs/query auto-generates DECLARE statements from value types.
  */
 async function execQuery(
-	sql: SqlInstance,
+	sql: SqlOrTx,
 	queryStr: string,
 	params: unknown[],
 	options?: { isolation?: 'snapshotReadOnly' | 'onlineReadOnly'; idempotent?: boolean },
@@ -212,6 +221,7 @@ async function execQuery(
 			...Record<string, unknown>[][],
 		]
 	}
+	// biome-ignore lint/nursery/useAwaitThenable: @ydbjs/query Query<T> is thenable (its .then() dispatches exec); biome nursery doesn't see through SqlOrTx union.
 	return (await q) as [Record<string, unknown>[], ...Record<string, unknown>[][]]
 }
 
@@ -247,7 +257,7 @@ function convertRow(row: Record<string, unknown>): Record<string, unknown> {
 // CustomAdapter builder — bound to a sql or tx connection
 // ---------------------------------------------------------------------------
 
-function buildCrudAdapter(q: SqlInstance): CustomAdapter {
+function buildCrudAdapter(q: SqlOrTx): CustomAdapter {
 	return {
 		async create({ model, data }) {
 			const { columns, values } = prepareUpsertData(model, data as Record<string, unknown>)
@@ -403,21 +413,21 @@ function buildCrudAdapter(q: SqlInstance): CustomAdapter {
 /**
  * YDB adapter for Better Auth.
  *
- * NOTE on transactions: we intentionally do NOT implement the optional
- * `transaction` hook for MVP. Every CRUD call goes through the top-level
- * `sql` connection and each YQL statement is its own auto-committed unit
- * — exactly what YDB Query Service does by default.
+/**
+ * Transactions: we implement Better Auth's optional `transaction` hook by
+ * opening a YDB `sql.begin(async (tx) => …)` and rebuilding the CRUD adapter
+ * bound to `tx`. Any `throw` inside the callback aborts the transaction
+ * cleanly (YDB rolls back); normal return auto-commits.
  *
- * Why no tx wrapper: our previous attempt wrapped Better Auth's internal
- * transaction in `sql.begin(async (tx) => callback(buildCrudAdapter(tx)))`.
- * UPSERTs succeeded inside the tx scope (SELECT-readback saw the row), but
- * the whole transaction silently rolled back after the callback returned.
- * Root cause isolated to 2026-04-23: interplay of Better Auth `wrapWithTx`
- * and @ydbjs/query tx semantics with a cross-factory adapter.
+ * This fixes the historical "sign-up is not atomic" footnote (user + account +
+ * session across three UPSERTs): a failure mid-way now rolls back, no orphan
+ * rows. Verified empirically against @ydbjs/query 6.1.0 (session pool era).
  *
- * Impact: sign-up is not atomic across user + account + session (3 writes).
- * On failure mid-way we may leak orphan rows. For a single-dev MVP this is
- * acceptable — cleanup via cron. Revisit when we add real money flows.
+ * The earlier attempt at this (documented in git history) rolled back silently
+ * because it built a *new* adapter via `createAdapterFactory` inside the
+ * callback instead of a bare `CustomAdapter`. BA's own `wrapWithTx` treated
+ * that re-entrant factory as a separate connection and discarded the writes.
+ * Here we call `buildCrudAdapter(tx)` directly — a plain object, no factory.
  */
 export function ydbAdapter(sql: SqlInstance) {
 	return createAdapterFactory({
@@ -429,6 +439,10 @@ export function ydbAdapter(sql: SqlInstance) {
 			supportsArrays: false,
 			supportsNumericIds: false,
 		},
-		adapter: () => buildCrudAdapter(sql),
+		adapter: () => ({
+			...buildCrudAdapter(sql),
+			transaction: <R>(callback: (trx: CustomAdapter) => Promise<R>): Promise<R> =>
+				sql.begin(async (tx) => callback(buildCrudAdapter(tx))),
+		}),
 	})
 }
