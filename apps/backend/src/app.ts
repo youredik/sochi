@@ -7,6 +7,8 @@ import { pinoLogger } from 'hono-pino'
 import { z } from 'zod'
 import { auth } from './auth.ts'
 import { sql } from './db/index.ts'
+import { createAvailabilityFactory } from './domains/availability/availability.factory.ts'
+import { createAvailabilityRoutes } from './domains/availability/availability.routes.ts'
 import { createPropertyFactory } from './domains/property/property.factory.ts'
 import { createPropertyRoutes } from './domains/property/property.routes.ts'
 import { createRateFactory } from './domains/rate/rate.factory.ts'
@@ -35,6 +37,7 @@ const roomTypeFactory = createRoomTypeFactory(sql, propertyFactory.service)
 const roomFactory = createRoomFactory(sql, propertyFactory.service, roomTypeFactory.service)
 const ratePlanFactory = createRatePlanFactory(sql, propertyFactory.service, roomTypeFactory.service)
 const rateFactory = createRateFactory(sql, ratePlanFactory.service)
+const availabilityFactory = createAvailabilityFactory(sql, roomTypeFactory.service)
 
 const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
 	.map((o) => o.trim())
@@ -102,6 +105,7 @@ const routes = app
 	.route('/api/v1', createRoomRoutes(roomFactory))
 	.route('/api/v1', createRatePlanRoutes(ratePlanFactory))
 	.route('/api/v1', createRateRoutes(rateFactory))
+	.route('/api/v1', createAvailabilityRoutes(availabilityFactory))
 	.get('/health', (c) =>
 		c.json(
 			{

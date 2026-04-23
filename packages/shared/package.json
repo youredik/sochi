@@ -35,6 +35,10 @@
 		"./rate": {
 			"types": "./src/rate.ts",
 			"default": "./src/rate.ts"
+		},
+		"./availability": {
+			"types": "./src/availability.ts",
+			"default": "./src/availability.ts"
 		}
 	},
 	"publishConfig": {
@@ -70,6 +74,10 @@
 			"./rate": {
 				"types": "./dist/rate.d.ts",
 				"default": "./dist/rate.js"
+			},
+			"./availability": {
+				"types": "./dist/availability.d.ts",
+				"default": "./dist/availability.js"
 			}
 		}
 	},
