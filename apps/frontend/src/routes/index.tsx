@@ -1,5 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
@@ -35,33 +35,27 @@ function HomePage() {
 				<dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
 					<dt className="text-neutral-500">Backend</dt>
 					<dd>
-						{health.isPending && <span className="text-neutral-500">проверяем…</span>}
-						{health.isError && <span className="text-red-400">недоступен</span>}
-						{health.data && (
-							<span
-								className={
-									health.data.status === 'ok' ? 'text-emerald-400' : 'text-amber-400'
-								}
-							>
+						{health.isPending ? (
+							<span className="text-neutral-500">проверяем…</span>
+						) : health.isError ? (
+							<span className="text-red-400">недоступен</span>
+						) : health.data ? (
+							<span className={health.data.status === 'ok' ? 'text-emerald-400' : 'text-amber-400'}>
 								{health.data.status}
 							</span>
-						)}
+						) : null}
 					</dd>
 					<dt className="text-neutral-500">YDB</dt>
 					<dd>
 						{health.data?.ydb.connected ? (
 							<span className="text-emerald-400">connected</span>
 						) : (
-							<span className="text-red-400">
-								{health.data?.ydb.error ?? 'disconnected'}
-							</span>
+							<span className="text-red-400">{health.data?.ydb.error ?? 'disconnected'}</span>
 						)}
 					</dd>
 					<dt className="text-neutral-500">Последняя проверка</dt>
 					<dd className="text-neutral-400">
-						{health.data?.time
-							? new Date(health.data.time).toLocaleTimeString('ru-RU')
-							: '—'}
+						{health.data?.time ? new Date(health.data.time).toLocaleTimeString('ru-RU') : '—'}
 					</dd>
 				</dl>
 			</section>

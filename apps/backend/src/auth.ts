@@ -1,4 +1,4 @@
-import { newId, type EntityKind } from '@horeca/shared'
+import { type EntityKind, newId } from '@horeca/shared'
 import { betterAuth } from 'better-auth'
 import { organization } from 'better-auth/plugins/organization'
 import { ac, manager, owner, staff } from './access-control.ts'
@@ -38,7 +38,6 @@ const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
 export const auth = betterAuth({
 	database: ydbAdapter(sql),
 	secret: env.BETTER_AUTH_SECRET,
-	// biome-ignore lint/style/useNamingConvention: Better Auth API field name
 	baseURL: env.BETTER_AUTH_URL,
 	trustedOrigins,
 	emailAndPassword: {

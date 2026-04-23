@@ -16,7 +16,6 @@ type AuthUser = (typeof auth.$Infer.Session)['user']
 type MemberRole = 'owner' | 'manager' | 'staff'
 
 export type AppEnv = {
-	// biome-ignore lint/style/useNamingConvention: Hono Env type requires PascalCase `Variables`
 	Variables: {
 		/** Authenticated user. Set by authMiddleware. */
 		user: AuthUser

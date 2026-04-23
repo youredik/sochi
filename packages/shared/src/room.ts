@@ -9,11 +9,23 @@ import { idSchema } from './schemas.ts'
  * floor, housekeeping-relevant notes.
  */
 
-const floorSchema = z.coerce.number().int().min(-5).max(100)
+/** Realistic floor range: from -5 (deep underground parking) to 50. */
+const floorSchema = z.coerce.number().int().min(-5).max(50)
+
+/**
+ * Room number: alphanumeric + hyphen/dot/slash, 1..20 chars.
+ * Examples: "101", "2B", "SUITE-1", "A.12", "101/R".
+ * Rejects whitespace, emoji, control characters — prevents lookalike collisions.
+ */
+const roomNumberSchema = z
+	.string()
+	.min(1)
+	.max(20)
+	.regex(/^[A-Za-z0-9][A-Za-z0-9\-./]*$/, 'Only letters, digits, hyphen, dot, slash allowed')
 
 export const roomCreateInput = z.object({
 	roomTypeId: idSchema('roomType'),
-	number: z.string().min(1).max(20),
+	number: roomNumberSchema,
 	floor: floorSchema.optional(),
 	notes: z.string().max(1000).optional(),
 })
@@ -22,7 +34,7 @@ export type RoomCreateInput = z.infer<typeof roomCreateInput>
 export const roomUpdateInput = z
 	.object({
 		roomTypeId: idSchema('roomType').optional(),
-		number: z.string().min(1).max(20).optional(),
+		number: roomNumberSchema.optional(),
 		floor: floorSchema.nullable().optional(),
 		notes: z.string().max(1000).nullable().optional(),
 		isActive: z.boolean().optional(),

@@ -1,3 +1,4 @@
+import { zValidator } from '@hono/zod-validator'
 import {
 	roomCreateInput,
 	roomIdParam,
@@ -5,13 +6,13 @@ import {
 	roomPropertyParam,
 	roomUpdateInput,
 } from '@horeca/shared'
-import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
 import { PropertyNotFoundError } from '../roomType/roomType.service.ts'
 import type { RoomFactory } from './room.factory.ts'
+import { RoomNumberTakenError } from './room.repo.ts'
 import { RoomTypeNotFoundError } from './room.service.ts'
 
 /**
@@ -59,6 +60,9 @@ export function createRoomRoutes(f: RoomFactory) {
 				if (err instanceof RoomTypeNotFoundError) {
 					return c.json({ error: { code: 'NOT_FOUND', message: 'Room type not found' } }, 404)
 				}
+				if (err instanceof RoomNumberTakenError) {
+					return c.json({ error: { code: 'ROOM_NUMBER_TAKEN', message: err.message } }, 409)
+				}
 				throw err
 			}
 		})
@@ -86,6 +90,9 @@ export function createRoomRoutes(f: RoomFactory) {
 				} catch (err) {
 					if (err instanceof RoomTypeNotFoundError) {
 						return c.json({ error: { code: 'NOT_FOUND', message: 'Room type not found' } }, 404)
+					}
+					if (err instanceof RoomNumberTakenError) {
+						return c.json({ error: { code: 'ROOM_NUMBER_TAKEN', message: err.message } }, 409)
 					}
 					throw err
 				}

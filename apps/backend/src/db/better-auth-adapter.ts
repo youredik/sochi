@@ -356,11 +356,7 @@ function buildCrudAdapter(q: SqlInstance): CustomAdapter {
 				const { columns, values } = prepareUpsertData(model, merged)
 				const colList = columns.map((c) => `\`${c}\``).join(', ')
 				const placeholders = columns.map((_, i) => `$p${i}`).join(', ')
-				await execQuery(
-					q,
-					`UPSERT INTO \`${model}\` (${colList}) VALUES (${placeholders})`,
-					values,
-				)
+				await execQuery(q, `UPSERT INTO \`${model}\` (${colList}) VALUES (${placeholders})`, values)
 			}
 			return existingRows.length
 		},
@@ -419,7 +415,6 @@ export function ydbAdapter(sql: SqlInstance) {
 		config: {
 			adapterId: 'ydb',
 			supportsDates: true,
-			// biome-ignore lint/style/useNamingConvention: Better Auth createAdapterFactory API
 			supportsJSON: false,
 			supportsBooleans: true,
 			supportsArrays: false,

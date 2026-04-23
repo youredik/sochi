@@ -9,7 +9,10 @@
 			"default": "./src/app.ts"
 		}
 	},
-	"files": ["src", "package.json"],
+	"files": [
+		"src",
+		"package.json"
+	],
 	"scripts": {
 		"dev": "node --watch --watch-preserve-output --env-file-if-exists=../../.env src/index.ts",
 		"start": "node src/index.ts"

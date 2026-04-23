@@ -213,6 +213,9 @@ CREATE TABLE IF NOT EXISTS roomType (
 );
 
 -- 2.3. room — concrete rooms.
+-- UNIQUE (tenantId, propertyId, number) prevents creating two rooms with
+-- the same number in the same property (e.g. "101" twice) — logical
+-- housekeeping invariant. Enforced at DB level via a unique secondary index.
 CREATE TABLE IF NOT EXISTS room (
     tenantId    Utf8 NOT NULL,
     id          Utf8 NOT NULL,
@@ -225,7 +228,8 @@ CREATE TABLE IF NOT EXISTS room (
     createdAt   Timestamp NOT NULL,
     updatedAt   Timestamp NOT NULL,
     PRIMARY KEY (tenantId, id),
-    INDEX idxRoomTenantPropertyActive GLOBAL SYNC ON (tenantId, propertyId, isActive)
+    INDEX idxRoomTenantPropertyActive GLOBAL SYNC ON (tenantId, propertyId, isActive),
+    INDEX idxRoomPropertyNumberUnique GLOBAL UNIQUE SYNC ON (tenantId, propertyId, number)
 );
 
 -- 2.4. ratePlan — rate plan definition (metadata: name, policies, restrictions).

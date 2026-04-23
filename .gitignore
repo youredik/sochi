@@ -16,6 +16,7 @@ build/
 .vscode/
 .idea/
 .DS_Store
+.claude/
 
 # Tests
 coverage/

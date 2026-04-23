@@ -1,7 +1,7 @@
 import type { RoomType, RoomTypeCreateInput, RoomTypeUpdateInput } from '@horeca/shared'
 import { newId } from '@horeca/shared'
 import { Optional } from '@ydbjs/value/optional'
-import { Int32Type, TextType } from '@ydbjs/value/primitive'
+import { Int32Type, TextType, Timestamp } from '@ydbjs/value/primitive'
 import type { sql as SQL } from '../../db/index.ts'
 
 type SqlInstance = typeof SQL
@@ -54,12 +54,8 @@ function rowToRoomType(r: RoomTypeRow): RoomType {
  */
 export function createRoomTypeRepo(sql: SqlInstance) {
 	return {
-		async listByProperty(
-			tenantId: string,
-			propertyId: string,
-			opts: { includeInactive: boolean },
-		) {
-			const [rows] = opts.includeInactive
+		async listByProperty(tenantId: string, propertyId: string, opts: { includeInactive: boolean }) {
+			const [rows = []] = opts.includeInactive
 				? await sql<RoomTypeRow[]>`
 						SELECT * FROM roomType
 						WHERE tenantId = ${tenantId} AND propertyId = ${propertyId}
@@ -76,7 +72,7 @@ export function createRoomTypeRepo(sql: SqlInstance) {
 		},
 
 		async getById(tenantId: string, id: string): Promise<RoomType | null> {
-			const [rows] = await sql<RoomTypeRow[]>`
+			const [rows = []] = await sql<RoomTypeRow[]>`
 				SELECT * FROM roomType
 				WHERE tenantId = ${tenantId} AND id = ${id}
 				LIMIT 1
@@ -94,6 +90,9 @@ export function createRoomTypeRepo(sql: SqlInstance) {
 		): Promise<RoomType> {
 			const id = newId('roomType')
 			const now = new Date()
+			// See property.repo.ts: wrap in Timestamp to preserve ms precision;
+			// @ydbjs/value infers plain Date as `Datetime` (seconds) and truncates.
+			const nowTs = new Timestamp(now)
 			const description = input.description ?? NULL_TEXT
 			const areaSqm = input.areaSqm ?? NULL_INT32
 			await sql`
@@ -104,7 +103,7 @@ export function createRoomTypeRepo(sql: SqlInstance) {
 				) VALUES (
 					${tenantId}, ${id}, ${propertyId}, ${input.name}, ${description},
 					${input.maxOccupancy}, ${input.baseBeds}, ${input.extraBeds}, ${areaSqm},
-					${input.inventoryCount}, ${true}, ${now}, ${now}
+					${input.inventoryCount}, ${true}, ${nowTs}, ${nowTs}
 				)
 			`
 			return {
@@ -129,36 +128,52 @@ export function createRoomTypeRepo(sql: SqlInstance) {
 			id: string,
 			patch: RoomTypeUpdateInput,
 		): Promise<RoomType | null> {
-			const current = await this.getById(tenantId, id)
-			if (!current) return null
+			// Atomic read-modify-write via YDB Serializable tx.
+			return sql.begin(async (tx) => {
+				const [rows = []] = await tx<RoomTypeRow[]>`
+					SELECT * FROM roomType
+					WHERE tenantId = ${tenantId} AND id = ${id}
+					LIMIT 1
+				`
+				const row = rows[0]
+				if (!row) return null
+				const current = rowToRoomType(row)
 
-			const merged: RoomType = {
-				...current,
-				name: patch.name ?? current.name,
-				description:
-					patch.description === undefined ? current.description : patch.description,
-				maxOccupancy: patch.maxOccupancy ?? current.maxOccupancy,
-				baseBeds: patch.baseBeds ?? current.baseBeds,
-				extraBeds: patch.extraBeds ?? current.extraBeds,
-				areaSqm: patch.areaSqm === undefined ? current.areaSqm : patch.areaSqm,
-				inventoryCount: patch.inventoryCount ?? current.inventoryCount,
-				isActive: patch.isActive ?? current.isActive,
-				updatedAt: new Date().toISOString(),
-			}
-			const description = merged.description ?? NULL_TEXT
-			const areaSqm = merged.areaSqm ?? NULL_INT32
-			await sql`
-				UPSERT INTO roomType (
-					\`tenantId\`, \`id\`, \`propertyId\`, \`name\`, \`description\`,
-					\`maxOccupancy\`, \`baseBeds\`, \`extraBeds\`, \`areaSqm\`,
-					\`inventoryCount\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
-				) VALUES (
-					${tenantId}, ${id}, ${merged.propertyId}, ${merged.name}, ${description},
-					${merged.maxOccupancy}, ${merged.baseBeds}, ${merged.extraBeds}, ${areaSqm},
-					${merged.inventoryCount}, ${merged.isActive}, ${new Date(merged.createdAt)}, ${new Date(merged.updatedAt)}
-				)
-			`
-			return merged
+				const nextDescription: string | null =
+					'description' in patch && patch.description !== undefined
+						? patch.description
+						: current.description
+				const nextAreaSqm: number | null =
+					'areaSqm' in patch && patch.areaSqm !== undefined ? patch.areaSqm : current.areaSqm
+				const merged: RoomType = {
+					...current,
+					name: patch.name ?? current.name,
+					description: nextDescription,
+					maxOccupancy: patch.maxOccupancy ?? current.maxOccupancy,
+					baseBeds: patch.baseBeds ?? current.baseBeds,
+					extraBeds: patch.extraBeds ?? current.extraBeds,
+					areaSqm: nextAreaSqm,
+					inventoryCount: patch.inventoryCount ?? current.inventoryCount,
+					isActive: patch.isActive ?? current.isActive,
+					updatedAt: new Date().toISOString(),
+				}
+				const description = merged.description ?? NULL_TEXT
+				const areaSqm = merged.areaSqm ?? NULL_INT32
+				const createdAtTs = new Timestamp(new Date(merged.createdAt))
+				const updatedAtTs = new Timestamp(new Date(merged.updatedAt))
+				await tx`
+					UPSERT INTO roomType (
+						\`tenantId\`, \`id\`, \`propertyId\`, \`name\`, \`description\`,
+						\`maxOccupancy\`, \`baseBeds\`, \`extraBeds\`, \`areaSqm\`,
+						\`inventoryCount\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
+					) VALUES (
+						${tenantId}, ${id}, ${merged.propertyId}, ${merged.name}, ${description},
+						${merged.maxOccupancy}, ${merged.baseBeds}, ${merged.extraBeds}, ${areaSqm},
+						${merged.inventoryCount}, ${merged.isActive}, ${createdAtTs}, ${updatedAtTs}
+					)
+				`
+				return merged
+			})
 		},
 
 		async delete(tenantId: string, id: string): Promise<boolean> {

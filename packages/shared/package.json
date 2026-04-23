@@ -57,7 +57,11 @@
 			}
 		}
 	},
-	"files": ["src", "dist", "package.json"],
+	"files": [
+		"src",
+		"dist",
+		"package.json"
+	],
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json"
 	},

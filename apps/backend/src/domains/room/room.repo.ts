@@ -1,13 +1,33 @@
 import type { Room, RoomCreateInput, RoomUpdateInput } from '@horeca/shared'
 import { newId } from '@horeca/shared'
+import { YDBError } from '@ydbjs/error'
 import { Optional } from '@ydbjs/value/optional'
-import { Int32Type, TextType } from '@ydbjs/value/primitive'
+import { Int32Type, TextType, Timestamp } from '@ydbjs/value/primitive'
 import type { sql as SQL } from '../../db/index.ts'
 
 type SqlInstance = typeof SQL
 
 const NULL_TEXT = new Optional(null, new TextType())
 const NULL_INT32 = new Optional(null, new Int32Type())
+
+/** Thrown when a UNIQUE index violation hits, e.g. duplicate (property, number). */
+export class RoomNumberTakenError extends Error {
+	constructor(number: string) {
+		super(`Room number already taken in this property: ${number}`)
+		this.name = 'RoomNumberTakenError'
+	}
+}
+
+/**
+ * YDB PRECONDITION_FAILED status code (issueCode 2012 "Conflict with existing key").
+ * This is how UNIQUE index violations surface in the Query Service. Code value
+ * verified against stankoff-v2/objects/schema/schema.db.test.ts.
+ */
+const YDB_PRECONDITION_FAILED = 400120
+
+function isUniqueConflict(err: unknown): err is YDBError {
+	return err instanceof YDBError && err.code === YDB_PRECONDITION_FAILED
+}
 
 type RoomRow = {
 	tenantId: string
@@ -54,7 +74,7 @@ export function createRoomRepo(sql: SqlInstance) {
 			opts: { includeInactive: boolean; roomTypeId?: string },
 		) {
 			if (opts.roomTypeId) {
-				const [rows] = opts.includeInactive
+				const [rows = []] = opts.includeInactive
 					? await sql<RoomRow[]>`
 							SELECT * FROM room
 							WHERE tenantId = ${tenantId}
@@ -74,7 +94,7 @@ export function createRoomRepo(sql: SqlInstance) {
 							.idempotent(true)
 				return rows.map(rowToRoom)
 			}
-			const [rows] = opts.includeInactive
+			const [rows = []] = opts.includeInactive
 				? await sql<RoomRow[]>`
 						SELECT * FROM room
 						WHERE tenantId = ${tenantId} AND propertyId = ${propertyId}
@@ -91,7 +111,7 @@ export function createRoomRepo(sql: SqlInstance) {
 		},
 
 		async getById(tenantId: string, id: string): Promise<Room | null> {
-			const [rows] = await sql<RoomRow[]>`
+			const [rows = []] = await sql<RoomRow[]>`
 				SELECT * FROM room
 				WHERE tenantId = ${tenantId} AND id = ${id}
 				LIMIT 1
@@ -110,17 +130,25 @@ export function createRoomRepo(sql: SqlInstance) {
 		): Promise<Room> {
 			const id = newId('room')
 			const now = new Date()
+			// See property.repo.ts: wrap in Timestamp to preserve ms precision;
+			// @ydbjs/value infers plain Date as `Datetime` (seconds) and truncates.
+			const nowTs = new Timestamp(now)
 			const floor = input.floor ?? NULL_INT32
 			const notes = input.notes ?? NULL_TEXT
-			await sql`
-				UPSERT INTO room (
-					\`tenantId\`, \`id\`, \`propertyId\`, \`roomTypeId\`, \`number\`,
-					\`floor\`, \`isActive\`, \`notes\`, \`createdAt\`, \`updatedAt\`
-				) VALUES (
-					${tenantId}, ${id}, ${propertyId}, ${roomTypeId}, ${input.number},
-					${floor}, ${true}, ${notes}, ${now}, ${now}
-				)
-			`
+			try {
+				await sql`
+					UPSERT INTO room (
+						\`tenantId\`, \`id\`, \`propertyId\`, \`roomTypeId\`, \`number\`,
+						\`floor\`, \`isActive\`, \`notes\`, \`createdAt\`, \`updatedAt\`
+					) VALUES (
+						${tenantId}, ${id}, ${propertyId}, ${roomTypeId}, ${input.number},
+						${floor}, ${true}, ${notes}, ${nowTs}, ${nowTs}
+					)
+				`
+			} catch (err) {
+				if (isUniqueConflict(err)) throw new RoomNumberTakenError(input.number)
+				throw err
+			}
 			return {
 				id,
 				tenantId,
@@ -141,31 +169,62 @@ export function createRoomRepo(sql: SqlInstance) {
 			patch: RoomUpdateInput,
 			newPropertyId?: string,
 		): Promise<Room | null> {
-			const current = await this.getById(tenantId, id)
-			if (!current) return null
+			// Atomic read-modify-write via YDB Serializable tx.
+			// Note: @ydbjs/query's sql.begin() wraps any non-retryable error thrown
+			// from the callback in `new Error("Transaction failed.", { cause })`. We
+			// re-throw the original cause below so route handlers can `instanceof`
+			// our domain errors (RoomNumberTakenError) without walking .cause.
+			try {
+				return await sql.begin(async (tx) => {
+					const [rows = []] = await tx<RoomRow[]>`
+						SELECT * FROM room
+						WHERE tenantId = ${tenantId} AND id = ${id}
+						LIMIT 1
+					`
+					const row = rows[0]
+					if (!row) return null
+					const current = rowToRoom(row)
 
-			const merged: Room = {
-				...current,
-				propertyId: newPropertyId ?? current.propertyId,
-				roomTypeId: patch.roomTypeId ?? current.roomTypeId,
-				number: patch.number ?? current.number,
-				floor: patch.floor === undefined ? current.floor : patch.floor,
-				notes: patch.notes === undefined ? current.notes : patch.notes,
-				isActive: patch.isActive ?? current.isActive,
-				updatedAt: new Date().toISOString(),
+					const nextFloor: number | null =
+						'floor' in patch && patch.floor !== undefined ? patch.floor : current.floor
+					const nextNotes: string | null =
+						'notes' in patch && patch.notes !== undefined ? patch.notes : current.notes
+					const merged: Room = {
+						...current,
+						propertyId: newPropertyId ?? current.propertyId,
+						roomTypeId: patch.roomTypeId ?? current.roomTypeId,
+						number: patch.number ?? current.number,
+						floor: nextFloor,
+						notes: nextNotes,
+						isActive: patch.isActive ?? current.isActive,
+						updatedAt: new Date().toISOString(),
+					}
+					const floor = merged.floor ?? NULL_INT32
+					const notes = merged.notes ?? NULL_TEXT
+					const createdAtTs = new Timestamp(new Date(merged.createdAt))
+					const updatedAtTs = new Timestamp(new Date(merged.updatedAt))
+					try {
+						await tx`
+							UPSERT INTO room (
+								\`tenantId\`, \`id\`, \`propertyId\`, \`roomTypeId\`, \`number\`,
+								\`floor\`, \`isActive\`, \`notes\`, \`createdAt\`, \`updatedAt\`
+							) VALUES (
+								${tenantId}, ${id}, ${merged.propertyId}, ${merged.roomTypeId}, ${merged.number},
+								${floor}, ${merged.isActive}, ${notes}, ${createdAtTs}, ${updatedAtTs}
+							)
+						`
+					} catch (err) {
+						if (isUniqueConflict(err)) throw new RoomNumberTakenError(merged.number)
+						throw err
+					}
+					return merged
+				})
+			} catch (err) {
+				if (err instanceof Error && err.cause instanceof RoomNumberTakenError) {
+					throw err.cause
+				}
+				throw err
 			}
-			const floor = merged.floor ?? NULL_INT32
-			const notes = merged.notes ?? NULL_TEXT
-			await sql`
-				UPSERT INTO room (
-					\`tenantId\`, \`id\`, \`propertyId\`, \`roomTypeId\`, \`number\`,
-					\`floor\`, \`isActive\`, \`notes\`, \`createdAt\`, \`updatedAt\`
-				) VALUES (
-					${tenantId}, ${id}, ${merged.propertyId}, ${merged.roomTypeId}, ${merged.number},
-					${floor}, ${merged.isActive}, ${notes}, ${new Date(merged.createdAt)}, ${new Date(merged.updatedAt)}
-				)
-			`
-			return merged
 		},
 
 		async delete(tenantId: string, id: string): Promise<boolean> {

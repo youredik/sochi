@@ -1,10 +1,10 @@
+import { zValidator } from '@hono/zod-validator'
 import {
 	propertyCreateInput,
 	propertyIdParam,
 	propertyListParams,
 	propertyUpdateInput,
 } from '@horeca/shared'
-import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'

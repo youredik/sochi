@@ -1,5 +1,5 @@
 import { createAccessControl } from 'better-auth/plugins/access'
-import { defaultStatements, adminAc, memberAc } from 'better-auth/plugins/organization/access'
+import { adminAc, defaultStatements, memberAc } from 'better-auth/plugins/organization/access'
 
 /**
  * Role-based access control for organizations.

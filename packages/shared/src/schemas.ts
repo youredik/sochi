@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ID_PREFIXES, type EntityKind } from './ids.ts'
+import { type EntityKind, ID_PREFIXES } from './ids.ts'
 
 /**
  * Zod schema for a typed ID of a given entity kind.
@@ -8,9 +8,7 @@ import { ID_PREFIXES, type EntityKind } from './ids.ts'
 export function idSchema<K extends EntityKind>(kind: K) {
 	const prefix = ID_PREFIXES[kind]
 	const pattern = new RegExp(`^${prefix}_[0-9a-hjkmnp-tv-z]{26}$`, 'i')
-	return z
-		.string()
-		.regex(pattern, `Invalid ${kind} ID (expected ${prefix}_{26 base32 chars})`)
+	return z.string().regex(pattern, `Invalid ${kind} ID (expected ${prefix}_{26 base32 chars})`)
 }
 
 /** ISO 3166-1 alpha-2 country code (uppercase). */
@@ -61,12 +59,7 @@ export const documentTypeSchema = z.enum([
 export type DocumentType = z.infer<typeof documentTypeSchema>
 
 /** Job type values. */
-export const jobTypeSchema = z.enum([
-	'mvd_submit',
-	'yookassa_refund',
-	'ota_sync',
-	'send_email',
-])
+export const jobTypeSchema = z.enum(['mvd_submit', 'yookassa_refund', 'ota_sync', 'send_email'])
 export type JobType = z.infer<typeof jobTypeSchema>
 
 /** Job status values. */

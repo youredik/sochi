@@ -1,7 +1,7 @@
 import type { Property, PropertyCreateInput, PropertyUpdateInput } from '@horeca/shared'
 import { newId } from '@horeca/shared'
 import { Optional } from '@ydbjs/value/optional'
-import { TextType } from '@ydbjs/value/primitive'
+import { TextType, Timestamp } from '@ydbjs/value/primitive'
 import type { sql as SQL } from '../../db/index.ts'
 
 type SqlInstance = typeof SQL
@@ -51,7 +51,7 @@ function rowToProperty(r: PropertyRow): Property {
 export function createPropertyRepo(sql: SqlInstance) {
 	return {
 		async list(tenantId: string, opts: { includeInactive: boolean }) {
-			const [rows] = opts.includeInactive
+			const [rows = []] = opts.includeInactive
 				? await sql<PropertyRow[]>`
 						SELECT * FROM property
 						WHERE tenantId = ${tenantId}
@@ -68,7 +68,7 @@ export function createPropertyRepo(sql: SqlInstance) {
 		},
 
 		async getById(tenantId: string, id: string): Promise<Property | null> {
-			const [rows] = await sql<PropertyRow[]>`
+			const [rows = []] = await sql<PropertyRow[]>`
 				SELECT * FROM property
 				WHERE tenantId = ${tenantId} AND id = ${id}
 				LIMIT 1
@@ -82,6 +82,11 @@ export function createPropertyRepo(sql: SqlInstance) {
 		async create(tenantId: string, input: PropertyCreateInput): Promise<Property> {
 			const id = newId('property')
 			const now = new Date()
+			// createdAt/updatedAt columns are Timestamp (microsecond precision).
+			// @ydbjs/value infers a plain JS Date as `Datetime` (second precision),
+			// which silently truncates ms before the value reaches YDB. Wrap in
+			// `Timestamp` to preserve ms in both the stored value and the returned object.
+			const nowTs = new Timestamp(now)
 			const timezone = input.timezone ?? 'Europe/Moscow'
 			await sql`
 				UPSERT INTO property (
@@ -89,7 +94,7 @@ export function createPropertyRepo(sql: SqlInstance) {
 					\`isActive\`, \`createdAt\`, \`updatedAt\`
 				) VALUES (
 					${tenantId}, ${id}, ${input.name}, ${input.address}, ${input.city}, ${timezone},
-					${true}, ${now}, ${now}
+					${true}, ${nowTs}, ${nowTs}
 				)
 			`
 			return {
@@ -111,30 +116,46 @@ export function createPropertyRepo(sql: SqlInstance) {
 			id: string,
 			patch: PropertyUpdateInput,
 		): Promise<Property | null> {
-			const current = await this.getById(tenantId, id)
-			if (!current) return null
+			// Atomic read-modify-write. YDB default isolation is Serializable;
+			// concurrent PATCHes on the same row conflict → one commits, the
+			// other retries via @ydbjs/retry.
+			return sql.begin(async (tx) => {
+				const [rows = []] = await tx<PropertyRow[]>`
+					SELECT * FROM property
+					WHERE tenantId = ${tenantId} AND id = ${id}
+					LIMIT 1
+				`
+				const row = rows[0]
+				if (!row) return null
+				const current = rowToProperty(row)
 
-			const merged: Property = {
-				...current,
-				...patch,
-				classificationId:
-					patch.classificationId === undefined ? current.classificationId : patch.classificationId,
-				updatedAt: new Date().toISOString(),
-			}
+				// Nullable-field patch rule: treat `undefined` as "no change",
+				// `null` as "explicit clear". Plain `??` fails to distinguish them.
+				const nextClassificationId: string | null =
+					'classificationId' in patch && patch.classificationId !== undefined
+						? patch.classificationId
+						: current.classificationId
+				const merged: Property = {
+					...current,
+					...patch,
+					classificationId: nextClassificationId,
+					updatedAt: new Date().toISOString(),
+				}
 
-			const updatedAt = new Date(merged.updatedAt)
-			const classificationId = merged.classificationId ?? NULL_TEXT
-			// UPSERT rewrites the full row — simple, atomic, native YDB pattern.
-			await sql`
-				UPSERT INTO property (
-					\`tenantId\`, \`id\`, \`name\`, \`address\`, \`city\`, \`timezone\`,
-					\`classificationId\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
-				) VALUES (
-					${tenantId}, ${id}, ${merged.name}, ${merged.address}, ${merged.city}, ${merged.timezone},
-					${classificationId}, ${merged.isActive}, ${new Date(merged.createdAt)}, ${updatedAt}
-				)
-			`
-			return merged
+				const createdAtTs = new Timestamp(new Date(merged.createdAt))
+				const updatedAtTs = new Timestamp(new Date(merged.updatedAt))
+				const classificationId = merged.classificationId ?? NULL_TEXT
+				await tx`
+					UPSERT INTO property (
+						\`tenantId\`, \`id\`, \`name\`, \`address\`, \`city\`, \`timezone\`,
+						\`classificationId\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
+					) VALUES (
+						${tenantId}, ${id}, ${merged.name}, ${merged.address}, ${merged.city}, ${merged.timezone},
+						${classificationId}, ${merged.isActive}, ${createdAtTs}, ${updatedAtTs}
+					)
+				`
+				return merged
+			})
 		},
 
 		async delete(tenantId: string, id: string): Promise<boolean> {

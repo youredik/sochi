@@ -1,7 +1,7 @@
 import type { RoomCreateInput, RoomUpdateInput } from '@horeca/shared'
 import type { PropertyService } from '../property/property.service.ts'
-import { PropertyNotFoundError } from '../roomType/roomType.service.ts'
 import type { RoomTypeService } from '../roomType/roomType.service.ts'
+import { PropertyNotFoundError } from '../roomType/roomType.service.ts'
 import type { RoomRepo } from './room.repo.ts'
 
 export class RoomTypeNotFoundError extends Error {
