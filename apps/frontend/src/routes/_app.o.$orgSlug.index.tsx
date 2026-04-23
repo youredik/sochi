@@ -1,18 +1,31 @@
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { api } from '../lib/api.ts'
 
 /**
- * Tenant dashboard — `/o/{slug}/`. Bare skeleton for M5a.2; subsequent
- * M5 phases replace the "coming soon" blocks with:
- *   - setup wizard cards (M5c) when empty-state
- *   - reservation chessboard (M5d) once properties exist
- *   - KPI summary (boль 3.1 из MVP мандата)
+ * Tenant dashboard — `/o/{slug}/`.
  *
- * Keeps the existing health/db probe visible so the dev loop retains
- * the "backend is alive" signal we had on the pre-auth home screen.
+ * beforeLoad empties-state check: if the tenant has zero properties,
+ * bounce to `/o/{slug}/setup` (M5c wizard). Without this, the dashboard
+ * has nothing to render and the user is stuck. The check runs once per
+ * navigation — TQ caches the property list for subsequent visits.
  */
 export const Route = createFileRoute('/_app/o/$orgSlug/')({
+	beforeLoad: async ({ context, params }) => {
+		const list = await context.queryClient.ensureQueryData({
+			queryKey: ['properties'] as const,
+			queryFn: async () => {
+				const res = await api.api.v1.properties.$get({ query: {} })
+				if (!res.ok) throw new Error(`properties.list HTTP ${res.status}`)
+				const body = (await res.json()) as { data: Array<{ id: string }> }
+				return body.data
+			},
+			staleTime: 30_000,
+		})
+		if (list.length === 0) {
+			throw redirect({ to: '/o/$orgSlug/setup', params: { orgSlug: params.orgSlug } })
+		}
+	},
 	component: TenantHome,
 })
 
@@ -30,30 +43,30 @@ function TenantHome() {
 	return (
 		<main className="mx-auto max-w-5xl px-6 py-10">
 			<h1 className="text-2xl font-semibold tracking-tight">{organization.name}</h1>
-			<p className="mt-1 text-sm text-neutral-400">
+			<p className="text-muted-foreground mt-1 text-sm">
 				<span className="font-mono">/o/{organization.slug}</span>
 			</p>
 
 			<section className="mt-10 grid gap-4 sm:grid-cols-2">
-				<div className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-6">
-					<h2 className="text-sm font-medium text-neutral-400">Шахматка</h2>
-					<p className="mt-2 text-sm text-neutral-500">Появится в следующей фазе (M5d).</p>
+				<div className="border-border bg-card rounded-lg border p-6">
+					<h2 className="text-muted-foreground text-sm font-medium">Шахматка</h2>
+					<p className="text-muted-foreground mt-2 text-sm">Появится в следующей фазе (M5d).</p>
 				</div>
-				<div className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-6">
-					<h2 className="text-sm font-medium text-neutral-400">Объекты размещения</h2>
-					<p className="mt-2 text-sm text-neutral-500">
-						Мастер настройки — M5c (свойство → тип номера → номера).
+				<div className="border-border bg-card rounded-lg border p-6">
+					<h2 className="text-muted-foreground text-sm font-medium">Объекты размещения</h2>
+					<p className="text-muted-foreground mt-2 text-sm">
+						Гостиница создана. Следующая фаза (M5d) добавит шахматку бронирований.
 					</p>
 				</div>
 			</section>
 
-			<footer className="mt-12 border-t border-neutral-900 pt-4 text-xs text-neutral-600">
+			<footer className="border-border text-muted-foreground mt-12 border-t pt-4 text-xs">
 				Статус бэкенда:{' '}
-				<span className={health.data?.status === 'ok' ? 'text-emerald-500' : 'text-amber-500'}>
+				<span className={health.data?.status === 'ok' ? 'text-emerald-600' : 'text-amber-600'}>
 					{health.data?.status ?? '…'}
 				</span>{' '}
 				· YDB:{' '}
-				<span className={health.data?.ydb.connected ? 'text-emerald-500' : 'text-red-500'}>
+				<span className={health.data?.ydb.connected ? 'text-emerald-600' : 'text-destructive'}>
 					{health.data?.ydb.connected ? 'connected' : 'disconnected'}
 				</span>
 			</footer>

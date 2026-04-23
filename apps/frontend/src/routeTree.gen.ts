@@ -17,6 +17,7 @@ import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppOSelectRouteImport } from './routes/_app.o-select'
 import { Route as AppOOrgSlugRouteImport } from './routes/_app.o.$orgSlug'
 import { Route as AppOOrgSlugIndexRouteImport } from './routes/_app.o.$orgSlug.index'
+import { Route as AppOOrgSlugSetupRouteImport } from './routes/_app.o.$orgSlug.setup'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -57,6 +58,11 @@ const AppOOrgSlugIndexRoute = AppOOrgSlugIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppOOrgSlugRoute,
 } as any)
+const AppOOrgSlugSetupRoute = AppOOrgSlugSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => AppOOrgSlugRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/o-select': typeof AppOSelectRoute
   '/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
 }
 export interface FileRoutesByTo {
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/o-select': typeof AppOSelectRoute
   '/': typeof AppIndexRoute
+  '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/o/$orgSlug': typeof AppOOrgSlugIndexRoute
 }
 export interface FileRoutesById {
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/_app/o-select': typeof AppOSelectRoute
   '/_app/': typeof AppIndexRoute
   '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/_app/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/_app/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
 }
 export interface FileRouteTypes {
@@ -95,9 +104,17 @@ export interface FileRouteTypes {
     | '/signup'
     | '/o-select'
     | '/o/$orgSlug'
+    | '/o/$orgSlug/setup'
     | '/o/$orgSlug/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/privacy' | '/signup' | '/o-select' | '/' | '/o/$orgSlug'
+  to:
+    | '/login'
+    | '/privacy'
+    | '/signup'
+    | '/o-select'
+    | '/'
+    | '/o/$orgSlug/setup'
+    | '/o/$orgSlug'
   id:
     | '__root__'
     | '/_app'
@@ -107,6 +124,7 @@ export interface FileRouteTypes {
     | '/_app/o-select'
     | '/_app/'
     | '/_app/o/$orgSlug'
+    | '/_app/o/$orgSlug/setup'
     | '/_app/o/$orgSlug/'
   fileRoutesById: FileRoutesById
 }
@@ -175,14 +193,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugIndexRouteImport
       parentRoute: typeof AppOOrgSlugRoute
     }
+    '/_app/o/$orgSlug/setup': {
+      id: '/_app/o/$orgSlug/setup'
+      path: '/setup'
+      fullPath: '/o/$orgSlug/setup'
+      preLoaderRoute: typeof AppOOrgSlugSetupRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
+    }
   }
 }
 
 interface AppOOrgSlugRouteChildren {
+  AppOOrgSlugSetupRoute: typeof AppOOrgSlugSetupRoute
   AppOOrgSlugIndexRoute: typeof AppOOrgSlugIndexRoute
 }
 
 const AppOOrgSlugRouteChildren: AppOOrgSlugRouteChildren = {
+  AppOOrgSlugSetupRoute: AppOOrgSlugSetupRoute,
   AppOOrgSlugIndexRoute: AppOOrgSlugIndexRoute,
 }
 
