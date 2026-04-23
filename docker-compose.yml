@@ -54,7 +54,7 @@ services:
   # Mailpit — локальный SMTP перехватчик (замена Yandex Postbox в dev).
   # Host-порты: 1125 SMTP, 8125 web UI (http://localhost:8125 — смотреть отправленные письма).
   mailpit:
-    image: axllent/mailpit:v1.29
+    image: axllent/mailpit:v1.29.7
     ports:
       - '1125:1025'
       - '8125:8025'
