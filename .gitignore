@@ -23,7 +23,9 @@ coverage/
 .stryker-tmp/
 reports/
 playwright-report/
+playwright/.cache/
 test-results/
+tests/.auth/
 .vitest-attachments/
 
 # Docker data volumes (for reference — real ones are in Docker-managed volumes)

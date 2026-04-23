@@ -16,6 +16,10 @@
 			"entry": ["lingui.config.ts"],
 			"project": ["src/**/*.{ts,tsx}", "*.ts"]
 		},
+		".": {
+			"entry": ["tests/e2e/*.ts"],
+			"project": ["tests/**/*.ts"]
+		},
 		"packages/shared": {
 			"project": ["src/**/*.ts"],
 			"includeEntryExports": true

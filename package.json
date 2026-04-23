@@ -27,7 +27,7 @@
 		"smoke": "node --env-file-if-exists=.env scripts/smoke.ts",
 		"smoke:fresh": "pnpm infra:reset && pnpm smoke",
 		"e2e": "playwright test",
-		"e2e:smoke": "playwright test tests/e2e/auth.spec.ts --workers=1 --reporter=line",
+		"e2e:smoke": "playwright test --workers=1 --reporter=line",
 		"e2e:install": "playwright install chromium"
 	},
 	"devDependencies": {

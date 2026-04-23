@@ -93,10 +93,17 @@ docker compose up -d && ./scripts/apply-schema.sh
 - `pnpm knip` — dead exports / unused files
 - `pnpm depcruise` — архитектурные правила (no-cross-domain, routes→service→repo DAG)
 
-**pre-push** (полные, требуют локального YDB):
-- `pnpm test` — vitest full suite (unit + integration vs real YDB)
+**pre-push** (полные, требуют локального YDB + Chromium):
+- `pnpm test` — vitest full suite (unit + integration vs real YDB, 294+ tests)
 - `pnpm build` — production bundle (shared tsc + frontend vite)
 - `pnpm smoke` — **comprehensive E2E smoke** через `scripts/smoke.ts`
+- `pnpm e2e:smoke` — **Playwright adversarial auth suite** (11 assertions,
+  ~15s с reused dev server): signup→tenant dashboard; wrong password;
+  anonymous→protected redirect; authed→/login inverse-guard; cross-tenant
+  URL→home; logout clears session; 152-ФЗ consent-required signup;
+  `/privacy` public; backend `/health` + anonymous `get-session`
+
+Первый локальный запуск: `pnpm e2e:install` (скачивает Chromium для Playwright).
 
 ### `pnpm smoke` — что именно проверяет
 
@@ -128,6 +135,21 @@ Exit 0 только если все 20+ assertions прошли. Скрипт в
 
 Запускайте **перед каждым крупным PR** если трогали migrations, schema,
 или CDC wiring. Полная проверка ≈ 30 секунд на локальной машине.
+
+### `pnpm e2e` — Playwright two-project config
+
+Конфиг в `playwright.config.ts` (root), тесты в `tests/e2e/`:
+
+- **`setup` project** — `auth.setup.ts`: signup с уникальным email + orgName →
+  сохраняет authenticated storageState в `tests/.auth/owner.json` (gitignored)
+- **`chromium` project** — `auth.spec.ts`: реюзит storageState для flows
+  owner'а; adversarial paths (cross-tenant URL leak, inverse guards,
+  consent-блокировка signup)
+- **`smoke` project** — `smoke.spec.ts`: anonymous-only, независим от DB
+  state, пригоден для post-deploy против staging/prod `PLAYWRIGHT_BASE_URL`
+
+`pnpm e2e` гоняет все проекты, `pnpm e2e:smoke` — auth + smoke в one-worker
+режиме для pre-push.
 
 ## Что дальше
 

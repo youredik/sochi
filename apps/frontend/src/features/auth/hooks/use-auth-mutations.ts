@@ -13,11 +13,6 @@ type BAError = {
 	code?: string | undefined
 }
 
-function toLocalized(err: unknown): LocalizedError {
-	if (err && typeof err === 'object') return mapAuthError(err as BAError)
-	return mapAuthError({ message: String(err) })
-}
-
 /** Sign in with email + password. On success: invalidate session + navigate to home. */
 export function useSignInEmail() {
 	const queryClient = useQueryClient()
