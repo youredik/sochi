@@ -1,10 +1,8 @@
-import { YDBError } from '@ydbjs/error'
 import { Hono } from 'hono'
 import { contextStorage } from 'hono/context-storage'
 import { cors } from 'hono/cors'
 import { requestId } from 'hono/request-id'
 import { pinoLogger } from 'hono-pino'
-import { z } from 'zod'
 import { auth } from './auth.ts'
 import { sql } from './db/index.ts'
 import { createAvailabilityFactory } from './domains/availability/availability.factory.ts'
@@ -22,10 +20,11 @@ import { createRoomRoutes } from './domains/room/room.routes.ts'
 import { createRoomTypeFactory } from './domains/roomType/roomType.factory.ts'
 import { createRoomTypeRoutes } from './domains/roomType/roomType.routes.ts'
 import { env } from './env.ts'
-import { DomainError } from './errors/domain.ts'
-import { HTTP_STATUS_MAP } from './errors/http-mapping.ts'
+import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
 import { logger } from './logger.ts'
+import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
+import { idempotencyMiddleware } from './middleware/idempotency.ts'
 
 /**
  * Hono app with method-chained routes for type-safe RPC.
@@ -47,6 +46,7 @@ const bookingFactory = createBookingFactory(
 	roomTypeFactory.service,
 	ratePlanFactory.service,
 )
+const idempotency = idempotencyMiddleware(createIdempotencyRepo(sql))
 
 const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
 	.map((o) => o.trim())
@@ -80,28 +80,9 @@ app.use(
 	}),
 )
 
-// Global error handler. Domain errors map via HTTP_STATUS_MAP (404/409/403/400);
-// YDBError → 503 DB_ERROR (upstream problem, client may retry);
-// ZodError here means repo-row schema drift (user input is validated by
-// @hono/zod-validator middleware before reaching handlers) — log + 500;
-// everything else is unexpected — log the cause chain + 500 INTERNAL.
-app.onError((err, c) => {
-	if (err instanceof DomainError) {
-		const status = HTTP_STATUS_MAP[err.code] ?? 500
-		c.var.logger.warn({ err, code: err.code, status }, 'domain error')
-		return c.json({ error: { code: err.code, message: err.message } }, status)
-	}
-	if (err instanceof YDBError) {
-		c.var.logger.error({ err, ydbCode: err.code }, 'YDB error')
-		return c.json({ error: { code: 'DB_ERROR', message: 'Database temporarily unavailable' } }, 503)
-	}
-	if (err instanceof z.ZodError) {
-		c.var.logger.error({ err: err.flatten() }, 'schema drift in repo row')
-		return c.json({ error: { code: 'INTERNAL', message: 'Internal data shape mismatch' } }, 500)
-	}
-	c.var.logger.error({ err }, 'unhandled error')
-	return c.json({ error: { code: 'INTERNAL', message: 'Internal server error' } }, 500)
-})
+// Global error handler — domain/YDB/Zod → mapped JSON; fallback 500. Shared
+// with middleware/route tests via `src/errors/on-error.ts`.
+app.onError(onError)
 
 // Better Auth mounts its own router at /api/auth/** (sign-up/email, sign-in/email,
 // sign-out, get-session, organization/create, organization/invite, etc.).
@@ -115,7 +96,7 @@ const routes = app
 	.route('/api/v1', createRatePlanRoutes(ratePlanFactory))
 	.route('/api/v1', createRateRoutes(rateFactory))
 	.route('/api/v1', createAvailabilityRoutes(availabilityFactory))
-	.route('/api/v1', createBookingRoutes(bookingFactory))
+	.route('/api/v1', createBookingRoutes(bookingFactory, idempotency))
 	.get('/health', (c) =>
 		c.json(
 			{

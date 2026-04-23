@@ -117,3 +117,21 @@ export class BookingExternalIdTakenError extends ConflictError {
 		this.name = 'BookingExternalIdTakenError'
 	}
 }
+
+/**
+ * Same `Idempotency-Key` replayed with a different request body (fingerprint
+ * mismatch). Per IETF `draft-ietf-httpapi-idempotency-key-header-07` §2.7
+ * this MUST return 422 — the client is misusing the key.
+ */
+export class IdempotencyKeyConflictError extends ConflictError {
+	override readonly code = 'IDEMPOTENCY_KEY_CONFLICT'
+	constructor(key: string) {
+		super(`Idempotency-Key '${key}' was already used with a different request body`)
+		this.name = 'IdempotencyKeyConflictError'
+	}
+}
+
+// IdempotencyKeyInProgressError (409) deferred to Phase 3 — requires a
+// true concurrent-detection mechanism (row-lock or 'processing' sentinel).
+// MVP tolerates the thin race window between SELECT-and-UPSERT in the
+// idempotency middleware; revisit when real traffic shows contention.

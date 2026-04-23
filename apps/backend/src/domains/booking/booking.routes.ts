@@ -12,6 +12,7 @@ import { Hono } from 'hono'
 import { BookingNotFoundError } from '../../errors/domain.ts'
 import type { AppEnv } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
+import type { IdempotencyMiddleware } from '../../middleware/idempotency.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
 import type { BookingFactory } from './booking.factory.ts'
 
@@ -25,11 +26,12 @@ import type { BookingFactory } from './booking.factory.ts'
  *   PATCH  /api/v1/bookings/:id/check-out
  *   PATCH  /api/v1/bookings/:id/no-show
  */
-export function createBookingRoutes(f: BookingFactory) {
+export function createBookingRoutes(f: BookingFactory, idempotency: IdempotencyMiddleware) {
 	const { service } = f
 
 	return new Hono<AppEnv>()
 		.use('*', authMiddleware(), tenantMiddleware())
+		.use('*', idempotency)
 		.get(
 			'/properties/:propertyId/bookings',
 			zValidator('param', bookingPropertyParam),

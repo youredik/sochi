@@ -2,9 +2,11 @@ import type {
 	BookingCancelInput,
 	BookingCheckInInput,
 	BookingCreateInput,
+	BookingFeeSnapshot,
 	BookingMarkNoShowInput,
 	BookingStatus,
 	BookingTimeSlice,
+	RatePlan,
 } from '@horeca/shared'
 import { decimalToMicros } from '../../db/ydb-helpers.ts'
 import {
@@ -22,14 +24,81 @@ import { __bookingRepoInternals, type BookingRepo } from './booking.repo.ts'
 const { nightsBetween } = __bookingRepoInternals
 
 /**
+ * Subset of RatePlan fields used for fee-snapshot computation. Keeping the
+ * dependency narrow makes `computeCancellationFeeSnapshot` cheap to unit-test.
+ */
+type FeePolicySource = Pick<
+	RatePlan,
+	'isRefundable' | 'cancellationHours' | 'currency' | 'updatedAt'
+>
+
+/**
+ * Apaleo-style snapshot of the cancellation policy, frozen at booking-create time.
+ * Fiscal audit (RU 54-ФЗ) + refund correctness both require reproducibility —
+ * the guest agreed to THIS policy, not whatever the rate plan becomes later.
+ *
+ *   - Non-refundable (or unspecified grace window): 100% fee, no dueDate.
+ *   - Refundable with `cancellationHours`: 100% fee, dueDate = checkIn minus
+ *     the grace window. Actual fee at cancel time is computed by comparing
+ *     the cancellation timestamp to dueDate (done in folio, Phase 3).
+ *
+ * `policyVersion` is the ratePlan's `updatedAt` at snapshot time — changes
+ * whenever revenue manager edits the plan, giving us a monotonic marker.
+ */
+export function computeCancellationFeeSnapshot(
+	totalMicros: bigint,
+	rp: FeePolicySource,
+	checkInDate: string,
+): BookingFeeSnapshot {
+	if (!rp.isRefundable || rp.cancellationHours === null) {
+		return {
+			amountMicros: totalMicros,
+			currency: rp.currency,
+			dueDate: null,
+			policyCode: 'nonRefundable',
+			policyVersion: rp.updatedAt,
+		}
+	}
+	// Grace window expires `cancellationHours` before check-in. We store the
+	// calendar date (UTC) — calling systems can refine to wall-clock in the
+	// property's timezone; MVP keeps it simple and UTC-anchored.
+	const dueAt = new Date(`${checkInDate}T00:00:00Z`)
+	dueAt.setUTCHours(dueAt.getUTCHours() - rp.cancellationHours)
+	return {
+		amountMicros: totalMicros,
+		currency: rp.currency,
+		dueDate: dueAt.toISOString().slice(0, 10),
+		policyCode: 'flexible',
+		policyVersion: rp.updatedAt,
+	}
+}
+
+/**
+ * No-show fee is always 100% of the stay (industry default, Apaleo baseline).
+ * `dueDate` is intentionally null — a no-show decision is made AT the check-in
+ * date, so there's no grace window.
+ */
+export function computeNoShowFeeSnapshot(
+	totalMicros: bigint,
+	rp: Pick<RatePlan, 'currency' | 'updatedAt'>,
+): BookingFeeSnapshot {
+	return {
+		amountMicros: totalMicros,
+		currency: rp.currency,
+		dueDate: null,
+		policyCode: 'standardNoShow',
+		policyVersion: rp.updatedAt,
+	}
+}
+
+/**
  * Booking service. Validates cross-domain parents (property/roomType/ratePlan),
  * builds the price snapshot (`timeSlices[]`) from `rate` rows, computes
  * tourism tax, then delegates the atomic inventory+booking write to the repo.
  *
- * Deferred to later M4 sub-phases (marked TODO(M4c/M4e)):
- *   - cancellationFee / noShowFee snapshot from ratePlan cancellationPolicy (M4c)
- *   - tourism tax floor (min ₽100 / night) and property.tourismTaxRateBps lookup (M4e)
- *   - registrationStatus derivation from guest citizenship (M4e)
+ * Deferred to later M4 sub-phase (marked TODO(M4e)):
+ *   - tourism tax floor (min ₽100 / night) and property.tourismTaxRateBps lookup
+ *   - registrationStatus derivation from guest citizenship
  */
 export function createBookingService(
 	repo: BookingRepo,
@@ -104,10 +173,8 @@ export function createBookingService(
 			return repo.create(tenantId, propertyId, input, {
 				actorUserId,
 				timeSlices,
-				// TODO(M4c): snapshot cancellation/no-show fee from rp.cancellationHours /
-				// non-refundable policy. Non-trivial; punting to keep M4b focused.
-				cancellationFee: null,
-				noShowFee: null,
+				cancellationFee: computeCancellationFeeSnapshot(totalMicros, rp, input.checkIn),
+				noShowFee: computeNoShowFeeSnapshot(totalMicros, rp),
 				tourismTaxBaseMicros: totalMicros,
 				// TODO(M4e): fetch property.tourismTaxRateBps + apply min ₽100/night floor.
 				tourismTaxMicros: 0n,
