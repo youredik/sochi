@@ -1,9 +1,11 @@
 import { zValidator } from '@hono/zod-validator'
 import {
 	bookingCancelInput,
+	bookingCheckInInput,
 	bookingCreateInput,
 	bookingIdParam,
 	bookingListParams,
+	bookingMarkNoShowInput,
 	bookingPropertyParam,
 } from '@horeca/shared'
 import { Hono } from 'hono'
@@ -14,13 +16,14 @@ import { tenantMiddleware } from '../../middleware/tenant.ts'
 import type { BookingFactory } from './booking.factory.ts'
 
 /**
- * Booking routes.
+ * Booking routes — full M4b API surface.
  *   GET    /api/v1/properties/:propertyId/bookings
  *   POST   /api/v1/properties/:propertyId/bookings
  *   GET    /api/v1/bookings/:id
  *   PATCH  /api/v1/bookings/:id/cancel
- *
- * Check-in / check-out / no-show transitions land in M4b-2 (separate commit).
+ *   PATCH  /api/v1/bookings/:id/check-in
+ *   PATCH  /api/v1/bookings/:id/check-out
+ *   PATCH  /api/v1/bookings/:id/no-show
  */
 export function createBookingRoutes(f: BookingFactory) {
 	const { service } = f
@@ -68,6 +71,36 @@ export function createBookingRoutes(f: BookingFactory) {
 				const { id } = c.req.valid('param')
 				const input = c.req.valid('json')
 				const updated = await service.cancel(c.var.tenantId, id, input, c.var.user.id)
+				if (!updated) throw new BookingNotFoundError(id)
+				return c.json({ data: updated }, 200)
+			},
+		)
+		.patch(
+			'/bookings/:id/check-in',
+			zValidator('param', bookingIdParam),
+			zValidator('json', bookingCheckInInput),
+			async (c) => {
+				const { id } = c.req.valid('param')
+				const input = c.req.valid('json')
+				const updated = await service.checkIn(c.var.tenantId, id, input, c.var.user.id)
+				if (!updated) throw new BookingNotFoundError(id)
+				return c.json({ data: updated }, 200)
+			},
+		)
+		.patch('/bookings/:id/check-out', zValidator('param', bookingIdParam), async (c) => {
+			const { id } = c.req.valid('param')
+			const updated = await service.checkOut(c.var.tenantId, id, c.var.user.id)
+			if (!updated) throw new BookingNotFoundError(id)
+			return c.json({ data: updated }, 200)
+		})
+		.patch(
+			'/bookings/:id/no-show',
+			zValidator('param', bookingIdParam),
+			zValidator('json', bookingMarkNoShowInput),
+			async (c) => {
+				const { id } = c.req.valid('param')
+				const input = c.req.valid('json')
+				const updated = await service.markNoShow(c.var.tenantId, id, input, c.var.user.id)
 				if (!updated) throw new BookingNotFoundError(id)
 				return c.json({ data: updated }, 200)
 			},

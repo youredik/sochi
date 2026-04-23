@@ -66,6 +66,45 @@
  *     [E1]  channelCode: 'direct', 'walkIn', 'yandexTravel', 'ostrovok',
  *           'travelLine', 'bnovo', 'bookingCom', 'expedia', 'airbnb' all roundtrip
  *
+ *   Check-in transition (confirmed → in_house) — M4b-2:
+ *     [T5]  checkIn from wrong tenant → null, own-tenant row intact
+ *     [S6]  checkIn from confirmed: status='in_house', checkedInAt set, monotonic
+ *     [A1]  checkIn with assignedRoomId stores it; immutables still preserved
+ *     [A2]  checkIn without assignedRoomId leaves it null
+ *     [S7]  checkIn on already-in_house → InvalidBookingTransitionError
+ *     [S8]  checkIn on cancelled → InvalidBookingTransitionError
+ *     [S9]  checkIn on no_show → InvalidBookingTransitionError (IRREVERSIBLE enforcement)
+ *     [S10] checkIn on checked_out → InvalidBookingTransitionError
+ *     [I7]  checkIn does NOT change availability.sold
+ *     [X2]  checkIn preserves id/tenantId/propertyId/checkIn/createdAt/createdBy/confirmedAt
+ *     [R2]  Promise.all double checkIn: exactly 1 succeeds
+ *
+ *   Check-out transition (in_house → checked_out) — M4b-2:
+ *     [T6]  checkOut from wrong tenant → null, row intact
+ *     [S11] checkOut from in_house: status='checked_out', checkedOutAt set
+ *     [S12] checkOut from confirmed (no check-in first) → InvalidBookingTransitionError
+ *     [S13] checkOut from cancelled → InvalidBookingTransitionError
+ *     [I8]  checkOut does NOT change availability.sold
+ *     [X3]  checkOut preserves immutables incl. checkedInAt + assignedRoomId
+ *
+ *   No-show transition (confirmed → no_show, TERMINAL + IRREVERSIBLE) — M4b-2:
+ *     [T7]  markNoShow from wrong tenant → null, row intact
+ *     [S14] markNoShow from confirmed: status='no_show', noShowAt + reason
+ *     [S15] markNoShow from in_house → InvalidBookingTransitionError
+ *           (guest already arrived; correct op is checkOut with adjustments)
+ *     [S16] markNoShow from cancelled → InvalidBookingTransitionError
+ *     [I9]  markNoShow does NOT decrement availability.sold
+ *           (product decision: room was committed + not available for re-sale;
+ *           revenue integrity trumps inventory release)
+ *     [RN1] markNoShow with null reason stores null; cancelReason field preserved
+ *     [X4]  markNoShow preserves id/tenantId/propertyId/checkIn/createdAt/
+ *           createdBy/confirmedAt
+ *     [S19] markNoShow idempotent adversarial: second call throws (state → no_show
+ *           is irreversible, second call sees no_show and refuses)
+ *
+ *   Cancel-from-other states (extending M4a cancel tests):
+ *     [S18] cancel from in_house is ALLOWED (non-terminal); sold decrements
+ *
  * Requires local YDB.
  */
 import type { Booking, BookingCreateInput, BookingTimeSlice } from '@horeca/shared'
@@ -957,5 +996,291 @@ describe('booking.repo', { tags: ['db'], timeout: 60_000 }, () => {
 		trackBooking(TENANT_A, PROP_RT, b.checkIn, b.id)
 		const onlyA = await repo.listByProperty(TENANT_A, PROP_RT, { roomTypeId: RT_A })
 		expect(onlyA.map((x) => x.id)).toEqual([a.id])
+	})
+
+	// ---------------------------------------------------------------------------
+	// M4b-2: state transitions (checkIn / checkOut / markNoShow)
+	// ---------------------------------------------------------------------------
+
+	/** Small factory — create a confirmed booking for N nights and track cleanup. */
+	async function makeConfirmed(
+		propertyId: string,
+		roomTypeId: string,
+		tenantId: string,
+		startDate: string,
+		nightsCount = 1,
+	): Promise<Booking> {
+		const nights: string[] = []
+		const start = new Date(`${startDate}T00:00:00Z`)
+		for (let i = 0; i < nightsCount; i++) {
+			const d = new Date(start)
+			d.setUTCDate(start.getUTCDate() + i)
+			nights.push(d.toISOString().slice(0, 10))
+		}
+		const end = new Date(start)
+		end.setUTCDate(start.getUTCDate() + nightsCount)
+		const checkOut = end.toISOString().slice(0, 10)
+
+		await seedAvailability(tenantId, propertyId, roomTypeId, nights)
+		const created = await repo.create(
+			tenantId,
+			propertyId,
+			buildInput({ roomTypeId, checkIn: startDate, checkOut }),
+			buildCtx(buildSlices(nights)),
+		)
+		trackBooking(tenantId, propertyId, created.checkIn, created.id)
+		return created
+	}
+
+	// ---------------- checkIn ----------------
+
+	test('[T5] checkIn from wrong tenant → null, own-tenant row intact', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-01-05')
+		expect(await repo.checkIn(TENANT_B, b.id, {}, USER_B)).toBeNull()
+		const after = await repo.getById(TENANT_A, b.id)
+		expect(after?.status).toBe('confirmed')
+		expect(after?.checkedInAt).toBeNull()
+	})
+
+	test('[S6,X2,A2] checkIn from confirmed: status/timestamp/monotonicity/immutables', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-01-10')
+		await new Promise((r) => setTimeout(r, 12))
+		const checkedIn = await repo.checkIn(TENANT_A, b.id, {}, USER_B)
+		expect(checkedIn).not.toBeNull()
+		if (!checkedIn) return
+
+		expect(checkedIn.status).toBe('in_house')
+		expect(checkedIn.checkedInAt).not.toBeNull()
+		expect(checkedIn.updatedBy).toBe(USER_B)
+		expect(new Date(checkedIn.updatedAt).getTime()).toBeGreaterThan(new Date(b.updatedAt).getTime())
+		// A2: no room assignment passed → stays null
+		expect(checkedIn.assignedRoomId).toBeNull()
+
+		// X2: immutables preserved
+		expect(checkedIn.id).toBe(b.id)
+		expect(checkedIn.tenantId).toBe(b.tenantId)
+		expect(checkedIn.propertyId).toBe(b.propertyId)
+		expect(checkedIn.checkIn).toBe(b.checkIn)
+		expect(checkedIn.createdAt).toBe(b.createdAt)
+		expect(checkedIn.createdBy).toBe(b.createdBy)
+		expect(checkedIn.confirmedAt).toBe(b.confirmedAt)
+
+		// Re-fetch — server persisted exactly what we returned
+		const fetched = await repo.getById(TENANT_A, b.id)
+		expect(fetched).toEqual(checkedIn)
+	})
+
+	test('[A1] checkIn with assignedRoomId stores it', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-01-15')
+		const roomId = newId('room')
+		const checkedIn = await repo.checkIn(TENANT_A, b.id, { assignedRoomId: roomId }, USER_A)
+		expect(checkedIn?.assignedRoomId).toBe(roomId)
+		expect((await repo.getById(TENANT_A, b.id))?.assignedRoomId).toBe(roomId)
+	})
+
+	test('[S7] checkIn on already-in_house → InvalidBookingTransitionError', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-01-20')
+		await repo.checkIn(TENANT_A, b.id, {}, USER_A)
+		await expect(repo.checkIn(TENANT_A, b.id, {}, USER_A)).rejects.toBeInstanceOf(
+			InvalidBookingTransitionError,
+		)
+	})
+
+	test('[S8] checkIn on cancelled → InvalidBookingTransitionError', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-01-25')
+		await repo.cancel(TENANT_A, b.id, 'test', USER_A)
+		await expect(repo.checkIn(TENANT_A, b.id, {}, USER_A)).rejects.toBeInstanceOf(
+			InvalidBookingTransitionError,
+		)
+	})
+
+	test('[S9] checkIn on no_show → InvalidBookingTransitionError (irreversible)', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-02-01')
+		await repo.markNoShow(TENANT_A, b.id, 'guest didnt arrive', USER_A)
+		await expect(repo.checkIn(TENANT_A, b.id, {}, USER_A)).rejects.toBeInstanceOf(
+			InvalidBookingTransitionError,
+		)
+	})
+
+	test('[S10] checkIn on checked_out → InvalidBookingTransitionError', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-02-05')
+		await repo.checkIn(TENANT_A, b.id, {}, USER_A)
+		await repo.checkOut(TENANT_A, b.id, USER_A)
+		await expect(repo.checkIn(TENANT_A, b.id, {}, USER_A)).rejects.toBeInstanceOf(
+			InvalidBookingTransitionError,
+		)
+	})
+
+	test('[I7] checkIn does NOT change availability.sold', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-02-10', 2)
+		const nights = ['2029-02-10', '2029-02-11']
+		const soldBefore = await Promise.all(nights.map((d) => readSold(TENANT_A, PROP_A, RT_A, d)))
+		await repo.checkIn(TENANT_A, b.id, {}, USER_A)
+		const soldAfter = await Promise.all(nights.map((d) => readSold(TENANT_A, PROP_A, RT_A, d)))
+		expect(soldAfter).toEqual(soldBefore)
+	})
+
+	test('[R2] Promise.all double checkIn: exactly 1 succeeds', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-02-15')
+		const results = await Promise.allSettled([
+			repo.checkIn(TENANT_A, b.id, {}, USER_A),
+			repo.checkIn(TENANT_A, b.id, {}, USER_A),
+		])
+		const fulfilled = results.filter((r) => r.status === 'fulfilled')
+		const rejected = results.filter((r) => r.status === 'rejected')
+		expect(fulfilled).toHaveLength(1)
+		expect(rejected).toHaveLength(1)
+		// Rejected one must be InvalidBookingTransitionError (the loser saw status
+		// already advanced to in_house). OCC retries idempotent-flagged tx, which
+		// succeeds on retry and then the guard re-rejects with domain error.
+		if (rejected[0]?.status === 'rejected') {
+			expect(rejected[0].reason).toBeInstanceOf(InvalidBookingTransitionError)
+		}
+	})
+
+	// ---------------- checkOut ----------------
+
+	test('[T6] checkOut from wrong tenant → null, row intact', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-03-01')
+		await repo.checkIn(TENANT_A, b.id, {}, USER_A)
+		expect(await repo.checkOut(TENANT_B, b.id, USER_B)).toBeNull()
+		expect((await repo.getById(TENANT_A, b.id))?.status).toBe('in_house')
+	})
+
+	test('[S11,X3] checkOut from in_house: terminal transition + immutables', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-03-05')
+		const roomId = newId('room')
+		const checkedIn = await repo.checkIn(TENANT_A, b.id, { assignedRoomId: roomId }, USER_A)
+		expect(checkedIn?.status).toBe('in_house')
+		await new Promise((r) => setTimeout(r, 12))
+		const checkedOut = await repo.checkOut(TENANT_A, b.id, USER_B)
+		expect(checkedOut).not.toBeNull()
+		if (!checkedOut || !checkedIn) return
+
+		expect(checkedOut.status).toBe('checked_out')
+		expect(checkedOut.checkedOutAt).not.toBeNull()
+		expect(checkedOut.updatedBy).toBe(USER_B)
+		expect(new Date(checkedOut.updatedAt).getTime()).toBeGreaterThan(
+			new Date(checkedIn.updatedAt).getTime(),
+		)
+		// X3: checkedInAt + assignedRoomId preserved
+		expect(checkedOut.checkedInAt).toBe(checkedIn.checkedInAt)
+		expect(checkedOut.assignedRoomId).toBe(roomId)
+		// Immutables
+		expect(checkedOut.createdAt).toBe(b.createdAt)
+		expect(checkedOut.createdBy).toBe(b.createdBy)
+		expect(checkedOut.confirmedAt).toBe(b.confirmedAt)
+	})
+
+	test('[S12] checkOut from confirmed (no check-in) → InvalidBookingTransitionError', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-03-10')
+		await expect(repo.checkOut(TENANT_A, b.id, USER_A)).rejects.toBeInstanceOf(
+			InvalidBookingTransitionError,
+		)
+	})
+
+	test('[S13] checkOut from cancelled → InvalidBookingTransitionError', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-03-15')
+		await repo.cancel(TENANT_A, b.id, 'test', USER_A)
+		await expect(repo.checkOut(TENANT_A, b.id, USER_A)).rejects.toBeInstanceOf(
+			InvalidBookingTransitionError,
+		)
+	})
+
+	test('[I8] checkOut does NOT change availability.sold', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-03-20', 2)
+		await repo.checkIn(TENANT_A, b.id, {}, USER_A)
+		const nights = ['2029-03-20', '2029-03-21']
+		const soldBefore = await Promise.all(nights.map((d) => readSold(TENANT_A, PROP_A, RT_A, d)))
+		await repo.checkOut(TENANT_A, b.id, USER_A)
+		const soldAfter = await Promise.all(nights.map((d) => readSold(TENANT_A, PROP_A, RT_A, d)))
+		expect(soldAfter).toEqual(soldBefore)
+	})
+
+	// ---------------- markNoShow ----------------
+
+	test('[T7] markNoShow from wrong tenant → null, row intact', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-04-01')
+		expect(await repo.markNoShow(TENANT_B, b.id, 'bogus', USER_B)).toBeNull()
+		expect((await repo.getById(TENANT_A, b.id))?.status).toBe('confirmed')
+	})
+
+	test('[S14,RN1,X4] markNoShow from confirmed: status/noShowAt/reason/immutables', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-04-05')
+		await new Promise((r) => setTimeout(r, 12))
+		const noShown = await repo.markNoShow(TENANT_A, b.id, 'guest did not arrive', USER_B)
+		expect(noShown).not.toBeNull()
+		if (!noShown) return
+
+		expect(noShown.status).toBe('no_show')
+		expect(noShown.noShowAt).not.toBeNull()
+		// markNoShow stores the reason in `cancelReason` column (re-used for narrative).
+		expect(noShown.cancelReason).toBe('guest did not arrive')
+		expect(noShown.updatedBy).toBe(USER_B)
+		expect(new Date(noShown.updatedAt).getTime()).toBeGreaterThan(new Date(b.updatedAt).getTime())
+
+		// X4: immutables preserved
+		expect(noShown.id).toBe(b.id)
+		expect(noShown.tenantId).toBe(b.tenantId)
+		expect(noShown.propertyId).toBe(b.propertyId)
+		expect(noShown.checkIn).toBe(b.checkIn)
+		expect(noShown.createdAt).toBe(b.createdAt)
+		expect(noShown.createdBy).toBe(b.createdBy)
+		expect(noShown.confirmedAt).toBe(b.confirmedAt)
+	})
+
+	test('[RN1-null] markNoShow with null reason stores null', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-04-10')
+		const noShown = await repo.markNoShow(TENANT_A, b.id, null, USER_A)
+		expect(noShown?.cancelReason).toBeNull()
+		expect((await repo.getById(TENANT_A, b.id))?.cancelReason).toBeNull()
+	})
+
+	test('[S15] markNoShow from in_house → InvalidBookingTransitionError', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-04-15')
+		await repo.checkIn(TENANT_A, b.id, {}, USER_A)
+		await expect(repo.markNoShow(TENANT_A, b.id, 'late', USER_A)).rejects.toBeInstanceOf(
+			InvalidBookingTransitionError,
+		)
+	})
+
+	test('[S16] markNoShow from cancelled → InvalidBookingTransitionError', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-04-20')
+		await repo.cancel(TENANT_A, b.id, 'test', USER_A)
+		await expect(repo.markNoShow(TENANT_A, b.id, 'test', USER_A)).rejects.toBeInstanceOf(
+			InvalidBookingTransitionError,
+		)
+	})
+
+	test('[S19] markNoShow second call → InvalidBookingTransitionError (irreversible)', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-04-25')
+		await repo.markNoShow(TENANT_A, b.id, 'first', USER_A)
+		await expect(repo.markNoShow(TENANT_A, b.id, 'second', USER_A)).rejects.toBeInstanceOf(
+			InvalidBookingTransitionError,
+		)
+	})
+
+	test('[I9] markNoShow does NOT decrement availability.sold', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-05-01', 2)
+		const nights = ['2029-05-01', '2029-05-02']
+		const soldBefore = await Promise.all(nights.map((d) => readSold(TENANT_A, PROP_A, RT_A, d)))
+		await repo.markNoShow(TENANT_A, b.id, 'no-show', USER_A)
+		const soldAfter = await Promise.all(nights.map((d) => readSold(TENANT_A, PROP_A, RT_A, d)))
+		expect(soldAfter).toEqual(soldBefore)
+	})
+
+	// ---------------- Cancel-from-other-states (M4a extension) ----------------
+
+	test('[S18] cancel from in_house is ALLOWED (early departure); sold decrements', async () => {
+		const b = await makeConfirmed(PROP_A, RT_A, TENANT_A, '2029-06-01', 2)
+		await repo.checkIn(TENANT_A, b.id, {}, USER_A)
+		const nights = ['2029-06-01', '2029-06-02']
+		const soldBefore = await Promise.all(nights.map((d) => readSold(TENANT_A, PROP_A, RT_A, d)))
+		const cancelled = await repo.cancel(TENANT_A, b.id, 'early departure', USER_A)
+		expect(cancelled?.status).toBe('cancelled')
+		const soldAfter = await Promise.all(nights.map((d) => readSold(TENANT_A, PROP_A, RT_A, d)))
+		for (let i = 0; i < nights.length; i++) {
+			expect(soldAfter[i]).toBe((soldBefore[i] ?? 0) - 1)
+		}
 	})
 })

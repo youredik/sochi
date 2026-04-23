@@ -145,9 +145,21 @@ export const bookingCancelInput = z.object({
 })
 export type BookingCancelInput = z.infer<typeof bookingCancelInput>
 
-// NOTE: markNoShow / checkIn / checkOut input schemas land with M4b-2 when the
-// corresponding repo/service methods ship. Keeping this module tight until then
-// (knip-clean, no hypothetical scaffolding).
+/** PATCH /bookings/:id/check-in — optionally assigns a concrete room. */
+export const bookingCheckInInput = z.object({
+	assignedRoomId: idSchema('room').nullable().optional(),
+})
+export type BookingCheckInInput = z.infer<typeof bookingCheckInInput>
+
+/** PATCH /bookings/:id/no-show — mark as no-show; reason is optional but recommended. */
+export const bookingMarkNoShowInput = z.object({
+	reason: z.string().min(1).max(500).nullable().optional(),
+})
+export type BookingMarkNoShowInput = z.infer<typeof bookingMarkNoShowInput>
+
+// PATCH /bookings/:id/check-out has no body today. When Phase 3 adds
+// `earlyCheckoutReason` / folio adjustments, introduce `bookingCheckOutInput`
+// and wire the validator. For now the route only reads the path param.
 
 export const bookingIdParam = z.object({ id: idSchema('booking') })
 export const bookingPropertyParam = z.object({ propertyId: idSchema('property') })

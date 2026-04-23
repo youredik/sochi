@@ -1,6 +1,8 @@
 import type {
 	BookingCancelInput,
+	BookingCheckInInput,
 	BookingCreateInput,
+	BookingMarkNoShowInput,
 	BookingStatus,
 	BookingTimeSlice,
 } from '@horeca/shared'
@@ -117,5 +119,28 @@ export function createBookingService(
 
 		cancel: async (tenantId: string, id: string, input: BookingCancelInput, actorUserId: string) =>
 			repo.cancel(tenantId, id, input.reason, actorUserId),
+
+		checkIn: async (
+			tenantId: string,
+			id: string,
+			input: BookingCheckInInput,
+			actorUserId: string,
+		) =>
+			repo.checkIn(
+				tenantId,
+				id,
+				'assignedRoomId' in input ? { assignedRoomId: input.assignedRoomId ?? null } : {},
+				actorUserId,
+			),
+
+		checkOut: async (tenantId: string, id: string, actorUserId: string) =>
+			repo.checkOut(tenantId, id, actorUserId),
+
+		markNoShow: async (
+			tenantId: string,
+			id: string,
+			input: BookingMarkNoShowInput,
+			actorUserId: string,
+		) => repo.markNoShow(tenantId, id, input.reason ?? null, actorUserId),
 	}
 }

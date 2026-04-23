@@ -11,6 +11,7 @@ import type {
 	BookingTimeSlice,
 } from '@horeca/shared'
 import { newId } from '@horeca/shared'
+import type { TX } from '@ydbjs/query'
 import type { sql as SQL } from '../../db/index.ts'
 import {
 	dateFromIso,
@@ -149,6 +150,124 @@ function nightsBetween(checkIn: string, checkOut: string): string[] {
 		cursor.setUTCDate(cursor.getUTCDate() + 1)
 	}
 	return out
+}
+
+/**
+ * Shape of the transition change passed to `upsertBookingRow`. Every non-required
+ * field is optional — unspecified = keep current row value, `null` = clear.
+ */
+type TransitionOverride = {
+	status: BookingStatus
+	updatedAt: Date
+	updatedBy: string
+	assignedRoomId?: string | null
+	checkedInAt?: Date | null
+	checkedOutAt?: Date | null
+	cancelledAt?: Date | null
+	noShowAt?: Date | null
+	cancelReason?: string | null
+}
+
+/**
+ * UPSERT the full booking row with selective field overrides, preserving all
+ * non-overridden fields. Called inside `sql.begin(tx => ...)` after the caller
+ * has asserted the transition is allowed.
+ *
+ * Why full-row UPSERT (not UPDATE): see `project_ydb_specifics.md` #14 — YDB
+ * `UPDATE ... SET` on mixed NOT NULL + nullable columns fails with
+ * "Expected optional, ... but got: Utf8". UPSERT tolerates bare values.
+ */
+async function upsertBookingRow(tx: TX, current: Booking, next: TransitionOverride): Promise<void> {
+	const nowTs = toTs(next.updatedAt)
+	const assignedRoomId = 'assignedRoomId' in next ? next.assignedRoomId : current.assignedRoomId
+	const checkedInAtDate =
+		'checkedInAt' in next
+			? (next.checkedInAt ?? null)
+			: current.checkedInAt
+				? new Date(current.checkedInAt)
+				: null
+	const checkedOutAtDate =
+		'checkedOutAt' in next
+			? (next.checkedOutAt ?? null)
+			: current.checkedOutAt
+				? new Date(current.checkedOutAt)
+				: null
+	const cancelledAtDate =
+		'cancelledAt' in next
+			? (next.cancelledAt ?? null)
+			: current.cancelledAt
+				? new Date(current.cancelledAt)
+				: null
+	const noShowAtDate =
+		'noShowAt' in next
+			? (next.noShowAt ?? null)
+			: current.noShowAt
+				? new Date(current.noShowAt)
+				: null
+	const cancelReason = 'cancelReason' in next ? next.cancelReason : current.cancelReason
+
+	await tx`
+		UPSERT INTO booking (
+			\`tenantId\`, \`propertyId\`, \`checkIn\`, \`id\`,
+			\`checkOut\`, \`roomTypeId\`, \`ratePlanId\`, \`assignedRoomId\`,
+			\`guestsCount\`, \`nightsCount\`,
+			\`primaryGuestId\`, \`guestSnapshot\`,
+			\`status\`, \`confirmedAt\`,
+			\`checkedInAt\`, \`checkedOutAt\`, \`cancelledAt\`, \`noShowAt\`, \`cancelReason\`,
+			\`channelCode\`, \`externalId\`, \`externalReferences\`,
+			\`totalMicros\`, \`paidMicros\`, \`currency\`, \`timeSlices\`,
+			\`cancellationFee\`, \`noShowFee\`,
+			\`registrationStatus\`, \`registrationMvdId\`, \`registrationSubmittedAt\`,
+			\`rklCheckResult\`, \`rklCheckedAt\`,
+			\`tourismTaxBaseMicros\`, \`tourismTaxMicros\`,
+			\`notes\`, \`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
+		) VALUES (
+			${current.tenantId}, ${current.propertyId}, ${dateFromIso(current.checkIn)}, ${current.id},
+			${dateFromIso(current.checkOut)}, ${current.roomTypeId}, ${current.ratePlanId},
+			${assignedRoomId ?? NULL_TEXT},
+			${current.guestsCount}, ${current.nightsCount},
+			${current.primaryGuestId}, ${toJson(current.guestSnapshot)},
+			${next.status}, ${tsFromIso(current.confirmedAt)},
+			${timestampOpt(checkedInAtDate)},
+			${timestampOpt(checkedOutAtDate)},
+			${timestampOpt(cancelledAtDate)},
+			${timestampOpt(noShowAtDate)},
+			${cancelReason ?? NULL_TEXT},
+			${current.channelCode}, ${current.externalId ?? NULL_TEXT}, ${toJson(current.externalReferences)},
+			${BigInt(current.totalMicros)}, ${BigInt(current.paidMicros)},
+			${current.currency}, ${toJson(current.timeSlices)},
+			${toJson(current.cancellationFee)}, ${toJson(current.noShowFee)},
+			${current.registrationStatus}, ${current.registrationMvdId ?? NULL_TEXT},
+			${timestampOpt(current.registrationSubmittedAt ? new Date(current.registrationSubmittedAt) : null)},
+			${current.rklCheckResult},
+			${timestampOpt(current.rklCheckedAt ? new Date(current.rklCheckedAt) : null)},
+			${BigInt(current.tourismTaxBaseMicros)}, ${BigInt(current.tourismTaxMicros)},
+			${current.notes ?? NULL_TEXT}, ${tsFromIso(current.createdAt)}, ${nowTs},
+			${current.createdBy}, ${next.updatedBy}
+		)
+	`
+}
+
+/** Apply the same override semantics as upsertBookingRow in memory. */
+function applyTransition(current: Booking, next: TransitionOverride): Booking {
+	return {
+		...current,
+		status: next.status,
+		updatedAt: next.updatedAt.toISOString(),
+		updatedBy: next.updatedBy,
+		...('assignedRoomId' in next ? { assignedRoomId: next.assignedRoomId ?? null } : {}),
+		...('checkedInAt' in next
+			? { checkedInAt: next.checkedInAt ? next.checkedInAt.toISOString() : null }
+			: {}),
+		...('checkedOutAt' in next
+			? { checkedOutAt: next.checkedOutAt ? next.checkedOutAt.toISOString() : null }
+			: {}),
+		...('cancelledAt' in next
+			? { cancelledAt: next.cancelledAt ? next.cancelledAt.toISOString() : null }
+			: {}),
+		...('noShowAt' in next ? { noShowAt: next.noShowAt ? next.noShowAt.toISOString() : null } : {}),
+		...('cancelReason' in next ? { cancelReason: next.cancelReason ?? null } : {}),
+	}
 }
 
 type BookingCreateContext = {
@@ -395,15 +514,8 @@ export function createBookingRepo(sql: SqlInstance) {
 		): Promise<Booking | null> {
 			try {
 				return await sql.begin(async (tx) => {
-					// Load by PK via id-index (booking PK is compound but id-alone is a SYNC index).
-					const [rows = []] = await tx<BookingRow[]>`
-						SELECT * FROM booking VIEW ixBookingId
-						WHERE id = ${id} AND tenantId = ${tenantId}
-						LIMIT 1
-					`
-					const row = rows[0]
-					if (!row) return null
-					const current = rowToBooking(row)
+					const current = await loadByIdForTx(tx, tenantId, id)
+					if (!current) return null
 
 					// Only non-terminal states can cancel. Terminal: cancelled, no_show, checked_out.
 					if (
@@ -430,65 +542,15 @@ export function createBookingRepo(sql: SqlInstance) {
 						`
 					}
 
-					// UPSERT full row — UPDATE ... SET on nullable columns hits YDB strict
-					// type inference ("Expected optional, but got: Utf8"); UPSERT tolerates
-					// bare values for nullable cols. See `project_ydb_specifics.md` #14.
-					const externalIdBind = current.externalId ?? NULL_TEXT
-					const externalRefBind = toJson(current.externalReferences)
-					const cancellationFeeBind = toJson(current.cancellationFee)
-					const noShowFeeBind = toJson(current.noShowFee)
-					const notesBind = current.notes ?? NULL_TEXT
-					const assignedRoomBind = current.assignedRoomId ?? NULL_TEXT
-					const registrationMvdBind = current.registrationMvdId ?? NULL_TEXT
-
-					await tx`
-						UPSERT INTO booking (
-							\`tenantId\`, \`propertyId\`, \`checkIn\`, \`id\`,
-							\`checkOut\`, \`roomTypeId\`, \`ratePlanId\`, \`assignedRoomId\`,
-							\`guestsCount\`, \`nightsCount\`,
-							\`primaryGuestId\`, \`guestSnapshot\`,
-							\`status\`, \`confirmedAt\`,
-							\`checkedInAt\`, \`checkedOutAt\`, \`cancelledAt\`, \`noShowAt\`, \`cancelReason\`,
-							\`channelCode\`, \`externalId\`, \`externalReferences\`,
-							\`totalMicros\`, \`paidMicros\`, \`currency\`, \`timeSlices\`,
-							\`cancellationFee\`, \`noShowFee\`,
-							\`registrationStatus\`, \`registrationMvdId\`, \`registrationSubmittedAt\`,
-							\`rklCheckResult\`, \`rklCheckedAt\`,
-							\`tourismTaxBaseMicros\`, \`tourismTaxMicros\`,
-							\`notes\`, \`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
-						) VALUES (
-							${tenantId}, ${current.propertyId}, ${dateFromIso(current.checkIn)}, ${id},
-							${dateFromIso(current.checkOut)}, ${current.roomTypeId}, ${current.ratePlanId}, ${assignedRoomBind},
-							${current.guestsCount}, ${current.nightsCount},
-							${current.primaryGuestId}, ${toJson(current.guestSnapshot)},
-							${'cancelled'}, ${tsFromIso(current.confirmedAt)},
-							${timestampOpt(current.checkedInAt ? new Date(current.checkedInAt) : null)},
-							${timestampOpt(current.checkedOutAt ? new Date(current.checkedOutAt) : null)},
-							${nowTs},
-							${timestampOpt(current.noShowAt ? new Date(current.noShowAt) : null)},
-							${reason},
-							${current.channelCode}, ${externalIdBind}, ${externalRefBind},
-							${BigInt(current.totalMicros)}, ${BigInt(current.paidMicros)},
-							${current.currency}, ${toJson(current.timeSlices)},
-							${cancellationFeeBind}, ${noShowFeeBind},
-							${current.registrationStatus}, ${registrationMvdBind},
-							${timestampOpt(current.registrationSubmittedAt ? new Date(current.registrationSubmittedAt) : null)},
-							${current.rklCheckResult},
-							${timestampOpt(current.rklCheckedAt ? new Date(current.rklCheckedAt) : null)},
-							${BigInt(current.tourismTaxBaseMicros)}, ${BigInt(current.tourismTaxMicros)},
-							${notesBind}, ${tsFromIso(current.createdAt)}, ${nowTs},
-							${current.createdBy}, ${actorUserId}
-						)
-					`
-
-					return {
-						...current,
+					const next: TransitionOverride = {
 						status: 'cancelled',
-						cancelledAt: now.toISOString(),
-						cancelReason: reason,
-						updatedAt: now.toISOString(),
+						updatedAt: now,
 						updatedBy: actorUserId,
+						cancelledAt: now,
+						cancelReason: reason,
 					}
+					await upsertBookingRow(tx, current, next)
+					return applyTransition(current, next)
 				})
 			} catch (err) {
 				if (err instanceof Error && err.cause instanceof InvalidBookingTransitionError)
@@ -496,6 +558,108 @@ export function createBookingRepo(sql: SqlInstance) {
 				throw err
 			}
 		},
+
+		async checkIn(
+			tenantId: string,
+			id: string,
+			opts: { assignedRoomId?: string | null },
+			actorUserId: string,
+		): Promise<Booking | null> {
+			try {
+				return await sql.begin(async (tx) => {
+					const current = await loadByIdForTx(tx, tenantId, id)
+					if (!current) return null
+					if (current.status !== 'confirmed') {
+						throw new InvalidBookingTransitionError(current.status, 'in_house')
+					}
+					const now = new Date()
+					const next: TransitionOverride = {
+						status: 'in_house',
+						updatedAt: now,
+						updatedBy: actorUserId,
+						checkedInAt: now,
+						...('assignedRoomId' in opts ? { assignedRoomId: opts.assignedRoomId ?? null } : {}),
+					}
+					await upsertBookingRow(tx, current, next)
+					return applyTransition(current, next)
+				})
+			} catch (err) {
+				if (err instanceof Error && err.cause instanceof InvalidBookingTransitionError)
+					throw err.cause
+				throw err
+			}
+		},
+
+		async checkOut(tenantId: string, id: string, actorUserId: string): Promise<Booking | null> {
+			try {
+				return await sql.begin(async (tx) => {
+					const current = await loadByIdForTx(tx, tenantId, id)
+					if (!current) return null
+					if (current.status !== 'in_house') {
+						throw new InvalidBookingTransitionError(current.status, 'checked_out')
+					}
+					const now = new Date()
+					const next: TransitionOverride = {
+						status: 'checked_out',
+						updatedAt: now,
+						updatedBy: actorUserId,
+						checkedOutAt: now,
+					}
+					await upsertBookingRow(tx, current, next)
+					return applyTransition(current, next)
+				})
+			} catch (err) {
+				if (err instanceof Error && err.cause instanceof InvalidBookingTransitionError)
+					throw err.cause
+				throw err
+			}
+		},
+
+		async markNoShow(
+			tenantId: string,
+			id: string,
+			reason: string | null,
+			actorUserId: string,
+		): Promise<Booking | null> {
+			try {
+				return await sql.begin(async (tx) => {
+					const current = await loadByIdForTx(tx, tenantId, id)
+					if (!current) return null
+					// `no_show` can only be set BEFORE check-in (guest didn't arrive).
+					// After check-in the correct transition is `checked_out` with adjustments.
+					if (current.status !== 'confirmed') {
+						throw new InvalidBookingTransitionError(current.status, 'no_show')
+					}
+					const now = new Date()
+					const next: TransitionOverride = {
+						status: 'no_show',
+						updatedAt: now,
+						updatedBy: actorUserId,
+						noShowAt: now,
+						cancelReason: reason,
+					}
+					// Inventory intentionally NOT decremented: the hotel committed the
+					// room and guest didn't arrive; the unit stays "consumed" for audit
+					// and revenue integrity. Front desk releases manually if wanted.
+					await upsertBookingRow(tx, current, next)
+					return applyTransition(current, next)
+				})
+			} catch (err) {
+				if (err instanceof Error && err.cause instanceof InvalidBookingTransitionError)
+					throw err.cause
+				throw err
+			}
+		},
+	}
+
+	async function loadByIdForTx(tx: TX, tenantId: string, id: string): Promise<Booking | null> {
+		const [rows = []] = await tx<BookingRow[]>`
+			SELECT * FROM booking VIEW ixBookingId
+			WHERE id = ${id} AND tenantId = ${tenantId}
+			LIMIT 1
+		`
+		const row = rows[0]
+		return row ? rowToBooking(row) : null
 	}
 }
 
