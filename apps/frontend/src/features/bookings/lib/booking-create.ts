@@ -1,4 +1,9 @@
-import type { BookingGuestSnapshot, GuestCreateInput } from '@horeca/shared'
+import type {
+	BookingGuestSnapshot,
+	BookingStatus,
+	GuestCreateInput,
+	RatePlan,
+} from '@horeca/shared'
 import { addDays, diffDays } from '../../chessboard/lib/date-range.ts'
 
 /**
@@ -161,4 +166,88 @@ export function defaultCheckOut(checkIn: string): string {
  */
 export function generateIdempotencyKey(): string {
 	return crypto.randomUUID()
+}
+
+/**
+ * Russian-grammar plural for "ночь" (night).
+ *
+ * Rules per Russian morphology:
+ *   - 1, 21, 31, 101, … (mod 10 == 1 BUT mod 100 != 11) → singular "ночь"
+ *   - 2-4, 22-24, … (mod 10 in 2..4 BUT mod 100 not in 12..14) → "ночи"
+ *   - 0, 5-20, 25-30, 111-114, … → "ночей"
+ *
+ * The teens-exception (11, 12, 13, 14 all → "ночей") is the classic bug
+ * magnet here. Tested with explicit boundary cases.
+ */
+export function pluralNights(n: number): string {
+	const mod10 = n % 10
+	const mod100 = n % 100
+	if (mod10 === 1 && mod100 !== 11) return 'ночь'
+	if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'ночи'
+	return 'ночей'
+}
+
+/**
+ * Pick the rate plan the booking-create dialog should default to.
+ *
+ * Priority (intentional two-step fallback):
+ *   1. `isDefault && isActive` — the tenant's designated primary plan
+ *      (wizard seeds exactly one with `isDefault=true`).
+ *   2. Any `isActive` plan — covers edge case where admin toggled off
+ *      the default but left others active.
+ *   3. `null` — no usable plan; dialog must disable submit with a
+ *      loaded-but-empty affordance (NOT submit and let server 500).
+ *
+ * `inactive && isDefault` never wins: an inactive default means the
+ * admin is mid-transition; we don't silently submit to a plan that's
+ * not being sold right now.
+ */
+export function pickDefaultRatePlan(plans: readonly RatePlan[]): RatePlan | null {
+	return plans.find((p) => p.isDefault && p.isActive) ?? plans.find((p) => p.isActive) ?? null
+}
+
+/**
+ * Shape of a grid-displayable booking row. Narrower than the full
+ * Booking from @horeca/shared — the grid only reads these 5 fields,
+ * and the bigint money fields arrive as decimal strings on the wire
+ * (see patches.ts BigInt#toJSON) which would trip the full type.
+ */
+export interface OptimisticBand {
+	readonly id: string
+	readonly roomTypeId: string
+	readonly status: BookingStatus
+	readonly checkIn: string
+	readonly checkOut: string
+}
+
+/**
+ * Produce the optimistic placeholder band to stamp into the grid
+ * cache the instant the user submits. Prefix `pending_` on the id
+ * lets e2e tests prove the rollback path (real id never collides).
+ */
+export function buildOptimisticBand(args: {
+	idempotencyKey: string
+	roomTypeId: string
+	checkIn: string
+	checkOut: string
+}): OptimisticBand {
+	return {
+		id: `pending_${args.idempotencyKey}`,
+		roomTypeId: args.roomTypeId,
+		status: 'confirmed',
+		checkIn: args.checkIn,
+		checkOut: args.checkOut,
+	}
+}
+
+/**
+ * Cache transform for `onMutate`. Pure — doesn't mutate input, lets
+ * React Query's structural-sharing behave correctly on subsequent
+ * reads and snapshots.
+ */
+export function applyOptimisticBand(
+	previous: readonly OptimisticBand[],
+	band: OptimisticBand,
+): OptimisticBand[] {
+	return [...previous, band]
 }

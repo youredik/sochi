@@ -16,6 +16,8 @@ import {
 	defaultCheckOut,
 	generateIdempotencyKey,
 	nightsCount,
+	pickDefaultRatePlan,
+	pluralNights,
 } from '../lib/booking-create'
 
 /**
@@ -65,10 +67,10 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 	// First active rate plan for this roomType. Null while query loads or if
 	// the tenant somehow has zero plans for this roomType — submit button is
 	// disabled in that case (guard below).
-	const defaultRatePlan = useMemo(() => {
-		const plans = ratePlansQ.data ?? []
-		return plans.find((p) => p.isDefault && p.isActive) ?? plans.find((p) => p.isActive) ?? null
-	}, [ratePlansQ.data])
+	const defaultRatePlan = useMemo(
+		() => pickDefaultRatePlan(ratePlansQ.data ?? []),
+		[ratePlansQ.data],
+	)
 
 	const form = useForm({
 		defaultValues: {
@@ -234,13 +236,4 @@ function safeNightsCount(ci: string, co: string): number {
 	} catch {
 		return 0
 	}
-}
-
-function pluralNights(n: number): string {
-	// Russian plural: ночь / ночи / ночей (1 / 2-4 / 5+, with teens exception)
-	const mod10 = n % 10
-	const mod100 = n % 100
-	if (mod10 === 1 && mod100 !== 11) return 'ночь'
-	if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'ночи'
-	return 'ночей'
 }

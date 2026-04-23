@@ -1,12 +1,17 @@
+import type { RatePlan } from '@horeca/shared'
 import { describe, expect, it } from 'vitest'
 import {
+	applyOptimisticBand,
 	type BookingCreateDialogInput,
 	buildBookingCreateBody,
 	buildGuestCreateBody,
 	buildGuestSnapshot,
+	buildOptimisticBand,
 	defaultCheckOut,
 	generateIdempotencyKey,
 	nightsCount,
+	pickDefaultRatePlan,
+	pluralNights,
 } from './booking-create.ts'
 
 const baseGuest: BookingCreateDialogInput['primaryGuest'] = {
@@ -263,5 +268,170 @@ describe('generateIdempotencyKey', () => {
 		const set = new Set<string>()
 		for (let i = 0; i < 1000; i++) set.add(generateIdempotencyKey())
 		expect(set.size).toBe(1000)
+	})
+})
+
+describe('pluralNights — Russian morphology', () => {
+	describe('singular "ночь" (mod10=1, excluding teens)', () => {
+		it.each([1, 21, 31, 41, 51, 61, 71, 81, 91, 101, 121])('%d → ночь', (n) => {
+			expect(pluralNights(n)).toBe('ночь')
+		})
+	})
+
+	describe('few "ночи" (mod10 in 2-4, excluding teens)', () => {
+		it.each([2, 3, 4, 22, 23, 24, 32, 103, 104, 122, 123])('%d → ночи', (n) => {
+			expect(pluralNights(n)).toBe('ночи')
+		})
+	})
+
+	describe('many "ночей" (mod10 0 or 5-9, OR teens 11-14)', () => {
+		it.each([0, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 100, 105])('%d → ночей', (n) => {
+			expect(pluralNights(n)).toBe('ночей')
+		})
+
+		it.each([
+			11, 12, 13, 14, 111, 112, 113, 114, 211, 212, 213, 214,
+		])('teens-exception: %d → ночей (NOT ночь/ночи)', (n) => {
+			expect(pluralNights(n)).toBe('ночей')
+		})
+	})
+})
+
+describe('pickDefaultRatePlan — fallback chain', () => {
+	const plan = (overrides: Partial<RatePlan>): RatePlan => ({
+		id: overrides.id ?? 'rp_1',
+		tenantId: 'tnt_1',
+		propertyId: 'prop_1',
+		roomTypeId: 'rmt_1',
+		name: 'Базовый',
+		code: 'BAR',
+		isDefault: false,
+		isRefundable: true,
+		cancellationHours: 24,
+		mealsIncluded: 'none',
+		minStay: 1,
+		maxStay: 365,
+		currency: 'RUB',
+		isActive: true,
+		createdAt: '2026-04-24T00:00:00Z',
+		updatedAt: '2026-04-24T00:00:00Z',
+		...overrides,
+	})
+
+	it('returns null for empty list', () => {
+		expect(pickDefaultRatePlan([])).toBeNull()
+	})
+
+	it('prefers isDefault=true + isActive=true over bare isActive plan', () => {
+		const def = plan({ id: 'rp_def', isDefault: true, isActive: true })
+		const extra = plan({ id: 'rp_extra', isDefault: false, isActive: true })
+		expect(pickDefaultRatePlan([extra, def])?.id).toBe('rp_def')
+		// Order-independent — same outcome with default first.
+		expect(pickDefaultRatePlan([def, extra])?.id).toBe('rp_def')
+	})
+
+	it('falls back to first isActive plan when no isDefault exists', () => {
+		const a = plan({ id: 'rp_a', isDefault: false, isActive: true })
+		const b = plan({ id: 'rp_b', isDefault: false, isActive: true })
+		expect(pickDefaultRatePlan([a, b])?.id).toBe('rp_a')
+	})
+
+	it('adversarial: inactive default NEVER wins — falls through to active non-default', () => {
+		// Admin toggled off the default mid-transition. We must NOT submit
+		// to an inactive plan (server would 409 or stale it).
+		const inactiveDefault = plan({ id: 'rp_stale_def', isDefault: true, isActive: false })
+		const activeExtra = plan({ id: 'rp_extra', isDefault: false, isActive: true })
+		expect(pickDefaultRatePlan([inactiveDefault, activeExtra])?.id).toBe('rp_extra')
+	})
+
+	it('returns null when every plan is inactive (dialog submit must stay disabled)', () => {
+		const allInactive = [
+			plan({ id: 'rp_a', isActive: false }),
+			plan({ id: 'rp_b', isDefault: true, isActive: false }),
+		]
+		expect(pickDefaultRatePlan(allInactive)).toBeNull()
+	})
+})
+
+describe('buildOptimisticBand — pending placeholder shape', () => {
+	it('produces exact band shape with pending_ prefixed id', () => {
+		const band = buildOptimisticBand({
+			idempotencyKey: 'abc-123',
+			roomTypeId: 'rmt_x',
+			checkIn: '2026-05-10',
+			checkOut: '2026-05-12',
+		})
+		expect(band).toEqual({
+			id: 'pending_abc-123',
+			roomTypeId: 'rmt_x',
+			status: 'confirmed',
+			checkIn: '2026-05-10',
+			checkOut: '2026-05-12',
+		})
+	})
+
+	it('id carries the full idempotency key verbatim (e2e rollback sanity asserts this prefix)', () => {
+		const uuid = '550e8400-e29b-41d4-a716-446655440000'
+		const band = buildOptimisticBand({
+			idempotencyKey: uuid,
+			roomTypeId: 'rmt_x',
+			checkIn: '2026-05-10',
+			checkOut: '2026-05-11',
+		})
+		expect(band.id).toBe(`pending_${uuid}`)
+		// Future regression: if someone truncates or hashes the key, the
+		// e2e `.not.toMatch(/^pending_/)` assertion would still pass but
+		// this unit test would fail loudly.
+		expect(band.id).toMatch(/^pending_[0-9a-f-]{36}$/)
+	})
+
+	it('status is always "confirmed" (server default — grid band palette picks it up immediately)', () => {
+		const band = buildOptimisticBand({
+			idempotencyKey: 'k',
+			roomTypeId: 'rmt_x',
+			checkIn: '2026-05-10',
+			checkOut: '2026-05-11',
+		})
+		expect(band.status).toBe('confirmed')
+	})
+})
+
+describe('applyOptimisticBand — pure cache transform', () => {
+	const existing = [
+		{
+			id: 'b1',
+			roomTypeId: 'rmt_x',
+			status: 'confirmed' as const,
+			checkIn: '2026-05-01',
+			checkOut: '2026-05-03',
+		},
+	]
+	const newBand = {
+		id: 'pending_xxx',
+		roomTypeId: 'rmt_x',
+		status: 'confirmed' as const,
+		checkIn: '2026-05-10',
+		checkOut: '2026-05-11',
+	}
+
+	it('appends the new band without losing existing ones', () => {
+		const out = applyOptimisticBand(existing, newBand)
+		expect(out).toHaveLength(2)
+		expect(out[0]?.id).toBe('b1')
+		expect(out[1]?.id).toBe('pending_xxx')
+	})
+
+	it('pure: does not mutate the input array (React Query structural sharing safety)', () => {
+		const lenBefore = existing.length
+		const firstRef = existing[0]
+		applyOptimisticBand(existing, newBand)
+		expect(existing).toHaveLength(lenBefore)
+		// Reference identity preserved on the element we didn't touch.
+		expect(existing[0]).toBe(firstRef)
+	})
+
+	it('empty previous → result is just [band]', () => {
+		const out = applyOptimisticBand([], newBand)
+		expect(out).toEqual([newBand])
 	})
 })

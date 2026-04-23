@@ -5,9 +5,12 @@ import { api } from '../../../lib/api.ts'
 import { type ApiError, errorFromResponse, extractApiError } from '../../../lib/api-errors.ts'
 import { logger } from '../../../lib/logger.ts'
 import {
+	applyOptimisticBand,
 	type BookingCreateDialogInput,
 	buildBookingCreateBody,
 	buildGuestCreateBody,
+	buildOptimisticBand,
+	type OptimisticBand,
 } from '../lib/booking-create.ts'
 
 /**
@@ -32,14 +35,6 @@ import {
  * lands in a stale cache entry and the user sees "band flicker"; we
  * prevent this by threading the window from Chessboard.
  */
-
-type GridBooking = {
-	id: string
-	roomTypeId: string
-	status: BookingStatus
-	checkIn: string
-	checkOut: string
-}
 
 export function useRatePlans(propertyId: string | null, roomTypeId: string | null) {
 	return useQuery({
@@ -123,15 +118,14 @@ export function useCreateBooking(propertyId: string | null, windowFrom: string, 
 			// Cancel any in-flight refetch so our optimistic write isn't
 			// overwritten by a stale response landing mid-mutation.
 			await queryClient.cancelQueries({ queryKey: bookingsKey })
-			const previous = queryClient.getQueryData<GridBooking[]>(bookingsKey) ?? []
-			const optimistic: GridBooking = {
-				id: `pending_${args.idempotencyKey}`,
+			const previous = queryClient.getQueryData<OptimisticBand[]>(bookingsKey) ?? []
+			const band = buildOptimisticBand({
+				idempotencyKey: args.idempotencyKey,
 				roomTypeId: args.input.roomTypeId,
-				status: 'confirmed',
 				checkIn: args.input.checkIn,
 				checkOut: args.input.checkOut,
-			}
-			queryClient.setQueryData<GridBooking[]>(bookingsKey, [...previous, optimistic])
+			})
+			queryClient.setQueryData<OptimisticBand[]>(bookingsKey, applyOptimisticBand(previous, band))
 			return { previous }
 		},
 		onError: (err: ApiError, _args, ctx) => {
