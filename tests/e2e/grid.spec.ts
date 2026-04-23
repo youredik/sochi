@@ -68,8 +68,29 @@ test.describe('reservation grid', () => {
 		await expect(page.locator('[aria-current="date"]')).toHaveCount(1)
 	})
 
-	test('cross-tenant URL /o/not-your-slug/grid redirects away (no leak)', async ({ page }) => {
+	test('cross-tenant URL /o/not-your-slug/grid redirects to own org (positive assert)', async ({
+		page,
+	}) => {
 		await page.goto('/o/definitely-not-your-org/grid')
-		await expect(page).not.toHaveURL(/definitely-not-your-org/)
+		// Positive assertion: must land on owner's OWN /o/e2e-hotel-…/ path,
+		// not just "anywhere but the adversarial slug". Prevents false-positive
+		// passes (e.g. blank page / error page that also lacks the slug).
+		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/?$/)
+	})
+
+	test('Назад button shifts window back (symmetric to Вперёд)', async ({ page }) => {
+		await page.goto('/')
+		await page.getByRole('link', { name: /Шахматка/ }).click()
+
+		const firstDateHeader = page.locator('[role="columnheader"]').nth(1)
+		const before = (await firstDateHeader.textContent())?.trim() ?? ''
+		expect(before.length).toBeGreaterThan(0)
+
+		await page.getByRole('button', { name: 'Предыдущие 15 дней' }).click()
+		await expect(firstDateHeader).not.toHaveText(before, { useInnerText: true })
+
+		// Go back to present — headers should match pre-Назад state.
+		await page.getByRole('button', { name: 'Следующие 15 дней' }).click()
+		await expect(firstDateHeader).toHaveText(before, { useInnerText: true })
 	})
 })
