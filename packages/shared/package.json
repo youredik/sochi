@@ -23,6 +23,10 @@
 		"./roomType": {
 			"types": "./src/roomType.ts",
 			"default": "./src/roomType.ts"
+		},
+		"./room": {
+			"types": "./src/room.ts",
+			"default": "./src/room.ts"
 		}
 	},
 	"publishConfig": {
@@ -46,6 +50,10 @@
 			"./roomType": {
 				"types": "./dist/roomType.d.ts",
 				"default": "./dist/roomType.js"
+			},
+			"./room": {
+				"types": "./dist/room.d.ts",
+				"default": "./dist/room.js"
 			}
 		}
 	},

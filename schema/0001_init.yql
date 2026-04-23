@@ -219,7 +219,7 @@ CREATE TABLE IF NOT EXISTS room (
     propertyId  Utf8 NOT NULL,
     roomTypeId  Utf8 NOT NULL,
     number      Utf8 NOT NULL,
-    floor       Int16,
+    floor       Int32,
     isActive    Bool NOT NULL,
     notes       Utf8,
     createdAt   Timestamp NOT NULL,

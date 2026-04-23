@@ -4,6 +4,8 @@ import { auth } from './auth.ts'
 import { sql } from './db/index.ts'
 import { createPropertyFactory } from './domains/property/property.factory.ts'
 import { createPropertyRoutes } from './domains/property/property.routes.ts'
+import { createRoomFactory } from './domains/room/room.factory.ts'
+import { createRoomRoutes } from './domains/room/room.routes.ts'
 import { createRoomTypeFactory } from './domains/roomType/roomType.factory.ts'
 import { createRoomTypeRoutes } from './domains/roomType/roomType.routes.ts'
 import { env } from './env.ts'
@@ -19,6 +21,7 @@ const app = new Hono<AppEnv>()
 // Domain factories (one place to wire sql → repo → service).
 const propertyFactory = createPropertyFactory(sql)
 const roomTypeFactory = createRoomTypeFactory(sql, propertyFactory.service)
+const roomFactory = createRoomFactory(sql, propertyFactory.service, roomTypeFactory.service)
 
 const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
 	.map((o) => o.trim())
@@ -43,6 +46,7 @@ app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 const routes = app
 	.route('/api/v1/properties', createPropertyRoutes(propertyFactory))
 	.route('/api/v1', createRoomTypeRoutes(roomTypeFactory))
+	.route('/api/v1', createRoomRoutes(roomFactory))
 	.get('/health', (c) =>
 		c.json(
 			{
