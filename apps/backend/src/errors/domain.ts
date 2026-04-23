@@ -133,5 +133,5 @@ export class IdempotencyKeyConflictError extends ConflictError {
 
 // IdempotencyKeyInProgressError (409) deferred to Phase 3 — requires a
 // true concurrent-detection mechanism (row-lock or 'processing' sentinel).
-// MVP tolerates the thin race window between SELECT-and-UPSERT in the
+// первый этап толерирует the thin race window between SELECT-and-UPSERT in the
 // idempotency middleware; revisit when real traffic shows contention.

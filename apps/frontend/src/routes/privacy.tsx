@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 
 /**
- * Privacy policy. MVP version — public access (no auth guard), ru-RU only,
+ * Privacy policy. начальная версия — public access (no auth guard), ru-RU only,
  * based on the Roskomnadzor template for small operators of personal data
  * under 152-ФЗ. This file is NOT a stub: the text below is the initial
  * real policy customers can sign via the /signup consent checkbox.

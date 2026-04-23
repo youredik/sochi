@@ -15,13 +15,13 @@ const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000
 /**
  * Better Auth instance for HoReCa.
  *
- * MVP constraints (explicit):
- *   - Only email + password. No magic link, no OAuth, no passkeys on MVP.
- *   - Email verification is OFF on MVP so owners can register and click around
+ * Launch constraints (explicit):
+ *   - Only email + password. No magic link, no OAuth, no passkeys на старте.
+ *   - Email verification is OFF на старте so owners can register and click around
  *     without an email round-trip. Turn ON before the first real customer.
  *   - Organization plugin owns multi-tenancy — organization.id == tenantId.
  *   - Roles: owner / manager / staff (see access-control.ts).
- *   - Users CAN create organizations on MVP. Once we have real customers this
+ *   - Users CAN create organizations на старте. Once we have real customers this
  *     should flip to invitation-only like stankoff-v2 does.
  *
  * ID generation: typeid with prefix per model (usr_, ses_, org_, …).

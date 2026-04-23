@@ -6,7 +6,7 @@ import { broadcastOrgChange } from '../lib/broadcast-auth.ts'
 
 /**
  * Organization chooser for users with 2+ orgs who land without an active
- * selection. For solo-owner MVP most users never see this screen — the
+ * selection. For solo-owner (первый этап) most users never see this screen — the
  * `_app` guard auto-selects when there's exactly one org.
  */
 export const Route = createFileRoute('/_app/o-select')({

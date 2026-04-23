@@ -3,7 +3,7 @@ import { idSchema } from './schemas.ts'
 
 /**
  * RatePlan — one sellable price-and-policy template for a specific roomType
- * within a property. The industry-standard base for Sochi MVP is two plans
+ * within a property. The industry-standard base for Sochi launch is two plans
  * per roomType: BAR-flexible (`BAR`) and BAR-non-refundable (`BAR-NR`).
  *
  * Per ARI model (see memory `project_horeca_domain_model.md`):

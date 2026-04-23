@@ -61,7 +61,7 @@ const idempotency = idempotencyMiddleware(createIdempotencyRepo(sql))
 
 // CDC consumer — populates the polymorphic `activity` table by diffing
 // oldImage/newImage from the `booking/booking_events` changefeed. Started
-// in-process for MVP; portable to a Serverless Container post-MVP without
+// in-process (первый этап); portable to a Serverless Container post-launch without
 // touching the writer side (ALTER TABLE ... ADD CHANGEFEED stays the
 // single source of truth). See memory `project_event_architecture.md`.
 // Consumer name registered via migration 0005.

@@ -6,7 +6,7 @@ import { messages as ruMessages } from '../../locales/ru/messages.po'
  *
  * - Catalog compiled on-the-fly by `@lingui/vite-plugin` — no separate
  *   `lingui compile` step in dev.
- * - ru-RU is the only MVP locale. Activation is synchronous to avoid a
+ * - ru-RU is the only начальный locale. Activation is synchronous to avoid a
  *   render-flash on first paint; when en/kz are added, use `loadLocale()`
  *   that dynamic-imports the catalog before calling `activate()`.
  * - Re-exported `i18n` singleton is the same reference the `<I18nProvider>`

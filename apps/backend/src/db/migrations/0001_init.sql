@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     INDEX idxUserEmail GLOBAL UNIQUE SYNC ON (email)
 );
 
--- 1.1.a. superAdmin — optional escalation table (empty on MVP; used by tooling).
+-- 1.1.a. superAdmin — optional escalation table (empty на старте; used by tooling).
 -- Kept out of the `user` table to not pollute Better Auth's model.
 CREATE TABLE IF NOT EXISTS superAdmin (
     userId      Utf8 NOT NULL,
@@ -68,7 +68,7 @@ WITH (
     TTL = Interval("PT0S") ON expiresAt
 );
 
--- 1.3. account — Better Auth credential providers (email+password on MVP).
+-- 1.3. account — Better Auth credential providers (email+password на старте).
 CREATE TABLE IF NOT EXISTS account (
     id                      Utf8 NOT NULL,
     userId                  Utf8 NOT NULL,
@@ -104,7 +104,7 @@ WITH (
 );
 
 -- 1.5. organization — our tenants. organization.id is tenantId everywhere else.
--- KEEP 1:1 with Better Auth organization model on MVP: it emits only
+-- KEEP 1:1 with Better Auth organization model на старте: it emits only
 -- name/slug/logo/metadata/createdAt on create (no updatedAt). Adding custom
 -- NOT NULL columns here breaks the adapter (it doesn't know to populate them).
 -- HoReCa-specific tenant data (inn, taxForm, plan, DPA consent, trial, dedicated DB)
@@ -338,7 +338,7 @@ CREATE TABLE IF NOT EXISTS booking (
     INDEX idxBookingAssignedRoom GLOBAL SYNC ON (tenantId, assignedRoomId, checkIn)
 );
 
--- 2.6. guest — guest personal info (manual input on MVP, no scans).
+-- 2.6. guest — guest personal info (manual input на старте, no scans).
 -- documentType: 'ruPassport' | 'foreignPassport' | 'ruDriverLicense' | 'militaryId'
 CREATE TABLE IF NOT EXISTS guest (
     tenantId             Utf8 NOT NULL,

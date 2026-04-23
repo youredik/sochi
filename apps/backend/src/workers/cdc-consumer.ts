@@ -103,7 +103,7 @@ export function createActivityCdcHandler(repo: ActivityRepo, objectType: Activit
 						tenantId: input.tenantId,
 						activityType: input.activityType,
 					},
-					'cdc-consumer: activity INSERT failed — continuing (no DLQ in MVP)',
+					'cdc-consumer: activity INSERT failed — continuing (no DLQ на старте)',
 				)
 			}
 		}

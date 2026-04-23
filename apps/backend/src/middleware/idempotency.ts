@@ -22,7 +22,7 @@ const MUTATING_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE'])
  *     IdempotencyKeyConflictError (§2.7).
  *   • Stored record absent → run handler, capture response, UPSERT.
  *
- * Concurrent-request 409 detection (§2.7) deferred to Phase 3: MVP
+ * Concurrent-request 409 detection (§2.7) deferred to Phase 3: первый этап
  * tolerates the SELECT-then-UPSERT race window. Row TTL = 24h native
  * YDB column TTL (migration 0004).
  */

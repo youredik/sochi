@@ -35,7 +35,7 @@ export const Route = createFileRoute('/_app')({
 			if (orgs.length === 0) {
 				// Edge case: session but no org (should not happen for fresh signup).
 				// Defensive — send to signup to re-create; alternative would be a
-				// dedicated /org/new but MVP keeps signup as the single creation path.
+				// dedicated /org/new but первый этап держит signup as the single creation path.
 				throw redirect({ to: '/signup' })
 			}
 			if (orgs.length === 1) {

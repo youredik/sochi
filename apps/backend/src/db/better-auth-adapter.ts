@@ -88,12 +88,12 @@ function ydbValue(model: string, field: string, value: unknown): unknown {
 // Index hints — YDB VIEW optimization for secondary index lookups
 // ---------------------------------------------------------------------------
 //
-// DISABLED on MVP. YDB Query Service + tagged-template `Object.assign(strings,
+// DISABLED на старте. YDB Query Service + tagged-template `Object.assign(strings,
 // {raw: strings})` hack + VIEW index clause → `SCHEME_ERROR 1030: Required
 // global index not found` (verified 2026-04-23, see project_ydb_specifics.md).
 // CLI path `ydb sql -s` with plain DECLARE works — this is a @ydbjs/query
 // tagged-template interop issue, not a schema problem. Better Auth tables
-// (user/session/account/...) are small on MVP and full scan is acceptable.
+// (user/session/account/...) are small на старте and full scan is acceptable.
 // When scaling matters, use native tagged-template in domain code where
 // VIEW works correctly (without the hack).
 //

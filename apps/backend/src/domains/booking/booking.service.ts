@@ -63,7 +63,7 @@ export function computeCancellationFeeSnapshot(
 	}
 	// Grace window expires `cancellationHours` before check-in. We store the
 	// calendar date (UTC) — calling systems can refine to wall-clock in the
-	// property's timezone; MVP keeps it simple and UTC-anchored.
+	// property's timezone; первый этап держит it simple and UTC-anchored.
 	const dueAt = new Date(`${checkInDate}T00:00:00Z`)
 	dueAt.setUTCHours(dueAt.getUTCHours() - rp.cancellationHours)
 	return {

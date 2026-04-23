@@ -4,7 +4,7 @@ import { formatter } from '@lingui/format-po'
 /**
  * Lingui v6 configuration.
  *
- * - ru-RU is the MVP locale. Future en/kz locales extracted to the same
+ * - ru-RU is the начальный locale. Future en/kz locales extracted to the same
  *   catalogs folder by running `pnpm lingui extract`.
  * - `.po` (gettext) format — translator-friendly, diff-clean in PRs.
  *   v6 breaking change: `format` is now a formatter *function* (not the

@@ -4,7 +4,7 @@ import { adminAc, defaultStatements, memberAc } from 'better-auth/plugins/organi
 /**
  * Role-based access control for organizations.
  *
- * Three roles on MVP:
+ * Three roles на старте:
  *   - owner   — founder / ИП / юрлицо. All permissions.
  *   - manager — property manager. Everything except billing / deleting org.
  *   - staff   — reception. Create/update bookings and guests only.
