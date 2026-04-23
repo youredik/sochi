@@ -22,7 +22,7 @@ function SignUpPage() {
 	return (
 		<main className="mx-auto max-w-sm px-6 py-16">
 			<h1 className="text-2xl font-semibold tracking-tight">Регистрация</h1>
-			<p className="mt-1 text-sm text-neutral-400">
+			<p className="mt-1 text-muted-foreground text-sm">
 				Создайте аккаунт и вашу первую гостиницу на платформе.
 			</p>
 			<div className="mt-8">

@@ -26,7 +26,7 @@ function LoginPage() {
 	return (
 		<main className="mx-auto max-w-sm px-6 py-16">
 			<h1 className="text-2xl font-semibold tracking-tight">Вход</h1>
-			<p className="mt-1 text-sm text-neutral-400">HoReCa-портал для Сочи</p>
+			<p className="mt-1 text-muted-foreground text-sm">HoReCa-портал для Сочи</p>
 			<div className="mt-8">
 				<SignInForm redirect={redirectTarget} />
 			</div>

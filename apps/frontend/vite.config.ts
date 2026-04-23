@@ -1,8 +1,12 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { lingui } from '@lingui/vite-plugin'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
 	plugins: [
@@ -21,7 +25,12 @@ export default defineConfig({
 		tailwindcss(),
 	],
 	resolve: {
-		tsconfigPaths: true,
+		alias: {
+			// Matches apps/frontend/tsconfig.json paths: { "@/*": ["./src/*"] }.
+			// shadcn components import via `@/lib/utils` and `@/components/...`;
+			// Vite needs an explicit alias (tsconfig paths are type-only).
+			'@': path.resolve(__dirname, './src'),
+		},
 	},
 	server: {
 		port: 5173,

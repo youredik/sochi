@@ -1,5 +1,9 @@
 import { Link } from '@tanstack/react-router'
 import { type FormEvent, useId, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useSignUp } from '../hooks/use-auth-mutations.ts'
 import type { LocalizedError } from '../lib/errors.ts'
 import { slugify } from '../lib/slugify.ts'
@@ -15,9 +19,9 @@ import { slugify } from '../lib/slugify.ts'
  * data for the subsequent МВД / tourism-tax reporting would be a direct
  * violation. See project_ru_compliance_blockers memory.
  *
- * Accessibility: full labels + aria-invalid/describedby + aria-live error;
- * `slug` is a readonly preview computed live from `orgName` so the user
- * sees the URL their property dashboard will live at before submitting.
+ * shadcn primitives (Button/Input/Label/Checkbox). Slug preview is a live
+ * readonly hint so the user sees their future `/o/{slug}/` URL before
+ * submitting — reduces support tickets about "where did my hotel go".
  */
 export function SignUpForm() {
 	const nameId = useId()
@@ -50,18 +54,16 @@ export function SignUpForm() {
 					id={errorId}
 					role="alert"
 					aria-live="polite"
-					className="rounded-md border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-200"
+					className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
 				>
 					<p className="font-medium">{error.title}</p>
-					{error.description ? <p className="mt-1 text-red-300/80">{error.description}</p> : null}
+					{error.description ? <p className="mt-1 opacity-80">{error.description}</p> : null}
 				</div>
 			) : null}
 
-			<div>
-				<label htmlFor={nameId} className="block text-sm font-medium text-neutral-200">
-					Ваше имя
-				</label>
-				<input
+			<div className="space-y-1.5">
+				<Label htmlFor={nameId}>Ваше имя</Label>
+				<Input
 					id={nameId}
 					type="text"
 					autoComplete="name"
@@ -72,15 +74,12 @@ export function SignUpForm() {
 					onChange={(e) => setName(e.target.value)}
 					aria-invalid={signUp.isError ? true : undefined}
 					aria-describedby={signUp.isError ? errorId : undefined}
-					className="mt-1.5 block w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
 				/>
 			</div>
 
-			<div>
-				<label htmlFor={emailId} className="block text-sm font-medium text-neutral-200">
-					Email
-				</label>
-				<input
+			<div className="space-y-1.5">
+				<Label htmlFor={emailId}>Email</Label>
+				<Input
 					id={emailId}
 					type="email"
 					autoComplete="email"
@@ -89,16 +88,13 @@ export function SignUpForm() {
 					onChange={(e) => setEmail(e.target.value)}
 					aria-invalid={signUp.isError ? true : undefined}
 					aria-describedby={signUp.isError ? errorId : undefined}
-					className="mt-1.5 block w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
 					placeholder="you@example.com"
 				/>
 			</div>
 
-			<div>
-				<label htmlFor={passwordId} className="block text-sm font-medium text-neutral-200">
-					Пароль
-				</label>
-				<input
+			<div className="space-y-1.5">
+				<Label htmlFor={passwordId}>Пароль</Label>
+				<Input
 					id={passwordId}
 					type="password"
 					autoComplete="new-password"
@@ -108,16 +104,13 @@ export function SignUpForm() {
 					onChange={(e) => setPassword(e.target.value)}
 					aria-invalid={signUp.isError ? true : undefined}
 					aria-describedby={signUp.isError ? errorId : undefined}
-					className="mt-1.5 block w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
 				/>
-				<p className="mt-1 text-xs text-neutral-500">Минимум 8 символов.</p>
+				<p className="text-xs text-muted-foreground">Минимум 8 символов.</p>
 			</div>
 
-			<div>
-				<label htmlFor={orgNameId} className="block text-sm font-medium text-neutral-200">
-					Название гостиницы
-				</label>
-				<input
+			<div className="space-y-1.5">
+				<Label htmlFor={orgNameId}>Название гостиницы</Label>
+				<Input
 					id={orgNameId}
 					type="text"
 					autoComplete="organization"
@@ -127,47 +120,45 @@ export function SignUpForm() {
 					value={orgName}
 					onChange={(e) => setOrgName(e.target.value)}
 					aria-describedby={slugId}
-					className="mt-1.5 block w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
 					placeholder="Гостиница Ромашка"
 				/>
-				<p id={slugId} className="mt-1 text-xs text-neutral-500">
-					Адрес кабинета:{' '}
-					<span className="font-mono text-neutral-400">/o/{slugPreview || '…'}</span>
+				<p id={slugId} className="text-xs text-muted-foreground">
+					Адрес кабинета: <span className="font-mono">/o/{slugPreview || '…'}</span>
 				</p>
 			</div>
 
 			<div className="flex items-start gap-2">
-				<input
+				<Checkbox
 					id={consentId}
-					type="checkbox"
 					checked={consent}
-					onChange={(e) => setConsent(e.target.checked)}
+					onCheckedChange={(v) => setConsent(v === true)}
 					required
-					className="mt-1 h-4 w-4 rounded border-neutral-600 bg-neutral-900 text-blue-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+					className="mt-0.5"
 				/>
-				<label htmlFor={consentId} className="text-sm text-neutral-300">
+				<Label htmlFor={consentId} className="text-sm font-normal leading-snug">
 					Даю согласие на обработку персональных данных в соответствии с{' '}
-					<Link to="/privacy" className="text-blue-400 hover:text-blue-300">
+					<Link to="/privacy" className="text-primary underline-offset-4 hover:underline">
 						политикой конфиденциальности
 					</Link>
 					.
-				</label>
+				</Label>
 			</div>
 
-			<button
+			<Button
 				type="submit"
+				size="lg"
+				className="w-full"
 				disabled={signUp.isPending || error?.blocking === true}
-				className="inline-flex w-full items-center justify-center rounded-md bg-neutral-100 px-4 py-2.5 text-sm font-medium text-neutral-900 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
 			>
 				{signUp.isPending ? 'Создаём…' : 'Создать аккаунт'}
-			</button>
+			</Button>
 
-			<p className="text-center text-sm text-neutral-400">
+			<p className="text-center text-sm text-muted-foreground">
 				Уже есть аккаунт?{' '}
 				<Link
 					to="/login"
 					search={{ redirect: undefined }}
-					className="text-blue-400 hover:text-blue-300"
+					className="text-primary underline-offset-4 hover:underline"
 				>
 					Войти
 				</Link>

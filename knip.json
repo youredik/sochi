@@ -4,7 +4,9 @@
 		"pino-pretty",
 		"tailwindcss",
 		"@lingui/cli",
-		"@fontsource-variable/geist"
+		"@fontsource-variable/geist",
+		"tw-animate-css",
+		"shadcn"
 	],
 	"workspaces": {
 		"apps/backend": {
