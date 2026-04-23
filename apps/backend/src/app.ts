@@ -32,6 +32,7 @@ import type { AppEnv } from './factory.ts'
 import { logger } from './logger.ts'
 import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
+import { createOtelIngest } from './otel-ingest.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
 
 /**
@@ -132,7 +133,10 @@ app.onError(onError)
 // We proxy all /api/auth/* requests to auth.handler; it handles method and body parsing.
 app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
+const otelIngest = createOtelIngest()
+
 const routes = app
+	.route('/api/otel', otelIngest)
 	.route('/api/v1/properties', createPropertyRoutes(propertyFactory))
 	.route('/api/v1', createRoomTypeRoutes(roomTypeFactory))
 	.route('/api/v1', createRoomRoutes(roomFactory))

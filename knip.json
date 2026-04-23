@@ -1,7 +1,10 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
 	"ignoreDependencies": [
-		"pino-pretty"
+		"pino-pretty",
+		"tailwindcss",
+		"@lingui/cli",
+		"@fontsource-variable/geist"
 	],
 	"workspaces": {
 		"apps/backend": {
@@ -10,7 +13,8 @@
 			"ignore": ["src/tests/**"]
 		},
 		"apps/frontend": {
-			"project": ["src/**/*.{ts,tsx}"]
+			"entry": ["lingui.config.ts"],
+			"project": ["src/**/*.{ts,tsx}", "*.ts"]
 		},
 		"packages/shared": {
 			"project": ["src/**/*.ts"],

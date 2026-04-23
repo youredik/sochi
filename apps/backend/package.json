@@ -7,6 +7,10 @@
 		"./app": {
 			"types": "./src/app.ts",
 			"default": "./src/app.ts"
+		},
+		"./auth": {
+			"types": "./src/auth.ts",
+			"default": "./src/auth.ts"
 		}
 	},
 	"files": [

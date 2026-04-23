@@ -61,7 +61,7 @@ export function createActivityRepo(sql: SqlInstance) {
 			const impersonatorUserId = input.impersonatorUserId ?? null
 			// YDB `@ydbjs/query` rejects bare JS null → bind via typed `NULL_TEXT`
 			// when absent. Present value binds as plain string (auto-inferred Utf8).
-			const impersonatorBind = impersonatorUserId === null ? NULL_TEXT : impersonatorUserId
+			const impersonatorBind = impersonatorUserId ?? NULL_TEXT
 			await sql`
 				UPSERT INTO activity (
 					\`tenantId\`, \`objectType\`, \`recordId\`, \`createdAt\`, \`id\`,
