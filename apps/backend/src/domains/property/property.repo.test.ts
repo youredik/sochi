@@ -365,4 +365,79 @@ describe('property.repo', { tags: ['db'], timeout: 30_000 }, () => {
 		const ghost = 'prop_11111111111111111111111111'
 		expect(await repo.delete(TENANT_A, ghost)).toBe(false)
 	})
+
+	// ---------------------------------------------------------------------------
+	// M4e: tourismTaxRateBps (nullable Int32) roundtrip invariants
+	// ---------------------------------------------------------------------------
+
+	test('[TaxRT1] create without tourismTaxRateBps → null (opt-out default)', async () => {
+		const p = await repo.create(TENANT_A, {
+			name: 'No-tax Property',
+			address: 'ул. Тестовая',
+			city: 'Other',
+		})
+		expect(p.tourismTaxRateBps).toBeNull()
+		const fetched = await repo.getById(TENANT_A, p.id)
+		expect(fetched?.tourismTaxRateBps).toBeNull()
+	})
+
+	test('[TaxRT2] create with tourismTaxRateBps=200 (Sochi 2026) roundtrips exactly', async () => {
+		const p = await repo.create(TENANT_A, {
+			name: 'Sochi Resort',
+			address: 'ул. Приморская',
+			city: 'Sochi',
+			tourismTaxRateBps: 200,
+		})
+		expect(p.tourismTaxRateBps).toBe(200)
+		const fetched = await repo.getById(TENANT_A, p.id)
+		expect(fetched?.tourismTaxRateBps).toBe(200)
+	})
+
+	test('[TaxRT3] update tourismTaxRateBps null → 200 sets value', async () => {
+		const p = await repo.create(TENANT_A, {
+			name: 'Upgrade',
+			address: 'ул. Тестовая',
+			city: 'Sochi',
+		})
+		const updated = await repo.update(TENANT_A, p.id, { tourismTaxRateBps: 200 })
+		expect(updated?.tourismTaxRateBps).toBe(200)
+		expect((await repo.getById(TENANT_A, p.id))?.tourismTaxRateBps).toBe(200)
+	})
+
+	test('[TaxRT4] update tourismTaxRateBps 200 → null CLEARS (null-patch semantic)', async () => {
+		const p = await repo.create(TENANT_A, {
+			name: 'Downgrade',
+			address: 'ул. Тестовая',
+			city: 'Sochi',
+			tourismTaxRateBps: 200,
+		})
+		const cleared = await repo.update(TENANT_A, p.id, { tourismTaxRateBps: null })
+		expect(cleared?.tourismTaxRateBps).toBeNull()
+		expect((await repo.getById(TENANT_A, p.id))?.tourismTaxRateBps).toBeNull()
+	})
+
+	test('[TaxRT5] update WITHOUT tourismTaxRateBps in patch keeps current value (undefined = no change)', async () => {
+		const p = await repo.create(TENANT_A, {
+			name: 'Stable',
+			address: 'ул. Тестовая',
+			city: 'Sochi',
+			tourismTaxRateBps: 200,
+		})
+		// Patch only name → rateBps stays 200.
+		const updated = await repo.update(TENANT_A, p.id, { name: 'Stable-Renamed' })
+		expect(updated?.tourismTaxRateBps).toBe(200)
+	})
+
+	test('[TaxRT6] future roadmap values 300 (2027) / 400 (2028) / 500 (2029 cap) all roundtrip', async () => {
+		for (const bps of [300, 400, 500]) {
+			const p = await repo.create(TENANT_A, {
+				name: `Rate-${bps}`,
+				address: 'ул. Future',
+				city: 'Sochi',
+				tourismTaxRateBps: bps,
+			})
+			expect(p.tourismTaxRateBps).toBe(bps)
+			expect((await repo.getById(TENANT_A, p.id))?.tourismTaxRateBps).toBe(bps)
+		}
+	})
 })

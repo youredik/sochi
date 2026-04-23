@@ -22,6 +22,27 @@
  *   [FP3] No-show: ANY (total, rp) → fee=total, dueDate=null,
  *         code='standardNoShow', independent of isRefundable / hours.
  *   [FP4] policyVersion is always `ratePlan.updatedAt` verbatim — no mutation.
+ *
+ * M4e — Tourism tax (НК РФ ст.418.5), example-based:
+ *   [TT1] Sochi 2026 rate 200 bps × 2 nights × 5000₽ → 2% proportional
+ *   [TT2] Low-base booking → ₽100/night floor kicks in, proportional loses
+ *   [TT3] High-base booking → proportional wins over floor
+ *   [TT4] rateBps=null (opt-out) → 0n, floor NOT applied
+ *   [TT5] nightsCount=0 → 0n
+ *   [TT6] rateBps=0 with nights>0 → floor still applies (literal NK reading)
+ *   [TT7] 2027 federal-roadmap rate 300 bps future-proofing
+ *
+ * M4e — Tourism tax, property-based:
+ *   [TTP1] result = max(proportional, floor) ALWAYS when rateBps !== null
+ *   [TTP2] rateBps=null invariant: tax is 0n across entire input space
+ *   [TTP3] nightsCount ≤ 0 invariant: tax is 0n across entire input space
+ *   [TTP4] monotonicity: doubling nights never decreases tax
+ *
+ * M4e — Registration status derivation:
+ *   [DR1] RU citizenship → 'notRequired'
+ *   [DR2] RUS (ISO alpha-3) → 'pending' (documented limitation — alpha-3 not mapped)
+ *   [DR3] Case-insensitive for 'RU'
+ *   [DR4] 9 foreign countries → all 'pending'
  */
 
 import { fc, test as pbTest } from '@fast-check/vitest'

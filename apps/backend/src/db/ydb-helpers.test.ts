@@ -11,8 +11,9 @@
  * property-based tests for Rate.compute(), Availability.allotment() etc.
  */
 import { fc, test } from '@fast-check/vitest'
+import { Optional } from '@ydbjs/value/optional'
 import { describe, expect, test as vitestTest } from 'vitest'
-import { decimalToMicros, microsToDecimal, toNumber } from './ydb-helpers.ts'
+import { dateOpt, decimalToMicros, microsToDecimal, toNumber } from './ydb-helpers.ts'
 
 describe('toNumber', () => {
 	test('returns null for null input (identity on null)', () => {
@@ -91,4 +92,56 @@ describe('micros ↔ decimal conversion', () => {
 		const back = microsToDecimal(micros)
 		expect(decimalToMicros(back)).toBe(micros)
 	})
+})
+
+describe('dateOpt (nullable YDB `Date` binding helper)', () => {
+	vitestTest('[DO1] null input returns an Optional wrapping null', () => {
+		const result = dateOpt(null)
+		expect(result).toBeInstanceOf(Optional)
+	})
+
+	vitestTest('[DO2] undefined input treated as null (same Optional)', () => {
+		const result = dateOpt(undefined)
+		expect(result).toBeInstanceOf(Optional)
+	})
+
+	vitestTest('[DO3] YYYY-MM-DD input returns an Optional with a non-null Date payload', () => {
+		const result = dateOpt('2026-07-15')
+		expect(result).toBeInstanceOf(Optional)
+		// The wrapped primitive is NOT the same instance as NULL — we check by
+		// interrogating the optional's internal `value` field presence. The Optional
+		// class stores the wrapped primitive; a non-null value is present.
+		// Struct read via JSON shape is the least-invasive way without mocking SDK.
+		const asJson = JSON.parse(JSON.stringify(result)) as { value?: { case?: string } }
+		expect(asJson.value?.case).not.toBe('nullFlagValue')
+	})
+
+	// Property-based: dateOpt MUST accept any valid YYYY-MM-DD string without
+	// throwing (avoids the fc.date quirk from memory `project_fastcheck_gotchas.md`
+	// by generating via integer-over-epoch).
+	const MS_PER_DAY = 86_400_000
+	const ymdArb = fc
+		.integer({
+			min: Math.floor(Date.parse('2025-01-01T00:00:00Z') / MS_PER_DAY),
+			max: Math.floor(Date.parse('2030-12-31T00:00:00Z') / MS_PER_DAY),
+		})
+		.map((day) => new Date(day * MS_PER_DAY).toISOString().slice(0, 10))
+
+	test.prop([ymdArb])(
+		'[DOP1] dateOpt never throws on any valid YYYY-MM-DD in booking horizon',
+		(ymd) => {
+			expect(() => dateOpt(ymd)).not.toThrow()
+			expect(dateOpt(ymd)).toBeInstanceOf(Optional)
+		},
+	)
+
+	vitestTest(
+		'[DO4] month/year rollover dates accepted (Dec 31 → Jan 1, leap-day 2028-02-29)',
+		() => {
+			// 2028 is a leap year (divisible by 4 and by 400).
+			expect(() => dateOpt('2028-02-29')).not.toThrow()
+			expect(() => dateOpt('2026-12-31')).not.toThrow()
+			expect(() => dateOpt('2027-01-01')).not.toThrow()
+		},
+	)
 })

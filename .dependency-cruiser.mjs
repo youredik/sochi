@@ -31,12 +31,21 @@ export default {
 		// `type { RoomTypeService }` to receive an injected instance via factory),
 		// so `dependencyTypesNot: ['type-only']` excludes them. Runtime
 		// cross-domain imports still fail this rule with an error.
+		//
+		// `*.integration.test.ts` files are exempted because integration tests
+		// legitimately orchestrate factories from multiple domains to prove
+		// end-to-end behavior (e.g. booking.service creating a reservation
+		// requires property + roomType + ratePlan + rate + availability
+		// factories to be wired). Production code is still locked in.
 		{
 			name: 'no-cross-domain',
 			comment:
-				'Domains must not import runtime code from other domains — use type-only imports for DI wiring.',
+				'Domains must not import runtime code from other domains — use type-only imports for DI wiring. Integration tests (*.integration.test.ts) are exempted.',
 			severity: 'error',
-			from: { path: '^apps/backend/src/domains/([^/]+)/' },
+			from: {
+				path: '^apps/backend/src/domains/([^/]+)/',
+				pathNot: '\\.integration\\.test\\.ts$',
+			},
 			to: {
 				path: '^apps/backend/src/domains/([^/]+)/',
 				pathNot: '^apps/backend/src/domains/$1/',
