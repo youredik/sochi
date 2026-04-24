@@ -119,6 +119,12 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		const dialog = page.getByRole('dialog')
 		await expect(dialog).toBeVisible()
 		await expect(dialog.getByRole('heading', { name: /Новое бронирование/ })).toBeVisible()
+		// Wait for ratePlan query to settle — until then, submit button is
+		// disabled (opacity-50), which axe flags as contrast violation from
+		// the blended computed color. Empirically: "тариф Базовый тариф"
+		// text in the description appears ONLY after ratePlan loaded.
+		await expect(dialog.getByText(/тариф Базовый тариф/)).toBeVisible()
+		await expect(dialog.getByRole('button', { name: /Создать бронирование/ })).toBeEnabled()
 
 		const results = await new AxeBuilder({ page })
 			.include('[role="dialog"]')
