@@ -253,27 +253,33 @@ export function Chessboard() {
 							gridTemplateColumns: `180px repeat(${dates.length}, minmax(40px, 1fr))`,
 						}}
 					>
-						{/* Header row: empty corner + date columns */}
-						<div
-							className="border-border bg-muted sticky top-0 left-0 z-20 border-r border-b p-2 font-medium"
-							role="columnheader"
-							aria-colindex={1}
-						>
-							Тип номера
-						</div>
-						{dates.map((d, i) => (
+						{/* Header row: empty corner + date columns. WRAPPED in
+						    role="row" — WCAG 1.3.1 requires gridcell/columnheader
+						    direct parent to be role="row". The wrapper uses CSS
+						    `display: contents` so its children continue to lay
+						    out as direct grid items (CSS grid ≠ ARIA structure). */}
+						<div role="row" aria-rowindex={1} className="contents">
 							<div
-								key={d}
-								className={`border-border bg-muted sticky top-0 z-10 border-b p-2 text-center font-medium ${
-									i === todayIdx ? 'bg-blue-100 text-blue-900' : ''
-								}`}
+								className="border-border bg-muted sticky top-0 left-0 z-20 border-r border-b p-2 font-medium"
 								role="columnheader"
-								aria-colindex={i + 2}
-								aria-current={i === todayIdx ? 'date' : undefined}
+								aria-colindex={1}
 							>
-								<div>{formatDateHeader(d)}</div>
+								Тип номера
 							</div>
-						))}
+							{dates.map((d, i) => (
+								<div
+									key={d}
+									className={`border-border bg-muted sticky top-0 z-10 border-b p-2 text-center font-medium ${
+										i === todayIdx ? 'bg-blue-100 text-blue-900' : ''
+									}`}
+									role="columnheader"
+									aria-colindex={i + 2}
+									aria-current={i === todayIdx ? 'date' : undefined}
+								>
+									<div>{formatDateHeader(d)}</div>
+								</div>
+							))}
+						</div>
 
 						{/* Room-type rows. Band cells use grid-column span + aria-colspan
 						    — 2026 canonical APG pattern (React Aria, AG Grid 2026).

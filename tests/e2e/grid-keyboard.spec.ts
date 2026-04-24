@@ -28,23 +28,27 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		await page.goto('/')
 		await page.getByRole('link', { name: /Шахматка/ }).click()
 		await expect(page).toHaveURL(/\/grid$/)
+		// Wait for grid + its initial tabStop cell to be present BEFORE
+		// starting the Tab dance. Without this, the test is racy — grid may
+		// still be rendering when we Tab, sending focus to <body>.
+		await expect(page.locator('[role="gridcell"][tabindex="0"]')).toBeAttached()
 
-		// Focus the "Вперёд →" nav button first (known tab stop before grid)
-		// and Tab until we land inside the grid.
+		// Invariant: the roving-tabindex pattern guarantees EXACTLY ONE cell
+		// with tabIndex=0 — the next Tab stop after the grid's preceding
+		// focusable (the "Вперёд →" button). So Tab from that button lands
+		// directly on the roving anchor.
 		await page.getByRole('button', { name: 'Следующие 15 дней' }).focus()
-
-		// Tab once — should land on the initial grid cell (tabIndex=0 per
-		// roving pattern).
 		await page.keyboard.press('Tab')
 
 		// The initial tab stop is row 0, first cell (aria-colindex=2).
-		const activeRole = await page.evaluate(() => document.activeElement?.getAttribute('role'))
-		expect(activeRole).toBe('gridcell')
-
-		const activeColIdx = await page.evaluate(() =>
-			document.activeElement?.getAttribute('aria-colindex'),
-		)
-		expect(activeColIdx).toBe('2')
+		const active = await page.evaluate(() => ({
+			role: document.activeElement?.getAttribute('role'),
+			col: document.activeElement?.getAttribute('aria-colindex'),
+			tabIndex: (document.activeElement as HTMLElement | null)?.tabIndex,
+		}))
+		expect(active.role).toBe('gridcell')
+		expect(active.tabIndex).toBe(0)
+		expect(active.col).toBe('2')
 	})
 
 	test('ArrowRight / ArrowLeft move focus within row; no wrap', async ({ page }) => {
