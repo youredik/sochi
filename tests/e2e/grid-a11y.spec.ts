@@ -41,21 +41,32 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		expect(results.violations).toEqual([])
 	})
 
-	test('grid with existing booking bands (colspan + palette variants) passes WCAG 2.2 AA', async ({
-		page,
-	}) => {
-		// Other tests in the run have already created multiple bands of
-		// various statuses (confirmed blue / in_house black / cancelled
-		// grey / no_show yellow / checked_out grey). We audit the grid
-		// AS-IS rather than creating a specific booking — covers the full
-		// palette variance without test-ordering coupling.
-		//
-		// Invariant: at least ONE band must be visible by the time this
-		// test runs (otherwise "colspan cell" coverage is a no-op). The
-		// runner enforces this because grid-keyboard + bookings-edit
-		// tests run BEFORE grid-a11y alphabetically.
+	test('grid with a booking band (colspan + palette) passes WCAG 2.2 AA', async ({ page }) => {
+		// Ensure AT LEAST ONE band is visible before scanning. Avoids
+		// test-ordering dependency by creating one IF absent — and picks
+		// the empty date deterministically from the CURRENT DOM (not a
+		// fixed offset that might collide with prior tests).
 		await page.goto('/')
 		await page.getByRole('link', { name: /Шахматка/ }).click()
+		// Wait for grid to finish loading (either bands OR empty cells are
+		// present, never neither).
+		await expect(page.locator('button[data-cell-date], [data-booking-id]').first()).toBeVisible()
+
+		const hasBand = (await page.locator('[data-booking-id]').count()) > 0
+		if (!hasBand) {
+			// First-run (no prior test bands): create one on whatever empty
+			// cell is first in DOM — no date assumption.
+			const emptyCell = page.locator('button[data-cell-date]').first()
+			await expect(emptyCell).toBeVisible()
+			await emptyCell.click()
+			const dialog = page.getByRole('dialog')
+			await expect(dialog).toBeVisible()
+			await dialog.getByLabel('Фамилия').fill('A11y')
+			await dialog.getByLabel('Имя').fill('Scan')
+			await dialog.getByLabel('Номер документа').fill('4510888000')
+			await dialog.getByRole('button', { name: /Создать бронирование/ }).click()
+			await expect(page.getByText('Бронирование создано')).toBeVisible()
+		}
 		await expect(page.locator('[data-booking-id]').first()).toBeVisible()
 
 		const results = await new AxeBuilder({ page })
@@ -90,6 +101,62 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 
 		if (results.violations.length > 0) {
 			console.error('axe violations (focused cell):', JSON.stringify(results.violations, null, 2))
+		}
+		expect(results.violations).toEqual([])
+	})
+
+	test('booking-CREATE dialog passes WCAG 2.2 AA (labels, focus, contrast)', async ({ page }) => {
+		// Dialog a11y: distinct from grid — tests DialogContent structure,
+		// form-field label associations, submit button name, close button
+		// (aria-label="Закрыть" on X icon), focus trap. Scope the scan to
+		// the role=dialog surface so other page chrome doesn't mask findings.
+		await page.goto('/')
+		await page.getByRole('link', { name: /Шахматка/ }).click()
+
+		// Click any empty cell — test-order-independent (the first data-cell-
+		// date in DOM is always the first empty cell in row 0).
+		await page.locator('button[data-cell-date]').first().click()
+		const dialog = page.getByRole('dialog')
+		await expect(dialog).toBeVisible()
+		await expect(dialog.getByRole('heading', { name: /Новое бронирование/ })).toBeVisible()
+
+		const results = await new AxeBuilder({ page })
+			.include('[role="dialog"]')
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+
+		if (results.violations.length > 0) {
+			console.error('axe violations (create dialog):', JSON.stringify(results.violations, null, 2))
+		}
+		expect(results.violations).toEqual([])
+	})
+
+	test('booking-EDIT dialog passes WCAG 2.2 AA (action buttons + state-machine labels)', async ({
+		page,
+	}) => {
+		// Edit dialog a11y — opens on an existing band. Prior tests leave
+		// bands in various statuses (confirmed / in_house / cancelled / …).
+		// Pick the FIRST band in DOM and open its edit dialog.
+		await page.goto('/')
+		await page.getByRole('link', { name: /Шахматка/ }).click()
+
+		const firstBand = page.locator('[data-booking-id]').first()
+		await expect(firstBand).toBeVisible()
+		await firstBand.click()
+
+		const dialog = page.getByRole('dialog')
+		await expect(dialog).toBeVisible()
+		// Either TerminalView ("Бронь завершена") or ActionView ("Бронь:") —
+		// both pass through the same Dialog primitive so scan either.
+		await expect(dialog.getByRole('heading')).toBeVisible()
+
+		const results = await new AxeBuilder({ page })
+			.include('[role="dialog"]')
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+
+		if (results.violations.length > 0) {
+			console.error('axe violations (edit dialog):', JSON.stringify(results.violations, null, 2))
 		}
 		expect(results.violations).toEqual([])
 	})

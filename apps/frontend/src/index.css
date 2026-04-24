@@ -18,7 +18,11 @@
 	--secondary: oklch(0.97 0 0);
 	--secondary-foreground: oklch(0.205 0 0);
 	--muted: oklch(0.97 0 0);
-	--muted-foreground: oklch(0.556 0 0);
+	/* muted-foreground darkened from shadcn default 0.556 → 0.45 (≈ #6e6e6e)
+	 * to meet WCAG 2.2 AA 4.5:1 on both bg-background (white) AND
+	 * bg-muted (#f5f5f5). Default 0.556 gave 3.95:1 on Input's computed
+	 * bg — axe-core caught during dialog scan 2026-04-24. */
+	--muted-foreground: oklch(0.45 0 0);
 	--accent: oklch(0.97 0 0);
 	--accent-foreground: oklch(0.205 0 0);
 	--destructive: oklch(0.577 0.245 27.325);

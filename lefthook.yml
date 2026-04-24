@@ -43,8 +43,10 @@ pre-push:
     - name: smoke
       run: pnpm smoke
     - name: e2e-smoke
-      # Playwright browser smoke — signup, adversarial auth paths (wrong
-      # password, anonymous→protected redirect, authed inverse-guard,
-      # cross-tenant, consent-required signup, public /privacy), logout.
-      # Budget ~15s with reused dev servers. Full 11-assertion run today.
+      # Playwright full suite (all .spec.ts files via chromium project).
+      # Covers: auth adversarial, wizard flow, reservation grid (keyboard +
+      # read), booking create + edit state-machine, cross-tenant probes,
+      # and @axe-core/playwright WCAG 2.2 AA gate (grid-a11y.spec.ts —
+      # ANY axe violation blocks the push, empirical compliance proof).
+      # Full run ~45s with reused dev servers.
       run: pnpm e2e:smoke
