@@ -26,7 +26,7 @@ export function OrgSwitcher() {
 	if (isLoading || active === null) return null
 
 	if (orgs.length <= 1) {
-		return <span className="text-sm font-medium text-neutral-200">{active.name}</span>
+		return <span className="text-sm font-medium text-foreground">{active.name}</span>
 	}
 
 	const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -44,12 +44,12 @@ export function OrgSwitcher() {
 	}
 
 	return (
-		<label className="flex items-center gap-2 text-sm text-neutral-300">
+		<label className="flex items-center gap-2 text-sm text-foreground">
 			<span className="sr-only">Организация</span>
 			<select
 				value={active.id}
 				onChange={handleChange}
-				className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+				className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 			>
 				{orgs.map((o) => (
 					<option key={o.id} value={o.id}>

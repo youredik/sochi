@@ -33,7 +33,7 @@ function OrgSelect() {
 				У вас несколько организаций. Выберите, с какой продолжить работу.
 			</p>
 			{isPending ? (
-				<p className="mt-8 text-sm text-neutral-500">Загружаем…</p>
+				<p className="mt-8 text-sm text-muted-foreground">Загружаем…</p>
 			) : (
 				<ul className="mt-8 space-y-2">
 					{orgs.map((o) => (
@@ -41,10 +41,10 @@ function OrgSelect() {
 							<button
 								type="button"
 								onClick={() => choose(o.id, o.slug)}
-								className="flex w-full items-center justify-between rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3 text-left text-sm text-neutral-100 hover:border-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+								className="flex w-full items-center justify-between rounded-md border border-border bg-card px-4 py-3 text-left text-sm text-card-foreground hover:border-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 							>
 								<span className="font-medium">{o.name}</span>
-								<span className="font-mono text-xs text-neutral-500">/o/{o.slug}</span>
+								<span className="font-mono text-xs text-muted-foreground">/o/{o.slug}</span>
 							</button>
 						</li>
 					))}

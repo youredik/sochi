@@ -68,11 +68,11 @@ function TenantHome() {
 
 			<footer className="border-border text-muted-foreground mt-12 border-t pt-4 text-xs">
 				Статус бэкенда:{' '}
-				<span className={health.data?.status === 'ok' ? 'text-emerald-600' : 'text-amber-600'}>
+				<span className={health.data?.status === 'ok' ? 'text-emerald-700' : 'text-amber-700'}>
 					{health.data?.status ?? '…'}
 				</span>{' '}
 				· YDB:{' '}
-				<span className={health.data?.ydb.connected ? 'text-emerald-600' : 'text-destructive'}>
+				<span className={health.data?.ydb.connected ? 'text-emerald-700' : 'text-destructive'}>
 					{health.data?.ydb.connected ? 'connected' : 'disconnected'}
 				</span>
 			</footer>

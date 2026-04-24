@@ -90,7 +90,7 @@ export function SignInForm({ redirect }: { redirect?: string | undefined }) {
 
 			<p className="text-center text-sm text-muted-foreground">
 				Нет аккаунта?{' '}
-				<Link to="/signup" className="text-primary underline-offset-4 hover:underline">
+				<Link to="/signup" className="text-primary underline underline-offset-4 hover:no-underline">
 					Зарегистрироваться
 				</Link>
 			</p>

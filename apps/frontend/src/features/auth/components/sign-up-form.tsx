@@ -137,7 +137,10 @@ export function SignUpForm() {
 				/>
 				<Label htmlFor={consentId} className="text-sm font-normal leading-snug">
 					Даю согласие на обработку персональных данных в соответствии с{' '}
-					<Link to="/privacy" className="text-primary underline-offset-4 hover:underline">
+					<Link
+						to="/privacy"
+						className="text-primary underline underline-offset-4 hover:no-underline"
+					>
 						политикой конфиденциальности
 					</Link>
 					.
@@ -158,7 +161,7 @@ export function SignUpForm() {
 				<Link
 					to="/login"
 					search={{ redirect: undefined }}
-					className="text-primary underline-offset-4 hover:underline"
+					className="text-primary underline underline-offset-4 hover:no-underline"
 				>
 					Войти
 				</Link>

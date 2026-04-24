@@ -22,7 +22,11 @@ const buttonVariants = cva(
         // shadcn convention for critical actions (cancel booking, delete).
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+        // Always underlined for link-in-text a11y (WCAG 1.4.1 Use of Color):
+        // relying on color alone to distinguish links from surrounding text
+        // fails when link text's contrast vs surrounding text < 3:1. Hover
+        // removes underline as affordance feedback.
+        link: "text-primary underline underline-offset-4 hover:no-underline",
       },
       size: {
         default:

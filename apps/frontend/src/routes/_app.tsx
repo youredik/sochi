@@ -77,9 +77,9 @@ function AppLayout() {
 
 	return (
 		<div className="flex min-h-screen flex-col">
-			<header className="border-b border-neutral-800 bg-neutral-950/80 backdrop-blur">
+			<header className="border-b border-border bg-background/80 backdrop-blur">
 				<div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
-					<span className="text-sm font-semibold tracking-tight text-neutral-100">HoReCa</span>
+					<span className="text-sm font-semibold tracking-tight text-foreground">HoReCa</span>
 					<div className="flex items-center gap-4">
 						<OrgSwitcher />
 						<LogoutButton />

@@ -20,17 +20,10 @@
 --    suffices for the audit-log UI.
 ALTER TABLE activity ADD COLUMN impersonatorUserId Utf8?;
 
--- 2. superAdmin table — allow-list for platform ops / support. Separate
---    from tenant `user` / `member` so role escalation requires an explicit
---    row here, not a column flip on a regular user. Seeded post-deploy
---    via `yc` CLI or a protected migration seed; empty in local dev.
---
---    No TTL — super-admins persist until explicitly removed. `note` is
---    free-form ("Ivanov, 1st-line support") for audit clarity; surface it
---    in impersonation trail rendering.
-CREATE TABLE superAdmin (
-    userId    Utf8 NOT NULL,
-    createdAt Timestamp NOT NULL,
-    note      Utf8,
-    PRIMARY KEY (userId)
-);
+-- NOTE: superAdmin table is ALREADY created in 0001_init.sql with schema
+-- (userId PK, grantedAt, grantedBy). This migration originally tried to
+-- CREATE it again with a different schema (createdAt, note), which fails
+-- on a fresh DB because 0001 ran first. Removed the duplicate CREATE —
+-- impersonation schema only needs the activity.impersonatorUserId column.
+-- Caught 2026-04-24 when docker compose down -v + migrate surfaced the
+-- conflict.

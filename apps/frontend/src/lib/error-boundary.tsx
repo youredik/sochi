@@ -61,16 +61,16 @@ export class ErrorBoundary extends Component<Props, State> {
 				<div
 					role="alert"
 					aria-live="assertive"
-					className="mx-auto max-w-md px-6 py-16 text-neutral-100"
+					className="mx-auto max-w-md px-6 py-16 text-foreground"
 				>
 					<h1 className="text-2xl font-semibold">Что-то пошло не так</h1>
-					<p className="mt-3 text-sm text-neutral-400">
+					<p className="mt-3 text-sm text-muted-foreground">
 						Мы записали ошибку и уже работаем над ней. Попробуйте обновить страницу.
 					</p>
 					<button
 						type="button"
 						onClick={this.handleReload}
-						className="mt-6 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+						className="mt-6 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 					>
 						Обновить страницу
 					</button>
