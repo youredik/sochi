@@ -236,4 +236,117 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		// Active element is now OUTSIDE the grid — not a gridcell.
 		expect(activeRole).not.toBe('gridcell')
 	})
+
+	test('PageDown/PageUp: handler fires + focus stays in grid (not browser scroll)', async ({
+		page,
+	}) => {
+		await page.goto('/')
+		await page.getByRole('link', { name: /Шахматка/ }).click()
+
+		const firstCell = page.locator('[role="gridcell"][aria-colindex="2"]').first()
+		await firstCell.focus()
+
+		// PageDown default browser behavior: scrolls viewport DOWN. Our handler
+		// calls preventDefault() on the recognized key, so the browser scroll
+		// is suppressed. Assert:
+		//  (a) focus remains on a gridcell (not scrolled away)
+		//  (b) window.scrollY did not change (preventDefault effective)
+		const scrollBefore = await page.evaluate(() => window.scrollY)
+		await page.keyboard.press('PageDown')
+		const afterDown = await page.evaluate(() => ({
+			scroll: window.scrollY,
+			role: document.activeElement?.getAttribute('role'),
+			col: document.activeElement?.getAttribute('aria-colindex'),
+		}))
+		expect(afterDown.role).toBe('gridcell')
+		expect(afterDown.scroll).toBe(scrollBefore) // preventDefault worked
+		// With only 1 roomType row, PageDown clamps at row 0 — column preserved.
+		expect(afterDown.col).toBe('2')
+
+		await page.keyboard.press('PageUp')
+		const afterUp = await page.evaluate(() => ({
+			role: document.activeElement?.getAttribute('role'),
+			col: document.activeElement?.getAttribute('aria-colindex'),
+		}))
+		expect(afterUp.role).toBe('gridcell')
+		expect(afterUp.col).toBe('2')
+	})
+
+	test('Enter on focused BAND opens edit dialog (parity with empty-cell Enter)', async ({
+		page,
+	}) => {
+		// Create a booking FIRST so there's a band to focus. Use day 0 (today)
+		// to keep this test independent from other date-offset tests.
+		await page.goto('/')
+		await page.getByRole('link', { name: /Шахматка/ }).click()
+
+		const targetDate = futureIso(0)
+		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
+		const createDialog = page.getByRole('dialog')
+		await expect(createDialog).toBeVisible()
+		await createDialog.getByLabel('Фамилия').fill('Клавиатура')
+		await createDialog.getByLabel('Имя').fill('Тест')
+		await createDialog.getByLabel('Номер документа').fill('4510555000')
+		await createDialog.getByRole('button', { name: /Создать бронирование/ }).click()
+		await expect(page.getByText('Бронирование создано')).toBeVisible()
+		await expect(createDialog).not.toBeVisible()
+
+		// Focus the newly-created band and hit Enter — should open EDIT dialog.
+		const band = page.locator(`[data-booking-id][aria-label*="${targetDate} —"]`)
+		await band.focus()
+		await page.keyboard.press('Enter')
+
+		const editDialog = page.getByRole('dialog')
+		await expect(editDialog).toBeVisible()
+		await expect(editDialog.getByRole('heading', { name: /Бронь:.+Подтверждена/ })).toBeVisible()
+		// Close dialog to not pollute downstream tests.
+		await editDialog.locator('[aria-label="Закрыть"]').click()
+		await expect(editDialog).not.toBeVisible()
+	})
+
+	test('focus return after dialog close: roving tabindex preserved', async ({ page }) => {
+		await page.goto('/')
+		await page.getByRole('link', { name: /Шахматка/ }).click()
+
+		// Arrow away from initial position so we know focus has actually moved
+		// before opening the dialog.
+		const firstCell = page.locator('[role="gridcell"][aria-colindex="2"]').first()
+		await firstCell.focus()
+		await page.keyboard.press('ArrowRight')
+		await page.keyboard.press('ArrowRight')
+		const beforeCol = await page.evaluate(() =>
+			document.activeElement?.getAttribute('aria-colindex'),
+		)
+		expect(beforeCol).toBe('4')
+
+		// Open create dialog via Enter
+		await page.keyboard.press('Enter')
+		const dialog = page.getByRole('dialog')
+		await expect(dialog).toBeVisible()
+
+		// Close via Escape (Radix Dialog handles natively, returns focus to trigger)
+		await page.keyboard.press('Escape')
+		await expect(dialog).not.toBeVisible()
+
+		// Real invariant: roving tabindex state (our React useState) must
+		// remember (0, 4). Verify by directly focusing col=4 cell via its
+		// tabIndex=0 attribute — only ONE cell has tabIndex=0 in roving
+		// pattern, and it must still be col 4. Then ArrowRight advances
+		// to col 5.
+		const tabStopCol = await page.evaluate(() => {
+			const cells = Array.from(document.querySelectorAll('[role="gridcell"][tabindex="0"]'))
+			return cells[0]?.getAttribute('aria-colindex') ?? null
+		})
+		expect(tabStopCol).toBe('4')
+
+		// Focus that cell deterministically (Radix may or may not have
+		// restored focus exactly here in headless Chromium — we assert
+		// state, not browser behavior).
+		await page.locator('[role="gridcell"][tabindex="0"]').focus()
+		await page.keyboard.press('ArrowRight')
+		const afterArrow = await page.evaluate(() =>
+			document.activeElement?.getAttribute('aria-colindex'),
+		)
+		expect(afterArrow).toBe('5')
+	})
 })

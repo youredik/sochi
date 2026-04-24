@@ -119,6 +119,24 @@ export function nextFocusPosition(
 	action: NavAction,
 ): FocusPosition {
 	if (model.rows.length === 0) return current
+
+	// Absolute-position actions ignore current position entirely — handle
+	// FIRST so stale/invalid `current.rowIdx` (e.g. caller had row 5 in
+	// state but roomType was deleted, shrinking grid to 3 rows) still
+	// lands correctly. Without this, ctrl-home/end would fall through to
+	// the `if (!row) return current` guard and silently no-op.
+	if (action === 'ctrl-home') {
+		const firstRow = model.rows[0]
+		const firstCol = firstRow?.cellStarts[0]
+		return firstCol !== undefined ? { rowIdx: 0, colIdx: firstCol } : current
+	}
+	if (action === 'ctrl-end') {
+		const lastRowIdx = model.rows.length - 1
+		const lastRow = model.rows[lastRowIdx]
+		const lastCol = lastRow?.cellStarts[lastRow.cellStarts.length - 1]
+		return lastCol !== undefined ? { rowIdx: lastRowIdx, colIdx: lastCol } : current
+	}
+
 	const row = model.rows[current.rowIdx]
 	if (!row) return current
 
@@ -127,7 +145,10 @@ export function nextFocusPosition(
 	// Index within cellStarts of the current cell.
 	const currentIdx = row.cellStarts.indexOf(startColIdx)
 
-	switch (action) {
+	// Narrow the action type — ctrl-home/ctrl-end are already handled via
+	// early returns above, so the switch handles only the remaining 8.
+	const relativeAction: Exclude<NavAction, 'ctrl-home' | 'ctrl-end'> = action
+	switch (relativeAction) {
 		case 'left': {
 			if (currentIdx <= 0) return { rowIdx: current.rowIdx, colIdx: startColIdx }
 			const prevStart = row.cellStarts[currentIdx - 1]
@@ -151,17 +172,6 @@ export function nextFocusPosition(
 		case 'end': {
 			const last = row.cellStarts[row.cellStarts.length - 1]
 			return last !== undefined ? { rowIdx: current.rowIdx, colIdx: last } : current
-		}
-		case 'ctrl-home': {
-			const firstRow = model.rows[0]
-			const firstCol = firstRow?.cellStarts[0]
-			return firstCol !== undefined ? { rowIdx: 0, colIdx: firstCol } : current
-		}
-		case 'ctrl-end': {
-			const lastRowIdx = model.rows.length - 1
-			const lastRow = model.rows[lastRowIdx]
-			const lastCol = lastRow?.cellStarts[lastRow.cellStarts.length - 1]
-			return lastCol !== undefined ? { rowIdx: lastRowIdx, colIdx: lastCol } : current
 		}
 		case 'page-up':
 			return moveVertically(model, current.rowIdx, startColIdx, -model.pageStep)

@@ -345,6 +345,78 @@ describe('nextFocusPosition — adversarial + edge cases', () => {
 	})
 })
 
+// ---------- Adversarial: invalid FocusPosition inputs ----------
+
+describe('nextFocusPosition — adversarial invalid input guards (never throw)', () => {
+	const pos = (rowIdx: number, colIdx: number): FocusPosition => ({ rowIdx, colIdx })
+
+	it('rowIdx >= rows.length: every action returns current (no crash, no undefined)', () => {
+		// Caller race: grid shrinks (roomType deleted) while focus state holds
+		// stale rowIdx. Must not throw — just no-op.
+		const stale = pos(99, 3)
+		for (const action of [
+			'left',
+			'right',
+			'up',
+			'down',
+			'home',
+			'end',
+			'ctrl-home',
+			'ctrl-end',
+			'page-up',
+			'page-down',
+		] as const) {
+			const result = nextFocusPosition(model3Rows, stale, action)
+			// ctrl-home/end are absolute — they IGNORE current and jump to
+			// known corners. All other actions clamp to current position.
+			if (action === 'ctrl-home') {
+				expect(result).toEqual(pos(0, 2))
+			} else if (action === 'ctrl-end') {
+				expect(result.rowIdx).toBe(2)
+			} else {
+				expect(result).toEqual(stale)
+			}
+		}
+	})
+
+	it('negative rowIdx: same safety as >= length', () => {
+		const stale = pos(-5, 3)
+		const result = nextFocusPosition(model3Rows, stale, 'right')
+		// Left/right/up/down on an invalid row → no-op (returns current).
+		// This is defensive: in practice React state never produces negative
+		// rowIdx, but pure functions must not trust inputs.
+		expect(result).toEqual(stale)
+	})
+
+	it('colIdx out of range (past last cell): resolveContainingStart picks last cell, then navigates', () => {
+		// model3Rows row 0 has cellStarts [2,3,4,5,6]. colIdx=99 → resolves
+		// to last start (6). Left from "6" → 5.
+		expect(nextFocusPosition(model3Rows, pos(0, 99), 'left')).toEqual(pos(0, 5))
+	})
+
+	it('colIdx below first cell (e.g. 0 or 1): resolves to first cell, then navigates', () => {
+		// row 0 cellStarts [2,3,4,5,6]. colIdx=1 → resolves to first start (2).
+		expect(nextFocusPosition(model3Rows, pos(0, 1), 'right')).toEqual(pos(0, 3))
+	})
+
+	it('model with zero-span cells in a row: does not infinite-loop or throw', () => {
+		// Pathological input — cellSpans[i]=0 shouldn't happen but pure fn
+		// must be total. Loop in resolveContainingStart advances i each
+		// iteration regardless of span, so no infinite loop.
+		const degenerate: GridNavModel = {
+			rows: [{ cellStarts: [2, 3], cellSpans: [0, 1] }],
+			pageStep: 5,
+		}
+		expect(() => nextFocusPosition(degenerate, pos(0, 2), 'right')).not.toThrow()
+	})
+
+	it('current position ON a row that exists in model (valid): sanity — no-op for safety clamps elsewhere', () => {
+		// Anti-regression: ensure the out-of-bounds guards don't break valid
+		// inputs. This is the happy-path sibling of the adversarial tests.
+		expect(nextFocusPosition(model3Rows, pos(0, 3), 'right')).toEqual(pos(0, 4))
+	})
+})
+
 // ---------- Cross-cutting: action enum coverage ----------
 
 describe('NavAction enum coverage (hunt missing action handler)', () => {
