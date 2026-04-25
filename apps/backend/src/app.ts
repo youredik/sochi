@@ -42,6 +42,7 @@ import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
 import { createOtelIngest } from './otel-ingest.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
+import { createCancelFeeFinalizerHandler } from './workers/handlers/cancel-fee-finalizer.ts'
 import { createCheckoutFinalizerHandler } from './workers/handlers/checkout-finalizer.ts'
 import { createFolioBalanceHandler } from './workers/handlers/folio-balance.ts'
 import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
@@ -208,6 +209,17 @@ const tourismTaxConsumer = startCdcConsumer(driver, sql, {
 	label: 'tourism_tax:booking',
 })
 
+// cancel_fee_writer on booking — post cancellation/no-show fee from booking
+// snapshot at status → cancelled / no_show. Fee snapshotted at booking creation
+// per rate plan policy (Apaleo canon — guest sees policy active when booking).
+// Idempotent via deterministic folioLine.id `cancelFee_/noShowFee_<bookingId>`.
+const cancelFeeConsumer = startCdcConsumer(driver, sql, {
+	topic: 'booking/booking_events',
+	consumer: 'cancel_fee_writer',
+	projection: createCancelFeeFinalizerHandler(logger),
+	label: 'cancel_fee:booking',
+})
+
 // Night-audit cron — posts per-night accommodation lines on `in_house`
 // bookings at 03:00 Europe/Moscow. Boot catch-up handles restart-during-window
 // gaps. Idempotent via deterministic folioLine.id (PK collision = no-op).
@@ -230,6 +242,7 @@ const allCdcConsumers = [
 	refundCreatorConsumer,
 	folioCreatorConsumer,
 	tourismTaxConsumer,
+	cancelFeeConsumer,
 ] as const
 
 // Graceful shutdown: SIGTERM (Serverless Container / K8s) drains the CDC
