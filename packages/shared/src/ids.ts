@@ -23,6 +23,17 @@ export const ID_PREFIXES = {
 	webhook: 'wh',
 	migrationReport: 'mvd',
 	consent: 'cns',
+	// Payment domain (M6, 2026-04-25 — see project_payment_domain_canonical.md)
+	folio: 'fol',
+	folioLine: 'fln',
+	payment: 'pay',
+	refund: 'ref',
+	receipt: 'rcp',
+	dispute: 'dsp',
+	routingRule: 'rrl',
+	paymentWebhookEvent: 'pwe',
+	// Notification outbox (M6.5B, 2026-04-25)
+	notification: 'ntf',
 } as const
 
 export type EntityKind = keyof typeof ID_PREFIXES

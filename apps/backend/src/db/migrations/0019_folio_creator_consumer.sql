@@ -1,0 +1,16 @@
+-- M7.A.1 — folio_creator CDC consumer registration.
+--
+-- Auto-create a `guest` folio when a new `booking` row is committed.
+-- Listens on the existing `booking/booking_events` changefeed (added in
+-- migration 0004). New consumer name `folio_creator_writer`.
+--
+-- Trigger: INSERT events only. UPDATE/DELETE skipped (folio lifecycle is
+-- independent — closed/settled transitions don't relate to booking edits).
+--
+-- Idempotency: pre-check via `ixFolioBooking` (tenantId, bookingId). If any
+-- folio already exists for the booking — skip. Mirrors the
+-- `refund_creator_writer` pattern (canonical CDC dedup at projection time).
+--
+-- Per Apaleo canon: folio created upfront on reservation create, charges
+-- accumulate via night-audit cron later (M7.A.2).
+ALTER TOPIC `booking/booking_events` ADD CONSUMER `folio_creator_writer`;

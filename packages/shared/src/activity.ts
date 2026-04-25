@@ -27,6 +27,12 @@ const activityObjectTypeValues = [
 	'availability',
 	'rate',
 	'guest',
+	// Payment domain (M6.5, 2026-04-25 — see project_payment_domain_canonical.md)
+	'folio',
+	'payment',
+	'refund',
+	'receipt',
+	'dispute',
 ] as const
 export const activityObjectTypeSchema = z.enum(activityObjectTypeValues)
 export type ActivityObjectType = z.infer<typeof activityObjectTypeSchema>

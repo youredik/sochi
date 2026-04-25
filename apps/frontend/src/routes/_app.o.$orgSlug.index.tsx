@@ -58,12 +58,16 @@ function TenantHome() {
 						Посмотреть 15-дневное окно бронирований по типам номеров.
 					</p>
 				</Link>
-				<div className="border-border bg-card rounded-lg border p-6">
-					<h2 className="text-muted-foreground text-sm font-medium">Бронирования</h2>
+				<Link
+					to="/o/$orgSlug/receivables"
+					params={{ orgSlug: organization.slug }}
+					className="border-border bg-card hover:border-primary rounded-lg border p-6 transition-colors"
+				>
+					<h2 className="font-medium">Дебиторка</h2>
 					<p className="text-muted-foreground mt-2 text-sm">
-						Создание и редактирование — в следующей фазе (M5e).
+						Открытые счета с положительным балансом, KPI и aging-разрез.
 					</p>
-				</div>
+				</Link>
 			</section>
 
 			<footer className="border-border text-muted-foreground mt-12 border-t pt-4 text-xs">

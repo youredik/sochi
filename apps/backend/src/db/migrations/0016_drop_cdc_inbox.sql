@@ -1,0 +1,33 @@
+-- =============================================================================
+-- Migration 0016 — Drop cdcInbox (obsolete after createTopicTxReader discovery)
+-- =============================================================================
+--
+-- Context: migration 0014 created `cdcInbox` for at-least-once dedup using a
+-- (consumerName, topic, partitionId, offset) PK row + SELECT-then-UPSERT
+-- claim pattern. This was copied from stankoff-v2 per the canon "Concurrency"
+-- section.
+--
+-- 2026 web-research finding: `@ydbjs/topic` 6.1.x ships
+-- `createTopicTxReader(tx, driver, opts)` which sends a native YDB
+-- `UpdateOffsetsInTransactionRequest` RPC on tx commit. Topic offsets are
+-- committed ATOMICALLY with the same datashard transaction that wrote the
+-- projection — exactly-once semantics by construction, no inbox table needed.
+--
+-- Sources:
+--   - @ydbjs/topic README §"Transactions" (createTopicTxReader)
+--   - YDB docs: https://ydb.tech/docs/en/reference/ydb-sdk/topic
+--   - ydb-go-sdk topic_reader_transaction.go canonical example
+--   - Local: node_modules/.pnpm/@ydbjs+topic@6.1.2/.../README.md
+--
+-- The cdcInbox table never received a row in production (M6.5 wiring wasn't
+-- written yet — caught between M6.4 and M6.5 implementation). DROPping it
+-- keeps the schema honest: there's no dead-code table sitting in the DB
+-- pretending to be load-bearing.
+--
+-- Per `feedback_aggressive_delegacy.md`: "устаревшие практики удаляем
+-- молниеносно; stankoff-v2 reference, НЕ Писание; верифицируем каждый
+-- копируемый паттерн против 2026 best-practice".
+--
+-- =============================================================================
+
+DROP TABLE cdcInbox;

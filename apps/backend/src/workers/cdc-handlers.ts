@@ -25,19 +25,47 @@ export interface CdcEvent {
  * Columns that should NOT generate `fieldChange` activities — they're either
  * server-populated audit metadata (captured elsewhere) or derivable from
  * state-transition timestamps (`checkedInAt`/`cancelledAt`/… → statusChange).
+ *
+ * The state-transition timestamps come from EVERY domain that has an FSM
+ * (booking + payment + refund + folio + folioLine + receipt + dispute).
+ * Listing them here de-duplicates the audit signal: when the FSM advances,
+ * we emit ONE `statusChange` activity from the `status` column delta —
+ * individual `confirmedAt`/`succeededAt`/etc deltas are the SAME event
+ * recorded twice and would clutter the audit log.
  */
 export const SYSTEM_FIELDS = new Set([
 	'createdAt',
 	'updatedAt',
 	'createdBy',
 	'updatedBy',
-	// Booking state-transition timestamps — surfaced via statusChange semantic,
-	// individual column deltas would just duplicate the status log.
+	// Booking state-transition timestamps
 	'confirmedAt',
 	'checkedInAt',
 	'checkedOutAt',
 	'cancelledAt',
 	'noShowAt',
+	// Payment FSM timestamps (canon: 9-state)
+	'authorizedAt',
+	'capturedAt',
+	'refundedAt',
+	'canceledAt',
+	'failedAt',
+	'expiredAt',
+	// Refund FSM timestamps (canon: 3-state)
+	'requestedAt',
+	'succeededAt',
+	// Folio FSM timestamps (canon: 3-state)
+	'closedAt',
+	'settledAt',
+	// folioLine sub-state timestamps (canon: 3-state)
+	'postedAt',
+	'voidedAt',
+	// Receipt FSM timestamps (canon: 5-state)
+	'sentAt',
+	'correctedAt',
+	// Dispute FSM timestamps (canon: 5-state)
+	'submittedAt',
+	'resolvedAt',
 ])
 
 /** Shallow equality matching stankoff-v2 / records.service — stringified compare
@@ -80,9 +108,8 @@ export function diffFields(
  *   > oldImage, and update & reset in UPDATES mode), do not include the
  *   > columns that are primary key components."
  *
- * So for booking (compound PK `[tenantId, propertyId, checkIn, id]`) we
- * extract identity from `event.key[]` — NOT from newImage/oldImage — then
- * diff the image bodies for fieldChange/statusChange events.
+ * So we extract identity from `event.key[]` — NOT from newImage/oldImage —
+ * then diff the image bodies for fieldChange/statusChange events.
  *
  * Produces:
  *   INSERT → one `created` activity with `diffJson = { fields: <newImage> }`.
@@ -90,24 +117,36 @@ export function diffFields(
  *            for OTHER fields; else only `fieldChange` rows.
  *   DELETE → one `deleted` activity with `diffJson = { fields: <oldImage> }`.
  *
- * Per-objectType PK schema:
- *   booking: key[0]=tenantId, key[3]=id (compound PK, 4 components)
- *   others (single-PK): key[0]=tenantId or key[0]=id (not yet wired)
+ * Per-objectType PK schema (matches migrations 0001/0007/0008/0009/0011/0012):
+ *   - 4D PK `(tenantId, propertyId, _, id)`: booking, folio, payment
+ *     → key[0]=tenantId, key[3]=id
+ *   - 3D PK `(tenantId, paymentId, id)`: refund, receipt, dispute
+ *     → key[0]=tenantId, key[2]=id
+ *   - 2D PK `(tenantId, id)`: single-PK domains (default fallback)
+ *     → key[0]=tenantId, key[1]=id
  */
+const FOUR_D_PK_DOMAINS: ReadonlySet<ActivityObjectType> = new Set(['booking', 'folio', 'payment'])
+const THREE_D_PK_DOMAINS: ReadonlySet<ActivityObjectType> = new Set([
+	'refund',
+	'receipt',
+	'dispute',
+])
+
 function extractIdentity(
 	event: CdcEvent,
 	objectType: ActivityObjectType,
 ): { tenantId: string; recordId: string } | null {
 	const key = event.key ?? []
-	if (objectType === 'booking') {
-		const tenantId = key[0] === undefined ? '' : String(key[0])
-		const recordId = key[3] === undefined ? '' : String(key[3])
-		if (!tenantId || !recordId) return null
-		return { tenantId, recordId }
-	}
-	// Single-PK domains (future): `(tenantId, id)` → key[0]=tenantId, key[1]=id.
 	const tenantId = key[0] === undefined ? '' : String(key[0])
-	const recordId = key[1] === undefined ? '' : String(key[1])
+	let recordId = ''
+	if (FOUR_D_PK_DOMAINS.has(objectType)) {
+		recordId = key[3] === undefined ? '' : String(key[3])
+	} else if (THREE_D_PK_DOMAINS.has(objectType)) {
+		recordId = key[2] === undefined ? '' : String(key[2])
+	} else {
+		// Single-PK domains: `(tenantId, id)` → key[0]=tenantId, key[1]=id.
+		recordId = key[1] === undefined ? '' : String(key[1])
+	}
 	if (!tenantId || !recordId) return null
 	return { tenantId, recordId }
 }

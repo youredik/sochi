@@ -263,3 +263,325 @@ describe('buildActivitiesFromEvent — property-based', () => {
 		},
 	)
 })
+
+// ===========================================================================
+// M6.5A foundation coverage — extractIdentity + SYSTEM_FIELDS for the 5 new
+// payment-domain object types (folio / payment / refund / receipt / dispute).
+//
+// Pre-done audit (FROM START — feedback_pre_done_audit.md):
+//   [X] extractIdentity 4D-PK domains: booking/folio/payment → key[3]
+//   [X] extractIdentity 3D-PK domains: refund/receipt/dispute → key[2]
+//   [X] extractIdentity 2D-PK fallback: single-PK domains → key[1]
+//   [X] Missing key slot returns null (negative path) for each PK shape
+//   [X] Empty-string tenant slot returns null (defensive against malformed)
+//   [X] buildActivitiesFromEvent INSERT/UPDATE/DELETE for each new domain
+//   [X] SYSTEM_FIELDS contains EVERY state-transition timestamp from canon
+//   [X] diffFields skips new state-transition timestamps (single-domain check)
+//   [X] cross-domain isolation: same key shape but different objectType
+//       extracts different recordId (e.g. key[2]=foo vs key[3]=bar)
+// ===========================================================================
+
+describe('extractIdentity — 4D-PK domains (booking/folio/payment)', () => {
+	test('folio: key[0]=tenantId, key[3]=id', () => {
+		const event: CdcEvent = {
+			key: ['org_a', 'prop_x', 'book_y', 'fol_z'],
+			newImage: { status: 'open' },
+		}
+		const acts = buildActivitiesFromEvent(event, 'folio')
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.tenantId).toBe('org_a')
+		expect(acts[0]?.recordId).toBe('fol_z')
+		expect(acts[0]?.objectType).toBe('folio')
+	})
+
+	test('payment: key[0]=tenantId, key[3]=id', () => {
+		const event: CdcEvent = {
+			key: ['org_a', 'prop_x', 'book_y', 'pay_z'],
+			newImage: { status: 'created', amountMinor: '15900' },
+		}
+		const acts = buildActivitiesFromEvent(event, 'payment')
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.tenantId).toBe('org_a')
+		expect(acts[0]?.recordId).toBe('pay_z')
+	})
+
+	test('folio missing key[3] → empty result', () => {
+		const event: CdcEvent = { key: ['org_a', 'prop_x', 'book_y'], newImage: { status: 'open' } }
+		expect(buildActivitiesFromEvent(event, 'folio')).toEqual([])
+	})
+
+	test('payment missing key[3] → empty result', () => {
+		const event: CdcEvent = { key: ['org_a', 'prop_x', 'book_y'], newImage: { status: 'created' } }
+		expect(buildActivitiesFromEvent(event, 'payment')).toEqual([])
+	})
+
+	test('payment with empty tenant slot → empty result', () => {
+		const event: CdcEvent = {
+			key: ['', 'prop_x', 'book_y', 'pay_z'],
+			newImage: { status: 'created' },
+		}
+		expect(buildActivitiesFromEvent(event, 'payment')).toEqual([])
+	})
+})
+
+describe('extractIdentity — 3D-PK domains (refund/receipt/dispute)', () => {
+	test('refund: key[0]=tenantId, key[2]=id', () => {
+		const event: CdcEvent = {
+			key: ['org_a', 'pay_x', 'ref_z'],
+			newImage: { status: 'pending', amountMinor: '5000' },
+		}
+		const acts = buildActivitiesFromEvent(event, 'refund')
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.tenantId).toBe('org_a')
+		expect(acts[0]?.recordId).toBe('ref_z')
+		expect(acts[0]?.objectType).toBe('refund')
+	})
+
+	test('receipt: key[0]=tenantId, key[2]=id', () => {
+		const event: CdcEvent = {
+			key: ['org_a', 'pay_x', 'rcp_z'],
+			newImage: { status: 'pending', kind: 'final' },
+		}
+		const acts = buildActivitiesFromEvent(event, 'receipt')
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.recordId).toBe('rcp_z')
+		expect(acts[0]?.objectType).toBe('receipt')
+	})
+
+	test('dispute: key[0]=tenantId, key[2]=id', () => {
+		const event: CdcEvent = {
+			key: ['org_a', 'pay_x', 'dsp_z'],
+			newImage: { status: 'opened', reasonCode: '4853' },
+		}
+		const acts = buildActivitiesFromEvent(event, 'dispute')
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.recordId).toBe('dsp_z')
+		expect(acts[0]?.objectType).toBe('dispute')
+	})
+
+	test('refund missing key[2] → empty result', () => {
+		const event: CdcEvent = { key: ['org_a', 'pay_x'], newImage: { status: 'pending' } }
+		expect(buildActivitiesFromEvent(event, 'refund')).toEqual([])
+	})
+
+	test('dispute with empty key[2] → empty result', () => {
+		const event: CdcEvent = { key: ['org_a', 'pay_x', ''], newImage: { status: 'opened' } }
+		expect(buildActivitiesFromEvent(event, 'dispute')).toEqual([])
+	})
+})
+
+describe('extractIdentity — FULL ActivityObjectType enum coverage', () => {
+	// Lock that EVERY ActivityObjectType is dispatched correctly.
+	// 4D-PK domains → key[3]; 3D-PK → key[2]; 2D fallback → key[1].
+	const FOUR_D = ['booking', 'folio', 'payment'] as const
+	const THREE_D = ['refund', 'receipt', 'dispute'] as const
+	const TWO_D_FALLBACK = [
+		'property',
+		'roomType',
+		'room',
+		'ratePlan',
+		'availability',
+		'rate',
+		'guest',
+	] as const
+
+	test('all known ActivityObjectTypes are covered (3+3+7 = 13)', () => {
+		expect(FOUR_D.length + THREE_D.length + TWO_D_FALLBACK.length).toBe(13)
+	})
+
+	test.each(FOUR_D)('4D dispatch: %s → key[0]=tenantId, key[3]=id', (objectType) => {
+		const event: CdcEvent = {
+			key: ['org_a', 'p1', 'middle', 'rec_z'],
+			newImage: { status: 's', updatedBy: 'u' },
+		}
+		const acts = buildActivitiesFromEvent(event, objectType)
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.tenantId).toBe('org_a')
+		expect(acts[0]?.recordId).toBe('rec_z')
+		expect(acts[0]?.objectType).toBe(objectType)
+	})
+
+	test.each(THREE_D)('3D dispatch: %s → key[0]=tenantId, key[2]=id', (objectType) => {
+		const event: CdcEvent = {
+			key: ['org_a', 'parent_id', 'rec_z'],
+			newImage: { status: 's', updatedBy: 'u' },
+		}
+		const acts = buildActivitiesFromEvent(event, objectType)
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.tenantId).toBe('org_a')
+		expect(acts[0]?.recordId).toBe('rec_z')
+		expect(acts[0]?.objectType).toBe(objectType)
+	})
+
+	test.each(TWO_D_FALLBACK)('2D fallback: %s → key[0]=tenantId, key[1]=id', (objectType) => {
+		const event: CdcEvent = {
+			key: ['org_a', 'rec_z'],
+			newImage: { name: 'sample', updatedBy: 'u' },
+		}
+		const acts = buildActivitiesFromEvent(event, objectType)
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.tenantId).toBe('org_a')
+		expect(acts[0]?.recordId).toBe('rec_z')
+		expect(acts[0]?.objectType).toBe(objectType)
+	})
+})
+
+describe('extractIdentity — cross-domain isolation', () => {
+	// Same key array but different objectType MUST produce different recordIds
+	// — guards against regression where 4D/3D dispatch gets mistakenly unified.
+	const sameKey = ['org_a', 'p_x', 'middle', 'last']
+	const newImage = { status: 's', updatedBy: 'u' }
+
+	test('payment(4D) on this key → recordId=last', () => {
+		const acts = buildActivitiesFromEvent({ key: sameKey, newImage }, 'payment')
+		expect(acts[0]?.recordId).toBe('last')
+	})
+
+	test('refund(3D) on this key → recordId=middle (different slot!)', () => {
+		const acts = buildActivitiesFromEvent({ key: sameKey, newImage }, 'refund')
+		expect(acts[0]?.recordId).toBe('middle')
+	})
+
+	test('property(2D) on this key → recordId=p_x (yet another slot)', () => {
+		const acts = buildActivitiesFromEvent({ key: sameKey, newImage }, 'property')
+		expect(acts[0]?.recordId).toBe('p_x')
+	})
+})
+
+describe('SYSTEM_FIELDS — exact-set assertion (canon coverage)', () => {
+	// Lock the system-field set so adding/removing a state-transition timestamp
+	// without a deliberate decision shows up in code review. Sorted for stability.
+	const expected = [
+		// Audit
+		'createdAt',
+		'updatedAt',
+		'createdBy',
+		'updatedBy',
+		// Booking FSM
+		'confirmedAt',
+		'checkedInAt',
+		'checkedOutAt',
+		'cancelledAt',
+		'noShowAt',
+		// Payment FSM (9-state, canon)
+		'authorizedAt',
+		'capturedAt',
+		'refundedAt',
+		'canceledAt',
+		'failedAt',
+		'expiredAt',
+		// Refund FSM (3-state, canon)
+		'requestedAt',
+		'succeededAt',
+		// Folio FSM (3-state, canon)
+		'closedAt',
+		'settledAt',
+		// folioLine sub-state
+		'postedAt',
+		'voidedAt',
+		// Receipt FSM (5-state)
+		'sentAt',
+		'correctedAt',
+		// Dispute FSM (5-state)
+		'submittedAt',
+		'resolvedAt',
+	]
+
+	test('SYSTEM_FIELDS == expected canon set (exact equality, sorted)', () => {
+		expect([...SYSTEM_FIELDS].sort()).toEqual([...expected].sort())
+	})
+
+	test('SYSTEM_FIELDS size = 25 (locked count)', () => {
+		// 4 audit + 5 booking + 6 payment + 2 refund + 2 folio + 2 folioLine
+		// + 2 receipt + 2 dispute = 25.
+		// If you add a new FSM, update this count + the expected array above.
+		expect(SYSTEM_FIELDS.size).toBe(25)
+	})
+})
+
+describe('diffFields — skips new domain state timestamps', () => {
+	test('payment status flip emits ONE statusChange (not 6 timestamp deltas)', () => {
+		// Simulate full payment lifecycle: created → succeeded.
+		// All FSM timestamps go from null → ISO; status goes from 'pending' → 'succeeded'.
+		// Expected: ONE statusChange row only, no per-timestamp fieldChange noise.
+		const event: CdcEvent = {
+			key: ['org_a', 'prop_x', 'book_y', 'pay_z'],
+			oldImage: {
+				status: 'pending',
+				authorizedAt: null,
+				capturedAt: null,
+				updatedBy: 'u_old',
+			},
+			newImage: {
+				status: 'succeeded',
+				authorizedAt: '2026-04-25T10:00:00Z',
+				capturedAt: '2026-04-25T10:00:01Z',
+				updatedBy: 'u_new',
+			},
+		}
+		const acts = buildActivitiesFromEvent(event, 'payment')
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.activityType).toBe('statusChange')
+	})
+
+	test('refund pending → succeeded: ONE statusChange (succeededAt skipped)', () => {
+		const event: CdcEvent = {
+			key: ['org_a', 'pay_x', 'ref_z'],
+			oldImage: { status: 'pending', succeededAt: null, updatedBy: 'u_old' },
+			newImage: {
+				status: 'succeeded',
+				succeededAt: '2026-04-25T10:00:00Z',
+				updatedBy: 'u_new',
+			},
+		}
+		const acts = buildActivitiesFromEvent(event, 'refund')
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.activityType).toBe('statusChange')
+		expect(acts[0]?.diffJson).toMatchObject({
+			field: 'status',
+			oldValue: 'pending',
+			newValue: 'succeeded',
+		})
+	})
+
+	test('folio open → closed: ONE statusChange (closedAt + closedBy skipped)', () => {
+		const event: CdcEvent = {
+			key: ['org_a', 'prop_x', 'book_y', 'fol_z'],
+			oldImage: { status: 'open', closedAt: null, closedBy: null, updatedBy: 'u_old' },
+			newImage: {
+				status: 'closed',
+				closedAt: '2026-04-25T10:00:00Z',
+				closedBy: 'u_new',
+				updatedBy: 'u_new',
+			},
+		}
+		const acts = buildActivitiesFromEvent(event, 'folio')
+		// closedAt is system; closedBy is a non-system field (not in SYSTEM_FIELDS)
+		// → 1 statusChange + 1 fieldChange(closedBy: null → u_new)
+		expect(acts).toHaveLength(2)
+		expect(acts[0]?.activityType).toBe('statusChange')
+		expect(acts[1]?.activityType).toBe('fieldChange')
+		expect(acts[1]?.diffJson).toMatchObject({ field: 'closedBy' })
+	})
+
+	test('dispute opened → won: ONE statusChange (resolvedAt + submittedAt skipped)', () => {
+		const event: CdcEvent = {
+			key: ['org_a', 'pay_x', 'dsp_z'],
+			oldImage: {
+				status: 'opened',
+				resolvedAt: null,
+				submittedAt: null,
+				updatedBy: 'u_old',
+			},
+			newImage: {
+				status: 'won',
+				resolvedAt: '2026-04-25T10:00:00Z',
+				submittedAt: '2026-04-25T09:00:00Z',
+				updatedBy: 'u_new',
+			},
+		}
+		const acts = buildActivitiesFromEvent(event, 'dispute')
+		expect(acts).toHaveLength(1)
+		expect(acts[0]?.activityType).toBe('statusChange')
+	})
+})

@@ -16,17 +16,9 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
-        // Solid destructive (bg-destructive + text-white) — 5.48:1 WCAG AA
-        // pass. Previous subtle variant (bg-destructive/10 + text-destructive)
-        // = 4.00:1 fail caught by axe-core 2026-04-24. Solid is also 2026
-        // shadcn convention for critical actions (cancel booking, delete).
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/40",
-        // Always underlined for link-in-text a11y (WCAG 1.4.1 Use of Color):
-        // relying on color alone to distinguish links from surrounding text
-        // fails when link text's contrast vs surrounding text < 3:1. Hover
-        // removes underline as affordance feedback.
-        link: "text-primary underline underline-offset-4 hover:no-underline",
+          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
         default:
@@ -72,4 +64,4 @@ function Button({
   )
 }
 
-export { Button }
+export { Button, buttonVariants }

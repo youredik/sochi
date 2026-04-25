@@ -30,9 +30,9 @@
 		"@ydbjs/error": "6.0.5",
 		"@ydbjs/query": "6.1.0",
 		"@ydbjs/topic": "6.1.2",
-		"@ydbjs/value": "6.0.6",
-		"better-auth": "^1.6.8",
-		"hono": "^4.12.14",
+		"@ydbjs/value": "6.0.7",
+		"better-auth": "^1.6.9",
+		"hono": "^4.12.15",
 		"hono-pino": "^0.10.3",
 		"pino": "^10.3.1",
 		"zod": "^4.3.6"

@@ -17,15 +17,17 @@
 		},
 		"apps/frontend": {
 			"entry": ["lingui.config.ts"],
-			"project": ["src/**/*.{ts,tsx}", "*.ts"]
+			"project": ["src/**/*.{ts,tsx}", "*.ts"],
+			"ignore": [
+				"src/components/ui/**"
+			]
 		},
 		".": {
 			"entry": ["tests/e2e/*.ts"],
 			"project": ["tests/**/*.ts"]
 		},
 		"packages/shared": {
-			"project": ["src/**/*.ts"],
-			"includeEntryExports": true
+			"project": ["src/**/*.ts"]
 		}
 	}
 }

@@ -18,7 +18,9 @@ import { Route as AppOSelectRouteImport } from './routes/_app.o-select'
 import { Route as AppOOrgSlugRouteImport } from './routes/_app.o.$orgSlug'
 import { Route as AppOOrgSlugIndexRouteImport } from './routes/_app.o.$orgSlug.index'
 import { Route as AppOOrgSlugSetupRouteImport } from './routes/_app.o.$orgSlug.setup'
+import { Route as AppOOrgSlugReceivablesRouteImport } from './routes/_app.o.$orgSlug.receivables'
 import { Route as AppOOrgSlugGridRouteImport } from './routes/_app.o.$orgSlug.grid'
+import { Route as AppOOrgSlugBookingsBookingIdFoliosFolioIdRouteImport } from './routes/_app.o.$orgSlug.bookings.$bookingId.folios.$folioId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -64,11 +66,22 @@ const AppOOrgSlugSetupRoute = AppOOrgSlugSetupRouteImport.update({
   path: '/setup',
   getParentRoute: () => AppOOrgSlugRoute,
 } as any)
+const AppOOrgSlugReceivablesRoute = AppOOrgSlugReceivablesRouteImport.update({
+  id: '/receivables',
+  path: '/receivables',
+  getParentRoute: () => AppOOrgSlugRoute,
+} as any)
 const AppOOrgSlugGridRoute = AppOOrgSlugGridRouteImport.update({
   id: '/grid',
   path: '/grid',
   getParentRoute: () => AppOOrgSlugRoute,
 } as any)
+const AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute =
+  AppOOrgSlugBookingsBookingIdFoliosFolioIdRouteImport.update({
+    id: '/bookings/$bookingId/folios/$folioId',
+    path: '/bookings/$bookingId/folios/$folioId',
+    getParentRoute: () => AppOOrgSlugRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -78,8 +91,10 @@ export interface FileRoutesByFullPath {
   '/o-select': typeof AppOSelectRoute
   '/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
+  '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
+  '/o/$orgSlug/bookings/$bookingId/folios/$folioId': typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -88,8 +103,10 @@ export interface FileRoutesByTo {
   '/o-select': typeof AppOSelectRoute
   '/': typeof AppIndexRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
+  '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/o/$orgSlug': typeof AppOOrgSlugIndexRoute
+  '/o/$orgSlug/bookings/$bookingId/folios/$folioId': typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -101,8 +118,10 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
   '/_app/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
+  '/_app/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/_app/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/_app/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
+  '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId': typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -114,8 +133,10 @@ export interface FileRouteTypes {
     | '/o-select'
     | '/o/$orgSlug'
     | '/o/$orgSlug/grid'
+    | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
     | '/o/$orgSlug/'
+    | '/o/$orgSlug/bookings/$bookingId/folios/$folioId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -124,8 +145,10 @@ export interface FileRouteTypes {
     | '/o-select'
     | '/'
     | '/o/$orgSlug/grid'
+    | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
     | '/o/$orgSlug'
+    | '/o/$orgSlug/bookings/$bookingId/folios/$folioId'
   id:
     | '__root__'
     | '/_app'
@@ -136,8 +159,10 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/o/$orgSlug'
     | '/_app/o/$orgSlug/grid'
+    | '/_app/o/$orgSlug/receivables'
     | '/_app/o/$orgSlug/setup'
     | '/_app/o/$orgSlug/'
+    | '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -212,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugSetupRouteImport
       parentRoute: typeof AppOOrgSlugRoute
     }
+    '/_app/o/$orgSlug/receivables': {
+      id: '/_app/o/$orgSlug/receivables'
+      path: '/receivables'
+      fullPath: '/o/$orgSlug/receivables'
+      preLoaderRoute: typeof AppOOrgSlugReceivablesRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
+    }
     '/_app/o/$orgSlug/grid': {
       id: '/_app/o/$orgSlug/grid'
       path: '/grid'
@@ -219,19 +251,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugGridRouteImport
       parentRoute: typeof AppOOrgSlugRoute
     }
+    '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId': {
+      id: '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId'
+      path: '/bookings/$bookingId/folios/$folioId'
+      fullPath: '/o/$orgSlug/bookings/$bookingId/folios/$folioId'
+      preLoaderRoute: typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
+    }
   }
 }
 
 interface AppOOrgSlugRouteChildren {
   AppOOrgSlugGridRoute: typeof AppOOrgSlugGridRoute
+  AppOOrgSlugReceivablesRoute: typeof AppOOrgSlugReceivablesRoute
   AppOOrgSlugSetupRoute: typeof AppOOrgSlugSetupRoute
   AppOOrgSlugIndexRoute: typeof AppOOrgSlugIndexRoute
+  AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute: typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
 }
 
 const AppOOrgSlugRouteChildren: AppOOrgSlugRouteChildren = {
   AppOOrgSlugGridRoute: AppOOrgSlugGridRoute,
+  AppOOrgSlugReceivablesRoute: AppOOrgSlugReceivablesRoute,
   AppOOrgSlugSetupRoute: AppOOrgSlugSetupRoute,
   AppOOrgSlugIndexRoute: AppOOrgSlugIndexRoute,
+  AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute:
+    AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute,
 }
 
 const AppOOrgSlugRouteWithChildren = AppOOrgSlugRoute._addFileChildren(

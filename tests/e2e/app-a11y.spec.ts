@@ -39,6 +39,18 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		await runAxe(page, 'dashboard')
 	})
 
+	test('/o/{slug}/receivables passes WCAG 2.2 AA (M6.7.4)', async ({ page }) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+		// Click the dashboard tile linking to receivables.
+		await page.getByRole('link', { name: /Дебиторка/ }).click()
+		await expect(page).toHaveURL(/\/receivables$/)
+		// Heading + KPI region must be visible.
+		await expect(page.getByRole('heading', { name: /Дебиторская задолженность/ })).toBeVisible()
+		await expect(page.getByRole('region', { name: 'Ключевые показатели' })).toBeVisible()
+		await runAxe(page, 'receivables-dashboard')
+	})
+
 	test('/o/{slug}/setup wizard (in progress) passes WCAG 2.2 AA', async ({ page, context }) => {
 		// Fresh tenant so we can land on /setup. Sign up a brand-new user
 		// in THIS test's context (can't reuse owner.json which has a fully-

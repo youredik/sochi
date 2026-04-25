@@ -1,0 +1,49 @@
+-- =============================================================================
+-- Migration 0018 — activity audit dedup column for CDC at-least-once
+-- =============================================================================
+--
+-- Context (memory `project_payment_domain_canonical.md` "M6.5 closed"):
+-- The CDC consumer pivoted to the non-tx `createTopicReader` API after
+-- empirical proof that `createTopicTxReader` (tx-bound, destroyed on
+-- commit per PR #544) cycled all 13 consumers in 400070 SCHEME_ERROR /
+-- 400190 SESSION_BUSY. Non-tx reader holds a long-lived stream + manual
+-- `await reader.commit(batch)` after the projection tx commits.
+--
+-- That gives at-least-once delivery instead of exactly-once. All money
+-- handlers (folio_balance, payment_status, refund_creator, notification)
+-- are idempotent by domain UNIQUE constraints + pre-check-then-write.
+-- The activity audit handler was the only one with NO idempotency: id
+-- is `newId('activity')` random per INSERT, so a redelivered event
+-- (rare commit-after-projection-success race) creates a duplicate audit
+-- row.
+--
+-- This migration closes that last gap by adding a deterministic dedup
+-- key per (CDC event × derived activity index) and a non-UNIQUE index
+-- (gotcha #12 — UNIQUE inline only at CREATE TABLE) for fast lookup
+-- inside the activity insertTx pre-check.
+--
+-- ## Dedup key shape
+--
+--   `${ts[0]}-${ts[1]}-${index}`  where:
+--     - `ts[0]/ts[1]` = CDC virtual timestamp tuple (step, txId), unique
+--       per event in YDB; present because ALL our changefeeds (0004
+--       booking, 0007 folio, 0008 payment, 0009 refund, 0011 receipt,
+--       0012 dispute) declare `VIRTUAL_TIMESTAMPS = TRUE`.
+--     - `index` = position of the derived activity row within the batch
+--       built by `buildActivitiesFromEvent` (a single CDC UPDATE event
+--       can produce 1 statusChange + N fieldChange rows; each needs its
+--       own dedup key).
+--
+-- The pre-check pattern in activity.repo.insertTx is canonical and
+-- matches refund-creator + notification handlers (SELECT-then-UPSERT
+-- inside the projection tx).
+--
+-- =============================================================================
+
+ALTER TABLE activity ADD COLUMN eventDedupKey Utf8;
+
+-- Non-UNIQUE GlobalSync index for fast pre-check.
+-- UNIQUE retroactively rejected by YDB 25.x (gotcha #12); we enforce
+-- uniqueness through the pre-check + the deterministic key shape, plus
+-- the activity PK protects against ID-collision regardless.
+ALTER TABLE activity ADD INDEX ixActivityDedup GLOBAL SYNC ON (tenantId, eventDedupKey);

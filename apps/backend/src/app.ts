@@ -14,14 +14,22 @@ import { createAvailabilityFactory } from './domains/availability/availability.f
 import { createAvailabilityRoutes } from './domains/availability/availability.routes.ts'
 import { createBookingFactory } from './domains/booking/booking.factory.ts'
 import { createBookingRoutes } from './domains/booking/booking.routes.ts'
+import { createFolioFactory } from './domains/folio/folio.factory.ts'
+import { createFolioRoutes } from './domains/folio/folio.routes.ts'
 import { createGuestFactory } from './domains/guest/guest.factory.ts'
 import { createGuestRoutes } from './domains/guest/guest.routes.ts'
+import { createMeRoutes } from './domains/me/me.routes.ts'
+import { createPaymentFactory } from './domains/payment/payment.factory.ts'
+import { createPaymentRoutes } from './domains/payment/payment.routes.ts'
+import { createStubPaymentProvider } from './domains/payment/provider/stub-provider.ts'
 import { createPropertyFactory } from './domains/property/property.factory.ts'
 import { createPropertyRoutes } from './domains/property/property.routes.ts'
 import { createRateFactory } from './domains/rate/rate.factory.ts'
 import { createRateRoutes } from './domains/rate/rate.routes.ts'
 import { createRatePlanFactory } from './domains/ratePlan/ratePlan.factory.ts'
 import { createRatePlanRoutes } from './domains/ratePlan/ratePlan.routes.ts'
+import { createRefundFactory } from './domains/refund/refund.factory.ts'
+import { createRefundRoutes } from './domains/refund/refund.routes.ts'
 import { createRoomFactory } from './domains/room/room.factory.ts'
 import { createRoomRoutes } from './domains/room/room.routes.ts'
 import { createRoomTypeFactory } from './domains/roomType/roomType.factory.ts'
@@ -34,6 +42,11 @@ import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
 import { createOtelIngest } from './otel-ingest.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
+import { createFolioBalanceHandler } from './workers/handlers/folio-balance.ts'
+import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
+import { createNotificationHandler } from './workers/handlers/notification.ts'
+import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
+import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
 
 /**
  * Hono app with method-chained routes for type-safe RPC.
@@ -57,20 +70,147 @@ const bookingFactory = createBookingFactory(
 )
 const activityFactory = createActivityFactory(sql)
 const guestFactory = createGuestFactory(sql)
+const folioFactory = createFolioFactory(sql)
+// V1 demo: stub payment provider (synchronous-success autocapture mirror of SBP).
+// Real provider wiring (ЮKassa / T-Kassa / СБП) lands in Phase 3 alongside the
+// webhook handler. Switch via env `PAYMENT_PROVIDER` when those impls ship.
+const paymentProvider = createStubPaymentProvider()
+const paymentFactory = createPaymentFactory(sql, paymentProvider, folioFactory.service)
+const refundFactory = createRefundFactory(sql, paymentFactory.repo, paymentProvider)
 const idempotency = idempotencyMiddleware(createIdempotencyRepo(sql))
 
-// CDC consumer — populates the polymorphic `activity` table by diffing
-// oldImage/newImage from the `booking/booking_events` changefeed. Started
-// in-process (первый этап); portable to a Serverless Container post-launch without
-// touching the writer side (ALTER TABLE ... ADD CHANGEFEED stays the
-// single source of truth). See memory `project_event_architecture.md`.
-// Consumer name registered via migration 0005.
-const bookingCdcConsumer = startCdcConsumer(driver, {
+// CDC consumers — exactly-once projection pipeline.
+//
+// Each consumer runs `createTopicTxReader` inside `startCdcConsumer`'s
+// outer `sql.begin`, atomically committing the topic offset and the
+// projection writes in the same datashard transaction. See
+// `workers/cdc-consumer.ts` header for the full architecture.
+//
+// Consumer registrations (`ALTER TOPIC ... ADD CONSUMER`) live in
+// migrations 0005 (booking) + 0015 (12 payment-domain consumers).
+// Total wired: 13 consumers across 6 changefeeds.
+//
+// Handlers/factories live in `workers/cdc-consumer.ts` (activity) and
+// `workers/handlers/*.ts` (4 payment-domain projections). All take a
+// minimal `HandlerLogger` interface — pino satisfies it directly.
+
+// activity_writer fan-out: 6 topics × same factory with per-domain objectType.
+const bookingCdcConsumer = startCdcConsumer(driver, sql, {
 	topic: 'booking/booking_events',
 	consumer: 'activity_writer',
-	handler: createActivityCdcHandler(activityFactory.repo, 'booking'),
+	projection: createActivityCdcHandler(activityFactory.repo, 'booking'),
 	label: 'activity:booking',
 })
+const folioActivityConsumer = startCdcConsumer(driver, sql, {
+	topic: 'folio/folio_events',
+	consumer: 'activity_writer',
+	projection: createActivityCdcHandler(activityFactory.repo, 'folio'),
+	label: 'activity:folio',
+})
+const paymentActivityConsumer = startCdcConsumer(driver, sql, {
+	topic: 'payment/payment_events',
+	consumer: 'activity_writer',
+	projection: createActivityCdcHandler(activityFactory.repo, 'payment'),
+	label: 'activity:payment',
+})
+const refundActivityConsumer = startCdcConsumer(driver, sql, {
+	topic: 'refund/refund_events',
+	consumer: 'activity_writer',
+	projection: createActivityCdcHandler(activityFactory.repo, 'refund'),
+	label: 'activity:refund',
+})
+const receiptActivityConsumer = startCdcConsumer(driver, sql, {
+	topic: 'receipt/receipt_events',
+	consumer: 'activity_writer',
+	projection: createActivityCdcHandler(activityFactory.repo, 'receipt'),
+	label: 'activity:receipt',
+})
+const disputeActivityConsumer = startCdcConsumer(driver, sql, {
+	topic: 'dispute/dispute_events',
+	consumer: 'activity_writer',
+	projection: createActivityCdcHandler(activityFactory.repo, 'dispute'),
+	label: 'activity:dispute',
+})
+
+// folio_balance_writer fan-out: 3 topics × same factory with per-source key
+// extraction. folio source is a no-op (would loop) — handler returns early.
+const folioBalanceFromFolio = startCdcConsumer(driver, sql, {
+	topic: 'folio/folio_events',
+	consumer: 'folio_balance_writer',
+	projection: createFolioBalanceHandler(logger, 'folio'),
+	label: 'folio_balance:folio',
+})
+const folioBalanceFromPayment = startCdcConsumer(driver, sql, {
+	topic: 'payment/payment_events',
+	consumer: 'folio_balance_writer',
+	projection: createFolioBalanceHandler(logger, 'payment'),
+	label: 'folio_balance:payment',
+})
+const folioBalanceFromRefund = startCdcConsumer(driver, sql, {
+	topic: 'refund/refund_events',
+	consumer: 'folio_balance_writer',
+	projection: createFolioBalanceHandler(logger, 'refund'),
+	label: 'folio_balance:refund',
+})
+
+// notification_writer fan-out: 2 topics — payment + receipt.
+const notificationFromPayment = startCdcConsumer(driver, sql, {
+	topic: 'payment/payment_events',
+	consumer: 'notification_writer',
+	projection: createNotificationHandler(logger, 'payment'),
+	label: 'notification:payment',
+})
+const notificationFromReceipt = startCdcConsumer(driver, sql, {
+	topic: 'receipt/receipt_events',
+	consumer: 'notification_writer',
+	projection: createNotificationHandler(logger, 'receipt'),
+	label: 'notification:receipt',
+})
+
+// payment_status_writer: 1 topic — refund_events. Derives parent
+// payment.status from cumulative refund projection (canon #23).
+const paymentStatusConsumer = startCdcConsumer(driver, sql, {
+	topic: 'refund/refund_events',
+	consumer: 'payment_status_writer',
+	projection: createPaymentStatusHandler(logger),
+	label: 'payment_status:refund',
+})
+
+// refund_creator_writer: 1 topic — dispute_events. Auto-creates refund
+// on dispute.lost transition (canon #15 refund-causality-required).
+const refundCreatorConsumer = startCdcConsumer(driver, sql, {
+	topic: 'dispute/dispute_events',
+	consumer: 'refund_creator_writer',
+	projection: createRefundCreatorHandler(logger),
+	label: 'refund_creator:dispute',
+})
+
+// folio_creator on booking — auto-create `guest` folio per new booking
+// (M7.A.1, 2026-04-25). Apaleo canon: folio created upfront, charges accumulate
+// via night-audit cron (M7.A.2 follow-up). Idempotent via ixFolioBooking pre-check.
+const folioCreatorConsumer = startCdcConsumer(driver, sql, {
+	topic: 'booking/booking_events',
+	consumer: 'folio_creator_writer',
+	projection: createFolioCreatorHandler(logger),
+	label: 'folio_creator:booking',
+})
+
+const allCdcConsumers = [
+	bookingCdcConsumer,
+	folioActivityConsumer,
+	paymentActivityConsumer,
+	refundActivityConsumer,
+	receiptActivityConsumer,
+	disputeActivityConsumer,
+	folioBalanceFromFolio,
+	folioBalanceFromPayment,
+	folioBalanceFromRefund,
+	notificationFromPayment,
+	notificationFromReceipt,
+	paymentStatusConsumer,
+	refundCreatorConsumer,
+	folioCreatorConsumer,
+] as const
 
 // Graceful shutdown: SIGTERM (Serverless Container / K8s) drains the CDC
 // loop before the process exits so in-flight activity INSERTs commit and
@@ -82,8 +222,8 @@ const bookingCdcConsumer = startCdcConsumer(driver, {
  * need programmatic teardown in addition to SIGTERM/SIGINT delivery.
  */
 export async function stopApp(): Promise<void> {
-	logger.info('shutdown: stopping CDC consumers + YDB driver')
-	await bookingCdcConsumer.stop()
+	logger.info({ count: allCdcConsumers.length }, 'shutdown: stopping CDC consumers + YDB driver')
+	await Promise.all(allCdcConsumers.map((c) => c.stop()))
 }
 process.once('SIGTERM', () => {
 	void stopApp()
@@ -153,6 +293,10 @@ const routes = app
 	.route('/api/v1', createBookingRoutes(bookingFactory, idempotency))
 	.route('/api/v1', createActivityRoutes(activityFactory))
 	.route('/api/v1', createGuestRoutes(guestFactory, idempotency))
+	.route('/api/v1', createMeRoutes())
+	.route('/api/v1', createFolioRoutes(folioFactory, idempotency))
+	.route('/api/v1', createPaymentRoutes(paymentFactory, idempotency))
+	.route('/api/v1', createRefundRoutes(refundFactory, idempotency))
 	.get('/health', (c) =>
 		c.json(
 			{

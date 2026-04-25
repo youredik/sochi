@@ -1,9 +1,11 @@
 import { Optional } from '@ydbjs/value/optional'
 import {
 	DateType,
+	FloatType,
 	Int32Type,
 	Json,
 	JsonType,
+	Text,
 	TextType,
 	Timestamp,
 	TimestampType,
@@ -32,6 +34,9 @@ export const NULL_TEXT = new Optional(null, new TextType())
 /** Typed null for nullable `Int32` columns. */
 export const NULL_INT32 = new Optional(null, new Int32Type())
 
+/** Typed null for nullable `Float` columns. */
+export const NULL_FLOAT = new Optional(null, new FloatType())
+
 /** Typed null for nullable `Timestamp` columns. */
 export const NULL_TIMESTAMP = new Optional(null, new TimestampType())
 
@@ -50,6 +55,21 @@ const NULL_JSON = new Optional(null, new JsonType())
  */
 export function timestampOpt(value: Date | null): Optional<TimestampType> {
 	return value === null ? NULL_TIMESTAMP : new Optional(new Timestamp(value), new TimestampType())
+}
+
+/**
+ * Bind a string (or null) to a nullable `Utf8` column.
+ *
+ * Bare `${str}` inference is `Utf8` (non-Optional). For an UPDATE that targets
+ * a nullable Utf8 column (e.g. `booking.folioId Utf8?`), YDB rejects with
+ * `Expected optional, pg type or Null type, but got: Utf8`. Use `textOpt`
+ * to wrap so the bind matches the column's Optional<Utf8> type.
+ *
+ * See `project_ydb_specifics.md` #14 — alternative to full-row UPSERT for
+ * single-column updates targeting Nullable text.
+ */
+export function textOpt(value: string | null): Optional<TextType> {
+	return value === null ? NULL_TEXT : new Optional(new Text(value), new TextType())
 }
 
 /** Typed null for nullable `Date` (calendar-day) columns. */

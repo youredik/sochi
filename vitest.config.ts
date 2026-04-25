@@ -15,17 +15,17 @@ export default defineConfig({
 			provider: 'v8',
 			include: ['apps/*/src/**', 'packages/*/src/**'],
 			exclude: ['**/*.test.ts', '**/*.test-d.ts', '**/fixtures.*', '**/*.gen.ts'],
-			// Thresholds = NO-REGRESSION floor (measured 2026-04-24, gate
-			// surfaced via `pnpm coverage` + pre-push). NOT a quality target
-			// — 75/65/70/75 is the M5f stretch goal when vitest-browser-mode
-			// + component tests land and cover route files (currently 0%
-			// because they're React components without isolated tests).
-			// Raise this table each time a phase adds coverage.
+			// Thresholds = NO-REGRESSION floor. Raise each time a phase adds
+			// coverage. Bumped 2026-04-25 после M6.7 + M6.8:
+			//   M5e.3.5    — 39/47/31/39 (initial floor)
+			//   M6.7+M6.8  — 47/53/36/47 (measured 48.99/54.55/37.19/48.48)
+			// Stretch goal остаётся 75/65/70/75 — достижимо когда component
+			// tests покроют sheet/route files (vitest-browser-mode когда GA).
 			thresholds: {
-				lines: 39,
-				branches: 47,
-				functions: 31,
-				statements: 39,
+				lines: 47,
+				branches: 53,
+				functions: 36,
+				statements: 47,
 			},
 		},
 	},
