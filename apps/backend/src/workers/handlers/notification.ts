@@ -40,11 +40,17 @@ import type { HandlerLogger } from './refund-creator.ts'
 const NOTIFICATION_WRITER_ACTOR_ID = 'system:notification_writer'
 
 /** Source topic the handler is wired to — selects the dispatch table. */
-export type NotificationSource = 'payment' | 'receipt'
+export type NotificationSource = 'payment' | 'receipt' | 'booking'
 
 /**
  * Map (source, statusTransition) → notification kind. Returns null if the
  * transition does not warrant a notification.
+ *
+ * Booking source: only fires `booking_confirmed` once when the booking
+ * crosses INTO `confirmed` from a non-confirmed state (typically INSERT
+ * sets status=confirmed; oldStatus=undefined ≠ 'confirmed' → fires).
+ * Cancelled/no_show transitions are handled by `cancel_fee_writer` (M7.A.4),
+ * not here, to avoid double-notifications on the same event.
  */
 function deriveKind(
 	source: NotificationSource,
@@ -58,6 +64,8 @@ function deriveKind(
 	} else if (source === 'receipt') {
 		if (newStatus === 'confirmed') return 'receipt_confirmed'
 		if (newStatus === 'failed') return 'receipt_failed'
+	} else if (source === 'booking') {
+		if (newStatus === 'confirmed') return 'booking_confirmed'
 	}
 	return null
 }
@@ -119,7 +127,8 @@ export function createNotificationHandler(log: HandlerLogger, source: Notificati
 		const key = event.key ?? []
 		// payment PK 4D: (tenantId, propertyId, bookingId, paymentId) → key[0], key[3]
 		// receipt PK 3D: (tenantId, paymentId, receiptId)              → key[0], key[2]
-		const sourceIdSlot = source === 'payment' ? 3 : 2
+		// booking PK 4D: (tenantId, propertyId, checkIn, bookingId)    → key[0], key[3]
+		const sourceIdSlot = source === 'receipt' ? 2 : 3
 		if (key[0] === undefined || key[sourceIdSlot] === undefined) {
 			log.warn({ source, key }, 'notification_writer: malformed event key — skipping')
 			return

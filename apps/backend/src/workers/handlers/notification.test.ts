@@ -51,6 +51,7 @@ const silentLog = { debug: () => {}, info: () => {}, warn: () => {} }
 const handlers: Record<NotificationSource, ReturnType<typeof createNotificationHandler>> = {
 	payment: createNotificationHandler(silentLog, 'payment'),
 	receipt: createNotificationHandler(silentLog, 'receipt'),
+	booking: createNotificationHandler(silentLog, 'booking'),
 }
 
 function buildPaymentEvent(args: {

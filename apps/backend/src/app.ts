@@ -51,6 +51,7 @@ import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts
 import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
 import { StubAdapter } from './workers/lib/postbox-adapter.ts'
 import { startNightAuditCron } from './workers/night-audit.cron.ts'
+import { startNotificationCron } from './workers/notification-cron.ts'
 import { startNotificationDispatcher } from './workers/notification-dispatcher.ts'
 
 /**
@@ -158,7 +159,7 @@ const folioBalanceFromRefund = startCdcConsumer(driver, sql, {
 	label: 'folio_balance:refund',
 })
 
-// notification_writer fan-out: 2 topics — payment + receipt.
+// notification_writer fan-out: 3 topics — payment + receipt + booking.
 const notificationFromPayment = startCdcConsumer(driver, sql, {
 	topic: 'payment/payment_events',
 	consumer: 'notification_writer',
@@ -170,6 +171,13 @@ const notificationFromReceipt = startCdcConsumer(driver, sql, {
 	consumer: 'notification_writer',
 	projection: createNotificationHandler(logger, 'receipt'),
 	label: 'notification:receipt',
+})
+// M7.B.3 — booking_confirmed notification on booking INSERT (status=confirmed).
+const notificationFromBooking = startCdcConsumer(driver, sql, {
+	topic: 'booking/booking_events',
+	consumer: 'notification_writer',
+	projection: createNotificationHandler(logger, 'booking'),
+	label: 'notification:booking',
 })
 
 // payment_status_writer: 1 topic — refund_events. Derives parent
@@ -237,6 +245,13 @@ const notificationDispatcher =
 		? null
 		: startNotificationDispatcher(sql, new StubAdapter(), logger, {})
 
+// Notification cron — fires checkin_reminder (24h before checkIn at 18:00 MSK)
+// and review_request (24h after checkOut at 11:00 MSK). Hourly cron picks up
+// eligible bookings and writes notificationOutbox rows; dispatcher sends.
+// Idempotent via UNIQUE(tenantId, sourceEventDedupKey).
+const notificationCron =
+	process.env.NODE_ENV === 'test' ? null : startNotificationCron(sql, logger, {})
+
 const allCdcConsumers = [
 	bookingCdcConsumer,
 	folioActivityConsumer,
@@ -249,6 +264,7 @@ const allCdcConsumers = [
 	folioBalanceFromRefund,
 	notificationFromPayment,
 	notificationFromReceipt,
+	notificationFromBooking,
 	paymentStatusConsumer,
 	refundCreatorConsumer,
 	folioCreatorConsumer,
@@ -270,6 +286,7 @@ export async function stopApp(): Promise<void> {
 	await Promise.all(allCdcConsumers.map((c) => c.stop()))
 	if (nightAuditCron) await nightAuditCron.stop()
 	if (notificationDispatcher) await notificationDispatcher.stop()
+	if (notificationCron) await notificationCron.stop()
 }
 process.once('SIGTERM', () => {
 	void stopApp()
