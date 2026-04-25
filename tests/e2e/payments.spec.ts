@@ -170,7 +170,7 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 	test('Mark Paid Sheet (open state) passes WCAG 2.2 AA', async ({ page }) => {
 		const seed = await seedFolioFixture(page, {
 			amountMinor: 500_000,
-			futureDays: 5,
+			futureDays: 15,
 			docSuffix: 'a11ymp',
 		})
 
@@ -200,7 +200,7 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 	test('Refund Sheet Step 1 (form) passes WCAG 2.2 AA', async ({ page }) => {
 		const seed = await seedFolioFixture(page, {
 			amountMinor: 500_000,
-			futureDays: 6,
+			futureDays: 16,
 			docSuffix: 'a11yr1',
 			seedPayment: true,
 		})
@@ -234,7 +234,7 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 	test('Refund Sheet Step 2 (confirm) passes WCAG 2.2 AA', async ({ page }) => {
 		const seed = await seedFolioFixture(page, {
 			amountMinor: 500_000,
-			futureDays: 7,
+			futureDays: 17,
 			docSuffix: 'a11yr2',
 			seedPayment: true,
 		})
@@ -299,7 +299,7 @@ test.describe('M6.8: full-flow E2E (post-bigint-fix regression gate)', () => {
 	test('mark-paid happy path: POST 201 + Sheet closes + payment row appears', async ({ page }) => {
 		const seed = await seedFolioFixture(page, {
 			amountMinor: 500_000,
-			futureDays: 8,
+			futureDays: 18,
 			docSuffix: 'flowmp',
 		})
 
@@ -320,7 +320,7 @@ test.describe('M6.8: full-flow E2E (post-bigint-fix regression gate)', () => {
 	test('refund flow: 2-step confirm in Sheet → POST 201', async ({ page }) => {
 		const seed = await seedFolioFixture(page, {
 			amountMinor: 500_000,
-			futureDays: 9,
+			futureDays: 19,
 			docSuffix: 'flowrf',
 			seedPayment: true, // skip mark-paid UI; payment seeded via API
 		})
@@ -361,7 +361,7 @@ test.describe('M6.8: Idempotency-Key per-Sheet-mount regression (post-bigint-fix
 	}) => {
 		const seed = await seedFolioFixture(page, {
 			amountMinor: 1_000_000, // 10000 ₽ — enough for 2 partial payments
-			futureDays: 10,
+			futureDays: 20,
 			docSuffix: 'idem',
 		})
 
