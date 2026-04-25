@@ -1,12 +1,12 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, type Page, test } from '@playwright/test'
 
-// Payment tests seed via UI booking grid + API folio/line. Под full e2e:smoke
-// load (15+ test files в одном workers=1 run, accumulated YDB state) grid
-// render takes longer than the default 30s. Per Apaleo / Mews / Cloudbeds 2026
-// e2e canon — payment-domain tests get 90s ceiling. Default 30s for fast tests
-// в других spec'ах не меняется.
-test.describe.configure({ timeout: 90_000 })
+// API-only seed (no UI grid traversal) keeps payment specs deterministic под
+// full e2e:smoke load. Ranged-day bookings (15+ days в будущем) не пересекаются
+// с bookings.spec.ts (futureDays 1-10) — нет inventory contention. 60s timeout
+// достаточен для UI navigation + axe scan; seed теперь O(API roundtrips), не
+// O(grid render).
+test.describe.configure({ timeout: 60_000 })
 
 /**
  * M6.8 — payment Sheets a11y + full-flow E2E + regression gates.
@@ -61,9 +61,16 @@ async function getFirstPropertyId(page: Page): Promise<string> {
 }
 
 /**
- * Seed: create booking via UI grid, затем via page.request создаёт folio +
- * posts charge line чтобы balance > 0. Опционально pre-seed payment чтобы
- * Refund Sheet имел refundable payment (без необходимости mark-paid через UI).
+ * Seed via API-only chain (NO UI grid traversal):
+ *   1. List roomTypes + ratePlans (auth.setup wizard pre-seeds 1 of each)
+ *   2. POST /guests — create primary guest
+ *   3. POST /properties/:p/bookings — create booking (1 night)
+ *   4. Poll-list /folios (M7.A.1 CDC auto-creates) или explicit POST fallback
+ *   5. POST /folios/:f/lines — pump balance
+ *   6. (optional) POST /payments — pre-seed для Refund Sheet
+ *
+ * Deterministic + ~5x faster than UI flow + no Шахматка inventory contention
+ * с bookings.spec.ts (futureDays 1-10 → этот suite 15-20).
  */
 async function seedFolioFixture(
 	page: Page,
@@ -80,38 +87,87 @@ async function seedFolioFixture(
 	orgSlug: string
 }> {
 	const orgSlug = await getOrgSlug(page)
-
-	// 1) Create booking via UI grid (uses existing tested flow).
-	await page.getByRole('link', { name: /Шахматка/ }).click()
-	await expect(page).toHaveURL(/\/grid$/)
-	const targetDate = futureIso(opts.futureDays)
-	await page.locator(`button[data-cell-date="${targetDate}"]`).click()
-	const createDialog = page.getByRole('dialog')
-	await expect(createDialog).toBeVisible()
-	await createDialog.getByLabel('Фамилия').fill(`Тестов-${opts.docSuffix}`)
-	await createDialog.getByLabel('Имя').fill('Платёжный')
-	await createDialog.getByLabel('Номер документа').fill(`4510${opts.docSuffix.padStart(6, '0')}`)
-	await createDialog.getByRole('button', { name: /Создать бронирование/ }).click()
-	await expect(page.getByText('Бронирование создано')).toBeVisible()
-	await expect(createDialog).not.toBeVisible()
-
-	const band = page.locator('[data-booking-id]:not([data-booking-id^="pending_"])').last()
-	await expect(band).toBeVisible()
-	const bookingId = await band.getAttribute('data-booking-id')
-	if (!bookingId) throw new Error('No bookingId on band')
-
 	const propertyId = await getFirstPropertyId(page)
 
-	// 2) Create folio + post charge line via API.
-	const listRes = await page.request.get(
-		`${API_BASE}/properties/${propertyId}/bookings/${bookingId}/folios`,
+	// 1. Pull roomType + ratePlan (auth.setup created exactly one of each).
+	const [roomTypesRes, ratePlansRes] = await Promise.all([
+		page.request.get(`${API_BASE}/properties/${propertyId}/room-types`),
+		page.request.get(`${API_BASE}/properties/${propertyId}/rate-plans`),
+	])
+	if (!roomTypesRes.ok()) throw new Error(`roomTypes.list HTTP ${roomTypesRes.status()}`)
+	if (!ratePlansRes.ok()) throw new Error(`ratePlans.list HTTP ${ratePlansRes.status()}`)
+	const roomTypeId = ((await roomTypesRes.json()) as { data: Array<{ id: string }> }).data[0]?.id
+	const ratePlanId = ((await ratePlansRes.json()) as { data: Array<{ id: string }> }).data[0]?.id
+	if (!roomTypeId) throw new Error('seed: no roomType in tenant (wizard fixture missing)')
+	if (!ratePlanId) throw new Error('seed: no ratePlan in tenant (wizard fixture missing)')
+
+	// 2. Create guest (passport snapshot mirrors UI dialog for канон parity).
+	const lastName = `Тестов-${opts.docSuffix}`
+	const firstName = 'Платёжный'
+	const documentNumber = `4510${opts.docSuffix.padStart(6, '0')}`
+	const guestRes = await page.request.post(`${API_BASE}/guests`, {
+		data: {
+			lastName,
+			firstName,
+			citizenship: 'RU',
+			documentType: 'passport',
+			documentNumber,
+		},
+	})
+	if (!guestRes.ok()) {
+		throw new Error(`guest.create HTTP ${guestRes.status()}: ${await guestRes.text()}`)
+	}
+	const guestId = ((await guestRes.json()) as { data: { id: string } }).data.id
+
+	// 3. Create booking (1-night, walkIn channel — no OTA gate).
+	const checkIn = futureIso(opts.futureDays)
+	const checkOut = futureIso(opts.futureDays + 1)
+	const bookingRes = await page.request.post(
+		`${API_BASE}/properties/${propertyId}/bookings`,
+		{
+			data: {
+				roomTypeId,
+				ratePlanId,
+				checkIn,
+				checkOut,
+				guestsCount: 1,
+				primaryGuestId: guestId,
+				guestSnapshot: {
+					firstName,
+					lastName,
+					citizenship: 'RU',
+					documentType: 'passport',
+					documentNumber,
+				},
+				channelCode: 'walkIn',
+			},
+		},
 	)
-	if (!listRes.ok()) throw new Error(`folios.list HTTP ${listRes.status()}`)
-	const listBody = (await listRes.json()) as { data: Array<{ id: string }> }
-	let folioId: string
-	if (listBody.data[0]) {
-		folioId = listBody.data[0].id
-	} else {
+	if (!bookingRes.ok()) {
+		throw new Error(`booking.create HTTP ${bookingRes.status()}: ${await bookingRes.text()}`)
+	}
+	const bookingId = ((await bookingRes.json()) as { data: { id: string } }).data.id
+
+	// 4. Folio: M7.A.1 CDC consumer auto-creates async after booking INSERT.
+	// Poll up to 5s; fallback to explicit POST if CDC slow (race-safe — repo
+	// has UNIQUE(bookingId), explicit create returns 409 if CDC won → still
+	// usable via the list path on next iteration).
+	let folioId: string | undefined
+	const pollDeadline = Date.now() + 5_000
+	while (Date.now() < pollDeadline) {
+		const listRes = await page.request.get(
+			`${API_BASE}/properties/${propertyId}/bookings/${bookingId}/folios`,
+		)
+		if (!listRes.ok()) throw new Error(`folios.list HTTP ${listRes.status()}`)
+		const listBody = (await listRes.json()) as { data: Array<{ id: string }> }
+		if (listBody.data[0]) {
+			folioId = listBody.data[0].id
+			break
+		}
+		await page.waitForTimeout(150)
+	}
+	if (!folioId) {
+		// CDC didn't fire within 5s — explicit fallback (deterministic seed).
 		const createRes = await page.request.post(
 			`${API_BASE}/properties/${propertyId}/bookings/${bookingId}/folios`,
 			{
@@ -120,11 +176,23 @@ async function seedFolioFixture(
 			},
 		)
 		if (!createRes.ok()) {
-			throw new Error(`folio.create HTTP ${createRes.status()}: ${await createRes.text()}`)
+			// Race: CDC created folio between our last poll and POST → list now.
+			const listRes = await page.request.get(
+				`${API_BASE}/properties/${propertyId}/bookings/${bookingId}/folios`,
+			)
+			const listBody = (await listRes.json()) as { data: Array<{ id: string }> }
+			if (!listBody.data[0]) {
+				throw new Error(
+					`folio.create HTTP ${createRes.status()}: ${await createRes.text()} (and list returned empty)`,
+				)
+			}
+			folioId = listBody.data[0].id
+		} else {
+			folioId = ((await createRes.json()) as { data: { id: string } }).data.id
 		}
-		folioId = ((await createRes.json()) as { data: { id: string } }).data.id
 	}
 
+	// 5. Pump folio balance.
 	const lineRes = await page.request.post(`${API_BASE}/folios/${folioId}/lines`, {
 		data: {
 			category: 'accommodation',
@@ -139,7 +207,7 @@ async function seedFolioFixture(
 		throw new Error(`folioLine.post HTTP ${lineRes.status()}: ${await lineRes.text()}`)
 	}
 
-	// 3) Optional: seed payment so Refund Sheet has a refundable target.
+	// 6. Optional: seed payment so Refund Sheet has a refundable target.
 	if (opts.seedPayment) {
 		const payRes = await page.request.post(
 			`${API_BASE}/properties/${propertyId}/bookings/${bookingId}/payments`,
