@@ -47,6 +47,7 @@ import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
 import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
 import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
+import { startNightAuditCron } from './workers/night-audit.cron.ts'
 
 /**
  * Hono app with method-chained routes for type-safe RPC.
@@ -187,13 +188,19 @@ const refundCreatorConsumer = startCdcConsumer(driver, sql, {
 
 // folio_creator on booking — auto-create `guest` folio per new booking
 // (M7.A.1, 2026-04-25). Apaleo canon: folio created upfront, charges accumulate
-// via night-audit cron (M7.A.2 follow-up). Idempotent via ixFolioBooking pre-check.
+// via night-audit cron (M7.A.2). Idempotent via ixFolioBooking pre-check.
 const folioCreatorConsumer = startCdcConsumer(driver, sql, {
 	topic: 'booking/booking_events',
 	consumer: 'folio_creator_writer',
 	projection: createFolioCreatorHandler(logger),
 	label: 'folio_creator:booking',
 })
+
+// Night-audit cron — posts per-night accommodation lines on `in_house`
+// bookings at 03:00 Europe/Moscow. Boot catch-up handles restart-during-window
+// gaps. Idempotent via deterministic folioLine.id (PK collision = no-op).
+// Tests bypass via NODE_ENV=test (integration calls runNightAudit directly).
+const nightAuditCron = process.env.NODE_ENV === 'test' ? null : startNightAuditCron(sql, logger, {})
 
 const allCdcConsumers = [
 	bookingCdcConsumer,
@@ -224,6 +231,7 @@ const allCdcConsumers = [
 export async function stopApp(): Promise<void> {
 	logger.info({ count: allCdcConsumers.length }, 'shutdown: stopping CDC consumers + YDB driver')
 	await Promise.all(allCdcConsumers.map((c) => c.stop()))
+	if (nightAuditCron) await nightAuditCron.stop()
 }
 process.once('SIGTERM', () => {
 	void stopApp()
