@@ -18,6 +18,10 @@ const notificationKindValues = [
 	'payment_failed',
 	'receipt_confirmed',
 	'receipt_failed',
+	// M7.B.3 — booking lifecycle + cron-driven guest engagement.
+	'booking_confirmed',
+	'checkin_reminder',
+	'review_request',
 ] as const
 export const notificationKindSchema = z.enum(notificationKindValues)
 export type NotificationKind = z.infer<typeof notificationKindSchema>
@@ -69,8 +73,10 @@ export type Notification = {
  * two rows. Same separator-char convention as
  * `synthesizeYookassaDedupKey`.
  */
+export type NotificationSourceObjectType = 'payment' | 'receipt' | 'booking'
+
 export function buildNotificationDedupKey(args: {
-	sourceObjectType: 'payment' | 'receipt'
+	sourceObjectType: NotificationSourceObjectType
 	sourceObjectId: string
 	kind: NotificationKind
 }): string {

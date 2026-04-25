@@ -81,6 +81,27 @@ function buildOutboxFields(kind: NotificationKind): {
 			return { subject: 'Фискальный чек', recipient: 'guest@placeholder.local', channel: 'email' }
 		case 'receipt_failed':
 			return { subject: 'ОФД ошибка', recipient: 'ops@placeholder.local', channel: 'email' }
+		// M7.B.3 kinds — handler scope is payment/receipt CDC only; these are
+		// produced by other writers (booking-confirmed CDC + cron-driven), but
+		// the enum is shared. Defensive return so the union is exhaustive.
+		case 'booking_confirmed':
+			return {
+				subject: 'Бронирование подтверждено',
+				recipient: 'guest@placeholder.local',
+				channel: 'email',
+			}
+		case 'checkin_reminder':
+			return {
+				subject: 'Напоминание о заезде',
+				recipient: 'guest@placeholder.local',
+				channel: 'email',
+			}
+		case 'review_request':
+			return {
+				subject: 'Поделитесь впечатлениями',
+				recipient: 'guest@placeholder.local',
+				channel: 'email',
+			}
 	}
 }
 
