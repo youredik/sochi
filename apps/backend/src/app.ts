@@ -49,7 +49,9 @@ import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
 import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
 import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
+import { StubAdapter } from './workers/lib/postbox-adapter.ts'
 import { startNightAuditCron } from './workers/night-audit.cron.ts'
+import { startNotificationDispatcher } from './workers/notification-dispatcher.ts'
 
 /**
  * Hono app with method-chained routes for type-safe RPC.
@@ -226,6 +228,15 @@ const cancelFeeConsumer = startCdcConsumer(driver, sql, {
 // Tests bypass via NODE_ENV=test (integration calls runNightAudit directly).
 const nightAuditCron = process.env.NODE_ENV === 'test' ? null : startNightAuditCron(sql, logger, {})
 
+// Notification dispatcher — polls notificationOutbox для pending rows and
+// sends through the email adapter. V1 uses StubAdapter (logs sends — Mailpit
+// в dev, real Postbox адаптер wires via env when production lands). Tests
+// bypass via NODE_ENV=test (integration calls pollOnce directly).
+const notificationDispatcher =
+	process.env.NODE_ENV === 'test'
+		? null
+		: startNotificationDispatcher(sql, new StubAdapter(), logger, {})
+
 const allCdcConsumers = [
 	bookingCdcConsumer,
 	folioActivityConsumer,
@@ -258,6 +269,7 @@ export async function stopApp(): Promise<void> {
 	logger.info({ count: allCdcConsumers.length }, 'shutdown: stopping CDC consumers + YDB driver')
 	await Promise.all(allCdcConsumers.map((c) => c.stop()))
 	if (nightAuditCron) await nightAuditCron.stop()
+	if (notificationDispatcher) await notificationDispatcher.stop()
 }
 process.once('SIGTERM', () => {
 	void stopApp()
