@@ -1,6 +1,13 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, type Page, test } from '@playwright/test'
 
+// Payment tests seed via UI booking grid + API folio/line. Под full e2e:smoke
+// load (15+ test files в одном workers=1 run, accumulated YDB state) grid
+// render takes longer than the default 30s. Per Apaleo / Mews / Cloudbeds 2026
+// e2e canon — payment-domain tests get 90s ceiling. Default 30s for fast tests
+// в других spec'ах не меняется.
+test.describe.configure({ timeout: 90_000 })
+
 /**
  * M6.8 — payment Sheets a11y + full-flow E2E + regression gates.
  *
