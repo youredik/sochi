@@ -42,6 +42,7 @@ import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
 import { createOtelIngest } from './otel-ingest.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
+import { createCheckoutFinalizerHandler } from './workers/handlers/checkout-finalizer.ts'
 import { createFolioBalanceHandler } from './workers/handlers/folio-balance.ts'
 import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
@@ -196,6 +197,17 @@ const folioCreatorConsumer = startCdcConsumer(driver, sql, {
 	label: 'folio_creator:booking',
 })
 
+// tourism_tax_writer on booking — post 2% (Сочи 2026) tourism-tax line при
+// status → checked_out. Apaleo Russia / TravelLine canon: at-checkout single
+// line, не per-night. НК РФ ст. 418, min-floor 100₽ × ночей × номеров.
+// Idempotent via deterministic folioLine.id `tax_<bookingId>`.
+const tourismTaxConsumer = startCdcConsumer(driver, sql, {
+	topic: 'booking/booking_events',
+	consumer: 'tourism_tax_writer',
+	projection: createCheckoutFinalizerHandler(logger),
+	label: 'tourism_tax:booking',
+})
+
 // Night-audit cron — posts per-night accommodation lines on `in_house`
 // bookings at 03:00 Europe/Moscow. Boot catch-up handles restart-during-window
 // gaps. Idempotent via deterministic folioLine.id (PK collision = no-op).
@@ -217,6 +229,7 @@ const allCdcConsumers = [
 	paymentStatusConsumer,
 	refundCreatorConsumer,
 	folioCreatorConsumer,
+	tourismTaxConsumer,
 ] as const
 
 // Graceful shutdown: SIGTERM (Serverless Container / K8s) drains the CDC
