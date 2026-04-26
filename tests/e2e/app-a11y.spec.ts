@@ -51,6 +51,33 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		await runAxe(page, 'receivables-dashboard')
 	})
 
+	test('/o/{slug}/admin/tax passes WCAG 2.2 AA (M7.fix.3.b)', async ({ page }) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+		// Owner role grants `report:read`, so the dashboard tile is rendered.
+		await page.getByRole('link', { name: /Туристический налог/ }).click()
+		await expect(page).toHaveURL(/\/admin\/tax(\?.*)?$/)
+		// Heading + filter + KPI section visible — content settled.
+		await expect(page.getByRole('heading', { name: /Туристический налог/, level: 1 })).toBeVisible()
+		await expect(page.getByRole('region', { name: 'Фильтры' })).toBeVisible()
+		await expect(page.getByRole('region', { name: 'Ключевые показатели' })).toBeVisible()
+		await runAxe(page, 'admin-tax-tourism')
+	})
+
+	test('/o/{slug}/admin/notifications passes WCAG 2.2 AA (M7.fix.3.d)', async ({ page }) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+		// Dashboard tile: link contains both H2 "Уведомления" + description text.
+		await page.getByRole('link', { name: /Уведомления/ }).click()
+		await expect(page).toHaveURL(/\/admin\/notifications(\?.*)?$/)
+		await expect(
+			page.getByRole('heading', { name: /^Уведомления$/, level: 1 }),
+		).toBeVisible()
+		await expect(page.getByRole('region', { name: 'Фильтры' })).toBeVisible()
+		await expect(page.getByRole('region', { name: 'История уведомлений' })).toBeVisible()
+		await runAxe(page, 'admin-notifications')
+	})
+
 	test('/o/{slug}/setup wizard (in progress) passes WCAG 2.2 AA', async ({ page, context }) => {
 		// Fresh tenant so we can land on /setup. Sign up a brand-new user
 		// in THIS test's context (can't reuse owner.json which has a fully-

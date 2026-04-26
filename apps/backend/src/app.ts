@@ -19,6 +19,7 @@ import { createFolioRoutes } from './domains/folio/folio.routes.ts'
 import { createGuestFactory } from './domains/guest/guest.factory.ts'
 import { createGuestRoutes } from './domains/guest/guest.routes.ts'
 import { createMeRoutes } from './domains/me/me.routes.ts'
+import { createNotificationFactory } from './domains/notification/notification.factory.ts'
 import { createPaymentFactory } from './domains/payment/payment.factory.ts'
 import { createPaymentRoutes } from './domains/payment/payment.routes.ts'
 import { createStubPaymentProvider } from './domains/payment/provider/stub-provider.ts'
@@ -41,6 +42,8 @@ import { logger } from './logger.ts'
 import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
 import { createOtelIngest } from './otel-ingest.ts'
+import { createAdminNotificationsRoutes } from './routes/admin/notifications.ts'
+import { createAdminTaxRoutes } from './routes/admin/tax.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
 import { createCancelFeeFinalizerHandler } from './workers/handlers/cancel-fee-finalizer.ts'
 import { createCheckoutFinalizerHandler } from './workers/handlers/checkout-finalizer.ts'
@@ -75,6 +78,7 @@ const bookingFactory = createBookingFactory(
 	ratePlanFactory.service,
 )
 const activityFactory = createActivityFactory(sql)
+const notificationFactory = createNotificationFactory(sql, activityFactory.repo)
 const guestFactory = createGuestFactory(sql)
 const folioFactory = createFolioFactory(sql)
 // V1 demo: stub payment provider (synchronous-success autocapture mirror of SBP).
@@ -365,6 +369,8 @@ const routes = app
 	.route('/api/v1', createFolioRoutes(folioFactory, idempotency))
 	.route('/api/v1', createPaymentRoutes(paymentFactory, idempotency))
 	.route('/api/v1', createRefundRoutes(refundFactory, idempotency))
+	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
+	.route('/api/admin', createAdminNotificationsRoutes(notificationFactory.service))
 	.get('/health', (c) =>
 		c.json(
 			{

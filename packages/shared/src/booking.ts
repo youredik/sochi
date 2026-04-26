@@ -185,6 +185,71 @@ export type TourismTaxReport = {
 	accommodationBaseMicros: string
 }
 
+/**
+ * GET /api/admin/tax/tourism/report?from=YYYY-MM-DD&to=YYYY-MM-DD&propertyId?
+ *
+ * Org-level tourism-tax report — aggregates across all properties of the
+ * tenant within the period. Optional `propertyId` filter narrows to a single
+ * property (per-property drill-down). Excludes `cancelled` bookings (no tax
+ * accrued); `no_show` retains liability per domain rule.
+ *
+ * Response is shaped for both UI (KPI cards + monthly chart + line table)
+ * and XLSX export (3 sheets: Свод/Помесячно/Построчно).
+ *
+ * Льгота columns intentionally ABSENT in V1: schema lands with M8 МВД guest-
+ * document flow (см. project_epgu_integration_pending.md). UI placeholder
+ * column rendered as `—`.
+ */
+export const tourismTaxOrgReportParams = z
+	.object({
+		from: dateSchema,
+		to: dateSchema,
+		propertyId: idSchema('property').optional(),
+	})
+	.refine((v) => v.from <= v.to, 'from must be <= to')
+export type TourismTaxOrgReportParams = z.infer<typeof tourismTaxOrgReportParams>
+
+/** One booking line in the report — flat row for table + XLSX. */
+export type TourismTaxOrgReportRow = {
+	bookingId: string
+	propertyId: string
+	propertyName: string
+	checkIn: string
+	checkOut: string
+	nightsCount: number
+	guestName: string
+	channelCode: string
+	status: string
+	/** Accommodation base in Int64 micros (kopecks × 10⁴), decimal string. */
+	accommodationBaseMicros: string
+	/** Computed tax in micros (post-floor + half-up rounding). */
+	tourismTaxMicros: string
+}
+
+/** One YYYY-MM bucket for monthly aggregation (for КНД 1153008 line 005). */
+export type TourismTaxOrgReportMonthly = {
+	/** Format: YYYY-MM (e.g. '2026-01'). */
+	month: string
+	bookingsCount: number
+	totalNights: number
+	accommodationBaseMicros: string
+	tourismTaxMicros: string
+}
+
+export type TourismTaxOrgReport = {
+	period: { from: string; to: string }
+	/** Optional filter applied — null if all properties included. */
+	propertyId: string | null
+	kpi: {
+		bookingsCount: number
+		totalNights: number
+		accommodationBaseMicros: string
+		tourismTaxMicros: string
+	}
+	monthly: TourismTaxOrgReportMonthly[]
+	rows: TourismTaxOrgReportRow[]
+}
+
 /** GET /properties/:propertyId/bookings — optional filters. */
 export const bookingListParams = z
 	.object({

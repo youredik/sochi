@@ -194,6 +194,7 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 			refund: ['create', 'read'],
 			receipt: ['read', 'resend'],
 			report: ['read'],
+			notification: ['read', 'retry'],
 			billing: ['read', 'manage'],
 		},
 		manager: {
@@ -207,6 +208,7 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 			refund: ['create', 'read'],
 			receipt: ['read', 'resend'],
 			report: ['read'],
+			notification: ['read', 'retry'],
 			billing: ['read'],
 		},
 		staff: {
@@ -218,6 +220,7 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 			folio: ['create', 'read', 'update'],
 			payment: ['create', 'read'],
 			receipt: ['read', 'resend'],
+			// notification: NOT granted to staff (admin-only).
 		},
 	}
 
@@ -232,6 +235,7 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 		'refund',
 		'receipt',
 		'report',
+		'notification',
 		'billing',
 	] as const
 	const ALL_ACTIONS = [
@@ -243,6 +247,7 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 		'reopen',
 		'manage',
 		'resend',
+		'retry',
 	] as const
 
 	test.each(ALL_ROLES)('every (resource × action) tuple matches matrix for role %s', (role) => {

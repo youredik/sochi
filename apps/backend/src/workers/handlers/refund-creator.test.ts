@@ -89,6 +89,8 @@ function buildDisputeEvent(
 	if (includeNewImage) {
 		event.newImage = {
 			status: newStatus,
+			// biome-ignore lint/nursery/useNullishCoalescing: distinguish explicit
+			// null (passes through to event) from undefined (default).
 			amountMinor: overrides.amountMinor === undefined ? '15000' : overrides.amountMinor,
 			currency: overrides.currency ?? 'RUB',
 			providerCode: overrides.providerCode ?? 'yookassa',

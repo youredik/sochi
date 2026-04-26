@@ -1,6 +1,8 @@
+import { hasPermission } from '@horeca/shared'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { api } from '../lib/api.ts'
+import { useCurrentRole } from '../lib/use-can.ts'
 
 /**
  * Tenant dashboard — `/o/{slug}/`.
@@ -31,6 +33,9 @@ export const Route = createFileRoute('/_app/o/$orgSlug/')({
 
 function TenantHome() {
 	const { organization } = Route.useRouteContext()
+	const role = useCurrentRole()
+	const canReadReports = role !== undefined && hasPermission(role, { report: ['read'] })
+	const canReadNotifications = role !== undefined && hasPermission(role, { notification: ['read'] })
 	const health = useQuery({
 		queryKey: ['health', 'db'],
 		queryFn: async () => {
@@ -68,6 +73,30 @@ function TenantHome() {
 						Открытые счета с положительным балансом, KPI и aging-разрез.
 					</p>
 				</Link>
+				{canReadReports ? (
+					<Link
+						to="/o/$orgSlug/admin/tax"
+						params={{ orgSlug: organization.slug }}
+						className="border-border bg-card hover:border-primary rounded-lg border p-6 transition-colors"
+					>
+						<h2 className="font-medium">Туристический налог</h2>
+						<p className="text-muted-foreground mt-2 text-sm">
+							Квартальный отчёт по бронированиям, помесячная разбивка, выгрузка XLSX для бухгалтера.
+						</p>
+					</Link>
+				) : null}
+				{canReadNotifications ? (
+					<Link
+						to="/o/$orgSlug/admin/notifications"
+						params={{ orgSlug: organization.slug }}
+						className="border-border bg-card hover:border-primary rounded-lg border p-6 transition-colors"
+					>
+						<h2 className="font-medium">Уведомления</h2>
+						<p className="text-muted-foreground mt-2 text-sm">
+							История писем гостям и администрации: статусы, фильтры, повтор отправки при сбое.
+						</p>
+					</Link>
+				) : null}
 			</section>
 
 			<footer className="border-border text-muted-foreground mt-12 border-t pt-4 text-xs">

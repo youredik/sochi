@@ -44,6 +44,11 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		refund: ['create', 'read'],
 		receipt: ['read', 'resend'],
 		report: ['read'],
+		// notification: outbox console + manual retry of failed/stuck rows.
+		// Not staff-grantable — outbox manipulation is an operator-elevated action
+		// (industry canon: Stripe, Inngest, Bull-Board all gate retry behind
+		// admin role). See memory `project_mcp_server_strategic.md` (Apr 2026).
+		notification: ['read', 'retry'],
 		billing: ['read', 'manage'],
 	},
 	manager: {
@@ -58,6 +63,7 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		refund: ['create', 'read'],
 		receipt: ['read', 'resend'],
 		report: ['read'],
+		notification: ['read', 'retry'],
 		billing: ['read'],
 	},
 	staff: {
@@ -72,6 +78,7 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		payment: ['create', 'read'],
 		// refund: NOT granted — financial decision, manager+ only
 		receipt: ['read', 'resend'],
+		// notification: NOT granted — outbox console / retry are admin-only
 	},
 }
 

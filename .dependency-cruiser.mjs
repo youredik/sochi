@@ -109,6 +109,9 @@ export default {
 					'(^|/)vite\\.config\\.ts$',
 					'^apps/frontend/',
 					'apps/backend/src/index\\.ts$',
+					// Vitest setupFile (referenced from vitest.config.ts setupFiles
+					// only — no direct import).
+					'apps/backend/src/tests/env-defaults\\.ts$',
 				],
 			},
 			to: {},

@@ -7,6 +7,10 @@ import type {
 	BookingStatus,
 	BookingTimeSlice,
 	RatePlan,
+	TourismTaxOrgReport,
+	TourismTaxOrgReportMonthly,
+	TourismTaxOrgReportParams,
+	TourismTaxOrgReportRow,
 	TourismTaxReport,
 	TourismTaxReportParams,
 } from '@horeca/shared'
@@ -279,6 +283,113 @@ export function createBookingService(
 				bookingsCount: included.length,
 				tourismTaxMicros: tax.toString(),
 				accommodationBaseMicros: base.toString(),
+			}
+		},
+
+		/**
+		 * Organisation-level tourism-tax report — aggregates across all properties
+		 * of the tenant within `[from, to]` (inclusive on both ends).
+		 *
+		 *   - Optional `propertyId` narrows the scan to a single property; when
+		 *     provided, validated against the tenant (cross-tenant 404 surfaces
+		 *     as PropertyNotFoundError).
+		 *   - Includes deactivated properties (`includeInactive: true`) so a
+		 *     property hidden from the operator UI does NOT silently disappear
+		 *     from a tax report covering the period when it was active. Tax
+		 *     liability follows the booking, not the current property flag.
+		 *   - Excludes `status === 'cancelled'` (no tax accrued); `no_show`
+		 *     rows are RETAINED — domain rule (booking.repo.markNoShow docstring).
+		 *   - Buckets by **YYYY-MM of `checkIn`**: matches КНД 1153008 line 005
+		 *     (number of month inside the quarter, per Order ФНС ЕД-7-3/1228@
+		 *     2025-12-19, see memory `project_ru_tax_form_2026q1.md`).
+		 */
+		getTourismTaxOrgReport: async (
+			tenantId: string,
+			input: TourismTaxOrgReportParams,
+		): Promise<TourismTaxOrgReport> => {
+			const properties = await propertyService.list(tenantId, true)
+			let scope = properties
+			if (input.propertyId) {
+				scope = properties.filter((p) => p.id === input.propertyId)
+				if (scope.length === 0) throw new PropertyNotFoundError(input.propertyId)
+			}
+
+			const propNameById = new Map(scope.map((p) => [p.id, p.name]))
+
+			const allRows: TourismTaxOrgReportRow[] = []
+			for (const p of scope) {
+				const bookings = await repo.listByProperty(tenantId, p.id, {
+					from: input.from,
+					to: input.to,
+				})
+				for (const b of bookings) {
+					if (b.status === 'cancelled') continue
+					const g = b.guestSnapshot
+					const guestName = [g.lastName, g.firstName, g.middleName ?? '']
+						.filter(Boolean)
+						.join(' ')
+						.trim()
+					allRows.push({
+						bookingId: b.id,
+						propertyId: p.id,
+						propertyName: propNameById.get(p.id) ?? p.id,
+						checkIn: b.checkIn,
+						checkOut: b.checkOut,
+						nightsCount: b.nightsCount,
+						guestName,
+						channelCode: b.channelCode,
+						status: b.status,
+						accommodationBaseMicros: b.tourismTaxBaseMicros,
+						tourismTaxMicros: b.tourismTaxMicros,
+					})
+				}
+			}
+
+			allRows.sort((a, b) => {
+				if (a.checkIn !== b.checkIn) return a.checkIn < b.checkIn ? -1 : 1
+				return a.bookingId < b.bookingId ? -1 : 1
+			})
+
+			const monthlyMap = new Map<string, TourismTaxOrgReportMonthly>()
+			let totalBase = 0n
+			let totalTax = 0n
+			let totalNights = 0
+			for (const r of allRows) {
+				const month = r.checkIn.slice(0, 7)
+				const cur = monthlyMap.get(month) ?? {
+					month,
+					bookingsCount: 0,
+					totalNights: 0,
+					accommodationBaseMicros: '0',
+					tourismTaxMicros: '0',
+				}
+				cur.bookingsCount += 1
+				cur.totalNights += r.nightsCount
+				cur.accommodationBaseMicros = (
+					BigInt(cur.accommodationBaseMicros) + BigInt(r.accommodationBaseMicros)
+				).toString()
+				cur.tourismTaxMicros = (
+					BigInt(cur.tourismTaxMicros) + BigInt(r.tourismTaxMicros)
+				).toString()
+				monthlyMap.set(month, cur)
+				totalBase += BigInt(r.accommodationBaseMicros)
+				totalTax += BigInt(r.tourismTaxMicros)
+				totalNights += r.nightsCount
+			}
+
+			const monthly = Array.from(monthlyMap.values()).sort((a, b) => a.month.localeCompare(b.month))
+
+			return {
+				period: { from: input.from, to: input.to },
+				propertyId: input.propertyId ?? null,
+				kpi: {
+					bookingsCount: allRows.length,
+					totalNights,
+					accommodationBaseMicros: totalBase.toString(),
+					tourismTaxMicros: totalTax.toString(),
+				},
+				monthly,
+				rows: allRows,
 			}
 		},
 	}

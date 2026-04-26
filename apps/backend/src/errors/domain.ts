@@ -336,3 +336,26 @@ export class ProviderRefundIdTakenError extends ConflictError {
 		this.name = 'ProviderRefundIdTakenError'
 	}
 }
+
+/* --------------------------------------------- Notification (M7.fix.3.c) */
+
+/** Notification outbox row not found in tenant scope. */
+export class NotificationNotFoundError extends NotFoundError {
+	constructor(notificationId: string) {
+		super('Notification', notificationId)
+		this.name = 'NotificationNotFoundError'
+	}
+}
+
+/**
+ * Operator attempted manual retry on a row already in `status='sent'`.
+ * Cannot un-send — operator must use the (future) "resend" flow that
+ * creates a NEW outbox row with the same payload.
+ */
+export class NotificationAlreadySentError extends ConflictError {
+	override readonly code = 'NOTIFICATION_ALREADY_SENT'
+	constructor(notificationId: string) {
+		super(`Notification ${notificationId} is already sent — cannot retry`)
+		this.name = 'NotificationAlreadySentError'
+	}
+}

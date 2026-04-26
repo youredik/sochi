@@ -33,11 +33,20 @@ const activityObjectTypeValues = [
 	'refund',
 	'receipt',
 	'dispute',
+	// M7.fix.3.c — operator manual actions on notification outbox
+	'notification',
 ] as const
 export const activityObjectTypeSchema = z.enum(activityObjectTypeValues)
 export type ActivityObjectType = z.infer<typeof activityObjectTypeSchema>
 
-const activityTypeValues = ['created', 'fieldChange', 'statusChange', 'deleted'] as const
+const activityTypeValues = [
+	'created',
+	'fieldChange',
+	'statusChange',
+	'deleted',
+	// M7.fix.3.c — operator-triggered retry of failed/stuck outbox row
+	'manualRetry',
+] as const
 export const activityTypeSchema = z.enum(activityTypeValues)
 export type ActivityType = z.infer<typeof activityTypeSchema>
 

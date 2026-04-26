@@ -69,6 +69,8 @@ async function seedBookingPaymentReceipt(opts: SeedFullChainOpts): Promise<{
 	const nowTs = toTs(now)
 
 	if (!opts.skipGuest) {
+		// biome-ignore lint/nursery/useNullishCoalescing: distinguish explicit null
+		// (NULL email column) from undefined (default test fixture).
 		const emailRaw = opts.guestEmail === undefined ? 'guest@test.local' : opts.guestEmail
 		const emailValue = textOpt(emailRaw)
 		await sql`

@@ -37,7 +37,12 @@ pre-commit:
 pre-push:
   jobs:
     - name: tests
-      run: pnpm test
+      # `test:serial` (vitest run --no-file-parallelism) — backend integration
+      # tests share local YDB; parallel file workers occasionally exhaust the
+      # docker container's connection pool and flake the gate (different tests
+      # fail each run, all passing solo). Serial run = ~90s instead of ~25s but
+      # 100% deterministic. `pnpm test` (parallel) stays for fast dev iteration.
+      run: pnpm test:serial
     - name: build
       run: pnpm build
     - name: smoke

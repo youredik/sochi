@@ -48,6 +48,9 @@ import { createBookingFactory } from './booking.factory.ts'
 
 const TENANT_A = newId('organization')
 const TENANT_B = newId('organization')
+// Dedicated tenant for ORG-report exact-value tests so other suite tests
+// don't leak bookings into KPI totals.
+const TENANT_ORG_ISOLATED = newId('organization')
 const USER_A = newId('user')
 
 describe('booking.service integration (M4e end-to-end)', { tags: ['db'], timeout: 60_000 }, () => {
@@ -467,5 +470,446 @@ describe('booking.service integration (M4e end-to-end)', { tags: ['db'], timeout
 				to: '2031-10-31',
 			}),
 		).rejects.toBeInstanceOf(PropertyNotFoundError)
+	})
+
+	// ---------------- M7.fix.3.a — Organisation-level tax report ----------------
+	//
+	//   [ORG1] Single property → KPI + row + monthly populated correctly
+	//   [ORG2] Two properties same tenant → flatten across both, propertyName set
+	//   [ORG3] propertyId filter narrows to one property only
+	//   [ORG4] Cross-tenant propertyId → PropertyNotFoundError
+	//   [ORG5] Cross-tenant scope: TENANT_B sees zero of TENANT_A's data
+	//   [ORG6] cancelled excluded, no_show included (parity with per-property)
+	//   [ORG7] Monthly bucketing across Jan/Feb → 2 monthly entries, totals match
+	//   [ORG8] Empty period → zero KPI + empty rows/monthly (not error)
+	//   [ORG9] Deactivated property STILL included (booking liability persists)
+	//   [ORG10] Row.guestName composed from snapshot (lastName + firstName + middleName)
+	//   [ORG11] Rows sorted by checkIn ASC, then bookingId ASC
+
+	test('[ORG1] Single property → KPI exact + row + monthly bucket exact (isolated tenant)', async () => {
+		// Isolated tenant — no other tests touch it, so KPI totals are EXACT,
+		// not "≥ 1" loosely.
+		const dates = ['2031-11-10', '2031-11-11']
+		const { prop, rt, rp } = await seedChain({
+			tenantId: TENANT_ORG_ISOLATED,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const b = await booking.create(
+			TENANT_ORG_ISOLATED,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2031-11-10', checkOut: '2031-11-12' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+
+		const report = await booking.getTourismTaxOrgReport(TENANT_ORG_ISOLATED, {
+			from: '2031-11-01',
+			to: '2031-11-30',
+		})
+		expect(report.period).toEqual({ from: '2031-11-01', to: '2031-11-30' })
+		expect(report.propertyId).toBeNull()
+
+		// EXACT KPI totals: only our 1 booking.
+		expect(report.kpi.bookingsCount).toBe(1)
+		expect(report.kpi.totalNights).toBe(2)
+		expect(report.kpi.tourismTaxMicros).toBe(200_000_000n.toString())
+		expect(report.kpi.accommodationBaseMicros).toBe(10_000_000_000n.toString())
+
+		// EXACT rows.
+		expect(report.rows.length).toBe(1)
+		const row = report.rows[0]
+		expect(row?.bookingId).toBe(b.id)
+		expect(row?.propertyId).toBe(prop.id)
+		expect(row?.propertyName).toBe(prop.name)
+		expect(row?.nightsCount).toBe(2)
+		expect(row?.tourismTaxMicros).toBe(200_000_000n.toString())
+		expect(row?.accommodationBaseMicros).toBe(10_000_000_000n.toString())
+		expect(row?.status).toBe('confirmed')
+		expect(row?.channelCode).toBe('direct')
+		expect(row?.checkIn).toBe('2031-11-10')
+		expect(row?.checkOut).toBe('2031-11-12')
+
+		// EXACT monthly: 1 bucket, exactly our booking.
+		expect(report.monthly.length).toBe(1)
+		const novMonth = report.monthly[0]
+		expect(novMonth?.month).toBe('2031-11')
+		expect(novMonth?.bookingsCount).toBe(1)
+		expect(novMonth?.totalNights).toBe(2)
+		expect(novMonth?.tourismTaxMicros).toBe(200_000_000n.toString())
+		expect(novMonth?.accommodationBaseMicros).toBe(10_000_000_000n.toString())
+	})
+
+	test('[ORG2] Two properties same tenant → flattened across both', async () => {
+		const dates = ['2032-01-10', '2032-01-11']
+		const {
+			prop: propX,
+			rt: rtX,
+			rp: rpX,
+		} = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const {
+			prop: propY,
+			rt: rtY,
+			rp: rpY,
+		} = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const bX = await booking.create(
+			TENANT_A,
+			propX.id,
+			buildBookingInput(rtX, rpX, { checkIn: '2032-01-10', checkOut: '2032-01-12' }),
+			USER_A,
+		)
+		const bY = await booking.create(
+			TENANT_A,
+			propY.id,
+			buildBookingInput(rtY, rpY, { checkIn: '2032-01-10', checkOut: '2032-01-12' }),
+			USER_A,
+		)
+		await trackBookingCleanup(bX)
+		await trackBookingCleanup(bY)
+
+		const report = await booking.getTourismTaxOrgReport(TENANT_A, {
+			from: '2032-01-01',
+			to: '2032-01-31',
+		})
+		const propIds = new Set(report.rows.map((r) => r.propertyId))
+		expect(propIds.has(propX.id)).toBe(true)
+		expect(propIds.has(propY.id)).toBe(true)
+	})
+
+	test('[ORG3] propertyId filter narrows to one property only', async () => {
+		const dates = ['2032-02-10']
+		const {
+			prop: propA,
+			rt: rtA,
+			rp: rpA,
+		} = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const {
+			prop: propB,
+			rt: rtB,
+			rp: rpB,
+		} = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const bA = await booking.create(
+			TENANT_A,
+			propA.id,
+			buildBookingInput(rtA, rpA, { checkIn: '2032-02-10', checkOut: '2032-02-11' }),
+			USER_A,
+		)
+		const bB = await booking.create(
+			TENANT_A,
+			propB.id,
+			buildBookingInput(rtB, rpB, { checkIn: '2032-02-10', checkOut: '2032-02-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(bA)
+		await trackBookingCleanup(bB)
+
+		const report = await booking.getTourismTaxOrgReport(TENANT_A, {
+			from: '2032-02-01',
+			to: '2032-02-28',
+			propertyId: propA.id,
+		})
+		expect(report.propertyId).toBe(propA.id)
+		// Only propA's booking — nothing from propB.
+		expect(report.rows.some((r) => r.propertyId === propB.id)).toBe(false)
+		expect(report.rows.some((r) => r.bookingId === bA.id)).toBe(true)
+	})
+
+	test('[ORG4] Cross-tenant propertyId → PropertyNotFoundError', async () => {
+		const dates = ['2032-03-10']
+		const { prop } = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		await expect(
+			booking.getTourismTaxOrgReport(TENANT_B, {
+				from: '2032-03-01',
+				to: '2032-03-31',
+				propertyId: prop.id,
+			}),
+		).rejects.toBeInstanceOf(PropertyNotFoundError)
+	})
+
+	test('[ORG5] Cross-tenant scope: TENANT_B sees zero of TENANT_A bookings', async () => {
+		const dates = ['2032-04-10']
+		const { prop, rt, rp } = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const bA = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2032-04-10', checkOut: '2032-04-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(bA)
+		const reportB = await booking.getTourismTaxOrgReport(TENANT_B, {
+			from: '2032-04-01',
+			to: '2032-04-30',
+		})
+		expect(reportB.rows.some((r) => r.bookingId === bA.id)).toBe(false)
+	})
+
+	test('[ORG6] cancelled excluded, no_show included (parity with per-property)', async () => {
+		const dates = ['2032-05-05', '2032-05-10', '2032-05-15']
+		const { prop, rt, rp } = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const [b1, b2, b3] = await Promise.all([
+			booking.create(
+				TENANT_A,
+				prop.id,
+				buildBookingInput(rt, rp, { checkIn: '2032-05-05', checkOut: '2032-05-06' }),
+				USER_A,
+			),
+			booking.create(
+				TENANT_A,
+				prop.id,
+				buildBookingInput(rt, rp, { checkIn: '2032-05-10', checkOut: '2032-05-11' }),
+				USER_A,
+			),
+			booking.create(
+				TENANT_A,
+				prop.id,
+				buildBookingInput(rt, rp, { checkIn: '2032-05-15', checkOut: '2032-05-16' }),
+				USER_A,
+			),
+		])
+		if (b1) await trackBookingCleanup(b1)
+		if (b2) await trackBookingCleanup(b2)
+		if (b3) await trackBookingCleanup(b3)
+		await booking.cancel(TENANT_A, b1.id, { reason: 'test' }, USER_A)
+		await booking.markNoShow(TENANT_A, b2.id, { reason: 'test' }, USER_A)
+
+		const report = await booking.getTourismTaxOrgReport(TENANT_A, {
+			from: '2032-05-01',
+			to: '2032-05-31',
+			propertyId: prop.id,
+		})
+		const ourBookingIds = new Set([b1.id, b2.id, b3.id])
+		const ourRows = report.rows.filter((r) => ourBookingIds.has(r.bookingId))
+		expect(ourRows.length).toBe(2)
+		expect(ourRows.some((r) => r.bookingId === b1.id)).toBe(false)
+		expect(ourRows.some((r) => r.bookingId === b2.id)).toBe(true)
+		expect(ourRows.some((r) => r.bookingId === b3.id)).toBe(true)
+	})
+
+	test('[ORG7] Monthly bucketing across Jan/Feb → 2 entries with correct totals', async () => {
+		const datesJan = ['2032-06-15', '2032-06-16'] // ← reuse seedChain creates 1 prop covering both periods
+		const datesFeb = ['2032-07-15', '2032-07-16']
+		const { prop, rt, rp } = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates: [...datesJan, ...datesFeb],
+			amountDecimal: '5000',
+		})
+		const bJan = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2032-06-15', checkOut: '2032-06-16' }),
+			USER_A,
+		)
+		const bFeb = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2032-07-15', checkOut: '2032-07-16' }),
+			USER_A,
+		)
+		await trackBookingCleanup(bJan)
+		await trackBookingCleanup(bFeb)
+
+		const report = await booking.getTourismTaxOrgReport(TENANT_A, {
+			from: '2032-06-01',
+			to: '2032-07-31',
+			propertyId: prop.id,
+		})
+		const jun = report.monthly.find((m) => m.month === '2032-06')
+		const jul = report.monthly.find((m) => m.month === '2032-07')
+		expect(jun?.bookingsCount).toBe(1)
+		expect(jul?.bookingsCount).toBe(1)
+		expect(jun?.tourismTaxMicros).toBe(100_000_000n.toString())
+		expect(jul?.tourismTaxMicros).toBe(100_000_000n.toString())
+		expect(jun?.totalNights).toBe(1)
+		expect(jul?.totalNights).toBe(1)
+	})
+
+	test('[ORG8] Empty period → zero KPI + empty rows/monthly', async () => {
+		const report = await booking.getTourismTaxOrgReport(TENANT_A, {
+			from: '2099-01-01',
+			to: '2099-01-31',
+		})
+		expect(report.kpi.bookingsCount).toBe(0)
+		expect(report.kpi.totalNights).toBe(0)
+		expect(report.kpi.tourismTaxMicros).toBe('0')
+		expect(report.kpi.accommodationBaseMicros).toBe('0')
+		expect(report.rows).toEqual([])
+		expect(report.monthly).toEqual([])
+	})
+
+	test('[ORG9] Deactivated property STILL included (booking liability persists)', async () => {
+		const dates = ['2032-08-10']
+		const { prop, rt, rp } = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2032-08-10', checkOut: '2032-08-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		// Deactivate property AFTER booking — operator UI hides it but tax
+		// liability remains for fiscal reporting.
+		await property.update(TENANT_A, prop.id, { isActive: false })
+
+		const report = await booking.getTourismTaxOrgReport(TENANT_A, {
+			from: '2032-08-01',
+			to: '2032-08-31',
+		})
+		expect(report.rows.some((r) => r.bookingId === b.id)).toBe(true)
+	})
+
+	test('[ORG10] Row.guestName composed from snapshot (lastName + firstName)', async () => {
+		const dates = ['2032-09-10']
+		const { prop, rt, rp } = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const input = {
+			...buildBookingInput(rt, rp, { checkIn: '2032-09-10', checkOut: '2032-09-11' }),
+			guestSnapshot: {
+				firstName: 'Иван',
+				lastName: 'Петров',
+				middleName: 'Сергеевич',
+				citizenship: 'RU',
+				documentType: 'passport',
+				documentNumber: '4500000000',
+			},
+		}
+		const b = await booking.create(TENANT_A, prop.id, input, USER_A)
+		await trackBookingCleanup(b)
+
+		const report = await booking.getTourismTaxOrgReport(TENANT_A, {
+			from: '2032-09-01',
+			to: '2032-09-30',
+			propertyId: prop.id,
+		})
+		const ourRow = report.rows.find((r) => r.bookingId === b.id)
+		expect(ourRow?.guestName).toBe('Петров Иван Сергеевич')
+	})
+
+	test('[ORG_INHOUSE] booking with status=in_house INCLUDED (any non-cancelled retains liability)', async () => {
+		const dates = ['2032-11-10']
+		const { prop, rt, rp } = await seedChain({
+			tenantId: TENANT_ORG_ISOLATED,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		const b = await booking.create(
+			TENANT_ORG_ISOLATED,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2032-11-10', checkOut: '2032-11-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		// Promote booking to in_house. Repo.checkIn requires the room assignment;
+		// availability seeded with 1 room → repo auto-assigns from inventory.
+		const room = (
+			await getTestSql()<{ id: string }[]>`
+				SELECT id FROM room
+				WHERE tenantId = ${TENANT_ORG_ISOLATED}
+					AND propertyId = ${prop.id}
+					AND roomTypeId = ${rt.id}
+				LIMIT 1
+			`
+		)[0]?.[0]
+		// Some seed paths don't auto-create physical rooms; if absent, the
+		// transition still moves status forward without an assignment id.
+		const inHouseInput = room ? { assignedRoomId: room.id } : {}
+		await booking.checkIn(TENANT_ORG_ISOLATED, b.id, inHouseInput, USER_A)
+
+		const report = await booking.getTourismTaxOrgReport(TENANT_ORG_ISOLATED, {
+			from: '2032-11-01',
+			to: '2032-11-30',
+			propertyId: prop.id,
+		})
+		const ourRow = report.rows.find((r) => r.bookingId === b.id)
+		expect(ourRow).toBeDefined()
+		expect(ourRow?.status).toBe('in_house')
+	})
+
+	test('[ORG11] Rows sorted by checkIn ASC, then bookingId ASC', async () => {
+		const dates = ['2032-10-05', '2032-10-10', '2032-10-15']
+		const { prop, rt, rp } = await seedChain({
+			tenantId: TENANT_A,
+			tourismTaxRateBps: 200,
+			dates,
+			amountDecimal: '5000',
+		})
+		// Insert in OUT-OF-ORDER chronologically to test sort.
+		const bMid = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2032-10-10', checkOut: '2032-10-11' }),
+			USER_A,
+		)
+		const bLast = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2032-10-15', checkOut: '2032-10-16' }),
+			USER_A,
+		)
+		const bFirst = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2032-10-05', checkOut: '2032-10-06' }),
+			USER_A,
+		)
+		await trackBookingCleanup(bMid)
+		await trackBookingCleanup(bLast)
+		await trackBookingCleanup(bFirst)
+
+		const report = await booking.getTourismTaxOrgReport(TENANT_A, {
+			from: '2032-10-01',
+			to: '2032-10-31',
+			propertyId: prop.id,
+		})
+		const ourIds = [bFirst.id, bMid.id, bLast.id]
+		const ourRows = report.rows.filter((r) => ourIds.includes(r.bookingId))
+		expect(ourRows.map((r) => r.bookingId)).toEqual(ourIds)
+		expect(ourRows.map((r) => r.checkIn)).toEqual(['2032-10-05', '2032-10-10', '2032-10-15'])
 	})
 })
