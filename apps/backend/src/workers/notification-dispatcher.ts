@@ -30,6 +30,11 @@ import {
 	shouldDeadLetter,
 } from './lib/dispatcher-policy.ts'
 import type { EmailAdapter, SendEmailResult } from './lib/postbox-adapter.ts'
+import {
+	type RecipientSource,
+	type ResolveResult,
+	resolveRecipientEmail,
+} from './lib/recipient-resolver.ts'
 
 type SqlInstance = typeof SQL
 
@@ -199,27 +204,51 @@ async function dispatchOne(
 	policy: RetryPolicy,
 	random: () => number,
 ): Promise<'sent' | 'permanent' | 'transient_retry' | 'dead_letter'> {
-	// 1. Render body. V1 path: `bodyText` rendered upstream by writer (or
+	// 1. Resolve real recipient email (M7.fix.1). The outbox row's `recipient`
+	// is a placeholder ('guest@placeholder.local' or 'ops@placeholder.local')
+	// because the upstream CDC writer doesn't have access to guest data.
+	// Per research synthesis §9 — resolve at dispatch time, not write time
+	// (guest may have changed email between booking and send).
+	//
+	// Ops-alert kinds (payment_failed / receipt_failed) have placeholder
+	// recipient='ops@placeholder.local' — kept as-is for V1; ops resolution
+	// (org owner email lookup) lands in M9 alongside Telegram bot.
+	const tenantId = row.tenantId
+	const id = row.id
+	let recipient = row.recipient
+	if (row.recipient === 'guest@placeholder.local' && isResolvableSource(row.sourceObjectType)) {
+		const resolved = await resolveRecipientEmail(
+			sql,
+			row.sourceObjectType as RecipientSource,
+			tenantId,
+			row.sourceObjectId,
+		)
+		const next = handleResolution(resolved, log, row)
+		if (next === 'fail_permanent') {
+			return await markPermanent(sql, row, 'recipient unresolvable', log)
+		}
+		recipient = next
+	}
+
+	// 2. Render body. V1 path: `bodyText` rendered upstream by writer (or
 	// dispatcher renders later via templates lib). For now, accept whatever
 	// the writer pre-rendered — falling back to subject when body is empty
-	// avoids sending empty mails. M7.B.3 will switch to lazy-render via
+	// avoids sending empty mails. M7.fix.3 will switch to lazy-render via
 	// notification-templates when payloadJson + kind drives it at send time.
 	const subject = row.subject
 	const bodyText = row.bodyText ?? row.subject
 	const bodyHtml = `<p>${escapeHtmlInline(bodyText)}</p>`
 
-	// 2. Send (single-row, no batch). Adapter classifier handles error mapping.
+	// 3. Send (single-row, no batch). Adapter classifier handles error mapping.
 	const result: SendEmailResult = await adapter.send({
 		from: fromAddress,
-		to: row.recipient,
+		to: recipient,
 		subject,
 		html: bodyHtml,
 		text: bodyText,
 	})
 
 	const now = new Date()
-	const tenantId = row.tenantId
-	const id = row.id
 	const newRetryCount = Number(row.retryCount) + 1
 
 	// Per project_ydb_specifics — YDB's UPDATE rejects mixed Optional/Utf8 binds
@@ -365,6 +394,71 @@ async function upsertOutbox(
 			${toTs(r.createdAt)}, ${toTs(r.updatedAt)}, ${r.createdBy}, ${DISPATCHER_ACTOR_ID}
 		)
 	`
+}
+
+function isResolvableSource(source: string): source is RecipientSource {
+	return source === 'booking' || source === 'payment' || source === 'receipt'
+}
+
+/**
+ * Map resolver outcome to next action: either a real email to send to, or
+ * a `fail_permanent` token instructing the dispatcher to flag the row.
+ */
+function handleResolution(
+	result: ResolveResult,
+	log: DispatcherLogger,
+	row: { tenantId: string; id: string; sourceObjectType: string; sourceObjectId: string },
+): string | 'fail_permanent' {
+	if (result.kind === 'resolved') return result.email
+	log.warn(
+		{
+			tenantId: row.tenantId,
+			id: row.id,
+			source: row.sourceObjectType,
+			sourceObjectId: row.sourceObjectId,
+			outcome: result.kind,
+			reason: result.reason,
+		},
+		'dispatcher: recipient resolution failed — marking permanent failure',
+	)
+	return 'fail_permanent'
+}
+
+async function markPermanent(
+	sql: SqlInstance,
+	row: PendingRow,
+	reason: string,
+	log: DispatcherLogger,
+): Promise<'permanent'> {
+	const now = new Date()
+	await upsertOutbox(sql, {
+		tenantId: row.tenantId,
+		id: row.id,
+		kind: row.kind,
+		channel: row.channel,
+		recipient: row.recipient,
+		subject: row.subject,
+		bodyText: row.bodyText,
+		payloadJson: row.payloadJson,
+		sourceObjectType: row.sourceObjectType,
+		sourceObjectId: row.sourceObjectId,
+		sourceEventDedupKey: row.sourceEventDedupKey,
+		createdAt: row.createdAt,
+		createdBy: row.createdBy,
+		status: 'failed',
+		sentAt: null,
+		failedAt: now,
+		failureReason: reason,
+		retryCount: Number(row.retryCount) + 1,
+		messageId: null,
+		nextAttemptAt: null,
+		updatedAt: now,
+	})
+	log.warn(
+		{ tenantId: row.tenantId, id: row.id, reason },
+		'dispatcher: marked permanent — recipient unresolvable',
+	)
+	return 'permanent'
 }
 
 /** Inline HTML escape duplicated from notification-templates to avoid ts cycle. */

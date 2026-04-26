@@ -24,7 +24,17 @@ const envSchema = z.object({
 	S3_SECRET_ACCESS_KEY: z.string().min(1),
 	S3_BUCKET: z.string().min(1),
 
-	// SMTP (Mailpit local / Postbox prod)
+	// Email transport — dual-mode (M7.fix.2):
+	//   POSTBOX_ENABLED=true  → Yandex Cloud Postbox via SES-compat HTTPS API (production)
+	//   POSTBOX_ENABLED=false → SMTP to Mailpit (local dev)
+	//   Neither configured    → log-only (silent — useful in CI / e2e where
+	//                           SMTP isn't available)
+	POSTBOX_ENABLED: z.coerce.boolean().default(false),
+	POSTBOX_ACCESS_KEY_ID: z.string().optional(),
+	POSTBOX_SECRET_ACCESS_KEY: z.string().optional(),
+	POSTBOX_ENDPOINT: z.string().default('https://postbox.cloud.yandex.net'),
+	// Sender identity. Domain MUST be DKIM/SPF/DMARC-verified at Postbox before
+	// production launch — see project_deferred_deploy_plan.md (infra-фаза).
 	SMTP_HOST: z.string().default('localhost'),
 	SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1125),
 	EMAIL_FROM_ADDRESS: z.email(),

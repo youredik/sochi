@@ -172,3 +172,173 @@ export function classifyPostboxError(err: unknown): SendEmailResult {
 	}
 	return { kind: 'transient', reason: 'unknown error' }
 }
+
+/* ----------------------------------------------------------------- MailpitAdapter */
+
+import * as net from 'node:net'
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
+
+/**
+ * Plain-SMTP adapter for local dev — speaks raw SMTP via `node:net`. Mailpit
+ * accepts everything (no TLS, no auth) and surfaces captured emails at the
+ * Web UI on `:8125` for visual inspection during development.
+ *
+ * Zero external deps — keeps install footprint small (no nodemailer pull-in).
+ * Pattern lifted directly from stankoff-v2 `services/email/email.ts`
+ * (verified production-grade 2026 reference).
+ *
+ * Errors: SMTP server returning 4xx/5xx OR socket timeout → 'transient'
+ * (Mailpit lives in docker; restart heals). Connection-refused (Mailpit
+ * not running) → 'transient' too — operator should `docker compose up
+ * mailpit` and the dispatcher's exp-backoff catches up.
+ */
+export class MailpitAdapter implements EmailAdapter {
+	private readonly host: string
+	private readonly port: number
+
+	constructor(host: string, port: number) {
+		this.host = host
+		this.port = port
+	}
+
+	async send(input: SendEmailInput): Promise<SendEmailResult> {
+		const date = new Date().toUTCString()
+		const messageId = `<${Date.now()}.${crypto.randomUUID()}@sochi.local>`
+		const boundary = `boundary_${Date.now().toString(36)}`
+
+		// Multipart/alternative: text + html. Mailpit renders both branches —
+		// matches the dual-MIME shape we ship to Postbox in production.
+		const message = [
+			`From: ${input.from}`,
+			`To: ${input.to}`,
+			`Subject: =?UTF-8?B?${Buffer.from(input.subject).toString('base64')}?=`,
+			`Date: ${date}`,
+			`Message-ID: ${messageId}`,
+			'MIME-Version: 1.0',
+			`Content-Type: multipart/alternative; boundary="${boundary}"`,
+			'',
+			`--${boundary}`,
+			'Content-Type: text/plain; charset=UTF-8',
+			'Content-Transfer-Encoding: base64',
+			'',
+			Buffer.from(input.text)
+				.toString('base64')
+				.match(/.{1,76}/g)
+				?.join('\r\n') ?? '',
+			'',
+			`--${boundary}`,
+			'Content-Type: text/html; charset=UTF-8',
+			'Content-Transfer-Encoding: base64',
+			'',
+			Buffer.from(input.html)
+				.toString('base64')
+				.match(/.{1,76}/g)
+				?.join('\r\n') ?? '',
+			'',
+			`--${boundary}--`,
+		].join('\r\n')
+
+		return new Promise<SendEmailResult>((resolve) => {
+			const socket = net.createConnection(this.port, this.host)
+			let step = 0
+			let buffer = ''
+
+			socket.setEncoding('utf8')
+			socket.setTimeout(10_000)
+
+			socket.on('data', (data: string) => {
+				buffer += data
+				if (!buffer.includes('\r\n')) return
+				const lines = buffer.split('\r\n')
+				buffer = lines.pop() ?? ''
+
+				for (const line of lines) {
+					const code = Number.parseInt(line.slice(0, 3), 10)
+					if (code >= 400) {
+						socket.destroy()
+						resolve({ kind: 'transient', reason: `SMTP ${line}` })
+						return
+					}
+					step += 1
+					if (step === 1) socket.write('EHLO sochi\r\n')
+					else if (step === 2) socket.write(`MAIL FROM:<${input.from}>\r\n`)
+					else if (step === 3) socket.write(`RCPT TO:<${input.to}>\r\n`)
+					else if (step === 4) socket.write('DATA\r\n')
+					else if (step === 5) socket.write(`${message}\r\n.\r\n`)
+					else if (step === 6) {
+						socket.write('QUIT\r\n')
+						resolve({ kind: 'sent', messageId })
+					}
+				}
+			})
+
+			socket.on('error', () => {
+				resolve({ kind: 'transient', reason: 'SMTP connection failed (Mailpit down?)' })
+			})
+			socket.on('timeout', () => {
+				socket.destroy()
+				resolve({ kind: 'transient', reason: 'SMTP connection timeout' })
+			})
+		})
+	}
+}
+
+/* ----------------------------------------------------------------- factory */
+
+interface EmailAdapterEnv {
+	POSTBOX_ENABLED: boolean
+	POSTBOX_ACCESS_KEY_ID?: string | undefined
+	POSTBOX_SECRET_ACCESS_KEY?: string | undefined
+	POSTBOX_ENDPOINT: string
+	SMTP_HOST: string
+	SMTP_PORT: number
+}
+
+interface FactoryLogger {
+	info: (obj: object, msg?: string) => void
+	warn: (obj: object, msg?: string) => void
+}
+
+/**
+ * Pick the right adapter based on environment.
+ *
+ *   POSTBOX_ENABLED=true + creds → PostboxAdapter (Yandex Cloud production)
+ *   POSTBOX_ENABLED=true + missing creds → log-only (StubAdapter) + warn
+ *   POSTBOX_ENABLED=false + SMTP_HOST set → MailpitAdapter (local dev)
+ *   neither → StubAdapter (CI / e2e where SMTP isn't available)
+ *
+ * Pattern from stankoff-v2; pre-launch verification is `dig TXT _domainkey.<domain>`
+ * + DKIM/SPF/DMARC records on sender domain (set in infra-фаза, not here).
+ */
+export function createEmailAdapter(env: EmailAdapterEnv, log: FactoryLogger): EmailAdapter {
+	if (env.POSTBOX_ENABLED) {
+		if (!env.POSTBOX_ACCESS_KEY_ID || !env.POSTBOX_SECRET_ACCESS_KEY) {
+			log.warn(
+				{ POSTBOX_ENABLED: true },
+				'POSTBOX_ENABLED=true but credentials missing — falling back to log-only StubAdapter',
+			)
+			return new StubAdapter()
+		}
+		const client = new SESv2Client({
+			region: 'ru-central1',
+			endpoint: env.POSTBOX_ENDPOINT,
+			credentials: {
+				accessKeyId: env.POSTBOX_ACCESS_KEY_ID,
+				secretAccessKey: env.POSTBOX_SECRET_ACCESS_KEY,
+			},
+		})
+		log.info({ endpoint: env.POSTBOX_ENDPOINT }, 'Email adapter: Yandex Cloud Postbox')
+		return new PostboxAdapter(client, SendEmailCommand)
+	}
+
+	if (env.SMTP_HOST && env.SMTP_PORT) {
+		log.info(
+			{ host: env.SMTP_HOST, port: env.SMTP_PORT },
+			'Email adapter: SMTP (Mailpit) for local dev',
+		)
+		return new MailpitAdapter(env.SMTP_HOST, env.SMTP_PORT)
+	}
+
+	log.info({}, 'Email adapter: StubAdapter (log-only — no transport configured)')
+	return new StubAdapter()
+}

@@ -49,7 +49,7 @@ import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
 import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
 import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
-import { StubAdapter } from './workers/lib/postbox-adapter.ts'
+import { createEmailAdapter } from './workers/lib/postbox-adapter.ts'
 import { startNightAuditCron } from './workers/night-audit.cron.ts'
 import { startNotificationCron } from './workers/notification-cron.ts'
 import { startNotificationDispatcher } from './workers/notification-dispatcher.ts'
@@ -237,13 +237,18 @@ const cancelFeeConsumer = startCdcConsumer(driver, sql, {
 const nightAuditCron = process.env.NODE_ENV === 'test' ? null : startNightAuditCron(sql, logger, {})
 
 // Notification dispatcher — polls notificationOutbox для pending rows and
-// sends through the email adapter. V1 uses StubAdapter (logs sends — Mailpit
-// в dev, real Postbox адаптер wires via env when production lands). Tests
-// bypass via NODE_ENV=test (integration calls pollOnce directly).
+// sends through the email adapter chosen by env (M7.fix.2):
+//   POSTBOX_ENABLED=true + creds  → Yandex Cloud Postbox (production)
+//   POSTBOX_ENABLED=false + SMTP  → Mailpit (local dev — http://localhost:8125)
+//   neither                       → StubAdapter (CI / e2e log-only)
+// Tests bypass via NODE_ENV=test (integration calls pollOnce directly с
+// inline StubAdapter).
 const notificationDispatcher =
 	process.env.NODE_ENV === 'test'
 		? null
-		: startNotificationDispatcher(sql, new StubAdapter(), logger, {})
+		: startNotificationDispatcher(sql, createEmailAdapter(env, logger), logger, {
+				fromAddress: `"${env.EMAIL_FROM_NAME}" <${env.EMAIL_FROM_ADDRESS}>`,
+			})
 
 // Notification cron — fires checkin_reminder (24h before checkIn at 18:00 MSK)
 // and review_request (24h after checkOut at 11:00 MSK). Hourly cron picks up

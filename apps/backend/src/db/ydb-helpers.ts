@@ -3,6 +3,7 @@ import {
 	DateType,
 	FloatType,
 	Int32Type,
+	Int64Type,
 	Json,
 	JsonType,
 	Text,
@@ -33,6 +34,9 @@ export const NULL_TEXT = new Optional(null, new TextType())
 
 /** Typed null for nullable `Int32` columns. */
 export const NULL_INT32 = new Optional(null, new Int32Type())
+
+/** Typed null for nullable `Int64` columns (e.g. `receipt.fdNumber`). */
+export const NULL_INT64 = new Optional(null, new Int64Type())
 
 /** Typed null for nullable `Float` columns. */
 export const NULL_FLOAT = new Optional(null, new FloatType())

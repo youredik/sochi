@@ -28,7 +28,16 @@
  */
 import { newId } from '@horeca/shared'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { NULL_TEXT, NULL_TIMESTAMP, toJson, toTs, tsFromIso } from '../db/ydb-helpers.ts'
+import {
+	dateFromIso,
+	dateOpt,
+	NULL_TEXT,
+	NULL_TIMESTAMP,
+	textOpt,
+	toJson,
+	toTs,
+	tsFromIso,
+} from '../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../tests/db-setup.ts'
 import { StubAdapter } from './lib/postbox-adapter.ts'
 import { startNotificationDispatcher } from './notification-dispatcher.ts'
@@ -347,6 +356,163 @@ describe('dispatcher — cross-tenant', { tags: ['db'] }, () => {
 		expect(recipients).toContain('a@example.local')
 		expect(recipients).toContain('b@example.local')
 
+		await dispatcher.stop()
+	})
+})
+
+/* ============================================================ recipient resolution (M7.fix.1) */
+
+/**
+ * Real proof of M7.fix.1 wiring: outbox row carries placeholder recipient
+ * (как пишет CDC handler), dispatcher tracing booking → guest → email
+ * подменяет placeholder реальным адресом перед отправкой.
+ */
+describe('dispatcher — recipient resolution', { tags: ['db'] }, () => {
+	async function seedBookingWithGuest(opts: {
+		tenantId: string
+		guestEmail: string | null
+	}): Promise<{ bookingId: string }> {
+		const sql = getTestSql()
+		const propertyId = newId('property')
+		const guestId = newId('guest')
+		const bookingId = newId('booking')
+		const now = new Date()
+		const nowTs = toTs(now)
+
+		await sql`
+			UPSERT INTO guest (
+				\`tenantId\`, \`id\`, \`lastName\`, \`firstName\`, \`middleName\`,
+				\`birthDate\`, \`citizenship\`, \`documentType\`, \`documentSeries\`, \`documentNumber\`,
+				\`documentIssuedBy\`, \`documentIssuedDate\`, \`registrationAddress\`,
+				\`phone\`, \`email\`, \`notes\`,
+				\`createdAt\`, \`updatedAt\`
+			) VALUES (
+				${opts.tenantId}, ${guestId}, ${'Resolver'}, ${'Тест'}, ${NULL_TEXT},
+				${dateOpt(null)}, ${'RU'}, ${'passport'}, ${NULL_TEXT}, ${'9999999'},
+				${NULL_TEXT}, ${dateOpt(null)}, ${NULL_TEXT},
+				${NULL_TEXT}, ${textOpt(opts.guestEmail)}, ${NULL_TEXT},
+				${nowTs}, ${nowTs}
+			)
+		`
+		await sql`
+			UPSERT INTO booking (
+				\`tenantId\`, \`propertyId\`, \`checkIn\`, \`id\`,
+				\`checkOut\`, \`roomTypeId\`, \`ratePlanId\`, \`assignedRoomId\`,
+				\`guestsCount\`, \`nightsCount\`, \`primaryGuestId\`, \`guestSnapshot\`,
+				\`status\`, \`confirmedAt\`, \`checkedInAt\`, \`checkedOutAt\`, \`cancelledAt\`, \`noShowAt\`, \`cancelReason\`,
+				\`channelCode\`, \`externalId\`, \`externalReferences\`,
+				\`totalMicros\`, \`paidMicros\`, \`currency\`, \`timeSlices\`,
+				\`cancellationFee\`, \`noShowFee\`,
+				\`registrationStatus\`, \`registrationMvdId\`, \`registrationSubmittedAt\`,
+				\`rklCheckResult\`, \`rklCheckedAt\`,
+				\`tourismTaxBaseMicros\`, \`tourismTaxMicros\`,
+				\`notes\`,
+				\`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
+			) VALUES (
+				${opts.tenantId}, ${propertyId}, ${dateFromIso('2026-04-25')}, ${bookingId},
+				${dateFromIso('2026-04-26')}, ${newId('roomType')}, ${newId('ratePlan')}, ${NULL_TEXT},
+				${1}, ${1}, ${guestId},
+				${toJson({ firstName: 'Тест', lastName: 'Resolver', citizenship: 'RU', documentType: 'passport', documentNumber: '9999999' })},
+				${'confirmed'}, ${nowTs}, ${NULL_TIMESTAMP}, ${NULL_TIMESTAMP}, ${NULL_TIMESTAMP}, ${NULL_TIMESTAMP}, ${NULL_TEXT},
+				${'walkIn'}, ${NULL_TEXT}, ${toJson(null)},
+				${5_000_000_000n}, ${0n}, ${'RUB'},
+				${toJson([{ date: '2026-04-25', grossMicros: '5000000000', ratePlanId: 'rp', ratePlanVersion: 'v1', currency: 'RUB' }])},
+				${toJson(null)}, ${toJson(null)},
+				${'pending'}, ${NULL_TEXT}, ${NULL_TIMESTAMP},
+				${'pending'}, ${NULL_TIMESTAMP},
+				${0n}, ${0n},
+				${NULL_TEXT},
+				${nowTs}, ${nowTs}, ${'test-actor'}, ${'test-actor'}
+			)
+		`
+		return { bookingId }
+	}
+
+	test('[RES1] placeholder + valid guest → adapter receives REAL email', async () => {
+		const tenantId = newId('organization')
+		const { bookingId } = await seedBookingWithGuest({ tenantId, guestEmail: 'real@guest.ru' })
+		// Outbox row written by CDC writer carries placeholder; resolver fixes
+		// it before send.
+		const { id } = await seed({
+			tenantId,
+			recipient: 'guest@placeholder.local',
+			sourceObjectType: 'booking',
+			sourceObjectId: bookingId,
+		})
+
+		const adapter = new StubAdapter()
+		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
+			skipTimer: true,
+		})
+		await dispatcher.pollOnce()
+
+		const row = await getRow(tenantId, id)
+		expect(row?.status).toBe('sent')
+		// Real email actually sent — NOT the placeholder.
+		expect(adapter.sent[0]?.to).toBe('real@guest.ru')
+
+		await dispatcher.stop()
+	})
+
+	test('[RES2] placeholder + NO guest email → status=failed (permanent)', async () => {
+		const tenantId = newId('organization')
+		const { bookingId } = await seedBookingWithGuest({ tenantId, guestEmail: null })
+		const { id } = await seed({
+			tenantId,
+			recipient: 'guest@placeholder.local',
+			sourceObjectType: 'booking',
+			sourceObjectId: bookingId,
+		})
+
+		const adapter = new StubAdapter()
+		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
+			skipTimer: true,
+		})
+		await dispatcher.pollOnce()
+
+		const row = await getRow(tenantId, id)
+		expect(row?.status).toBe('failed')
+		expect(row?.failureReason).toBe('recipient unresolvable')
+		// Adapter NEVER called for this row — proves we short-circuited before send.
+		expect(adapter.sent.find((s) => s.to === 'guest@placeholder.local')).toBeUndefined()
+
+		await dispatcher.stop()
+	})
+
+	test('[RES3] placeholder + booking missing → permanent failure', async () => {
+		const tenantId = newId('organization')
+		const { id } = await seed({
+			tenantId,
+			recipient: 'guest@placeholder.local',
+			sourceObjectType: 'booking',
+			sourceObjectId: 'book_doesnotexist',
+		})
+
+		const adapter = new StubAdapter()
+		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
+			skipTimer: true,
+		})
+		await dispatcher.pollOnce()
+
+		const row = await getRow(tenantId, id)
+		expect(row?.status).toBe('failed')
+		await dispatcher.stop()
+	})
+
+	test('[RES4] non-placeholder recipient → resolver SKIPPED (operator override)', async () => {
+		const tenantId = newId('organization')
+		// recipient is already a real address — no resolution attempted.
+		const { id } = await seed({ tenantId, recipient: 'override@manual.ru' })
+
+		const adapter = new StubAdapter()
+		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
+			skipTimer: true,
+		})
+		await dispatcher.pollOnce()
+
+		const row = await getRow(tenantId, id)
+		expect(row?.status).toBe('sent')
+		expect(adapter.sent.find((s) => s.to === 'override@manual.ru')).toBeDefined()
 		await dispatcher.stop()
 	})
 })
