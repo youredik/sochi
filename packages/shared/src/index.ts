@@ -1,4 +1,5 @@
 export * from './activity.ts'
+export * from './addons.ts'
 export * from './amenities.ts'
 export * from './availability.ts'
 export * from './booking.ts'
