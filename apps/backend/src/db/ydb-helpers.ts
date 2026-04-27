@@ -1,8 +1,11 @@
 import { Optional } from '@ydbjs/value/optional'
 import {
+	Bool,
+	BoolType,
 	DateType,
 	FloatType,
 	Int32Type,
+	Int64,
 	Int64Type,
 	Json,
 	JsonType,
@@ -44,6 +47,9 @@ export const NULL_FLOAT = new Optional(null, new FloatType())
 /** Typed null for nullable `Timestamp` columns. */
 export const NULL_TIMESTAMP = new Optional(null, new TimestampType())
 
+/** Typed null for nullable `Bool` columns. */
+export const NULL_BOOL = new Optional(null, new BoolType())
+
 /**
  * Typed null for nullable `Json` columns. Consumed internally by `toJson` —
  * NOT exported: external callers should use `toJson(null)` which returns this
@@ -78,6 +84,23 @@ export function textOpt(value: string | null): Optional<TextType> {
 
 /** Typed null for nullable `Date` (calendar-day) columns. */
 const NULL_DATE = new Optional(null, new DateType())
+
+/**
+ * Bind a bigint value (or null) to a nullable `Int64` column. Bare `${bn}`
+ * gives a non-Optional Int64 → YDB rejects on UPDATE/UPSERT to a nullable
+ * column. Same anti-pattern as `textOpt` for Utf8.
+ */
+export function int64Opt(value: bigint | null): Optional<Int64Type> {
+	return value === null ? NULL_INT64 : new Optional(new Int64(value), new Int64Type())
+}
+
+/**
+ * Bind a boolean value (or null) to a nullable `Bool` column. Same wrap-or-
+ * NULL pattern as `int64Opt` / `textOpt`.
+ */
+export function boolOpt(value: boolean | null): Optional<BoolType> {
+	return value === null ? NULL_BOOL : new Optional(new Bool(value), new BoolType())
+}
 
 /**
  * Bind a YYYY-MM-DD string (or null) to a nullable `Date` column. Wraps via
