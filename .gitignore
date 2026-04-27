@@ -39,6 +39,9 @@ minio_data/
 *.tfplan
 planfile
 
+# Build artifacts (videos, generated assets, reports — regenerable, not tracked)
+.artifacts/
+
 # Misc
 *.log
 .DS_Store

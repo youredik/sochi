@@ -3,11 +3,43 @@ import { z } from 'zod'
 /**
  * Environment variable schema. Validates on startup — fails fast with a clear error.
  * Never access process.env directly in the codebase; always import `env` from here.
+ *
+ * Exported (instead of file-private) so that `env.test.ts` can verify
+ * transforms (e.g. APP_MODE_PERMITTED_MOCK_ADAPTERS comma-split) without
+ * mutating real `process.env`.
  */
-const envSchema = z.object({
+export const envSchema = z.object({
 	NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 	PORT: z.coerce.number().int().min(1).max(65535).default(3000),
 	LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+
+	// Sandbox / Production gate (M8.0 prep — see plans/local-complete-system-v2.md §6).
+	//
+	// `APP_MODE` is independent from `NODE_ENV`. Same prod-built artefact runs
+	// in either mode; the difference is whether external-integration adapters
+	// MUST be in 'live' mode at startup. This separation prevents the class of
+	// bugs where "we built for production but forgot to flip a feature flag".
+	//
+	//   APP_MODE=sandbox    — default. Mocks/sandboxes are permitted.
+	//                         Used in dev, CI, staging until cutover.
+	//   APP_MODE=production — live integrations required.
+	//                         Startup REFUSES if any registered adapter is
+	//                         still mock/sandbox (unless whitelisted below).
+	//
+	// `APP_MODE_PERMITTED_MOCK_ADAPTERS` — comma-separated allow-list of
+	// adapter names that may remain in mock/sandbox even in production. Use
+	// VERY sparingly and document each entry in deploy notes; typical case is
+	// ЕПГУ during the multi-week ОВМ МВД agreement onboarding.
+	APP_MODE: z.enum(['sandbox', 'production']).default('sandbox'),
+	APP_MODE_PERMITTED_MOCK_ADAPTERS: z
+		.string()
+		.default('')
+		.transform((s) =>
+			s
+				.split(',')
+				.map((v) => v.trim())
+				.filter(Boolean),
+		),
 
 	// YDB
 	YDB_CONNECTION_STRING: z.string().min(1),

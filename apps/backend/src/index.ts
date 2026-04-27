@@ -2,11 +2,28 @@ import { serve } from '@hono/node-server'
 import { app } from './app.ts'
 import { closeDriver, readyDriver } from './db/index.ts'
 import { env } from './env.ts'
+import { assertProductionReady, listAdapters } from './lib/adapters/index.ts'
 import { logger } from './logger.ts'
 
 async function main(): Promise<void> {
 	// Pre-warm YDB connection so /health/db is fast on first call.
 	await readyDriver()
+
+	// Sandbox / Production gate (see env.ts APP_MODE comment). Importing
+	// `app.ts` above triggered every adapter factory's `registerAdapter()`
+	// call as a top-level side-effect, so by this point the registry is
+	// populated. We refuse to start in production with any non-live adapter
+	// (unless explicitly whitelisted via APP_MODE_PERMITTED_MOCK_ADAPTERS).
+	if (env.APP_MODE === 'production') {
+		assertProductionReady({ permittedMockAdapters: env.APP_MODE_PERMITTED_MOCK_ADAPTERS })
+	}
+	logger.info(
+		{
+			appMode: env.APP_MODE,
+			adapters: listAdapters().map((a) => ({ name: a.name, mode: a.mode })),
+		},
+		'Adapter registry ready',
+	)
 
 	const server = serve(
 		{

@@ -38,6 +38,7 @@ import { createRoomTypeRoutes } from './domains/roomType/roomType.routes.ts'
 import { env } from './env.ts'
 import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
+import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
 import { logger } from './logger.ts'
 import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
@@ -85,6 +86,14 @@ const folioFactory = createFolioFactory(sql)
 // Real provider wiring (ЮKassa / T-Kassa / СБП) lands in Phase 3 alongside the
 // webhook handler. Switch via env `PAYMENT_PROVIDER` when those impls ship.
 const paymentProvider = createStubPaymentProvider()
+registerAdapter({
+	name: 'payment.stub',
+	category: 'payment',
+	mode: 'mock',
+	description:
+		'In-process payment stub (synchronous-success autocapture, mirrors СБП rail). ' +
+		'Replace with payment.yookassa in Phase 3 (M9).',
+})
 const paymentFactory = createPaymentFactory(sql, paymentProvider, folioFactory.service)
 const refundFactory = createRefundFactory(sql, paymentFactory.repo, paymentProvider)
 const idempotency = idempotencyMiddleware(createIdempotencyRepo(sql))
@@ -406,6 +415,35 @@ const routes = app
 				503,
 			)
 		}
+	})
+	// Truthful runtime view of every registered external-integration adapter.
+	// Operators use this for go-live verification: «what's mock, sandbox, live?»
+	// Returns 200 in `APP_MODE=sandbox` regardless of contents; in
+	// `APP_MODE=production` returns 503 if any adapter is non-live (without
+	// the explicit whitelist) — same contract as the startup gate.
+	.get('/health/adapters', (c) => {
+		const adapters = listAdapters().map((a) => ({
+			name: a.name,
+			category: a.category,
+			mode: a.mode,
+			description: a.description,
+			providerVersion: a.providerVersion ?? null,
+		}))
+		const whitelist = new Set(env.APP_MODE_PERMITTED_MOCK_ADAPTERS)
+		const offenders = adapters.filter(
+			(a) => (a.mode === 'mock' || a.mode === 'sandbox') && !whitelist.has(a.name),
+		)
+		const isReady = env.APP_MODE === 'sandbox' || offenders.length === 0
+		return c.json(
+			{
+				status: isReady ? ('ok' as const) : ('degraded' as const),
+				appMode: env.APP_MODE,
+				adapters,
+				offendersInProduction: offenders.map((o) => o.name),
+				time: new Date().toISOString(),
+			},
+			isReady ? 200 : 503,
+		)
 	})
 
 export type AppType = typeof routes
