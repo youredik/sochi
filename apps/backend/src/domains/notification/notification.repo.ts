@@ -21,7 +21,7 @@
 
 import type { Notification, NotificationListPage, NotificationListParams } from '@horeca/shared'
 import type { sql as SQL } from '../../db/index.ts'
-import { NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from '../../db/ydb-helpers.ts'
+import { NULL_TEXT, NULL_TIMESTAMP, textOpt, toJson, toTs } from '../../db/ydb-helpers.ts'
 import { NotificationAlreadySentError, NotificationNotFoundError } from '../../errors/domain.ts'
 
 type SqlInstance = typeof SQL
@@ -218,7 +218,7 @@ export function createNotificationRepo(sql: SqlInstance): NotificationRepo {
 			const nowTs = toTs(now)
 			await sql`
 				UPSERT INTO notificationOutbox (
-					\`tenantId\`, \`id\`, \`kind\`, \`channel\`, \`recipient\`, \`subject\`,
+					\`tenantId\`, \`id\`, \`kind\`, \`channel\`, \`recipient\`, \`recipientKind\`, \`subject\`,
 					\`bodyText\`, \`payloadJson\`, \`status\`,
 					\`sentAt\`, \`failedAt\`, \`failureReason\`,
 					\`retryCount\`, \`messageId\`, \`nextAttemptAt\`,
@@ -226,7 +226,7 @@ export function createNotificationRepo(sql: SqlInstance): NotificationRepo {
 					\`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
 				) VALUES (
 					${current.tenantId}, ${current.id}, ${current.kind}, ${current.channel},
-					${current.recipient}, ${current.subject},
+					${current.recipient}, ${textOpt(current.recipientKind)}, ${current.subject},
 					${current.bodyText ?? NULL_TEXT},
 					${toJson(current.payloadJson)},
 					${'pending'},

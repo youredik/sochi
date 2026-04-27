@@ -16,7 +16,11 @@
  * elect leader via lease row keyed by `(jobName, businessHour)`.
  */
 
-import { buildNotificationDedupKey, newId } from '@horeca/shared'
+import {
+	buildNotificationDedupKey,
+	deriveRecipientKindFromNotificationKind,
+	newId,
+} from '@horeca/shared'
 import { Cron } from 'croner'
 import type { sql as SQL } from '../db/index.ts'
 import { dateFromIso, NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from '../db/ydb-helpers.ts'
@@ -225,6 +229,7 @@ async function tryInsertOutboxRow(
 	const subject = kind === 'checkin_reminder' ? 'Напоминание о заезде' : 'Поделитесь впечатлениями'
 	const id = newId('notification')
 	const nowTs = toTs(now)
+	const recipientKind = deriveRecipientKindFromNotificationKind(kind)
 	const payload = {
 		bookingId: booking.id,
 		checkIn: toIsoDate(booking.checkIn),
@@ -235,14 +240,14 @@ async function tryInsertOutboxRow(
 	await sql`
 		UPSERT INTO notificationOutbox (
 			\`tenantId\`, \`id\`,
-			\`kind\`, \`channel\`, \`recipient\`, \`subject\`, \`bodyText\`, \`payloadJson\`,
+			\`kind\`, \`channel\`, \`recipient\`, \`recipientKind\`, \`subject\`, \`bodyText\`, \`payloadJson\`,
 			\`status\`,
 			\`sentAt\`, \`failedAt\`, \`failureReason\`, \`retryCount\`,
 			\`sourceObjectType\`, \`sourceObjectId\`, \`sourceEventDedupKey\`,
 			\`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
 		) VALUES (
 			${booking.tenantId}, ${id},
-			${kind}, ${'email'}, ${'guest@placeholder.local'}, ${subject}, ${NULL_TEXT}, ${toJson(payload)},
+			${kind}, ${'email'}, ${'guest@placeholder.local'}, ${recipientKind}, ${subject}, ${NULL_TEXT}, ${toJson(payload)},
 			${'pending'},
 			${NULL_TIMESTAMP}, ${NULL_TIMESTAMP}, ${NULL_TEXT}, ${0},
 			${'booking'}, ${booking.id}, ${dedupKey},

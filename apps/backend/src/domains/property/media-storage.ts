@@ -46,8 +46,30 @@ export interface MediaStorage {
 	 * false if no upload was registered for this key.
 	 */
 	markDerivedReady(key: string): Promise<boolean>
+
+	/**
+	 * Read original bytes back from storage. Used by the local processor to
+	 * run sharp on the uploaded original. Returns null if the original
+	 * doesn't exist.
+	 *
+	 * In the Stub impl, the operator uploads bytes synchronously via
+	 * `simulateUpload(key, bytes)` (see `StubMediaStorage`); production
+	 * S3 GETs the object.
+	 */
+	getOriginalBytes(key: string): Promise<Buffer | null>
+
+	/**
+	 * Upload a derived variant. Idempotent — re-running the pipeline
+	 * overwrites the existing variant.
+	 */
+	putDerivedBytes(key: string, bytes: Buffer): Promise<void>
+
 	/** Test seam: count of in-memory uploads (Stub only — real impl returns -1). */
 	debugUploadCount?(): number
+	/** Test seam: directly seed bytes for a given key (Stub only). */
+	simulateUpload?(key: string, bytes: Buffer): void
+	/** Test seam: snapshot of all derived bytes by key (Stub only). */
+	debugDerivedSnapshot?(): ReadonlyMap<string, number>
 }
 
 // ─── In-memory Stub ──────────────────────────────────────────────────────
@@ -57,6 +79,7 @@ interface StubUploadRecord {
 	readonly maxBytes: number
 	readonly putUrl: string
 	derivedReady: boolean
+	originalBytes: Buffer | null
 }
 
 export interface StubMediaStorageOptions {
@@ -81,6 +104,7 @@ export function createStubMediaStorage(opts: StubMediaStorageOptions = {}): Medi
 	const ttlSec = opts.ttlSec ?? 300 // 5 min default — matches real S3 short-lived presign
 
 	const uploads = new Map<string, StubUploadRecord>()
+	const derived = new Map<string, Buffer>()
 	let presignCounter = 0
 
 	return {
@@ -95,6 +119,7 @@ export function createStubMediaStorage(opts: StubMediaStorageOptions = {}): Medi
 				maxBytes: input.maxBytes,
 				putUrl,
 				derivedReady: false,
+				originalBytes: null,
 			})
 			const expiresAt = new Date(now() + ttlSec * 1000).toISOString()
 			return {
@@ -115,8 +140,31 @@ export function createStubMediaStorage(opts: StubMediaStorageOptions = {}): Medi
 			rec.derivedReady = true
 			return true
 		},
+		async getOriginalBytes(key) {
+			return uploads.get(key)?.originalBytes ?? null
+		},
+		async putDerivedBytes(key, bytes) {
+			derived.set(key, bytes)
+		},
 		debugUploadCount() {
 			return uploads.size
+		},
+		simulateUpload(key, bytes) {
+			const rec = uploads.get(key)
+			if (!rec) {
+				throw new Error(
+					`simulateUpload: no presigned PUT registered for key '${key}' — call getPresignedPut first`,
+				)
+			}
+			if (bytes.length > rec.maxBytes) {
+				throw new Error(`simulateUpload: bytes (${bytes.length}) exceed maxBytes (${rec.maxBytes})`)
+			}
+			rec.originalBytes = bytes
+		},
+		debugDerivedSnapshot() {
+			const snap = new Map<string, number>()
+			for (const [k, v] of derived) snap.set(k, v.length)
+			return snap
 		},
 	}
 }

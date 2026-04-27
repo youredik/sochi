@@ -34,6 +34,9 @@ export const ID_PREFIXES = {
 	paymentWebhookEvent: 'pwe',
 	// Notification outbox (M6.5B, 2026-04-25)
 	notification: 'ntf',
+	// M8.A.0 — property content authoring (media + addons).
+	media: 'med',
+	addon: 'addn',
 } as const
 
 export type EntityKind = keyof typeof ID_PREFIXES

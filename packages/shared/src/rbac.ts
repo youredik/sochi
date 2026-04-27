@@ -50,6 +50,18 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		// admin role). See memory `project_mcp_server_strategic.md` (Apr 2026).
 		notification: ['read', 'retry'],
 		billing: ['read', 'manage'],
+		// M8.A.0 — property content authoring + tenant compliance (КСР, tax
+		// regime, ФЗ-127, annual revenue). Compliance UPDATE is owner-only:
+		// the org owner is the legal-entity DPA-signer (152-ФЗ ст. 22 — РКН
+		// registration responsibility lies on the organization, in practice
+		// on the founder/ИП). Manager has READ only — visibility for tax-
+		// regime guidance UI but no authority to mutate regulator-facing data.
+		// See research/ru-compliance-2026.md §1.2.
+		compliance: ['read', 'update'],
+		amenity: ['create', 'read', 'update', 'delete'],
+		description: ['create', 'read', 'update', 'delete'],
+		media: ['create', 'read', 'update', 'delete'],
+		addon: ['create', 'read', 'update', 'delete'],
 	},
 	manager: {
 		// Revenue + refund + reports; NO billing/manage, NO property delete
@@ -65,6 +77,14 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		report: ['read'],
 		notification: ['read', 'retry'],
 		billing: ['read'],
+		// M8.A.0 — manager edits content but cannot touch compliance:
+		// regulator-facing data is the org owner's responsibility (152-ФЗ
+		// ст. 22 РКН registration). Manager has read only.
+		compliance: ['read'],
+		amenity: ['create', 'read', 'update', 'delete'],
+		description: ['create', 'read', 'update', 'delete'],
+		media: ['create', 'read', 'update', 'delete'],
+		addon: ['create', 'read', 'update', 'delete'],
 	},
 	staff: {
 		// Front-desk operations: collect payments, NOT refund. Read-only org config.
@@ -79,6 +99,12 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		// refund: NOT granted — financial decision, manager+ only
 		receipt: ['read', 'resend'],
 		// notification: NOT granted — outbox console / retry are admin-only
+		// M8.A.0 — staff reads content (for booking conversations) but cannot
+		// edit (avoid accidental marketing/legal copy mutation).
+		amenity: ['read'],
+		description: ['read'],
+		media: ['read'],
+		addon: ['read'],
 	},
 }
 

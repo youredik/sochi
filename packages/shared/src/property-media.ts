@@ -20,6 +20,16 @@
  */
 
 import { z } from 'zod'
+import { int64WireSchema } from './schemas.ts'
+
+/**
+ * fileSizeBytes wire schema — accepts both `string` (canonical wire form,
+ * since `JSON.stringify(bigint)` throws) and `bigint` (server-side service
+ * calls). Coerces to bigint, refines to [0, 50 MB].
+ */
+const fileSizeBytesSchema = int64WireSchema
+	.refine((v) => v >= 0n, 'fileSizeBytes must be >= 0')
+	.refine((v) => v <= 50n * 1024n * 1024n, 'fileSizeBytes exceeds 50 MB cap')
 
 // ─── Allowed MIME types ──────────────────────────────────────────────────
 
@@ -200,7 +210,7 @@ export const propertyMediaSchema = z.object({
 	mimeType: mediaMimeTypeSchema,
 	widthPx: z.number().int().positive(),
 	heightPx: z.number().int().positive(),
-	fileSizeBytes: z.bigint().min(0n),
+	fileSizeBytes: int64WireSchema.refine((v) => v >= 0n, 'fileSizeBytes must be >= 0'),
 	exifStripped: z.boolean(),
 	derivedReady: z.boolean(),
 	sortOrder: z.number().int().min(0),
@@ -226,10 +236,7 @@ export const propertyMediaCreateInputSchema = z.object({
 	mimeType: mediaMimeTypeSchema,
 	widthPx: z.number().int().positive(),
 	heightPx: z.number().int().positive(),
-	fileSizeBytes: z
-		.bigint()
-		.min(0n)
-		.max(50n * 1024n * 1024n), // 50 MB cap
+	fileSizeBytes: fileSizeBytesSchema,
 	altRu: altTextSchema,
 	altEn: altTextSchema.nullable().optional(),
 	captionRu: z.string().max(500).nullable().optional(),

@@ -170,7 +170,14 @@ export function buildActivitiesFromEvent(
 			'system',
 	)
 
-	const base = { tenantId, objectType, recordId, actorUserId } as const
+	// Derive actorType from the actorUserId convention. System workers
+	// (cron / CDC / dispatcher) prefix with `system:`; real users are typed
+	// IDs `usr_...`. Public-widget guests will set actorType='guest'
+	// explicitly via M8.B.
+	const actorType: 'system' | 'user' =
+		actorUserId === 'system' || actorUserId.startsWith('system:') ? 'system' : 'user'
+
+	const base = { tenantId, objectType, recordId, actorUserId, actorType } as const
 
 	if (isInsert && event.newImage) {
 		return [

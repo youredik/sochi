@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+	deriveRecipientKindFromNotificationKind,
 	type NotificationKind,
 	type NotificationRecipientKind,
 	notificationKindSchema,
@@ -77,5 +78,45 @@ describe('M8.A.0.6 new public-widget kinds (locked-in subset)', () => {
 
 	it.each(newKinds)('%s is a valid NotificationKind', (k) => {
 		expect(notificationKindSchema.parse(k)).toBe(k)
+	})
+})
+
+describe('deriveRecipientKindFromNotificationKind — full enum coverage', () => {
+	// Ops alerts → 'system' (no human recipient at this layer)
+	it.each(['payment_failed', 'receipt_failed'] as const)('%s → system (ops alert)', (k) => {
+		expect(deriveRecipientKindFromNotificationKind(k)).toBe('system')
+	})
+
+	// Guest-facing → 'guest' (8 of 10 kinds)
+	it.each([
+		'payment_succeeded',
+		'receipt_confirmed',
+		'booking_confirmed',
+		'checkin_reminder',
+		'review_request',
+		'pre_arrival',
+		'booking_cancelled',
+		'booking_modified',
+	] as const)('%s → guest', (k) => {
+		expect(deriveRecipientKindFromNotificationKind(k)).toBe('guest')
+	})
+
+	it('switch is exhaustive over all 10 kinds (no fallthrough/throws)', () => {
+		const all: NotificationKind[] = [
+			'payment_succeeded',
+			'payment_failed',
+			'receipt_confirmed',
+			'receipt_failed',
+			'booking_confirmed',
+			'checkin_reminder',
+			'review_request',
+			'pre_arrival',
+			'booking_cancelled',
+			'booking_modified',
+		]
+		for (const k of all) {
+			const out = deriveRecipientKindFromNotificationKind(k)
+			expect(['user', 'guest', 'system', 'channel']).toContain(out)
+		}
 	})
 })

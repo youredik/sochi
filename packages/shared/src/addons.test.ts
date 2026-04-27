@@ -52,8 +52,12 @@ describe('enum surface (regression — fail loud on additions)', () => {
 		])
 	})
 
-	it('VAT_RATE_BPS_VALUES = 4 supported rates (0%, 10%, 20%, 22%)', () => {
-		expect(VAT_RATE_BPS_VALUES).toEqual([0, 1000, 2000, 2200])
+	it('VAT_RATE_BPS_VALUES = 6 supported RU 2026 rates (0%, 5%, 7%, 10%, 20%, 22%)', () => {
+		// 376-ФЗ от 12.07.2025: основная 22% с 01.01.2026 + УСН-НДС 5%/7% +
+		// pre-existing 0% (accommodation льгота, продлена до 30.06.2027) +
+		// 10% (пониженная — продукты/детские) + 20% (переходная). Plan v2
+		// research/ru-compliance-2026.md §3.
+		expect(VAT_RATE_BPS_VALUES).toEqual([0, 500, 700, 1000, 2000, 2200])
 	})
 })
 
@@ -62,12 +66,29 @@ describe('addonVatBpsSchema', () => {
 		expect(addonVatBpsSchema.parse(rate)).toBe(rate)
 	})
 
+	it('accepts 5% (УСН-НДС нижний — для УСН с выручкой 60-250M ₽)', () => {
+		expect(addonVatBpsSchema.parse(500)).toBe(500)
+	})
+
+	it('accepts 7% (УСН-НДС средний — для УСН с выручкой 250-450M ₽)', () => {
+		expect(addonVatBpsSchema.parse(700)).toBe(700)
+	})
+
 	it('rejects unsupported rate (1500 bps = 15%)', () => {
 		const r = addonVatBpsSchema.safeParse(1500)
 		expect(r.success).toBe(false)
 		if (!r.success) {
 			expect(r.error.issues[0]?.message).toMatch(/Unsupported VAT rate/)
 		}
+	})
+
+	it('rejects 600 bps (between 5% and 7% — not a canonical rate)', () => {
+		const r = addonVatBpsSchema.safeParse(600)
+		expect(r.success).toBe(false)
+	})
+
+	it('rejects 1800 bps (between 10% and 20% — not canonical)', () => {
+		expect(() => addonVatBpsSchema.parse(1800)).toThrow()
 	})
 
 	it('rejects > 10000 bps (sanity — typo guard)', () => {

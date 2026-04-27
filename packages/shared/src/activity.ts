@@ -50,6 +50,21 @@ const activityTypeValues = [
 export const activityTypeSchema = z.enum(activityTypeValues)
 export type ActivityType = z.infer<typeof activityTypeSchema>
 
+/**
+ * Who performed the audited action — symmetric to
+ * `NotificationRecipientKind`. Plan v2 §7.1 #7. Stored on
+ * `activity.actorType`; nullable for M7-era rows (read code falls back
+ * to `user` per backwards-compat semantics).
+ *
+ *   - `user`    — internal operator/staff
+ *   - `guest`   — public-widget customer (M8.B+)
+ *   - `system`  — automated workflow (CDC consumer, cron, retry handler)
+ *   - `channel` — channel-manager / OTA push (M8.C+)
+ */
+const activityActorTypeValues = ['user', 'guest', 'system', 'channel'] as const
+export const activityActorTypeSchema = z.enum(activityActorTypeValues)
+export type ActivityActorType = z.infer<typeof activityActorTypeSchema>
+
 export type Activity = {
 	tenantId: string
 	objectType: ActivityObjectType
@@ -57,6 +72,11 @@ export type Activity = {
 	createdAt: string
 	id: string
 	activityType: ActivityType
+	/**
+	 * Routing dimension for audit UI filters and downstream alerting.
+	 * Nullable for legacy M7 rows; UI MUST treat null as `user`.
+	 */
+	actorType: ActivityActorType | null
 	actorUserId: string
 	/**
 	 * Super-admin who was acting as `actorUserId` at event-time, or `null` when

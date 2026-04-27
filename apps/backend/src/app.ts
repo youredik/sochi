@@ -25,6 +25,8 @@ import { createPaymentRoutes } from './domains/payment/payment.routes.ts'
 import { createStubPaymentProvider } from './domains/payment/provider/stub-provider.ts'
 import { createPropertyFactory } from './domains/property/property.factory.ts'
 import { createPropertyRoutes } from './domains/property/property.routes.ts'
+import { createPropertyContentFactory } from './domains/property/property-content.factory.ts'
+import { createPropertyContentRoutes } from './domains/property/property-content.routes.ts'
 import { createRateFactory } from './domains/rate/rate.factory.ts'
 import { createRateRoutes } from './domains/rate/rate.routes.ts'
 import { createRatePlanFactory } from './domains/ratePlan/ratePlan.factory.ts'
@@ -35,6 +37,8 @@ import { createRoomFactory } from './domains/room/room.factory.ts'
 import { createRoomRoutes } from './domains/room/room.routes.ts'
 import { createRoomTypeFactory } from './domains/roomType/roomType.factory.ts'
 import { createRoomTypeRoutes } from './domains/roomType/roomType.routes.ts'
+import { createTenantComplianceFactory } from './domains/tenant/compliance.factory.ts'
+import { createTenantComplianceRoutes } from './domains/tenant/compliance.routes.ts'
 import { env } from './env.ts'
 import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
@@ -66,6 +70,8 @@ const app = new Hono<AppEnv>()
 
 // Domain factories (one place to wire sql → repo → service).
 const propertyFactory = createPropertyFactory(sql)
+const propertyContentFactory = createPropertyContentFactory(sql)
+const tenantComplianceFactory = createTenantComplianceFactory(sql)
 const roomTypeFactory = createRoomTypeFactory(sql, propertyFactory.service)
 const roomFactory = createRoomFactory(sql, propertyFactory.service, roomTypeFactory.service)
 const ratePlanFactory = createRatePlanFactory(sql, propertyFactory.service, roomTypeFactory.service)
@@ -366,6 +372,8 @@ const otelIngest = createOtelIngest()
 const routes = app
 	.route('/api/otel', otelIngest)
 	.route('/api/v1/properties', createPropertyRoutes(propertyFactory))
+	.route('/api/v1', createPropertyContentRoutes(propertyContentFactory, idempotency))
+	.route('/api/v1', createTenantComplianceRoutes(tenantComplianceFactory, idempotency))
 	.route('/api/v1', createRoomTypeRoutes(roomTypeFactory))
 	.route('/api/v1', createRoomRoutes(roomFactory))
 	.route('/api/v1', createRatePlanRoutes(ratePlanFactory))

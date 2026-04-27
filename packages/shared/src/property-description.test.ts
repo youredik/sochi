@@ -131,10 +131,15 @@ describe('propertyDescriptionInputSchema — boundaries', () => {
 	})
 
 	it('sections defaults to empty object when omitted', () => {
-		// Construct payload without sections
-		const { sections: _drop, ...rest } = fullValidInput
-		void _drop
-		const out = propertyDescriptionInputSchema.parse(rest)
+		const out = propertyDescriptionInputSchema.parse({
+			title: fullValidInput.title,
+			tagline: fullValidInput.tagline,
+			summaryMd: fullValidInput.summaryMd,
+			longDescriptionMd: fullValidInput.longDescriptionMd,
+			seoMetaTitle: fullValidInput.seoMetaTitle,
+			seoMetaDescription: fullValidInput.seoMetaDescription,
+			seoH1: fullValidInput.seoH1,
+		})
 		expect(out.sections).toEqual({})
 	})
 
@@ -200,9 +205,17 @@ describe('propertyDescriptionInputSchema — boundaries', () => {
 	})
 
 	it('rejects missing required title', () => {
-		const { title: _drop, ...rest } = fullValidInput
-		void _drop
-		expect(() => propertyDescriptionInputSchema.parse(rest)).toThrow()
+		expect(() =>
+			propertyDescriptionInputSchema.parse({
+				tagline: fullValidInput.tagline,
+				summaryMd: fullValidInput.summaryMd,
+				longDescriptionMd: fullValidInput.longDescriptionMd,
+				sections: fullValidInput.sections,
+				seoMetaTitle: fullValidInput.seoMetaTitle,
+				seoMetaDescription: fullValidInput.seoMetaDescription,
+				seoH1: fullValidInput.seoH1,
+			}),
+		).toThrow()
 	})
 
 	it('rejects empty title', () => {

@@ -20,6 +20,7 @@
  * Validated at service boundary (Hono routes + better-auth org hook).
  */
 import { z } from 'zod'
+import { int64WireSchema } from './schemas.ts'
 
 /**
  * Категория КСР по ПП-1912 от 27.11.2025 (в силе с 01.03.2026).
@@ -86,7 +87,14 @@ export type TaxRegime = z.infer<typeof taxRegimeSchema>
  * Все warn-thresholds — на app-уровне (advisory), НЕ enforce'им; оператор
  * сам выбирает режим. Threshold values читаются из system_constants (M8.0).
  */
-export const annualRevenueEstimateMicroRubSchema = z.bigint().min(0n).max(100_000_000_000_000_000n)
+/**
+ * Accepts both wire form (`string`) and bigint. JSON wire-format is string
+ * because `JSON.stringify(bigint)` throws — so frontend sends `"100"` and
+ * server-side service calls pass `100n` directly. Both coerce to bigint.
+ */
+export const annualRevenueEstimateMicroRubSchema = int64WireSchema
+	.refine((v) => v >= 0n, 'Revenue must be >= 0')
+	.refine((v) => v <= 100_000_000_000_000_000n, 'Revenue exceeds sanity bound (100 trillion ₽)')
 
 /**
  * Реестр КСР id — внешний идентификатор записи в реестре. Формат: free-form

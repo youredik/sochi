@@ -108,6 +108,36 @@ export function buildNotificationDedupKey(args: {
 	return `${args.sourceObjectType}:${args.sourceObjectId}:${args.kind}`
 }
 
+/**
+ * Default `recipientKind` for a given `kind`. Used by M7 writers
+ * (CDC handler + cron) so existing rows are routed correctly without
+ * service-layer override.
+ *
+ *   - guest-facing receipts/confirmations/reminders → `guest`
+ *   - ops alerts (payment failure, ОФД failure)     → `system`
+ *
+ * Channel-manager / OTA push notifications use `channel` — those flow
+ * via separate M8.C writers, not this default.
+ */
+export function deriveRecipientKindFromNotificationKind(
+	kind: NotificationKind,
+): NotificationRecipientKind {
+	switch (kind) {
+		case 'payment_failed':
+		case 'receipt_failed':
+			return 'system'
+		case 'payment_succeeded':
+		case 'receipt_confirmed':
+		case 'booking_confirmed':
+		case 'checkin_reminder':
+		case 'review_request':
+		case 'pre_arrival':
+		case 'booking_cancelled':
+		case 'booking_modified':
+			return 'guest'
+	}
+}
+
 /* ---------------------------------------- Admin console — listing + retry */
 
 /**

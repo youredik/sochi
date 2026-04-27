@@ -23,6 +23,13 @@
  */
 
 import { z } from 'zod'
+import { int64WireSchema } from './schemas.ts'
+
+/**
+ * Money-bigint accepting wire form (`string`) and bigint. Coerces to bigint.
+ * Specific to non-negative price values.
+ */
+const priceMicrosSchema = int64WireSchema.refine((v) => v >= 0n, 'priceMicros must be >= 0')
 
 // ─── Categories (12) ─────────────────────────────────────────────────────
 
@@ -68,7 +75,18 @@ export type AddonInventoryMode = z.infer<typeof addonInventoryModeSchema>
  * Basis points: 1 bp = 0.01%. 22% НДС = 2200 bps. Allowed values bounded
  * to [0, 10000] to catch typos (e.g. 22000 instead of 2200).
  */
-export const VAT_RATE_BPS_VALUES = [0, 1000, 2000, 2200] as const
+/**
+ * Canonical RU 2026 VAT rates in basis-points:
+ *   - **0** bps — accommodation льгота (НК ст.149.1.18, продлено до 30.06.2027)
+ *   - **500** bps (5%) — УСН-НДС нижний тариф (376-ФЗ; для УСН с выручкой 60-250M ₽)
+ *   - **700** bps (7%) — УСН-НДС средний тариф (376-ФЗ; УСН с выручкой 250-450M ₽)
+ *   - **1000** bps (10%) — пониженный (продукты, детские товары, печатная продукция)
+ *   - **2000** bps (20%) — переходная для 2025 (некоторых сделок)
+ *   - **2200** bps (22%) — основная с 01.01.2026 (376-ФЗ от 12.07.2025)
+ *
+ * Range [0, 10000] sanity-bound. Unsupported (e.g. 1500) refined out.
+ */
+export const VAT_RATE_BPS_VALUES = [0, 500, 700, 1000, 2000, 2200] as const
 export type AddonVatBps = (typeof VAT_RATE_BPS_VALUES)[number]
 export const addonVatBpsSchema = z
 	.number()
@@ -109,7 +127,7 @@ export const addonSchema = z.object({
 	descriptionRu: z.string().max(2000).nullable(),
 	descriptionEn: z.string().max(2000).nullable(),
 	pricingUnit: addonPricingUnitSchema,
-	priceMicros: z.bigint().min(0n),
+	priceMicros: priceMicrosSchema,
 	currency: addonCurrencySchema,
 	vatBps: addonVatBpsSchema,
 	isActive: z.boolean(),
@@ -132,7 +150,7 @@ export const addonCreateInputSchema = z
 		descriptionRu: z.string().max(2000).nullable().optional(),
 		descriptionEn: z.string().max(2000).nullable().optional(),
 		pricingUnit: addonPricingUnitSchema,
-		priceMicros: z.bigint().min(0n),
+		priceMicros: priceMicrosSchema,
 		currency: addonCurrencySchema.default('RUB'),
 		vatBps: addonVatBpsSchema,
 		isActive: z.boolean().default(true),
@@ -193,7 +211,7 @@ export const addonPatchSchema = z
 		descriptionRu: z.string().max(2000).nullable().optional(),
 		descriptionEn: z.string().max(2000).nullable().optional(),
 		pricingUnit: addonPricingUnitSchema.optional(),
-		priceMicros: z.bigint().min(0n).optional(),
+		priceMicros: priceMicrosSchema.optional(),
 		currency: addonCurrencySchema.optional(),
 		vatBps: addonVatBpsSchema.optional(),
 		isActive: z.boolean().optional(),

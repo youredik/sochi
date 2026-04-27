@@ -31,7 +31,12 @@
  * so the worker can resolve at send time.
  */
 
-import { buildNotificationDedupKey, type NotificationKind, newId } from '@horeca/shared'
+import {
+	buildNotificationDedupKey,
+	deriveRecipientKindFromNotificationKind,
+	type NotificationKind,
+	newId,
+} from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
 import { NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from '../../db/ydb-helpers.ts'
 import type { CdcEvent } from '../cdc-handlers.ts'
@@ -181,6 +186,7 @@ export function createNotificationHandler(log: HandlerLogger, source: Notificati
 		const now = new Date()
 		const nowTs = toTs(now)
 		const { subject, recipient, channel } = buildOutboxFields(kind)
+		const recipientKind = deriveRecipientKindFromNotificationKind(kind)
 		const payloadJson = {
 			source,
 			sourceObjectId,
@@ -191,14 +197,14 @@ export function createNotificationHandler(log: HandlerLogger, source: Notificati
 		await tx`
 			UPSERT INTO notificationOutbox (
 				\`tenantId\`, \`id\`,
-				\`kind\`, \`channel\`, \`recipient\`, \`subject\`, \`bodyText\`, \`payloadJson\`,
+				\`kind\`, \`channel\`, \`recipient\`, \`recipientKind\`, \`subject\`, \`bodyText\`, \`payloadJson\`,
 				\`status\`,
 				\`sentAt\`, \`failedAt\`, \`failureReason\`, \`retryCount\`,
 				\`sourceObjectType\`, \`sourceObjectId\`, \`sourceEventDedupKey\`,
 				\`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
 			) VALUES (
 				${tenantId}, ${id},
-				${kind}, ${channel}, ${recipient}, ${subject}, ${NULL_TEXT}, ${toJson(payloadJson)},
+				${kind}, ${channel}, ${recipient}, ${recipientKind}, ${subject}, ${NULL_TEXT}, ${toJson(payloadJson)},
 				${'pending'},
 				${NULL_TIMESTAMP}, ${NULL_TIMESTAMP}, ${NULL_TEXT}, ${0},
 				${source}, ${sourceObjectId}, ${dedupKey},

@@ -1,8 +1,8 @@
-import type { Activity, ActivityObjectType, ActivityType } from '@horeca/shared'
+import type { Activity, ActivityActorType, ActivityObjectType, ActivityType } from '@horeca/shared'
 import { newId } from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
 import type { sql as SQL } from '../../db/index.ts'
-import { NULL_TEXT, toJson, toTs } from '../../db/ydb-helpers.ts'
+import { NULL_TEXT, textOpt, toJson, toTs } from '../../db/ydb-helpers.ts'
 
 type SqlInstance = typeof SQL
 
@@ -13,6 +13,7 @@ type ActivityRow = {
 	createdAt: Date
 	id: string
 	activityType: string
+	actorType: string | null
 	actorUserId: string
 	impersonatorUserId: string | null
 	diffJson: unknown
@@ -26,6 +27,7 @@ function rowToActivity(r: ActivityRow): Activity {
 		createdAt: r.createdAt.toISOString(),
 		id: r.id,
 		activityType: r.activityType as ActivityType,
+		actorType: r.actorType as ActivityActorType | null,
 		actorUserId: r.actorUserId,
 		impersonatorUserId: r.impersonatorUserId,
 		diffJson: r.diffJson,
@@ -38,6 +40,12 @@ export type ActivityInsertInput = {
 	recordId: string
 	activityType: ActivityType
 	actorUserId: string
+	/**
+	 * Defaults to `'user'` when omitted (preserves M7 semantics). New
+	 * call-sites MUST set explicitly: CDC consumer → 'system', public
+	 * widget guest action → 'guest', channel-manager push → 'channel'.
+	 */
+	actorType?: ActivityActorType
 	/** Present when a super-admin was acting as `actorUserId`. Default null. */
 	impersonatorUserId?: string | null
 	diffJson: unknown
@@ -66,7 +74,7 @@ async function runInsert(
 	if (dedupKey !== null) {
 		const [existingRows = []] = await qrun<ActivityRow[]>`
 			SELECT \`tenantId\`, \`objectType\`, \`recordId\`, \`createdAt\`, \`id\`,
-				\`activityType\`, \`actorUserId\`, \`impersonatorUserId\`, \`diffJson\`
+				\`activityType\`, \`actorType\`, \`actorUserId\`, \`impersonatorUserId\`, \`diffJson\`
 			FROM activity VIEW ixActivityDedup
 			WHERE tenantId = ${input.tenantId} AND eventDedupKey = ${dedupKey}
 			LIMIT 1
@@ -79,14 +87,15 @@ async function runInsert(
 	const nowTs = toTs(now)
 	const impersonatorUserId = input.impersonatorUserId ?? null
 	const impersonatorBind = impersonatorUserId ?? NULL_TEXT
+	const actorType: ActivityActorType = input.actorType ?? 'user'
 	await qrun`
 		UPSERT INTO activity (
 			\`tenantId\`, \`objectType\`, \`recordId\`, \`createdAt\`, \`id\`,
-			\`activityType\`, \`actorUserId\`, \`impersonatorUserId\`, \`diffJson\`,
+			\`activityType\`, \`actorType\`, \`actorUserId\`, \`impersonatorUserId\`, \`diffJson\`,
 			\`eventDedupKey\`
 		) VALUES (
 			${input.tenantId}, ${input.objectType}, ${input.recordId}, ${nowTs}, ${id},
-			${input.activityType}, ${input.actorUserId}, ${impersonatorBind}, ${toJson(input.diffJson)},
+			${input.activityType}, ${textOpt(actorType)}, ${input.actorUserId}, ${impersonatorBind}, ${toJson(input.diffJson)},
 			${dedupKey ?? NULL_TEXT}
 		)
 	`
@@ -97,6 +106,7 @@ async function runInsert(
 		createdAt: now.toISOString(),
 		id,
 		activityType: input.activityType,
+		actorType,
 		actorUserId: input.actorUserId,
 		impersonatorUserId,
 		diffJson: input.diffJson,

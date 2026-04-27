@@ -14,3 +14,19 @@ export function idSchema<K extends EntityKind>(kind: K) {
 /** Member role values — used by organization plugin access-control. */
 export const memberRoleSchema = z.enum(['owner', 'manager', 'staff'])
 export type MemberRole = z.infer<typeof memberRoleSchema>
+
+/**
+ * Wire-format bigint: accepts JSON `string` (canonical wire form) OR native
+ * `bigint` (server-side service calls). Coerces to bigint and refines to
+ * Int64 range. Mirrors `bigIntMinorSchema` in folio.ts; canonicalised here
+ * so M8.A.0 schemas (compliance / addon / media) reuse one rule.
+ *
+ * Usage:
+ *   priceMicros: int64WireSchema   — accepts "800000000" or 800_000_000n
+ */
+export const int64WireSchema = z.coerce
+	.bigint()
+	.refine(
+		(n) => n >= -9_223_372_036_854_775_808n && n <= 9_223_372_036_854_775_807n,
+		'Overflow: must fit Int64',
+	)
