@@ -51,7 +51,6 @@ async function makeTestJpegWithExif(widthPx: number, heightPx: number): Promise<
 		.toBuffer()
 }
 
-const AVIF_MAGIC = Buffer.from([0, 0, 0]) // AVIF starts with size + 'ftyp'avif1
 const WEBP_MAGIC = Buffer.from('RIFF', 'ascii')
 
 describe('processMediaUpload — variant matrix', () => {

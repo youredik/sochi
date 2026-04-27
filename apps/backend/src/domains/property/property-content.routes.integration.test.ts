@@ -10,7 +10,6 @@
  *   - Idempotency-Key fingerprint mismatch: same key + different body → 422
  *   - Bigint wire-form coercion through real route stack
  */
-import { newId } from '@horeca/shared'
 import { Hono } from 'hono'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
@@ -19,7 +18,7 @@ import type { AppEnv } from '../../factory.ts'
 import { createIdempotencyRepo } from '../../middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from '../../middleware/idempotency.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
-import { createTestRouter, stubAuthMiddleware, type TestContext } from '../../tests/setup.ts'
+import { stubAuthMiddleware, type TestContext } from '../../tests/setup.ts'
 import { createPropertyContentFactory } from './property-content.factory.ts'
 import { createPropertyContentRoutesInner } from './property-content.routes.ts'
 
