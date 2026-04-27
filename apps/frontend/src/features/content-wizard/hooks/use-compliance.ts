@@ -62,17 +62,25 @@ function patchToWire(p: TenantCompliancePatch): CompliancePatchWire {
 	}
 }
 
+export interface PatchComplianceVars {
+	input: TenantCompliancePatch
+	idempotencyKey: string
+}
+
 export function usePatchCompliance() {
 	const queryClient = useQueryClient()
 	return useMutation({
 		mutationFn: async (
-			input: TenantCompliancePatch,
+			vars: PatchComplianceVars,
 		): Promise<{ data: TenantCompliance; warnings: string[] }> => {
-			const res = await api.api.v1.me.compliance.$patch({
-				// Backend's `int64WireSchema` accepts string|bigint and coerces.
-				// hc client types reflect the bigint side; we send string.
-				json: patchToWire(input) as unknown as TenantCompliancePatch,
-			})
+			const res = await api.api.v1.me.compliance.$patch(
+				{
+					// Backend's `int64WireSchema` accepts string|bigint and coerces.
+					// hc client types reflect the bigint side; we send string.
+					json: patchToWire(vars.input) as unknown as TenantCompliancePatch,
+				},
+				{ headers: { 'Idempotency-Key': vars.idempotencyKey } },
+			)
 			if (!res.ok) throw await errorFromResponse(res)
 			const body = (await res.json()) as { data: ComplianceWire; warnings: string[] }
 			return { data: fromWire(body.data), warnings: body.warnings }

@@ -46,16 +46,24 @@ export function useAddons(propertyId: string) {
 	return useQuery(addonsQueryOptions(propertyId))
 }
 
+export interface CreateAddonVars {
+	input: AddonCreateInput
+	idempotencyKey: string
+}
+
 export function useCreateAddon(propertyId: string) {
 	const queryClient = useQueryClient()
 	return useMutation({
-		mutationFn: async (input: AddonCreateInput): Promise<Addon> => {
-			const res = await api.api.v1.properties[':propertyId'].addons.$post({
-				param: { propertyId },
-				// Backend's `int64WireSchema` accepts string|bigint and coerces.
-				// hc client types reflect the bigint side; we send string.
-				json: createToWire(input) as unknown as AddonCreateInput,
-			})
+		mutationFn: async (vars: CreateAddonVars): Promise<Addon> => {
+			const res = await api.api.v1.properties[':propertyId'].addons.$post(
+				{
+					param: { propertyId },
+					// Backend's `int64WireSchema` accepts string|bigint and coerces.
+					// hc client types reflect the bigint side; we send string.
+					json: createToWire(vars.input) as unknown as AddonCreateInput,
+				},
+				{ headers: { 'Idempotency-Key': vars.idempotencyKey } },
+			)
 			if (!res.ok) throw await errorFromResponse(res)
 			const body = (await res.json()) as { data: AddonWire }
 			return fromWire(body.data)
@@ -71,19 +79,23 @@ export function useCreateAddon(propertyId: string) {
 	})
 }
 
-interface PatchVars {
+export interface PatchAddonVars {
 	addonId: string
 	patch: AddonPatch
+	idempotencyKey: string
 }
 
 export function usePatchAddon(propertyId: string) {
 	const queryClient = useQueryClient()
 	return useMutation({
-		mutationFn: async ({ addonId, patch }: PatchVars): Promise<Addon> => {
-			const res = await api.api.v1.properties[':propertyId'].addons[':addonId'].$patch({
-				param: { propertyId, addonId },
-				json: patchToWire(patch) as unknown as AddonPatch,
-			})
+		mutationFn: async (vars: PatchAddonVars): Promise<Addon> => {
+			const res = await api.api.v1.properties[':propertyId'].addons[':addonId'].$patch(
+				{
+					param: { propertyId, addonId: vars.addonId },
+					json: patchToWire(vars.patch) as unknown as AddonPatch,
+				},
+				{ headers: { 'Idempotency-Key': vars.idempotencyKey } },
+			)
 			if (!res.ok) throw await errorFromResponse(res)
 			const body = (await res.json()) as { data: AddonWire }
 			return fromWire(body.data)
@@ -99,13 +111,19 @@ export function usePatchAddon(propertyId: string) {
 	})
 }
 
+export interface DeleteAddonVars {
+	addonId: string
+	idempotencyKey: string
+}
+
 export function useDeleteAddon(propertyId: string) {
 	const queryClient = useQueryClient()
 	return useMutation({
-		mutationFn: async (addonId: string): Promise<void> => {
-			const res = await api.api.v1.properties[':propertyId'].addons[':addonId'].$delete({
-				param: { propertyId, addonId },
-			})
+		mutationFn: async (vars: DeleteAddonVars): Promise<void> => {
+			const res = await api.api.v1.properties[':propertyId'].addons[':addonId'].$delete(
+				{ param: { propertyId, addonId: vars.addonId } },
+				{ headers: { 'Idempotency-Key': vars.idempotencyKey } },
+			)
 			if (!res.ok) throw await errorFromResponse(res)
 		},
 		onSuccess: async () => {

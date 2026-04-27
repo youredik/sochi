@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { freshIdempotencyKey } from '../../../lib/idempotency.ts'
 import { useCan } from '../../../lib/use-can.ts'
 import { useDescriptions, useUpsertDescription } from '../hooks/use-descriptions.ts'
 import { useContentWizardStore } from '../wizard-store.ts'
@@ -178,7 +179,11 @@ export function DescriptionsStep({ propertyId }: Props) {
 			// Server enforces; surface inline so user doesn't waste a roundtrip.
 			return
 		}
-		await upsert.mutateAsync({ locale: activeLocale, input: toInput(activeDraft) })
+		await upsert.mutateAsync({
+			locale: activeLocale,
+			input: toInput(activeDraft),
+			idempotencyKey: freshIdempotencyKey(),
+		})
 	}
 
 	if (isLoading) return <p className="text-muted-foreground">Загрузка…</p>

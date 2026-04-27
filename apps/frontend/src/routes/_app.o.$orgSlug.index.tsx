@@ -1,6 +1,7 @@
 import { hasPermission } from '@horeca/shared'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { propertiesQueryOptions } from '../features/receivables/hooks/use-receivables.ts'
 import { api } from '../lib/api.ts'
 import { useCurrentRole } from '../lib/use-can.ts'
 
@@ -36,6 +37,19 @@ function TenantHome() {
 	const role = useCurrentRole()
 	const canReadReports = role !== undefined && hasPermission(role, { report: ['read'] })
 	const canReadNotifications = role !== undefined && hasPermission(role, { notification: ['read'] })
+	// `compliance:read` covers both owner+manager (152-ФЗ tax-regime guidance);
+	// the content wizard's per-step components further gate write operations
+	// on the server side. Tile is the operator's only entry point to the
+	// wizard — without it the route is reachable only by URL editing.
+	const canSeeContent =
+		role !== undefined &&
+		(hasPermission(role, { compliance: ['read'] }) || hasPermission(role, { amenity: ['read'] }))
+	// Read cached properties (route's beforeLoad already prefetched + verified
+	// length>=1 redirects to /setup if empty). First property is canonical
+	// "Шахматка" target — small operators have 1 hotel; multi-property
+	// dashboard with per-property tiles ships when the data justifies it.
+	const properties = useQuery(propertiesQueryOptions)
+	const firstProperty = properties.data?.[0]
 	const health = useQuery({
 		queryKey: ['health', 'db'],
 		queryFn: async () => {
@@ -94,6 +108,19 @@ function TenantHome() {
 						<h2 className="font-medium">Уведомления</h2>
 						<p className="text-muted-foreground mt-2 text-sm">
 							История писем гостям и администрации: статусы, фильтры, повтор отправки при сбое.
+						</p>
+					</Link>
+				) : null}
+				{canSeeContent && firstProperty ? (
+					<Link
+						to="/o/$orgSlug/properties/$propertyId/content"
+						params={{ orgSlug: organization.slug, propertyId: firstProperty.id }}
+						className="border-border bg-card hover:border-primary rounded-lg border p-6 transition-colors"
+					>
+						<h2 className="font-medium">Профиль гостиницы</h2>
+						<p className="text-muted-foreground mt-2 text-sm">
+							Compliance (КСР, налоги), удобства, описание, фото, услуги — всё для каналов продаж и
+							публичного виджета.
 						</p>
 					</Link>
 				) : null}

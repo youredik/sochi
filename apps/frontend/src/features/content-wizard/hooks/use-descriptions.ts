@@ -27,19 +27,23 @@ export function useDescriptions(propertyId: string) {
 	return useQuery(descriptionsQueryOptions(propertyId))
 }
 
-interface UpsertVars {
+export interface UpsertDescriptionVars {
 	locale: PropertyDescriptionLocale
 	input: PropertyDescriptionInput
+	idempotencyKey: string
 }
 
 export function useUpsertDescription(propertyId: string) {
 	const queryClient = useQueryClient()
 	return useMutation({
-		mutationFn: async ({ locale, input }: UpsertVars): Promise<PropertyDescription> => {
-			const res = await api.api.v1.properties[':propertyId'].descriptions[':locale'].$put({
-				param: { propertyId, locale },
-				json: input,
-			})
+		mutationFn: async (vars: UpsertDescriptionVars): Promise<PropertyDescription> => {
+			const res = await api.api.v1.properties[':propertyId'].descriptions[':locale'].$put(
+				{
+					param: { propertyId, locale: vars.locale },
+					json: vars.input,
+				},
+				{ headers: { 'Idempotency-Key': vars.idempotencyKey } },
+			)
 			if (!res.ok) throw await errorFromResponse(res)
 			const body = (await res.json()) as { data: PropertyDescription }
 			return body.data

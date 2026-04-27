@@ -39,6 +39,7 @@ export interface UploadVars {
 	altRu: string
 	altEn?: string
 	kind?: 'photo' | 'photo_360' | 'video_tour'
+	idempotencyKey: string
 }
 
 /**
@@ -63,7 +64,12 @@ export function useUploadMedia(propertyId: string) {
 			// `credentials: include` so the auth cookie ships.
 			const res = await fetch(
 				`${apiUrl}/api/v1/properties/${encodeURIComponent(propertyId)}/media/upload`,
-				{ method: 'POST', body: fd, credentials: 'include' },
+				{
+					method: 'POST',
+					body: fd,
+					credentials: 'include',
+					headers: { 'Idempotency-Key': vars.idempotencyKey },
+				},
 			)
 			if (!res.ok) throw await errorFromResponse(res)
 			const body = (await res.json()) as {
@@ -86,19 +92,23 @@ export function useUploadMedia(propertyId: string) {
 	})
 }
 
-interface PatchVars {
+export interface PatchMediaVars {
 	mediaId: string
 	patch: PropertyMediaPatch
+	idempotencyKey: string
 }
 
 export function usePatchMedia(propertyId: string) {
 	const queryClient = useQueryClient()
 	return useMutation({
-		mutationFn: async ({ mediaId, patch }: PatchVars): Promise<PropertyMedia> => {
-			const res = await api.api.v1.properties[':propertyId'].media[':mediaId'].$patch({
-				param: { propertyId, mediaId },
-				json: patch,
-			})
+		mutationFn: async (vars: PatchMediaVars): Promise<PropertyMedia> => {
+			const res = await api.api.v1.properties[':propertyId'].media[':mediaId'].$patch(
+				{
+					param: { propertyId, mediaId: vars.mediaId },
+					json: vars.patch,
+				},
+				{ headers: { 'Idempotency-Key': vars.idempotencyKey } },
+			)
 			if (!res.ok) throw await errorFromResponse(res)
 			const body = (await res.json()) as { data: MediaWire }
 			return fromWire(body.data)
@@ -114,13 +124,19 @@ export function usePatchMedia(propertyId: string) {
 	})
 }
 
+export interface DeleteMediaVars {
+	mediaId: string
+	idempotencyKey: string
+}
+
 export function useDeleteMedia(propertyId: string) {
 	const queryClient = useQueryClient()
 	return useMutation({
-		mutationFn: async (mediaId: string): Promise<void> => {
-			const res = await api.api.v1.properties[':propertyId'].media[':mediaId'].$delete({
-				param: { propertyId, mediaId },
-			})
+		mutationFn: async (vars: DeleteMediaVars): Promise<void> => {
+			const res = await api.api.v1.properties[':propertyId'].media[':mediaId'].$delete(
+				{ param: { propertyId, mediaId: vars.mediaId } },
+				{ headers: { 'Idempotency-Key': vars.idempotencyKey } },
+			)
 			if (!res.ok) throw await errorFromResponse(res)
 		},
 		onSuccess: async () => {
@@ -134,13 +150,19 @@ export function useDeleteMedia(propertyId: string) {
 	})
 }
 
+export interface SetHeroVars {
+	mediaId: string
+	idempotencyKey: string
+}
+
 export function useSetHero(propertyId: string) {
 	const queryClient = useQueryClient()
 	return useMutation({
-		mutationFn: async (mediaId: string): Promise<PropertyMedia> => {
-			const res = await api.api.v1.properties[':propertyId'].media[':mediaId'].hero.$post({
-				param: { propertyId, mediaId },
-			})
+		mutationFn: async (vars: SetHeroVars): Promise<PropertyMedia> => {
+			const res = await api.api.v1.properties[':propertyId'].media[':mediaId'].hero.$post(
+				{ param: { propertyId, mediaId: vars.mediaId } },
+				{ headers: { 'Idempotency-Key': vars.idempotencyKey } },
+			)
 			if (!res.ok) throw await errorFromResponse(res)
 			const body = (await res.json()) as { data: MediaWire }
 			return fromWire(body.data)

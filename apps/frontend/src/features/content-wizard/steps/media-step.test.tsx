@@ -366,6 +366,214 @@ describe('<MediaStep> — upload mutation', () => {
 })
 
 // ────────────────────────────────────────────────────────────────────
+// Idempotency (retry-safety canon)
+// ────────────────────────────────────────────────────────────────────
+
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+describe('<MediaStep> — idempotency', () => {
+	test('[I1] upload sends a UUIDv4 Idempotency-Key', async () => {
+		const mutateAsync = vi.fn().mockResolvedValue({})
+		mockedUpload.mockReturnValue({
+			mutateAsync,
+			isPending: false,
+		} as unknown as ReturnType<typeof useUploadMedia>)
+		render(<MediaStep propertyId="prop_x" />)
+		fireEvent.change(screen.getByLabelText('Выбрать файл') as HTMLInputElement, {
+			target: { files: [fileWithSize('ok.jpg', 'image/jpeg', 1024)] },
+		})
+		fireEvent.change(screen.getByLabelText('altRu (обязательно)'), { target: { value: 'A' } })
+		fireEvent.click(screen.getByRole('button', { name: 'Загрузить и обработать' }))
+		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
+		const arg = mutateAsync.mock.calls[0]?.[0] as { idempotencyKey: string }
+		expect(arg.idempotencyKey).toMatch(UUID_V4_REGEX)
+	})
+
+	test('[I2] patch + delete + setHero each carry distinct UUIDv4 keys', () => {
+		const patchMutate = vi.fn()
+		const delMutate = vi.fn()
+		const heroMutate = vi.fn()
+		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
+			typeof usePatchMedia
+		>)
+		mockedDelete.mockReturnValue({ mutate: delMutate } as unknown as ReturnType<
+			typeof useDeleteMedia
+		>)
+		mockedSetHero.mockReturnValue({ mutate: heroMutate } as unknown as ReturnType<
+			typeof useSetHero
+		>)
+		mockedUseList.mockReturnValue({
+			data: [ROW({ mediaId: 'm1', isHero: false, altRu: 'X' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useMediaList>)
+		render(<MediaStep propertyId="prop_x" />)
+		// Edit altRu to enable "Сохранить alt"
+		const labels = screen.getAllByText('altRu')
+		const inRowLabel = labels.find((l) => l.tagName === 'LABEL')
+		const inputId = inRowLabel?.getAttribute('for') ?? ''
+		fireEvent.change(document.getElementById(inputId) as HTMLInputElement, {
+			target: { value: 'Y' },
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Сохранить alt' }))
+		fireEvent.click(screen.getByRole('button', { name: 'Сделать hero' }))
+		// Удалить теперь открывает confirm-dialog; нажимаем кнопку "Удалить" в
+		// диалоге для actual deletion. Tests assert on UUIDv4-distinctness.
+		fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
+		const dialogDeleteBtn = screen
+			.getAllByRole('button', { name: 'Удалить' })
+			.find((b) => (b.closest('[role="dialog"]') ?? null) !== null)
+		fireEvent.click(dialogDeleteBtn as HTMLButtonElement)
+		const k1 = (patchMutate.mock.calls[0]?.[0] as { idempotencyKey: string }).idempotencyKey
+		const k2 = (heroMutate.mock.calls[0]?.[0] as { idempotencyKey: string }).idempotencyKey
+		const k3 = (delMutate.mock.calls[0]?.[0] as { idempotencyKey: string }).idempotencyKey
+		expect(k1).toMatch(UUID_V4_REGEX)
+		expect(k2).toMatch(UUID_V4_REGEX)
+		expect(k3).toMatch(UUID_V4_REGEX)
+		expect(new Set([k1, k2, k3]).size).toBe(3)
+	})
+})
+
+// ────────────────────────────────────────────────────────────────────
+// Delete-confirm dialog (destructive-action guard)
+// ────────────────────────────────────────────────────────────────────
+
+describe('<MediaStep> — delete confirm dialog', () => {
+	test('[Dc1] click Удалить → dialog opens, mutation NOT yet fired', () => {
+		const delMutate = vi.fn()
+		mockedDelete.mockReturnValue({ mutate: delMutate } as unknown as ReturnType<
+			typeof useDeleteMedia
+		>)
+		mockedUseList.mockReturnValue({
+			data: [ROW({ mediaId: 'm1' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useMediaList>)
+		render(<MediaStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
+		expect(screen.getByRole('dialog')).toBeTruthy()
+		expect(screen.getByRole('heading', { name: 'Удалить фото?' })).toBeTruthy()
+		expect(delMutate).not.toHaveBeenCalled()
+	})
+
+	test('[Dc2] dialog Отмена → no mutation, dialog closes', () => {
+		const delMutate = vi.fn()
+		mockedDelete.mockReturnValue({ mutate: delMutate } as unknown as ReturnType<
+			typeof useDeleteMedia
+		>)
+		mockedUseList.mockReturnValue({
+			data: [ROW({ mediaId: 'm1' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useMediaList>)
+		render(<MediaStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
+		fireEvent.click(screen.getByRole('button', { name: 'Отмена' }))
+		expect(delMutate).not.toHaveBeenCalled()
+	})
+
+	test('[Dc3] dialog Удалить → del.mutate fires once', () => {
+		const delMutate = vi.fn()
+		mockedDelete.mockReturnValue({ mutate: delMutate } as unknown as ReturnType<
+			typeof useDeleteMedia
+		>)
+		mockedUseList.mockReturnValue({
+			data: [ROW({ mediaId: 'm77' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useMediaList>)
+		render(<MediaStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
+		const dialogDeleteBtn = screen
+			.getAllByRole('button', { name: 'Удалить' })
+			.find((b) => (b.closest('[role="dialog"]') ?? null) !== null) as HTMLButtonElement
+		fireEvent.click(dialogDeleteBtn)
+		expect(delMutate).toHaveBeenCalledTimes(1)
+		expect(delMutate.mock.calls[0]?.[0]).toEqual(
+			expect.objectContaining({ mediaId: 'm77', idempotencyKey: expect.any(String) }),
+		)
+	})
+
+	test('[Dc4] hero photo → dialog shows extra hero-loss warning', () => {
+		mockedUseList.mockReturnValue({
+			data: [ROW({ mediaId: 'm_hero', isHero: true, altRu: 'Hero' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useMediaList>)
+		render(<MediaStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
+		expect(screen.getByText('Это hero-фото')).toBeTruthy()
+	})
+})
+
+// ────────────────────────────────────────────────────────────────────
+// Sort order (move up/down)
+// ────────────────────────────────────────────────────────────────────
+
+describe('<MediaStep> — sort order', () => {
+	test('[So1] first row Up disabled, last row Down disabled', () => {
+		mockedUseList.mockReturnValue({
+			data: [ROW({ mediaId: 'm1' }), ROW({ mediaId: 'm2' }), ROW({ mediaId: 'm3' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useMediaList>)
+		render(<MediaStep propertyId="prop_x" />)
+		const upBtns = screen.getAllByRole('button', { name: 'Поднять выше' }) as HTMLButtonElement[]
+		const downBtns = screen.getAllByRole('button', { name: 'Опустить ниже' }) as HTMLButtonElement[]
+		expect(upBtns).toHaveLength(3)
+		expect(downBtns).toHaveLength(3)
+		expect(upBtns[0]?.disabled).toBe(true)
+		expect(downBtns[2]?.disabled).toBe(true)
+		expect(upBtns[1]?.disabled).toBe(false)
+		expect(downBtns[1]?.disabled).toBe(false)
+	})
+
+	test('[So2] move-up → patch.mutate with new sortOrder for row above-1', () => {
+		const patchMutate = vi.fn()
+		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
+			typeof usePatchMedia
+		>)
+		mockedUseList.mockReturnValue({
+			data: [ROW({ mediaId: 'm1', sortOrder: 0 }), ROW({ mediaId: 'm2', sortOrder: 5 })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useMediaList>)
+		render(<MediaStep propertyId="prop_x" />)
+		const upBtns = screen.getAllByRole('button', { name: 'Поднять выше' }) as HTMLButtonElement[]
+		fireEvent.click(upBtns[1] as HTMLButtonElement)
+		// move-up of m2 (which has sortOrder=5) takes m1.sortOrder-1 = -1 → clamped to 0
+		expect(patchMutate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				mediaId: 'm2',
+				patch: { sortOrder: 0 },
+			}),
+		)
+	})
+
+	test('[So3] move-down → patch.mutate with new sortOrder for row below+1', () => {
+		const patchMutate = vi.fn()
+		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
+			typeof usePatchMedia
+		>)
+		mockedUseList.mockReturnValue({
+			data: [ROW({ mediaId: 'm1', sortOrder: 0 }), ROW({ mediaId: 'm2', sortOrder: 5 })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useMediaList>)
+		render(<MediaStep propertyId="prop_x" />)
+		const downBtns = screen.getAllByRole('button', { name: 'Опустить ниже' }) as HTMLButtonElement[]
+		fireEvent.click(downBtns[0] as HTMLButtonElement)
+		// move-down of m1 takes m2.sortOrder+1 = 6
+		expect(patchMutate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				mediaId: 'm1',
+				patch: { sortOrder: 6 },
+			}),
+		)
+	})
+})
+
+// ────────────────────────────────────────────────────────────────────
 // Existing media row UI
 // ────────────────────────────────────────────────────────────────────
 

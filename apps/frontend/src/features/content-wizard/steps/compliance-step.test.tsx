@@ -368,12 +368,15 @@ describe('<ComplianceStep> — submit serialization', () => {
 		await submitAndAwait()
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1))
 		expect(mutateAsync).toHaveBeenCalledWith({
-			ksrRegistryId: null,
-			ksrCategory: null,
-			legalEntityType: null,
-			taxRegime: null,
-			annualRevenueEstimateMicroRub: null,
-			guestHouseFz127Registered: null,
+			input: {
+				ksrRegistryId: null,
+				ksrCategory: null,
+				legalEntityType: null,
+				taxRegime: null,
+				annualRevenueEstimateMicroRub: null,
+				guestHouseFz127Registered: null,
+			},
+			idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
 		})
 	})
 
@@ -390,7 +393,10 @@ describe('<ComplianceStep> — submit serialization', () => {
 		await submitAndAwait()
 		await waitFor(() =>
 			expect(mutateAsync).toHaveBeenCalledWith(
-				expect.objectContaining({ ksrRegistryId: 'KSR-77' }),
+				expect.objectContaining({
+					input: expect.objectContaining({ ksrRegistryId: 'KSR-77' }),
+					idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+				}),
 			),
 		)
 	})
@@ -408,7 +414,11 @@ describe('<ComplianceStep> — submit serialization', () => {
 		await submitAndAwait()
 		await waitFor(() =>
 			expect(mutateAsync).toHaveBeenCalledWith(
-				expect.objectContaining({ annualRevenueEstimateMicroRub: 1_000_000_000_000n }),
+				expect.objectContaining({
+					input: expect.objectContaining({
+						annualRevenueEstimateMicroRub: 1_000_000_000_000n,
+					}),
+				}),
 			),
 		)
 	})
@@ -427,7 +437,9 @@ describe('<ComplianceStep> — submit serialization', () => {
 		// 1234 rub + 0.56 → 1234.56 × 1_000_000 micro = 1_234_560_000
 		await waitFor(() =>
 			expect(mutateAsync).toHaveBeenCalledWith(
-				expect.objectContaining({ annualRevenueEstimateMicroRub: 1_234_560_000n }),
+				expect.objectContaining({
+					input: expect.objectContaining({ annualRevenueEstimateMicroRub: 1_234_560_000n }),
+				}),
 			),
 		)
 	})
@@ -444,9 +456,11 @@ describe('<ComplianceStep> — submit serialization', () => {
 		})
 		await submitAndAwait()
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-		const call = mutateAsync.mock.calls[0]?.[0] as { annualRevenueEstimateMicroRub: unknown }
+		const call = mutateAsync.mock.calls[0]?.[0] as {
+			input: { annualRevenueEstimateMicroRub: unknown }
+		}
 		// Non-empty input but unparseable → undefined per onSubmit logic
-		expect(call.annualRevenueEstimateMicroRub).toBeUndefined()
+		expect(call.input.annualRevenueEstimateMicroRub).toBeUndefined()
 	})
 
 	test('[S6] whitespace-only ksrId → null (trimmed empty)', async () => {
@@ -461,8 +475,43 @@ describe('<ComplianceStep> — submit serialization', () => {
 		})
 		await submitAndAwait()
 		await waitFor(() =>
-			expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ ksrRegistryId: null })),
+			expect(mutateAsync).toHaveBeenCalledWith(
+				expect.objectContaining({
+					input: expect.objectContaining({ ksrRegistryId: null }),
+				}),
+			),
 		)
+	})
+
+	test('[I1] every submit includes a UUIDv4 Idempotency-Key (retry-safety)', async () => {
+		const mutateAsync = vi.fn()
+		mockedUsePatch.mockReturnValue({
+			mutateAsync,
+			isPending: false,
+		} as unknown as ReturnType<typeof usePatchCompliance>)
+		render(<ComplianceStep />)
+		fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
+		const call = mutateAsync.mock.calls[0]?.[0] as { idempotencyKey: string }
+		expect(call.idempotencyKey).toMatch(
+			/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+		)
+	})
+
+	test('[I2] two submits → two distinct keys (NOT cached, NOT shared)', async () => {
+		const mutateAsync = vi.fn()
+		mockedUsePatch.mockReturnValue({
+			mutateAsync,
+			isPending: false,
+		} as unknown as ReturnType<typeof usePatchCompliance>)
+		render(<ComplianceStep />)
+		fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+		await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1))
+		fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+		await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2))
+		const k1 = (mutateAsync.mock.calls[0]?.[0] as { idempotencyKey: string }).idempotencyKey
+		const k2 = (mutateAsync.mock.calls[1]?.[0] as { idempotencyKey: string }).idempotencyKey
+		expect(k1).not.toBe(k2)
 	})
 })
 

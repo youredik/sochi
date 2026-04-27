@@ -366,8 +366,11 @@ describe('<AddonsStep> — seasonal tags', () => {
 		fireEvent.click(screen.getByLabelText('Лыжный сезон (15.12-15.04)'))
 		fireEvent.click(screen.getByRole('button', { name: 'Добавить услугу' }))
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-		const arg = mutateAsync.mock.calls[0]?.[0] as { seasonalTags: string[] }
-		expect(arg.seasonalTags).toEqual(['ski-season'])
+		const arg = mutateAsync.mock.calls[0]?.[0] as {
+			input: { seasonalTags: string[] }
+			idempotencyKey: string
+		}
+		expect(arg.input.seasonalTags).toEqual(['ski-season'])
 	})
 
 	test('[Sg3] check + uncheck → tag NOT in payload', async () => {
@@ -383,8 +386,8 @@ describe('<AddonsStep> — seasonal tags', () => {
 		fireEvent.click(cb)
 		fireEvent.click(screen.getByRole('button', { name: 'Добавить услугу' }))
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-		const arg = mutateAsync.mock.calls[0]?.[0] as { seasonalTags: string[] }
-		expect(arg.seasonalTags).toEqual([])
+		const arg = mutateAsync.mock.calls[0]?.[0] as { input: { seasonalTags: string[] } }
+		expect(arg.input.seasonalTags).toEqual([])
 	})
 })
 
@@ -408,8 +411,8 @@ describe('<AddonsStep> — create serialization', () => {
 		fillRequired()
 		fireEvent.click(screen.getByRole('button', { name: 'Добавить услугу' }))
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-		const arg = mutateAsync.mock.calls[0]?.[0] as { priceMicros: bigint }
-		expect(arg.priceMicros).toBe(1_500_000_000n)
+		const arg = mutateAsync.mock.calls[0]?.[0] as { input: { priceMicros: bigint } }
+		expect(arg.input.priceMicros).toBe(1_500_000_000n)
 	})
 
 	test('[Cr2] price "1500.50" → priceMicros 1_500_500_000n', async () => {
@@ -422,8 +425,8 @@ describe('<AddonsStep> — create serialization', () => {
 		fireEvent.change(screen.getByLabelText('Цена, ₽'), { target: { value: '1500.50' } })
 		fireEvent.click(screen.getByRole('button', { name: 'Добавить услугу' }))
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-		const arg = mutateAsync.mock.calls[0]?.[0] as { priceMicros: bigint }
-		expect(arg.priceMicros).toBe(1_500_500_000n)
+		const arg = mutateAsync.mock.calls[0]?.[0] as { input: { priceMicros: bigint } }
+		expect(arg.input.priceMicros).toBe(1_500_500_000n)
 	})
 
 	test('[Cr3] empty nameEn → null in payload (NOT empty string)', async () => {
@@ -432,8 +435,8 @@ describe('<AddonsStep> — create serialization', () => {
 		fillRequired()
 		fireEvent.click(screen.getByRole('button', { name: 'Добавить услугу' }))
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-		const arg = mutateAsync.mock.calls[0]?.[0] as { nameEn: string | null }
-		expect(arg.nameEn).toBeNull()
+		const arg = mutateAsync.mock.calls[0]?.[0] as { input: { nameEn: string | null } }
+		expect(arg.input.nameEn).toBeNull()
 	})
 
 	test('[Cr4] empty descRu → null', async () => {
@@ -442,8 +445,8 @@ describe('<AddonsStep> — create serialization', () => {
 		fillRequired()
 		fireEvent.click(screen.getByRole('button', { name: 'Добавить услугу' }))
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-		const arg = mutateAsync.mock.calls[0]?.[0] as { descriptionRu: string | null }
-		expect(arg.descriptionRu).toBeNull()
+		const arg = mutateAsync.mock.calls[0]?.[0] as { input: { descriptionRu: string | null } }
+		expect(arg.input.descriptionRu).toBeNull()
 	})
 
 	test('[Cr5] currency=RUB, inventoryMode=NONE, dailyCapacity=null', async () => {
@@ -452,10 +455,10 @@ describe('<AddonsStep> — create serialization', () => {
 		fillRequired()
 		fireEvent.click(screen.getByRole('button', { name: 'Добавить услугу' }))
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-		const arg = mutateAsync.mock.calls[0]?.[0] as Record<string, unknown>
-		expect(arg.currency).toBe('RUB')
-		expect(arg.inventoryMode).toBe('NONE')
-		expect(arg.dailyCapacity).toBeNull()
+		const arg = mutateAsync.mock.calls[0]?.[0] as { input: Record<string, unknown> }
+		expect(arg.input.currency).toBe('RUB')
+		expect(arg.input.inventoryMode).toBe('NONE')
+		expect(arg.input.dailyCapacity).toBeNull()
 	})
 
 	test('[Cr6] sortOrder=0, descriptionEn=null', async () => {
@@ -464,9 +467,55 @@ describe('<AddonsStep> — create serialization', () => {
 		fillRequired()
 		fireEvent.click(screen.getByRole('button', { name: 'Добавить услугу' }))
 		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-		const arg = mutateAsync.mock.calls[0]?.[0] as Record<string, unknown>
-		expect(arg.sortOrder).toBe(0)
-		expect(arg.descriptionEn).toBeNull()
+		const arg = mutateAsync.mock.calls[0]?.[0] as { input: Record<string, unknown> }
+		expect(arg.input.sortOrder).toBe(0)
+		expect(arg.input.descriptionEn).toBeNull()
+	})
+})
+
+// ────────────────────────────────────────────────────────────────────
+// Idempotency (retry-safety canon)
+// ────────────────────────────────────────────────────────────────────
+
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+describe('<AddonsStep> — idempotency', () => {
+	test('[I1] create includes UUIDv4 Idempotency-Key', async () => {
+		const mutateAsync = vi.fn().mockResolvedValue({})
+		mockedCreate.mockReturnValue({
+			mutateAsync,
+			isPending: false,
+		} as unknown as ReturnType<typeof useCreateAddon>)
+		render(<AddonsStep propertyId="prop_x" />)
+		fillRequired()
+		fireEvent.click(screen.getByRole('button', { name: 'Добавить услугу' }))
+		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
+		const arg = mutateAsync.mock.calls[0]?.[0] as { idempotencyKey: string }
+		expect(arg.idempotencyKey).toMatch(UUID_V4_REGEX)
+	})
+
+	test('[I2] patch (toggle) and delete each include their OWN UUIDv4 key', () => {
+		const patchMutate = vi.fn()
+		const delMutate = vi.fn()
+		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
+			typeof usePatchAddon
+		>)
+		mockedDelete.mockReturnValue({ mutate: delMutate } as unknown as ReturnType<
+			typeof useDeleteAddon
+		>)
+		mockedUseAddons.mockReturnValue({
+			data: [ADDON_ROW({ addonId: 'addn_1' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useAddons>)
+		render(<AddonsStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Деактивировать' }))
+		fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
+		const k1 = (patchMutate.mock.calls[0]?.[0] as { idempotencyKey: string }).idempotencyKey
+		const k2 = (delMutate.mock.calls[0]?.[0] as { idempotencyKey: string }).idempotencyKey
+		expect(k1).toMatch(UUID_V4_REGEX)
+		expect(k2).toMatch(UUID_V4_REGEX)
+		expect(k1).not.toBe(k2)
 	})
 })
 
@@ -523,6 +572,9 @@ describe('<AddonsStep> — row interactions', () => {
 		expect(mutate).toHaveBeenCalledWith({
 			addonId: 'addn_77',
 			patch: { isActive: false },
+			idempotencyKey: expect.stringMatching(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+			),
 		})
 	})
 
@@ -536,7 +588,12 @@ describe('<AddonsStep> — row interactions', () => {
 		} as unknown as ReturnType<typeof useAddons>)
 		render(<AddonsStep propertyId="prop_x" />)
 		fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
-		expect(mutate).toHaveBeenCalledWith('addn_99')
+		expect(mutate).toHaveBeenCalledWith({
+			addonId: 'addn_99',
+			idempotencyKey: expect.stringMatching(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+			),
+		})
 	})
 
 	test('[Rx6] seasonalTags rendered as labelled spans in the row', () => {
@@ -554,6 +611,140 @@ describe('<AddonsStep> — row interactions', () => {
 		const list = screen.getByRole('list')
 		expect(within(list).getByText('Лыжный сезон (15.12-15.04)')).toBeTruthy()
 		expect(within(list).getByText('Новогодние праздники')).toBeTruthy()
+	})
+})
+
+// ────────────────────────────────────────────────────────────────────
+// Edit-after-create (full CRUD — closes feedback_no_halfway)
+// ────────────────────────────────────────────────────────────────────
+
+describe('<AddonsStep> — edit existing row', () => {
+	test('[Ed1] click Редактировать → form fields appear with row values pre-filled', () => {
+		mockedUseAddons.mockReturnValue({
+			data: [
+				ADDON_ROW({
+					addonId: 'addn_e1',
+					nameRu: 'Завтрак-A',
+					priceMicros: 1_500_000_000n,
+				}),
+			],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useAddons>)
+		render(<AddonsStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Редактировать' }))
+		// Inline form opens with the existing values (one of two name-ru inputs:
+		// the create form's empty + this row's editor pre-filled).
+		const ruInputs = screen.getAllByLabelText('Название (ru)') as HTMLInputElement[]
+		const filled = ruInputs.find((i) => i.value === 'Завтрак-A')
+		expect(filled).toBeDefined()
+	})
+
+	test('[Ed2] save changed name → patch.mutate with diff fields only + idempotencyKey', () => {
+		const patchMutate = vi.fn()
+		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
+			typeof usePatchAddon
+		>)
+		mockedUseAddons.mockReturnValue({
+			data: [ADDON_ROW({ addonId: 'addn_e2', nameRu: 'Old' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useAddons>)
+		render(<AddonsStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Редактировать' }))
+		const ruInputs = screen.getAllByLabelText('Название (ru)') as HTMLInputElement[]
+		const targetInput = ruInputs.find((i) => i.value === 'Old')
+		fireEvent.change(targetInput as HTMLInputElement, { target: { value: 'New' } })
+		// Cancel button has class ghost — pick the primary "Сохранить" inside <li>
+		const items = screen.getAllByRole('listitem')
+		const editingLi = items.find((li) => within(li).queryByText('Отмена'))
+		const saveBtn = within(editingLi as HTMLElement).getByRole('button', { name: 'Сохранить' })
+		fireEvent.click(saveBtn)
+		expect(patchMutate).toHaveBeenCalledTimes(1)
+		const arg = patchMutate.mock.calls[0]?.[0] as {
+			addonId: string
+			patch: Record<string, unknown>
+			idempotencyKey: string
+		}
+		expect(arg.addonId).toBe('addn_e2')
+		expect(arg.patch).toEqual({ nameRu: 'New' })
+		expect(arg.idempotencyKey).toMatch(UUID_V4_REGEX)
+	})
+
+	test('[Ed3] save without changes → no mutation fired (empty diff)', () => {
+		const patchMutate = vi.fn()
+		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
+			typeof usePatchAddon
+		>)
+		mockedUseAddons.mockReturnValue({
+			data: [ADDON_ROW({ addonId: 'addn_e3' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useAddons>)
+		render(<AddonsStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Редактировать' }))
+		const items = screen.getAllByRole('listitem')
+		const editingLi = items.find((li) => within(li).queryByText('Отмена'))
+		const saveBtn = within(editingLi as HTMLElement).getByRole('button', { name: 'Сохранить' })
+		fireEvent.click(saveBtn)
+		expect(patchMutate).not.toHaveBeenCalled()
+	})
+
+	test('[Ed4] cancel reverts draft and exits edit mode (no mutation)', () => {
+		const patchMutate = vi.fn()
+		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
+			typeof usePatchAddon
+		>)
+		mockedUseAddons.mockReturnValue({
+			data: [ADDON_ROW({ addonId: 'addn_e4', nameRu: 'Old' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useAddons>)
+		render(<AddonsStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Редактировать' }))
+		const ruInputs = screen.getAllByLabelText('Название (ru)') as HTMLInputElement[]
+		const targetInput = ruInputs.find((i) => i.value === 'Old')
+		fireEvent.change(targetInput as HTMLInputElement, { target: { value: 'Discarded' } })
+		fireEvent.click(screen.getByRole('button', { name: 'Отмена' }))
+		// Editing collapsed → "Редактировать" button visible again
+		expect(screen.getByRole('button', { name: 'Редактировать' })).toBeTruthy()
+		expect(patchMutate).not.toHaveBeenCalled()
+	})
+
+	test('[Ed5] price change → priceMicros in patch (rub → micro conversion)', () => {
+		const patchMutate = vi.fn()
+		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
+			typeof usePatchAddon
+		>)
+		mockedUseAddons.mockReturnValue({
+			data: [ADDON_ROW({ addonId: 'addn_e5', priceMicros: 1_500_000_000n })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useAddons>)
+		render(<AddonsStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Редактировать' }))
+		const items = screen.getAllByRole('listitem')
+		const editingLi = items.find((li) => within(li).queryByText('Отмена'))
+		const priceInput = within(editingLi as HTMLElement).getByLabelText(
+			'Цена, ₽',
+		) as HTMLInputElement
+		fireEvent.change(priceInput, { target: { value: '2000' } })
+		const saveBtn = within(editingLi as HTMLElement).getByRole('button', { name: 'Сохранить' })
+		fireEvent.click(saveBtn)
+		const arg = patchMutate.mock.calls[0]?.[0] as { patch: { priceMicros: bigint } }
+		expect(arg.patch.priceMicros).toBe(2_000_000_000n)
+	})
+
+	test('[Ed6] RBAC: staff cannot click Редактировать (button disabled)', () => {
+		setRole('staff')
+		mockedUseAddons.mockReturnValue({
+			data: [ADDON_ROW({ addonId: 'addn_e6' })],
+			isLoading: false,
+			error: null,
+		} as unknown as ReturnType<typeof useAddons>)
+		render(<AddonsStep propertyId="prop_x" />)
+		const btn = screen.getByRole('button', { name: 'Редактировать' })
+		expect((btn as HTMLButtonElement).disabled).toBe(true)
 	})
 })
 

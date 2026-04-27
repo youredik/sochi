@@ -272,8 +272,10 @@ describe('<AmenitiesStep> — toggle', () => {
 // Save serialization
 // ────────────────────────────────────────────────────────────────────
 
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
 describe('<AmenitiesStep> — save serialization', () => {
-	test('[S1] save with no selection → mutation called with empty array', () => {
+	test('[S1] save with no selection → mutation called with empty items array', () => {
 		const mutateAsync = vi.fn()
 		mockedUseSet.mockReturnValue({
 			mutateAsync,
@@ -281,7 +283,10 @@ describe('<AmenitiesStep> — save serialization', () => {
 		} as unknown as ReturnType<typeof useSetAmenities>)
 		render(<AmenitiesStep propertyId="prop_x" />)
 		fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
-		expect(mutateAsync).toHaveBeenCalledWith([])
+		expect(mutateAsync).toHaveBeenCalledWith({
+			items: [],
+			idempotencyKey: expect.stringMatching(UUID_V4_REGEX),
+		})
 	})
 
 	test('[S2] checked amenity with no value → serialized with value=null', () => {
@@ -293,9 +298,10 @@ describe('<AmenitiesStep> — save serialization', () => {
 		render(<AmenitiesStep propertyId="prop_x" />)
 		fireEvent.click(screen.getByLabelText(/Бесплатный Wi-Fi в общих зонах/))
 		fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
-		expect(mutateAsync).toHaveBeenCalledWith([
-			{ amenityCode: 'AMN_WIFI_FREE_PUBLIC', freePaid: 'free', value: null },
-		])
+		expect(mutateAsync).toHaveBeenCalledWith({
+			items: [{ amenityCode: 'AMN_WIFI_FREE_PUBLIC', freePaid: 'free', value: null }],
+			idempotencyKey: expect.stringMatching(UUID_V4_REGEX),
+		})
 	})
 
 	test('[S3] supportsValue amenity with non-empty value → serialized verbatim (trimmed)', () => {
@@ -309,9 +315,10 @@ describe('<AmenitiesStep> — save serialization', () => {
 		const input = screen.getByLabelText(/Значение для Высокоскоростной Wi-Fi/) as HTMLInputElement
 		fireEvent.change(input, { target: { value: '  500 Мбит/с  ' } })
 		fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
-		expect(mutateAsync).toHaveBeenCalledWith([
-			{ amenityCode: 'AMN_WIFI_HIGH_SPEED', freePaid: 'free', value: '500 Мбит/с' },
-		])
+		expect(mutateAsync).toHaveBeenCalledWith({
+			items: [{ amenityCode: 'AMN_WIFI_HIGH_SPEED', freePaid: 'free', value: '500 Мбит/с' }],
+			idempotencyKey: expect.stringMatching(UUID_V4_REGEX),
+		})
 	})
 
 	test('[S4] each item has exactly 3 fields: amenityCode, freePaid, value', () => {
@@ -323,10 +330,43 @@ describe('<AmenitiesStep> — save serialization', () => {
 		render(<AmenitiesStep propertyId="prop_x" />)
 		fireEvent.click(screen.getByLabelText(/Бесплатный Wi-Fi в общих зонах/))
 		fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
-		const items = mutateAsync.mock.calls[0]?.[0] as Array<Record<string, unknown>>
-		for (const item of items) {
+		const vars = mutateAsync.mock.calls[0]?.[0] as { items: Array<Record<string, unknown>> }
+		for (const item of vars.items) {
 			expect(Object.keys(item).sort()).toEqual(['amenityCode', 'freePaid', 'value'])
 		}
+	})
+})
+
+// ────────────────────────────────────────────────────────────────────
+// Idempotency (retry-safety canon)
+// ────────────────────────────────────────────────────────────────────
+
+describe('<AmenitiesStep> — idempotency', () => {
+	test('[I1] save includes a UUIDv4 Idempotency-Key', () => {
+		const mutateAsync = vi.fn()
+		mockedUseSet.mockReturnValue({
+			mutateAsync,
+			isPending: false,
+		} as unknown as ReturnType<typeof useSetAmenities>)
+		render(<AmenitiesStep propertyId="prop_x" />)
+		fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+		const vars = mutateAsync.mock.calls[0]?.[0] as { idempotencyKey: string }
+		expect(vars.idempotencyKey).toMatch(UUID_V4_REGEX)
+	})
+
+	test('[I2] two saves → two distinct keys (NOT shared across user-actions)', () => {
+		const mutateAsync = vi.fn()
+		mockedUseSet.mockReturnValue({
+			mutateAsync,
+			isPending: false,
+		} as unknown as ReturnType<typeof useSetAmenities>)
+		render(<AmenitiesStep propertyId="prop_x" />)
+		const btn = screen.getByRole('button', { name: 'Сохранить' })
+		fireEvent.click(btn)
+		fireEvent.click(btn)
+		const k1 = (mutateAsync.mock.calls[0]?.[0] as { idempotencyKey: string }).idempotencyKey
+		const k2 = (mutateAsync.mock.calls[1]?.[0] as { idempotencyKey: string }).idempotencyKey
+		expect(k1).not.toBe(k2)
 	})
 })
 

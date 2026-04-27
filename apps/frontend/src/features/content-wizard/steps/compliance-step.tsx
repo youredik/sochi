@@ -25,6 +25,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from '@/components/ui/select'
+import { freshIdempotencyKey } from '../../../lib/idempotency.ts'
 import { useCan } from '../../../lib/use-can.ts'
 import { useCompliance, usePatchCompliance } from '../hooks/use-compliance.ts'
 import { useContentWizardStore } from '../wizard-store.ts'
@@ -151,7 +152,10 @@ export function ComplianceStep() {
 						? null
 						: value.guestHouseFz127Registered === 'yes',
 			}
-			await patch.mutateAsync(body)
+			// Fresh key per submit click — TanStack Query auto-retry reuses
+			// the same vars (same key), so the server's idempotency middleware
+			// replays on retry instead of double-applying.
+			await patch.mutateAsync({ input: body, idempotencyKey: freshIdempotencyKey() })
 		},
 	})
 

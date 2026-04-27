@@ -23,19 +23,28 @@ export function useAmenities(propertyId: string) {
 	return useQuery(amenitiesQueryOptions(propertyId))
 }
 
+export interface SetAmenitiesVars {
+	items: PropertyAmenityInput[]
+	idempotencyKey: string
+}
+
 /**
  * Bulk replace — backend's PUT semantics. Server diffs against current set
  * and emits a single audit event. Conflict-free: passing the same payload
- * twice is a no-op.
+ * twice is a no-op. `idempotencyKey` ensures auto-retry on flaky network
+ * doesn't emit duplicate audit events.
  */
 export function useSetAmenities(propertyId: string) {
 	const queryClient = useQueryClient()
 	return useMutation({
-		mutationFn: async (items: PropertyAmenityInput[]): Promise<PropertyAmenityRow[]> => {
-			const res = await api.api.v1.properties[':propertyId'].amenities.$put({
-				param: { propertyId },
-				json: { items },
-			})
+		mutationFn: async (vars: SetAmenitiesVars): Promise<PropertyAmenityRow[]> => {
+			const res = await api.api.v1.properties[':propertyId'].amenities.$put(
+				{
+					param: { propertyId },
+					json: { items: vars.items },
+				},
+				{ headers: { 'Idempotency-Key': vars.idempotencyKey } },
+			)
 			if (!res.ok) throw await errorFromResponse(res)
 			const body = (await res.json()) as { data: PropertyAmenityRow[] }
 			return body.data

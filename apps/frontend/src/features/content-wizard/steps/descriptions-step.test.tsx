@@ -431,6 +431,48 @@ describe('<DescriptionsStep> — save isolation', () => {
 })
 
 // ────────────────────────────────────────────────────────────────────
+// Idempotency (retry-safety canon)
+// ────────────────────────────────────────────────────────────────────
+
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+describe('<DescriptionsStep> — idempotency', () => {
+	test('[I1] save includes UUIDv4 Idempotency-Key', async () => {
+		const mutateAsync = vi.fn()
+		mockedUpsert.mockReturnValue({
+			mutateAsync,
+			isPending: false,
+		} as unknown as ReturnType<typeof useUpsertDescription>)
+		render(<DescriptionsStep propertyId="prop_x" />)
+		fireEvent.change(screen.getByLabelText('Заголовок'), { target: { value: 'T' } })
+		fireEvent.change(screen.getByLabelText(/Краткое описание/), { target: { value: 'S' } })
+		fireEvent.click(screen.getByRole('button', { name: /^Сохранить/ }))
+		await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
+		const arg = mutateAsync.mock.calls[0]?.[0] as { idempotencyKey: string }
+		expect(arg.idempotencyKey).toMatch(UUID_V4_REGEX)
+	})
+
+	test('[I2] two saves → two distinct keys', async () => {
+		const mutateAsync = vi.fn()
+		mockedUpsert.mockReturnValue({
+			mutateAsync,
+			isPending: false,
+		} as unknown as ReturnType<typeof useUpsertDescription>)
+		render(<DescriptionsStep propertyId="prop_x" />)
+		fireEvent.change(screen.getByLabelText('Заголовок'), { target: { value: 'T' } })
+		fireEvent.change(screen.getByLabelText(/Краткое описание/), { target: { value: 'S' } })
+		const saveBtn = screen.getByRole('button', { name: /^Сохранить/ })
+		fireEvent.click(saveBtn)
+		await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1))
+		fireEvent.click(saveBtn)
+		await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2))
+		const k1 = (mutateAsync.mock.calls[0]?.[0] as { idempotencyKey: string }).idempotencyKey
+		const k2 = (mutateAsync.mock.calls[1]?.[0] as { idempotencyKey: string }).idempotencyKey
+		expect(k1).not.toBe(k2)
+	})
+})
+
+// ────────────────────────────────────────────────────────────────────
 // a11y
 // ────────────────────────────────────────────────────────────────────
 

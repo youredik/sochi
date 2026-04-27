@@ -19,6 +19,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from '@/components/ui/select'
+import { freshIdempotencyKey } from '../../../lib/idempotency.ts'
 import { useCan } from '../../../lib/use-can.ts'
 import { useAmenities, useSetAmenities } from '../hooks/use-amenities.ts'
 import { useContentWizardStore } from '../wizard-store.ts'
@@ -149,7 +150,7 @@ export function AmenitiesStep({ propertyId }: Props) {
 				value: entry.value.trim() === '' ? null : entry.value.trim(),
 			}),
 		)
-		await setAmenities.mutateAsync(items)
+		await setAmenities.mutateAsync({ items, idempotencyKey: freshIdempotencyKey() })
 	}
 
 	if (isLoading) return <p className="text-muted-foreground">Загрузка…</p>

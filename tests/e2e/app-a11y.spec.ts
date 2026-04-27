@@ -78,6 +78,49 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		await runAxe(page, 'admin-notifications')
 	})
 
+	test('/o/{slug}/properties/{id}/content wizard — all 5 steps pass WCAG 2.2 AA (M8.A.0.UI)', async ({
+		page,
+	}) => {
+		// Owner is logged in via storageState; tenant has 1+ properties
+		// (setup wizard ran in earlier seed). Dashboard tile leads to wizard.
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+		// Tile is conditional on `firstProperty` from a TanStack Query — wait
+		// for the asynchronous render before clicking. Without this gate the
+		// click locator races the query and times out.
+		const tile = page.getByRole('link', { name: /Профиль гостиницы/ })
+		await expect(tile).toBeVisible()
+		await tile.click()
+		await expect(page).toHaveURL(/\/properties\/[^/]+\/content$/)
+
+		// Step 1 (compliance) — default landing
+		await expect(page.getByRole('heading', { name: 'Профиль гостиницы', level: 1 })).toBeVisible()
+		await expect(
+			page.getByRole('region', { name: /Compliance — нормативные данные/ }),
+		).toBeVisible()
+		await runAxe(page, 'wizard-compliance-step')
+
+		// Progress indicator buttons have aria-label `Перейти к шагу N: <label>`
+		// — use that as the locator, not the visible <span> text (which would
+		// require role+name=aria-label match anyway).
+		await page.getByRole('button', { name: 'Перейти к шагу 2: Удобства' }).click()
+		await expect(page.getByRole('region', { name: 'Удобства' })).toBeVisible()
+		await runAxe(page, 'wizard-amenities-step')
+
+		await page.getByRole('button', { name: 'Перейти к шагу 3: Описание' }).click()
+		await expect(page.getByRole('region', { name: 'Описание гостиницы' })).toBeVisible()
+		await expect(page.getByRole('tab', { name: 'Русский' })).toBeVisible()
+		await runAxe(page, 'wizard-descriptions-step')
+
+		await page.getByRole('button', { name: 'Перейти к шагу 4: Фото' }).click()
+		await expect(page.getByRole('region', { name: 'Фото гостиницы' })).toBeVisible()
+		await runAxe(page, 'wizard-media-step')
+
+		await page.getByRole('button', { name: 'Перейти к шагу 5: Услуги' }).click()
+		await expect(page.getByRole('region', { name: 'Услуги и доп. сервис' })).toBeVisible()
+		await runAxe(page, 'wizard-addons-step')
+	})
+
 	test('/o/{slug}/setup wizard (in progress) passes WCAG 2.2 AA', async ({ page, context }) => {
 		// Fresh tenant so we can land on /setup. Sign up a brand-new user
 		// in THIS test's context (can't reuse owner.json which has a fully-

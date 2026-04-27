@@ -2,8 +2,17 @@ import type { PropertyMedia } from '@horeca/shared'
 import { useId, useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { freshIdempotencyKey } from '../../../lib/idempotency.ts'
 import { useCan } from '../../../lib/use-can.ts'
 import {
 	useDeleteMedia,
@@ -81,10 +90,11 @@ export function MediaStep({ propertyId }: Props) {
 			return
 		}
 		const altEnTrim = draftAltEn.trim()
+		const idempotencyKey = freshIdempotencyKey()
 		await upload.mutateAsync(
 			altEnTrim === ''
-				? { file: pendingFile, altRu: draftAltRu.trim() }
-				: { file: pendingFile, altRu: draftAltRu.trim(), altEn: altEnTrim },
+				? { file: pendingFile, altRu: draftAltRu.trim(), idempotencyKey }
+				: { file: pendingFile, altRu: draftAltRu.trim(), altEn: altEnTrim, idempotencyKey },
 		)
 		setPendingFile(null)
 		setDraftAltRu('')
@@ -233,15 +243,48 @@ export function MediaStep({ propertyId }: Props) {
 					<p className="text-muted-foreground mt-2 text-sm">Пока нет фото.</p>
 				) : (
 					<ul className="mt-3 space-y-3">
-						{rows.map((row) => (
+						{rows.map((row, idx) => (
 							<MediaRow
 								key={row.mediaId}
 								row={row}
 								canUpdate={canUpdate}
 								canDelete={canDelete}
-								onPatch={(p) => patch.mutate({ mediaId: row.mediaId, patch: p })}
-								onSetHero={() => setHero.mutate(row.mediaId)}
-								onDelete={() => del.mutate(row.mediaId)}
+								canMoveUp={idx > 0}
+								canMoveDown={idx < rows.length - 1}
+								onPatch={(p) =>
+									patch.mutate({
+										mediaId: row.mediaId,
+										patch: p,
+										idempotencyKey: freshIdempotencyKey(),
+									})
+								}
+								onSetHero={() =>
+									setHero.mutate({ mediaId: row.mediaId, idempotencyKey: freshIdempotencyKey() })
+								}
+								onDelete={() =>
+									del.mutate({ mediaId: row.mediaId, idempotencyKey: freshIdempotencyKey() })
+								}
+								onMoveUp={() => {
+									// Swap sortOrder with row above. Backend stores absolute sortOrder,
+									// not relative — but with stable sort index we can compute next:
+									// move-up = take previous row's sortOrder - 1 (or 0 if at top).
+									const prev = rows[idx - 1]
+									if (!prev) return
+									patch.mutate({
+										mediaId: row.mediaId,
+										patch: { sortOrder: Math.max(0, prev.sortOrder - 1) },
+										idempotencyKey: freshIdempotencyKey(),
+									})
+								}}
+								onMoveDown={() => {
+									const next = rows[idx + 1]
+									if (!next) return
+									patch.mutate({
+										mediaId: row.mediaId,
+										patch: { sortOrder: next.sortOrder + 1 },
+										idempotencyKey: freshIdempotencyKey(),
+									})
+								}}
 							/>
 						))}
 					</ul>
@@ -261,17 +304,33 @@ interface RowProps {
 	row: PropertyMedia
 	canUpdate: boolean
 	canDelete: boolean
+	canMoveUp: boolean
+	canMoveDown: boolean
 	onPatch: (p: { altRu?: string; altEn?: string | null }) => void
 	onSetHero: () => void
 	onDelete: () => void
+	onMoveUp: () => void
+	onMoveDown: () => void
 }
 
-function MediaRow({ row, canUpdate, canDelete, onPatch, onSetHero, onDelete }: RowProps) {
+function MediaRow({
+	row,
+	canUpdate,
+	canDelete,
+	canMoveUp,
+	canMoveDown,
+	onPatch,
+	onSetHero,
+	onDelete,
+	onMoveUp,
+	onMoveDown,
+}: RowProps) {
 	const altRuId = useId()
 	const altEnId = useId()
 	const [altRu, setAltRu] = useState(row.altRu)
 	const [altEn, setAltEn] = useState(row.altEn ?? '')
 	const altDirty = altRu !== row.altRu || altEn !== (row.altEn ?? '')
+	const [confirmDelete, setConfirmDelete] = useState(false)
 
 	return (
 		<li className="rounded-md border p-3">
@@ -352,17 +411,74 @@ function MediaRow({ row, canUpdate, canDelete, onPatch, onSetHero, onDelete }: R
 							Сделать hero
 						</Button>
 					) : null}
+					<div className="flex gap-1">
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							disabled={!canUpdate || !canMoveUp}
+							onClick={onMoveUp}
+							aria-label="Поднять выше"
+							title="Поднять выше"
+						>
+							↑
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							disabled={!canUpdate || !canMoveDown}
+							onClick={onMoveDown}
+							aria-label="Опустить ниже"
+							title="Опустить ниже"
+						>
+							↓
+						</Button>
+					</div>
 					<Button
 						type="button"
 						size="sm"
 						variant="destructive"
 						disabled={!canDelete}
-						onClick={onDelete}
+						onClick={() => setConfirmDelete(true)}
 					>
 						Удалить
 					</Button>
 				</div>
 			</div>
+			<Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Удалить фото?</DialogTitle>
+						<DialogDescription>
+							Действие необратимо. Все 11 derived-вариантов (5 размеров × AVIF/WebP + оригинал)
+							будут удалены из Object Storage.
+							{row.isHero ? (
+								<>
+									{' '}
+									<strong>Это hero-фото</strong> — после удаления виджет потеряет главное
+									изображение, пока не назначите новое.
+								</>
+							) : null}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button type="button" variant="ghost" onClick={() => setConfirmDelete(false)}>
+							Отмена
+						</Button>
+						<Button
+							type="button"
+							variant="destructive"
+							onClick={() => {
+								onDelete()
+								setConfirmDelete(false)
+							}}
+						>
+							Удалить
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</li>
 	)
 }

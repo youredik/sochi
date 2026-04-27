@@ -24,6 +24,7 @@ import {
 	SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { freshIdempotencyKey } from '../../../lib/idempotency.ts'
 import { useCan } from '../../../lib/use-can.ts'
 import { useAddons, useCreateAddon, useDeleteAddon, usePatchAddon } from '../hooks/use-addons.ts'
 import { useContentWizardStore } from '../wizard-store.ts'
@@ -179,7 +180,7 @@ export function AddonsStep({ propertyId }: Props) {
 			seasonalTags: Array.from(draft.seasonalTags),
 			sortOrder: 0,
 		}
-		await create.mutateAsync(input)
+		await create.mutateAsync({ input, idempotencyKey: freshIdempotencyKey() })
 		setDraft(emptyDraft())
 	}
 
@@ -405,9 +406,22 @@ export function AddonsStep({ propertyId }: Props) {
 								canUpdate={canUpdate}
 								canDelete={canDelete}
 								onToggleActive={() =>
-									patch.mutate({ addonId: row.addonId, patch: { isActive: !row.isActive } })
+									patch.mutate({
+										addonId: row.addonId,
+										patch: { isActive: !row.isActive },
+										idempotencyKey: freshIdempotencyKey(),
+									})
 								}
-								onDelete={() => del.mutate(row.addonId)}
+								onDelete={() =>
+									del.mutate({ addonId: row.addonId, idempotencyKey: freshIdempotencyKey() })
+								}
+								onEditSave={(p) =>
+									patch.mutate({
+										addonId: row.addonId,
+										patch: p,
+										idempotencyKey: freshIdempotencyKey(),
+									})
+								}
 							/>
 						))}
 					</ul>
@@ -429,9 +443,207 @@ interface AddonRowProps {
 	canDelete: boolean
 	onToggleActive: () => void
 	onDelete: () => void
+	onEditSave: (patch: {
+		nameRu?: string
+		nameEn?: string | null
+		descriptionRu?: string | null
+		priceMicros?: bigint
+		pricingUnit?: AddonPricingUnit
+		vatBps?: AddonVatBps
+		category?: AddonCategory
+	}) => void
 }
 
-function AddonRow({ row, canUpdate, canDelete, onToggleActive, onDelete }: AddonRowProps) {
+function AddonRow({
+	row,
+	canUpdate,
+	canDelete,
+	onToggleActive,
+	onDelete,
+	onEditSave,
+}: AddonRowProps) {
+	const [editing, setEditing] = useState(false)
+	const [draft, setDraft] = useState({
+		nameRu: row.nameRu,
+		nameEn: row.nameEn ?? '',
+		descriptionRu: row.descriptionRu ?? '',
+		priceRub: microsToRub(row.priceMicros),
+		pricingUnit: row.pricingUnit,
+		vatBps: row.vatBps as AddonVatBps,
+		category: row.category,
+	})
+	const nameRuId = useId()
+	const nameEnId = useId()
+	const descRuId = useId()
+	const priceId = useId()
+	const unitId = useId()
+	const vatId = useId()
+	const catId = useId()
+
+	function reset() {
+		setDraft({
+			nameRu: row.nameRu,
+			nameEn: row.nameEn ?? '',
+			descriptionRu: row.descriptionRu ?? '',
+			priceRub: microsToRub(row.priceMicros),
+			pricingUnit: row.pricingUnit,
+			vatBps: row.vatBps as AddonVatBps,
+			category: row.category,
+		})
+	}
+
+	function save() {
+		const patch: Parameters<typeof onEditSave>[0] = {}
+		if (draft.nameRu.trim() !== row.nameRu) patch.nameRu = draft.nameRu.trim()
+		const draftEn = draft.nameEn.trim() === '' ? null : draft.nameEn.trim()
+		if (draftEn !== row.nameEn) patch.nameEn = draftEn
+		const draftDescRu = draft.descriptionRu.trim() === '' ? null : draft.descriptionRu.trim()
+		if (draftDescRu !== row.descriptionRu) patch.descriptionRu = draftDescRu
+		const draftMicros = rubToMicros(draft.priceRub)
+		if (draftMicros !== null && draftMicros !== row.priceMicros) patch.priceMicros = draftMicros
+		if (draft.pricingUnit !== row.pricingUnit) patch.pricingUnit = draft.pricingUnit
+		if (draft.vatBps !== row.vatBps) patch.vatBps = draft.vatBps
+		if (draft.category !== row.category) patch.category = draft.category
+		// Empty patch (no diffs) → don't fire mutation, just exit edit mode
+		if (Object.keys(patch).length === 0) {
+			setEditing(false)
+			return
+		}
+		onEditSave(patch)
+		setEditing(false)
+	}
+
+	if (editing) {
+		return (
+			<li className="bg-muted/50 rounded-md border p-3">
+				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+					<div className="space-y-1">
+						<Label htmlFor={nameRuId} className="text-xs">
+							Название (ru)
+						</Label>
+						<Input
+							id={nameRuId}
+							value={draft.nameRu}
+							onChange={(e) => setDraft({ ...draft, nameRu: e.target.value })}
+							maxLength={200}
+							required
+						/>
+					</div>
+					<div className="space-y-1">
+						<Label htmlFor={nameEnId} className="text-xs">
+							Название (en)
+						</Label>
+						<Input
+							id={nameEnId}
+							value={draft.nameEn}
+							onChange={(e) => setDraft({ ...draft, nameEn: e.target.value })}
+							maxLength={200}
+						/>
+					</div>
+					<div className="space-y-1 sm:col-span-2">
+						<Label htmlFor={descRuId} className="text-xs">
+							Описание (ru)
+						</Label>
+						<Textarea
+							id={descRuId}
+							value={draft.descriptionRu}
+							onChange={(e) => setDraft({ ...draft, descriptionRu: e.target.value })}
+							maxLength={2000}
+							rows={2}
+						/>
+					</div>
+					<div className="space-y-1">
+						<Label htmlFor={priceId} className="text-xs">
+							Цена, ₽
+						</Label>
+						<Input
+							id={priceId}
+							value={draft.priceRub}
+							onChange={(e) => setDraft({ ...draft, priceRub: e.target.value })}
+							inputMode="numeric"
+						/>
+					</div>
+					<div className="space-y-1">
+						<Label htmlFor={unitId} className="text-xs">
+							Единица
+						</Label>
+						<Select
+							value={draft.pricingUnit}
+							onValueChange={(v) => setDraft({ ...draft, pricingUnit: v as AddonPricingUnit })}
+						>
+							<SelectTrigger id={unitId}>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{addonPricingUnitValues.map((u) => (
+									<SelectItem key={u} value={u}>
+										{PRICING_UNIT_LABELS[u]}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="space-y-1">
+						<Label htmlFor={vatId} className="text-xs">
+							НДС
+						</Label>
+						<Select
+							value={String(draft.vatBps)}
+							onValueChange={(v) => setDraft({ ...draft, vatBps: Number(v) as AddonVatBps })}
+						>
+							<SelectTrigger id={vatId}>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{VAT_RATE_BPS_VALUES.map((bps) => (
+									<SelectItem key={bps} value={String(bps)}>
+										{VAT_BPS_LABELS[bps]}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="space-y-1">
+						<Label htmlFor={catId} className="text-xs">
+							Категория
+						</Label>
+						<Select
+							value={draft.category}
+							onValueChange={(v) => setDraft({ ...draft, category: v as AddonCategory })}
+						>
+							<SelectTrigger id={catId}>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{addonCategoryValues.map((c) => (
+									<SelectItem key={c} value={c}>
+										{CATEGORY_LABELS[c]}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+				</div>
+				<div className="mt-3 flex items-center gap-2">
+					<Button type="button" size="sm" onClick={save}>
+						Сохранить
+					</Button>
+					<Button
+						type="button"
+						size="sm"
+						variant="ghost"
+						onClick={() => {
+							reset()
+							setEditing(false)
+						}}
+					>
+						Отмена
+					</Button>
+				</div>
+			</li>
+		)
+	}
+
 	return (
 		<li className="rounded-md border p-3">
 			<div className="flex flex-wrap items-start gap-3">
@@ -468,6 +680,15 @@ function AddonRow({ row, canUpdate, canDelete, onToggleActive, onDelete }: Addon
 					) : null}
 				</div>
 				<div className="flex flex-col gap-2">
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						disabled={!canUpdate}
+						onClick={() => setEditing(true)}
+					>
+						Редактировать
+					</Button>
 					<Button
 						type="button"
 						size="sm"

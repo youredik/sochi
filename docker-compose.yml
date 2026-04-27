@@ -11,6 +11,14 @@ services:
     image: ydbplatform/local-ydb:25.3.1.25
     hostname: localhost
     platform: linux/amd64
+    # `unless-stopped` — auto-revival after silent crashes. local-ydb under
+    # parallel test load occasionally dies on slow-query timeouts (memory
+    # `feedback_test_serial_for_pre_push.md`) — observed 2026-04-27 when the
+    # init script's `wait pid 18` exited with code 127 after a 7.88s tx.
+    # Without this policy, pre-push gate sees ECONNREFUSED instead of
+    # waiting for restart, fails opaquely, and operator wastes time
+    # diagnosing what looks like test regressions.
+    restart: unless-stopped
     ports:
       - '2235:2235'
       - '2236:2236'
