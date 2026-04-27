@@ -105,6 +105,12 @@ async function seed(opts: SeedNotificationOpts): Promise<{ id: string; tenantId:
 
 async function getRow(tenantId: string, id: string) {
 	const sql = getTestSql()
+	// NOT `snapshotReadOnly` — that takes a consistent past snapshot which
+	// can lag behind a JUST-committed UPDATE from `pollOnce()` under YDB
+	// load. Tests asserting read-after-write ([H1] [H2] [S1] etc.) need
+	// serializable (default) reads to see the latest committed state.
+	// Observed 2026-04-27: H1/H2 flaked under load with snapshotReadOnly
+	// even though `pollOnce` was awaited. Memory `feedback_no_preexisting`.
 	const [rows = []] = await sql<
 		{
 			id: string
@@ -119,9 +125,7 @@ async function getRow(tenantId: string, id: string) {
 		FROM notificationOutbox
 		WHERE tenantId = ${tenantId} AND id = ${id}
 		LIMIT 1
-	`
-		.isolation('snapshotReadOnly')
-		.idempotent(true)
+	`.idempotent(true)
 	const row = rows[0]
 	if (!row) return null
 	return {
