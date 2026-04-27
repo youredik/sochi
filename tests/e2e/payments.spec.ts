@@ -284,7 +284,17 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 		const dialog = page.getByRole('dialog', { name: /Возврат платежа/ })
 		await expect(dialog).toBeVisible()
 		await expect(dialog.getByText(/Доступно к возврату/)).toBeVisible()
+		// Wait for refunds query to settle — the «Сумма к возврату» input only
+		// renders when refundsQuery.isLoading=false, so its visibility is a
+		// stronger gate than toBeEnabled (which races with the brief disabled
+		// flash while the query loads under full-suite YDB load).
+		await expect(dialog.getByLabel('Сумма к возврату')).toBeVisible()
 		await expect(dialog.getByRole('button', { name: 'Далее' })).toBeEnabled()
+		// Wait for any in-flight CSS transitions (e.g. button opacity 0.5→1.0
+		// when refundsQuery.isLoading flips false) so axe captures the steady
+		// state, not a mid-transition frame. Default Tailwind transition is
+		// ≤150ms; we poll for empty getAnimations() instead of fixed waits.
+		await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
 
 		const results = await new AxeBuilder({ page })
 			.include('[role="dialog"]')
