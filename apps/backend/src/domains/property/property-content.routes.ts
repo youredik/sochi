@@ -19,6 +19,11 @@ import {
 	type Addon,
 	addonCreateInputSchema,
 	addonPatchSchema,
+	buildMediaOriginalKey,
+	type MediaKind,
+	type MediaMimeType,
+	mediaKindSchema,
+	mediaMimeTypeSchema,
 	newId,
 	type PropertyMedia,
 	propertyAmenityInputSchema,
@@ -28,13 +33,14 @@ import {
 	propertyMediaPatchSchema,
 } from '@horeca/shared'
 import { Hono } from 'hono'
+import sharp from 'sharp'
 import { z } from 'zod'
 import type { AppEnv } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import type { IdempotencyMiddleware } from '../../middleware/idempotency.ts'
 import { requirePermission } from '../../middleware/require-permission.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
-import { finalizeUploaded, setHeroExclusiveSafe } from './media.service.ts'
+import { finalizeUploaded, setHeroExclusiveSafe, uploadAndProcess } from './media.service.ts'
 import type { PropertyContentFactory } from './property-content.factory.ts'
 
 /** Wire shapes — bigints serialized as strings (canon: folio.amountMinor). */
@@ -275,6 +281,109 @@ export function createPropertyContentRoutesInner(f: PropertyContentFactory) {
 							},
 						},
 						200,
+					)
+				},
+			)
+			.post(
+				'/properties/:propertyId/media/upload',
+				zValidator('param', propertyIdParamSchema),
+				requirePermission({ media: ['create'] }),
+				async (c) => {
+					// Multipart end-to-end upload (dev-friendly: combines presign +
+					// browser PUT + create + process in one server-side call).
+					// Real prod path is the split flow (POST /media → PUT to Object
+					// Storage → POST /media/:id/process). This handler exists so the
+					// admin UI can demo the pipeline without a Cloud Function.
+					const { propertyId } = c.req.valid('param')
+					const body = await c.req.parseBody()
+					const file = body.file
+					const kindStr = (body.kind ?? 'photo') as string
+					const altRu = (body.altRu ?? '') as string
+					const altEnRaw = body.altEn as string | undefined
+					if (!(file instanceof File) || file.size === 0) {
+						return c.json(
+							{ error: { code: 'BAD_REQUEST', message: 'Missing or empty `file` field' } },
+							400,
+						)
+					}
+					const kindParse = mediaKindSchema.safeParse(kindStr)
+					if (!kindParse.success) {
+						return c.json(
+							{ error: { code: 'BAD_REQUEST', message: `Invalid kind: ${kindStr}` } },
+							400,
+						)
+					}
+					const mimeParse = mediaMimeTypeSchema.safeParse(file.type)
+					if (!mimeParse.success) {
+						return c.json(
+							{
+								error: {
+									code: 'BAD_REQUEST',
+									message: `Unsupported MIME type: ${file.type}. Use JPEG/PNG/WebP/HEIC.`,
+								},
+							},
+							400,
+						)
+					}
+					if (BigInt(file.size) > 50n * 1024n * 1024n) {
+						return c.json(
+							{ error: { code: 'PAYLOAD_TOO_LARGE', message: 'File exceeds 50 MB cap' } },
+							413,
+						)
+					}
+					const kind: MediaKind = kindParse.data
+					const mimeType: MediaMimeType = mimeParse.data
+					const buf = Buffer.from(await file.arrayBuffer())
+					// Read source dimensions via sharp (single decode, fail-loud on
+					// undecodable bytes — the operator gets a clear 400 instead of a
+					// half-created row).
+					const meta = await sharp(buf).metadata()
+					if (!meta.width || !meta.height) {
+						return c.json(
+							{ error: { code: 'BAD_REQUEST', message: 'Could not decode image dimensions' } },
+							400,
+						)
+					}
+					const ext = mimeType.split('/')[1] ?? 'bin'
+					const mediaId = newId('media')
+					const originalKey = buildMediaOriginalKey({
+						tenantId: c.var.tenantId,
+						propertyId,
+						mediaId,
+						ext,
+					})
+					const result = await uploadAndProcess(
+						{ repo: media, storage: mediaStorage },
+						{
+							tenantId: c.var.tenantId,
+							propertyId,
+							mediaId,
+							actorId: c.var.user.id,
+							meta: {
+								roomTypeId: null,
+								kind,
+								originalKey,
+								mimeType,
+								widthPx: meta.width,
+								heightPx: meta.height,
+								fileSizeBytes: BigInt(file.size),
+								altRu,
+								altEn: altEnRaw && altEnRaw !== '' ? altEnRaw : null,
+								captionRu: null,
+								captionEn: null,
+							},
+							originalBytes: buf,
+						},
+					)
+					return c.json(
+						{
+							data: {
+								media: mediaToWire(result.media),
+								variantCount: result.variantCount,
+								derivedKeys: result.derivedKeys,
+							},
+						},
+						201,
 					)
 				},
 			)
