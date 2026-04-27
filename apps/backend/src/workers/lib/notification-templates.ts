@@ -109,6 +109,36 @@ export interface ReviewRequestVars extends BaseVars {
 	yandexMapsReviewUrl: string
 }
 
+// M8.A.0.6 — public-widget guest journey (research §10.3 / §10.6 / §10.7).
+
+export interface PreArrivalVars extends BaseVars {
+	bookingNumber: string
+	checkInDate: string // RU-formatted: "25 апреля 2026"
+	checkInTime: string // e.g. "15:00"
+	propertyAddress: string
+	yandexMapsLink: string
+	travelInstructions: string | null
+}
+
+export interface BookingCancelledVars extends BaseVars {
+	bookingNumber: string
+	checkInDate: string
+	nights: number
+	totalFormatted: string
+	cancellationFeeFormatted: string | null
+	refundAmountFormatted: string
+	refundEtaDays: number
+}
+
+export interface BookingModifiedVars extends BaseVars {
+	bookingNumber: string
+	modificationSummary: string
+	totalFormatted: string
+	surchargeFormatted: string | null
+	refundFormatted: string | null
+	magicUrl: string
+}
+
 export type TemplateVars = {
 	payment_succeeded: PaymentSucceededVars
 	payment_failed: PaymentFailedVars
@@ -117,6 +147,9 @@ export type TemplateVars = {
 	booking_confirmed: BookingConfirmedVars
 	checkin_reminder: CheckinReminderVars
 	review_request: ReviewRequestVars
+	pre_arrival: PreArrivalVars
+	booking_cancelled: BookingCancelledVars
+	booking_modified: BookingModifiedVars
 }
 
 /* ----------------------------------------------------------------- shared chrome */
@@ -165,6 +198,12 @@ export function renderTemplate<K extends NotificationKind>(
 			return renderCheckinReminder(vars as CheckinReminderVars)
 		case 'review_request':
 			return renderReviewRequest(vars as ReviewRequestVars)
+		case 'pre_arrival':
+			return renderPreArrival(vars as PreArrivalVars)
+		case 'booking_cancelled':
+			return renderBookingCancelled(vars as BookingCancelledVars)
+		case 'booking_modified':
+			return renderBookingModified(vars as BookingModifiedVars)
 		default: {
 			// Exhaustive guard — TS errors if a new kind is added without a case.
 			const _exhaustive: never = kind
@@ -288,5 +327,85 @@ function renderReviewRequest(v: ReviewRequestVars): RenderedEmail {
 		subject,
 		html: htmlChrome(body, v),
 		text: `Здравствуйте, ${v.guestName}!\n\nСпасибо, что выбрали гостиницу ${v.propertyName}. Нам важно ваше мнение — расскажите о вашем визите на Яндекс.Картах:\n${v.yandexMapsReviewUrl}\n\nБронирование № ${v.bookingNumber}.${textFooter(v)}`,
+	}
+}
+
+// M8.A.0.6 — public-widget journey templates per research §10.
+
+function renderPreArrival(v: PreArrivalVars): RenderedEmail {
+	const subject = `Скоро ваш отдых в ${v.propertyName} — заезд через 3 дня`
+	const travelLine = v.travelInstructions
+		? `<p style="margin:0 0 12px"><strong>Как добраться:</strong> ${escapeHtml(v.travelInstructions)}</p>`
+		: ''
+	const travelText = v.travelInstructions ? `\nКак добраться: ${v.travelInstructions}` : ''
+	const body = `<tr><td>
+<h1 style="margin:0 0 16px;font-size:22px;font-weight:600">Через 3 дня ждём вас</h1>
+<p style="margin:0 0 12px">Здравствуйте, ${escapeHtml(v.guestName)}!</p>
+<p style="margin:0 0 12px">Через 3 дня ждём вас в <strong>${escapeHtml(v.propertyName)}</strong>.</p>
+<p style="margin:0 0 12px">Заезд: <strong>${escapeHtml(v.checkInDate)}</strong> с ${escapeHtml(v.checkInTime)}</p>
+<p style="margin:0 0 12px">Адрес: ${escapeHtml(v.propertyAddress)}</p>
+<p style="margin:0 0 12px">Карта: <a href="${escapeHtml(v.yandexMapsLink)}" style="color:#0066cc">${escapeHtml(v.yandexMapsLink)}</a></p>
+${travelLine}
+<p style="margin:0 0 12px">Документы: паспорт РФ или загранпаспорт (по 109-ФЗ).</p>
+<p style="margin:0 0 12px">Бронирование № ${escapeHtml(v.bookingNumber)}.</p>
+</td></tr>`
+	return {
+		subject,
+		html: htmlChrome(body, v),
+		text: `Здравствуйте, ${v.guestName}!\n\nЧерез 3 дня ждём вас в ${v.propertyName}.\nЗаезд: ${v.checkInDate} с ${v.checkInTime}\nАдрес: ${v.propertyAddress}\nКарта: ${v.yandexMapsLink}${travelText}\n\nДокументы: паспорт РФ или загранпаспорт (по 109-ФЗ).\nБронирование № ${v.bookingNumber}.${textFooter(v)}`,
+	}
+}
+
+function renderBookingCancelled(v: BookingCancelledVars): RenderedEmail {
+	const subject = `Бронирование № ${v.bookingNumber} отменено`
+	const feeLine = v.cancellationFeeFormatted
+		? `<p style="margin:0 0 12px">Удержание по политике отмены: <strong>${escapeHtml(v.cancellationFeeFormatted)}</strong></p>`
+		: ''
+	const feeText = v.cancellationFeeFormatted
+		? `\nУдержание по политике отмены: ${v.cancellationFeeFormatted}`
+		: ''
+	const nightsLabel = v.nights === 1 ? 'ночь' : v.nights < 5 ? 'ночи' : 'ночей'
+	const etaLabel = v.refundEtaDays === 1 ? 'дня' : 'дней'
+	const body = `<tr><td>
+<h1 style="margin:0 0 16px;font-size:22px;font-weight:600">Бронирование отменено</h1>
+<p style="margin:0 0 12px">Здравствуйте, ${escapeHtml(v.guestName)}!</p>
+<p style="margin:0 0 12px">Подтверждаем отмену бронирования № <strong>${escapeHtml(v.bookingNumber)}</strong> в ${escapeHtml(v.propertyName)}.</p>
+<p style="margin:0 0 12px">Заезд был запланирован на: ${escapeHtml(v.checkInDate)} (${v.nights} ${nightsLabel})</p>
+<p style="margin:0 0 12px">Сумма брони: ${escapeHtml(v.totalFormatted)}</p>
+${feeLine}
+<p style="margin:0 0 12px">Возврат: <strong>${escapeHtml(v.refundAmountFormatted)}</strong> — поступит в течение ${v.refundEtaDays} рабочих ${etaLabel}.</p>
+<p style="margin:0 0 12px">Будем рады видеть вас снова.</p>
+</td></tr>`
+	return {
+		subject,
+		html: htmlChrome(body, v),
+		text: `Здравствуйте, ${v.guestName}!\n\nПодтверждаем отмену бронирования № ${v.bookingNumber} в ${v.propertyName}.\nЗаезд был запланирован на: ${v.checkInDate} (${v.nights} ${nightsLabel})\nСумма брони: ${v.totalFormatted}${feeText}\nВозврат: ${v.refundAmountFormatted} — поступит в течение ${v.refundEtaDays} рабочих ${etaLabel}.\n\nБудем рады видеть вас снова.${textFooter(v)}`,
+	}
+}
+
+function renderBookingModified(v: BookingModifiedVars): RenderedEmail {
+	const subject = `Изменения в бронировании № ${v.bookingNumber}`
+	const surchargeLine = v.surchargeFormatted
+		? `<p style="margin:0 0 12px">Доплата: <strong>${escapeHtml(v.surchargeFormatted)}</strong></p>`
+		: ''
+	const refundLine = v.refundFormatted
+		? `<p style="margin:0 0 12px">Возврат: <strong>${escapeHtml(v.refundFormatted)}</strong></p>`
+		: ''
+	const surchargeText = v.surchargeFormatted ? `\nДоплата: ${v.surchargeFormatted}` : ''
+	const refundText = v.refundFormatted ? `\nВозврат: ${v.refundFormatted}` : ''
+	const body = `<tr><td>
+<h1 style="margin:0 0 16px;font-size:22px;font-weight:600">Изменения в бронировании</h1>
+<p style="margin:0 0 12px">Здравствуйте, ${escapeHtml(v.guestName)}!</p>
+<p style="margin:0 0 12px">В бронировании № <strong>${escapeHtml(v.bookingNumber)}</strong> в ${escapeHtml(v.propertyName)} внесены изменения:</p>
+<p style="margin:0 0 12px">${escapeHtml(v.modificationSummary)}</p>
+<p style="margin:0 0 12px">Новая сумма: <strong>${escapeHtml(v.totalFormatted)}</strong></p>
+${surchargeLine}
+${refundLine}
+<p style="margin:0 0 12px">Управлять бронированием: <a href="${escapeHtml(v.magicUrl)}" style="color:#0066cc">${escapeHtml(v.magicUrl)}</a></p>
+</td></tr>`
+	return {
+		subject,
+		html: htmlChrome(body, v),
+		text: `Здравствуйте, ${v.guestName}!\n\nВ бронировании № ${v.bookingNumber} в ${v.propertyName} внесены изменения:\n${v.modificationSummary}\n\nНовая сумма: ${v.totalFormatted}${surchargeText}${refundText}\n\nУправлять бронированием: ${v.magicUrl}${textFooter(v)}`,
 	}
 }

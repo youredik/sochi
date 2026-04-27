@@ -67,6 +67,9 @@ const allKinds: NotificationKind[] = [
 	'booking_confirmed',
 	'checkin_reminder',
 	'review_request',
+	'pre_arrival',
+	'booking_cancelled',
+	'booking_modified',
 ]
 
 const allVars: TemplateVars = {
@@ -111,6 +114,34 @@ const allVars: TemplateVars = {
 		bookingNumber: 'B-001',
 		yandexMapsReviewUrl: 'https://yandex.ru/maps/org/123/reviews?add-review=1',
 	},
+	pre_arrival: {
+		...xssVars,
+		bookingNumber: 'B-001',
+		checkInDate: '25 апреля 2026',
+		checkInTime: '15:00',
+		propertyAddress: 'Сочи, ул. Морская, 1',
+		yandexMapsLink: 'https://yandex.ru/maps/?ll=39.7,43.6&z=15',
+		travelInstructions: 'Автобус 105 от ж/д вокзала',
+	},
+	booking_cancelled: {
+		...xssVars,
+		bookingNumber: 'B-001',
+		checkInDate: '25 апреля 2026',
+		nights: 3,
+		totalFormatted: '15 000,00 ₽',
+		cancellationFeeFormatted: '5 000,00 ₽',
+		refundAmountFormatted: '10 000,00 ₽',
+		refundEtaDays: 5,
+	},
+	booking_modified: {
+		...xssVars,
+		bookingNumber: 'B-001',
+		modificationSummary: 'Заезд: 25.04 → 26.04; Гостей: 2 → 3',
+		totalFormatted: '18 000,00 ₽',
+		surchargeFormatted: '3 000,00 ₽',
+		refundFormatted: null,
+		magicUrl: 'https://booking.example.com/m/abc123',
+	},
 }
 
 // Templates differ in which user-input field is rendered. `receipt_failed` is
@@ -125,6 +156,9 @@ const xssAttackInField: Record<NotificationKind, 'guestName' | 'failureReason'> 
 	booking_confirmed: 'guestName',
 	checkin_reminder: 'guestName',
 	review_request: 'guestName',
+	pre_arrival: 'guestName',
+	booking_cancelled: 'guestName',
+	booking_modified: 'guestName',
 }
 
 describe('renderTemplate — XSS hardening (every kind)', () => {

@@ -34,6 +34,7 @@ function buildRow(overrides: Partial<Notification> = {}): Notification {
 		kind: 'payment_succeeded',
 		channel: 'email',
 		recipient: 'guest@host.local',
+		recipientKind: 'guest',
 		subject: 'Subject',
 		bodyText: 'Body',
 		payloadJson: {},

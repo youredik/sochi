@@ -110,6 +110,27 @@ function buildOutboxFields(kind: NotificationKind): {
 				recipient: 'guest@placeholder.local',
 				channel: 'email',
 			}
+		// M8.A.0.6 — public-widget journey kinds. CDC-driven from booking
+		// state-machine transitions / cron T-3d worker. Defensive subjects;
+		// real send-time text comes from notification-templates.ts.
+		case 'pre_arrival':
+			return {
+				subject: 'Скоро ваш отдых',
+				recipient: 'guest@placeholder.local',
+				channel: 'email',
+			}
+		case 'booking_cancelled':
+			return {
+				subject: 'Бронирование отменено',
+				recipient: 'guest@placeholder.local',
+				channel: 'email',
+			}
+		case 'booking_modified':
+			return {
+				subject: 'Изменения в бронировании',
+				recipient: 'guest@placeholder.local',
+				channel: 'email',
+			}
 	}
 }
 

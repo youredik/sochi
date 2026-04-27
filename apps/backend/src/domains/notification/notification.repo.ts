@@ -32,6 +32,7 @@ type NotificationRow = {
 	kind: string
 	channel: string
 	recipient: string
+	recipientKind: string | null
 	subject: string
 	bodyText: string | null
 	payloadJson: unknown
@@ -58,6 +59,7 @@ function rowToNotification(r: NotificationRow): Notification {
 		kind: r.kind as Notification['kind'],
 		channel: r.channel as Notification['channel'],
 		recipient: r.recipient,
+		recipientKind: r.recipientKind as Notification['recipientKind'],
 		subject: r.subject,
 		bodyText: r.bodyText,
 		payloadJson: r.payloadJson,

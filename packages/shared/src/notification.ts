@@ -22,6 +22,10 @@ const notificationKindValues = [
 	'booking_confirmed',
 	'checkin_reminder',
 	'review_request',
+	// M8.A.0.6 — public-widget guest journey (research §10.3 / §10.6 / §10.7).
+	'pre_arrival',
+	'booking_cancelled',
+	'booking_modified',
 ] as const
 export const notificationKindSchema = z.enum(notificationKindValues)
 export type NotificationKind = z.infer<typeof notificationKindSchema>
@@ -33,6 +37,20 @@ export type NotificationChannel = z.infer<typeof notificationChannelSchema>
 const notificationStatusValues = ['pending', 'sent', 'failed'] as const
 export const notificationStatusSchema = z.enum(notificationStatusValues)
 export type NotificationStatus = z.infer<typeof notificationStatusSchema>
+
+/**
+ * Recipient kind — distinguishes who receives the notification:
+ *   - `user`    — internal operator/staff member of the property
+ *   - `guest`   — public-widget customer (booking holder)
+ *   - `system`  — ops alerts (no human recipient; logs/Sentry)
+ *   - `channel` — channel-manager / OTA endpoint (B2B push)
+ *
+ * Per plan v2 §7.1 #5: drives downstream recipient-resolver routing
+ * (different DPA / unsubscribe / SMS short-codes per kind).
+ */
+const notificationRecipientKindValues = ['user', 'guest', 'system', 'channel'] as const
+export const notificationRecipientKindSchema = z.enum(notificationRecipientKindValues)
+export type NotificationRecipientKind = z.infer<typeof notificationRecipientKindSchema>
 
 /** Terminal states (no further transition). */
 export const TERMINAL_NOTIFICATION_STATUSES: readonly NotificationStatus[] = [
@@ -48,6 +66,13 @@ export type Notification = {
 	kind: NotificationKind
 	channel: NotificationChannel
 	recipient: string
+	/**
+	 * Routing dimension — `user` | `guest` | `system` | `channel`. Nullable
+	 * for backwards compat with rows written by M7.* before recipientKind was
+	 * added (migration 0032 ADD COLUMN). New rows MUST set it; service layer
+	 * fills based on source-object lookup.
+	 */
+	recipientKind: NotificationRecipientKind | null
 	subject: string
 	bodyText: string | null
 	payloadJson: unknown

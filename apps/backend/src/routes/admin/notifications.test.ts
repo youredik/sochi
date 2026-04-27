@@ -73,6 +73,7 @@ const FAKE_PAGE: NotificationListPage = {
 			kind: 'payment_succeeded',
 			channel: 'email',
 			recipient: 'guest@host.local',
+			recipientKind: 'guest',
 			subject: 'Платёж получен',
 			bodyText: 'Спасибо за оплату',
 			payloadJson: { amount: 1500 },
