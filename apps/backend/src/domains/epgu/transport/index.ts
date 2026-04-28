@@ -1,5 +1,10 @@
 export { createGostTlsTransport, type GostTlsTransportOptions } from './gost-tls.ts'
 export {
+	createMockEpguTransport,
+	type EpguErrorCategory,
+	type MockEpguTransportOptions,
+} from './mock-epgu.ts'
+export {
 	createProxyViaPartnerTransport,
 	type ProxyViaPartnerTransportOptions,
 } from './proxy-via-partner.ts'
