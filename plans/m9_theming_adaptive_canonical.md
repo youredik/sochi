@@ -1911,6 +1911,38 @@ test:run **962 passed** (56 files; 0 regressions).
 
 **Quality gates:** lint 0/0, typecheck clean, lefthook 5/5 ✅.
 
+### M9.6 + Phase D senior-pass v2 — residual eradication ✅ done 2026-04-29
+
+**Commit:** `5899748`
+
+User prompts «делай все на отлично! вспомни все!» поймали 3
+residuals в M9.6 + Phase D. All eradicated batched:
+
+**1. Mobile axe extension × 2 themes** (M9.6 plan canon line 683):
+- New test «M9.6 mobile axe extension — dashboard + receivables × 2
+  themes pass WCAG 2.2 AA» в app-a11y.spec.ts
+- 4 new axe scans (dashboard mobile light + dark + receivables mobile
+  light + dark) — closes plan canon explicit gap
+
+**2. tabular-nums coverage strict test** (M9.6 plan canon line 682):
+- New `lib/tabular-nums-coverage.test.ts` с 5 tests T1-T5
+- Verifies financial components retain utility class (Money +
+  MoneyInput + receivables-table + KPI cards + refund-sheet)
+- Vite `import.meta.glob({ query: '?raw' })` source reading (no
+  node:fs — biome SPA enforced)
+
+**3. Playwright Virtual Authenticator passkey e2e** (modern 2026/2027
+canon — replaces «deferred к operator» note с automated baseline):
+- New `tests/e2e/passkey.spec.ts`: VA1 + VA2
+- CDP `WebAuthn.enable` + `addVirtualAuthenticator` (ctap2 +
+  transport: 'internal' — platform authenticator equivalent)
+- Empty credential store → graceful error path verified
+- 2026/2027 canonical (Google/Apple/Microsoft DevTools team standard)
+
+**Quality:** lint 0/0 + typecheck clean + lefthook 5/5 + frontend
+test:run **967 passed** (57 files; +5 tabular-nums) + e2e gate **18/18**
+(13 axe incl mobile × 2 themes + 3 m9_5 smoke + 2 passkey VA).
+
 ### M9.7 — Media upload swap — pending
 
 ### M9.6 — Media upload swap — pending
@@ -1932,5 +1964,5 @@ test:run **962 passed** (56 files; 0 regressions).
 | M9.5 Phase D | 12 (Enroll 7 + Signin 5) | `cb31acb` + `2e27c01` 2026/2027 hardening | ✅ WebAuthn passkey + L3 hardening (platform attachment + userVerification required + residentKey + Conditional Mediation UI) |
 | M9.6 | — | — | pending |
 | M9.7 | — | — | pending |
-| M9.6 | 5 | `16b2c28` | ✅ web-vitals 5 → OTel + tabular-nums utility |
-| **Cumulative** | **172** | **18 + 1 chore + 3 docs** | **8/9 sub-phases done (M9.5 Phase D passkey complete; M9.6 web-vitals + M9.7 media swap pending) (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
+| M9.6 | 5 + 7 (eradication: tabular-nums 5 + passkey VA 2) | `16b2c28` + `5899748` eradication | ✅ web-vitals + tabular-nums + senior-pass eradication (mobile axe × 2 themes + tabular-nums grep + passkey VA e2e) |
+| **Cumulative** | **179** | **19 + 1 chore + 3 docs** | **8/9 sub-phases done (M9.5 Phase D passkey complete; M9.6 web-vitals + M9.7 media swap pending) (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
