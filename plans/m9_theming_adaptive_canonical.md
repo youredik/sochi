@@ -1943,7 +1943,55 @@ canon — replaces «deferred к operator» note с automated baseline):
 test:run **967 passed** (57 files; +5 tabular-nums) + e2e gate **18/18**
 (13 axe incl mobile × 2 themes + 3 m9_5 smoke + 2 passkey VA).
 
-### M9.7 — Media upload swap — pending
+### M9.7 — Media upload swap (Yandex Object Storage) ✅ done 2026-04-29
+
+**Commit:** `e3cbcad`
+
+Per plan §M9.7 + M8.A.0.UI memory commitment: production media upload
+flow через Yandex Object Storage S3-compat, modern 2026/2027 stack.
+
+**Modern 2026/2027 stack:**
+- `@aws-sdk/client-s3@3.10xx` (April 2026 latest)
+- `@aws-sdk/s3-request-presigner@3.10xx` (V4 signature pre-signing)
+- Yandex Object Storage `https://storage.yandexcloud.net`,
+  region `ru-central1`, `forcePathStyle: true` per Yandex docs
+- Pre-signed PUT URLs с TTL 5 min — phishing-resistant
+- Signed Content-Type + Content-Length constraints
+
+**Files:**
+- `media-storage-yandex-s3.ts` — production `MediaStorage` impl
+- `media-storage-yandex-s3.test.ts` — 11 strict tests Y1-Y9 (mode,
+  validation, headers, expiresAt TTL, public URL path-style,
+  markDerivedReady no-op, putDerivedBytes Content-Type inference)
+- `media-storage-resolve.ts` — production-aware dispatcher
+  (APP_MODE=production → Yandex S3, sandbox → Stub). Отдельный
+  файл для разрыва circular import (yandex-s3 → media-storage interface)
+
+**Backend wiring:**
+- `getStubMediaStorage()` (renamed from prior `getMediaStorage`)
+- `getMediaStorage()` lazy dispatch via media-storage-resolve.ts
+- New `POST /properties/:propertyId/media/sign` route — split-flow
+  presign endpoint returns `{ mediaId, originalKey, presignedUrl,
+  headers, expiresAt }` для direct browser PUT
+- Existing `/upload` (multipart) preserved для local dev parity
+
+**Quality gates:**
+- pnpm lint: 0/0
+- pnpm typecheck: clean
+- pnpm exec depcruise: 0 violations (circular fixed via dispatcher
+  separate file)
+- vitest media-storage-yandex-s3: **11/11** ✅
+- pre-commit lefthook 5/5 ✅
+
+**Cost + security:**
+- Cold-tier originals (~150₽/TB/mo) + Standard derived
+- Lifecycle rules: original → cold-storage after 30 days
+- URL TTL 5 min → small replay-attack window
+- Bucket-only ACL, CDN auth-check для derived URLs
+
+**Real-cloud smoke:** deferred к operator post-deploy (cannot
+автоматизировать без real Yandex Cloud credentials + bucket — same
+pattern как Phase D Touch ID).
 
 ### M9.6 — Media upload swap — pending
 
@@ -1964,5 +2012,6 @@ test:run **967 passed** (57 files; +5 tabular-nums) + e2e gate **18/18**
 | M9.5 Phase D | 12 (Enroll 7 + Signin 5) | `cb31acb` + `2e27c01` 2026/2027 hardening | ✅ WebAuthn passkey + L3 hardening (platform attachment + userVerification required + residentKey + Conditional Mediation UI) |
 | M9.6 | — | — | pending |
 | M9.7 | — | — | pending |
-| M9.6 | 5 + 7 (eradication: tabular-nums 5 + passkey VA 2) | `16b2c28` + `5899748` eradication | ✅ web-vitals + tabular-nums + senior-pass eradication (mobile axe × 2 themes + tabular-nums grep + passkey VA e2e) |
-| **Cumulative** | **179** | **19 + 1 chore + 3 docs** | **8/9 sub-phases done (M9.5 Phase D passkey complete; M9.6 web-vitals + M9.7 media swap pending) (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
+| M9.6 | 5 + 7 (eradication: tabular-nums 5 + passkey VA 2) | `16b2c28` + `5899748` eradication | ✅ web-vitals + tabular-nums + senior-pass eradication |
+| M9.7 | 11 (Yandex S3 Y1-Y9) | `e3cbcad` | ✅ Yandex Object Storage S3-compat + presigned PUT split-flow |
+| **Cumulative** | **190** | **20 + 1 chore + 3 docs** | **9/9 sub-phases done — M9 ALL FEATURE PHASES CLOSED (M9.5 Phase D passkey complete; M9.6 web-vitals + M9.7 media swap pending) (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
