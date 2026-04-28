@@ -1,0 +1,19 @@
+-- 0039_migration_registration_enqueuer_consumer.sql — M8.A.5.cdc.A
+--
+-- Registers `migration_registration_enqueuer` consumer on existing
+-- `booking/booking_events` changefeed (added в migration 0004).
+--
+-- Trigger semantics: UPDATE events with FSM transition `* → in_house`.
+-- INSERT events с newStatus='in_house' (rare manual ops case) тоже firing.
+-- See `apps/backend/src/workers/handlers/migration-registration-enqueuer.ts`
+-- для полной spec.
+--
+-- Idempotency: pre-check via `idxMigRegTenantBooking` (tenantId, bookingId).
+-- Если registration row уже существует для booking — skip. Same canon как
+-- `folio_creator_writer` (migration 0019).
+--
+-- Why `in_house` not `confirmed`: per Постановление №1668 ЕПГУ submission
+-- deadline = 24h ОТ check-in, не от подтверждения. Booking_confirmed может
+-- происходить за недели до приезда — в этот момент нет documentId
+-- (NOT NULL), нет приехавшего гостя.
+ALTER TOPIC `booking/booking_events` ADD CONSUMER `migration_registration_enqueuer`;

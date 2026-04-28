@@ -113,6 +113,23 @@ export const epguChannelSchema = z.enum(EPGU_CHANNEL_VALUES)
 export type EpguChannel = z.infer<typeof epguChannelSchema>
 
 /**
+ * ЕПГУ service identifiers — global per service-type (NOT tenant-specific).
+ *
+ * `EPGU_SERVICE_CODE_MIGRATION_REGISTRATION` — постановка ИГ на миграционный
+ * учёт (Постановление №1668). Все средства размещения отправляют под этим
+ * service code.
+ *
+ * `EPGU_TARGET_CODE_MIGRATION_REGISTRATION` — целевая ситуация в ЕПГУ
+ * (sub-service identifier).
+ *
+ * Source: research/epgu-rkl.md §2 + Скала-ЕПГУ public spec. Verified
+ * empirically через MockEpguTransport.test.ts fixtures (одинаковые значения
+ * как в production).
+ */
+export const EPGU_SERVICE_CODE_MIGRATION_REGISTRATION = '10000103652'
+export const EPGU_TARGET_CODE_MIGRATION_REGISTRATION = '-1000444103652'
+
+/**
  * Migration registration row schema — full domain model for ЕПГУ
  * submission. Mirror of `migrationRegistration` table (0035 migration).
  */

@@ -59,6 +59,7 @@ import { createCancelFeeFinalizerHandler } from './workers/handlers/cancel-fee-f
 import { createCheckoutFinalizerHandler } from './workers/handlers/checkout-finalizer.ts'
 import { createFolioBalanceHandler } from './workers/handlers/folio-balance.ts'
 import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
+import { createMigrationRegistrationEnqueuerHandler } from './workers/handlers/migration-registration-enqueuer.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
 import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
 import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
@@ -260,6 +261,20 @@ const folioCreatorConsumer = startCdcConsumer(driver, sql, {
 	label: 'folio_creator:booking',
 })
 
+// migration_registration_enqueuer on booking — auto-create draft
+// migrationRegistration row при check-in (status: * → in_house) для
+// последующего ЕПГУ submission (Боль 1.1, штраф 500k ₽ за non-compliance
+// с 1.1.2026). Per Постановление №1668: 24h deadline ОТ check-in moment.
+// Graceful skip если tenant epgu config неполный (МВД ОВМ onboarding pending)
+// или нет guestDocument для primaryGuestId. Idempotent via
+// idxMigRegTenantBooking pre-check.
+const migrationRegistrationEnqueuerConsumer = startCdcConsumer(driver, sql, {
+	topic: 'booking/booking_events',
+	consumer: 'migration_registration_enqueuer',
+	projection: createMigrationRegistrationEnqueuerHandler(logger),
+	label: 'migration_registration_enqueuer:booking',
+})
+
 // tourism_tax_writer on booking — post 2% (Сочи 2026) tourism-tax line при
 // status → checked_out. Apaleo Russia / TravelLine canon: at-checkout single
 // line, не per-night. НК РФ ст. 418, min-floor 100₽ × ночей × номеров.
@@ -325,6 +340,7 @@ const allCdcConsumers = [
 	paymentStatusConsumer,
 	refundCreatorConsumer,
 	folioCreatorConsumer,
+	migrationRegistrationEnqueuerConsumer,
 	tourismTaxConsumer,
 	cancelFeeConsumer,
 ] as const
