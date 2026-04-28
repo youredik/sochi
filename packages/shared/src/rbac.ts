@@ -62,6 +62,11 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		description: ['create', 'read', 'update', 'delete'],
 		media: ['create', 'read', 'update', 'delete'],
 		addon: ['create', 'read', 'update', 'delete'],
+		// M8.A — миграционный учёт МВД (ЕПГУ + AI passport + RKL).
+		// Все 3 роли read (для front-desk видимости статусов); manage —
+		// retry/manual-cancel/notes — owner+manager (отзыв ЕПГУ-уведомления
+		// = legal action, требует операторской accountability).
+		migrationRegistration: ['create', 'read', 'manage'],
 	},
 	manager: {
 		// Revenue + refund + reports; NO billing/manage, NO property delete
@@ -85,6 +90,7 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		description: ['create', 'read', 'update', 'delete'],
 		media: ['create', 'read', 'update', 'delete'],
 		addon: ['create', 'read', 'update', 'delete'],
+		migrationRegistration: ['create', 'read', 'manage'],
 	},
 	staff: {
 		// Front-desk operations: collect payments, NOT refund. Read-only org config.
@@ -105,6 +111,9 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		description: ['read'],
 		media: ['read'],
 		addon: ['read'],
+		// Staff reads migration status (front-desk видимости заселения),
+		// but не trigger ЕПГУ submit / retry — operator-elevated action.
+		migrationRegistration: ['read'],
 	},
 }
 

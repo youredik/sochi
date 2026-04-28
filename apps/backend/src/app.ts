@@ -1,6 +1,7 @@
 // MUST be the first import — installs BigInt#toJSON before any response
 // serialization can observe the default (which throws).
 import './patches.ts'
+import { newId } from '@horeca/shared'
 import { Hono } from 'hono'
 import { contextStorage } from 'hono/context-storage'
 import { cors } from 'hono/cors'
@@ -14,6 +15,10 @@ import { createAvailabilityFactory } from './domains/availability/availability.f
 import { createAvailabilityRoutes } from './domains/availability/availability.routes.ts'
 import { createBookingFactory } from './domains/booking/booking.factory.ts'
 import { createBookingRoutes } from './domains/booking/booking.routes.ts'
+import { createMigrationRegistrationFactory } from './domains/epgu/registration/registration.factory.ts'
+import { createMigrationRegistrationRoutes } from './domains/epgu/registration/registration.routes.ts'
+import { createMockRklCheck } from './domains/epgu/rkl/mock-rkl.ts'
+import { createMockEpguTransport } from './domains/epgu/transport/mock-epgu.ts'
 import { createFolioFactory } from './domains/folio/folio.factory.ts'
 import { createFolioRoutes } from './domains/folio/folio.routes.ts'
 import { createGuestFactory } from './domains/guest/guest.factory.ts'
@@ -88,6 +93,34 @@ const activityFactory = createActivityFactory(sql)
 const notificationFactory = createNotificationFactory(sql, activityFactory.repo)
 const guestFactory = createGuestFactory(sql)
 const folioFactory = createFolioFactory(sql)
+// M8.A.5 — миграционный учёт МВД (функция 1.1).
+// Mock adapters wired по умолчанию (APP_MODE=mock|sandbox); swap на live
+// = factory binding в registry. Behaviour-faithful per research/epgu-rkl.md.
+const epguTransport = createMockEpguTransport()
+registerAdapter({
+	name: 'epgu.mock',
+	category: 'epgu',
+	mode: 'mock',
+	description:
+		'In-process behaviour-faithful Скала-ЕПГУ simulator (FSM, 14 status codes, ' +
+		'8 error categories, P95=20m P99=60m polling cadence). Replace with ' +
+		'gost-tls / svoks / proxy-via-partner transport in M8.A.live.',
+})
+const rklAdapter = createMockRklCheck()
+registerAdapter({
+	name: 'rkl.mock',
+	category: 'rkl',
+	mode: 'mock',
+	description:
+		'In-process Контур.ФМС simulator (99/0.5/0.5 distribution clean/match/inconclusive, ' +
+		'50-300ms latency, daily registry revision). Replace with HTTP client in M8.A.live.',
+})
+const migrationRegistrationFactory = createMigrationRegistrationFactory({
+	sql,
+	transport: epguTransport,
+	rkl: rklAdapter,
+	idGen: () => newId('migrationRegistration'),
+})
 // V1 demo: stub payment provider (synchronous-success autocapture mirror of SBP).
 // Real provider wiring (ЮKassa / T-Kassa / СБП) lands in Phase 3 alongside the
 // webhook handler. Switch via env `PAYMENT_PROVIDER` when those impls ship.
@@ -386,6 +419,7 @@ const routes = app
 	.route('/api/v1', createFolioRoutes(folioFactory, idempotency))
 	.route('/api/v1', createPaymentRoutes(paymentFactory, idempotency))
 	.route('/api/v1', createRefundRoutes(refundFactory, idempotency))
+	.route('/api/v1', createMigrationRegistrationRoutes(migrationRegistrationFactory, idempotency))
 	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
 	.route('/api/admin', createAdminNotificationsRoutes(notificationFactory.service))
 	.get('/health', (c) =>
