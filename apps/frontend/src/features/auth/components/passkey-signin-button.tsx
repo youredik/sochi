@@ -6,6 +6,13 @@ import { authClient } from '@/lib/auth-client'
 
 interface Props {
 	onSuccess?: () => void
+	/**
+	 * Conditional Mediation UI (WebAuthn L3 2026): browser auto-suggests
+	 * passkey в username autofill suggestion поверх focus event без explicit
+	 * click. iOS 18 / macOS Sequoia / Chrome 130+ supported. Default false
+	 * для explicit-click UX; enable на login pages с email autofill chip.
+	 */
+	autoFill?: boolean
 }
 
 /**
@@ -22,13 +29,13 @@ interface Props {
  * browser supports — passkey appears в username autofill suggestions без
  * explicit click.
  */
-export function PasskeySigninButton({ onSuccess }: Props = {}) {
+export function PasskeySigninButton({ onSuccess, autoFill = false }: Props = {}) {
 	const [pending, setPending] = useState(false)
 
 	const handleSignin = async () => {
 		setPending(true)
 		try {
-			const result = await authClient.signIn.passkey()
+			const result = await authClient.signIn.passkey({ autoFill })
 			if (result?.error) {
 				toast.error(result.error.message ?? 'Не удалось войти через passkey')
 				return

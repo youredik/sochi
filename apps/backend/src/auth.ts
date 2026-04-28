@@ -106,6 +106,16 @@ export const auth = betterAuth({
 			rpName: 'HoReCa Sochi',
 			rpID: env.HOST,
 			origin: env.PUBLIC_BASE_URL,
+			// 2026/2027 modern hardening per WebAuthn L3 + 152-ФЗ canon:
+			authenticatorSelection: {
+				// Platform-bound (Touch/Face ID, Windows Hello, Android fingerprint).
+				// Cross-platform USB security keys excluded — operator UX optimization.
+				authenticatorAttachment: 'platform',
+				// Biometric verification mandatory — passkey без UV = просто credential.
+				userVerification: 'required',
+				// Discoverable credentials — enables passwordless flow без email field.
+				residentKey: 'required',
+			},
 		}),
 		organization({
 			ac,
