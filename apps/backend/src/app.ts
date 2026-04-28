@@ -58,6 +58,7 @@ import { createOtelIngest } from './otel-ingest.ts'
 import { createAdminNotificationsRoutes } from './routes/admin/notifications.ts'
 import { createAdminTaxRoutes } from './routes/admin/tax.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
+import { startDemoRefreshCron } from './workers/demo-refresh.cron.ts'
 import { createCancelFeeFinalizerHandler } from './workers/handlers/cancel-fee-finalizer.ts'
 import { createCheckoutFinalizerHandler } from './workers/handlers/checkout-finalizer.ts'
 import { createFolioBalanceHandler } from './workers/handlers/folio-balance.ts'
@@ -343,6 +344,13 @@ const cancelFeeConsumer = startCdcConsumer(driver, sql, {
 // Tests bypass via NODE_ENV=test (integration calls runNightAudit directly).
 const nightAuditCron = process.env.NODE_ENV === 'test' ? null : startNightAuditCron(sql, logger, {})
 
+// Demo refresh cron (M8.A.demo.runtime) — restores «Гостиница Сириус» demo
+// tenant к canonical golden state every 6h. Disabled в test (script run
+// directly через `pnpm seed:demo` для integration tests). Per
+// project_demo_strategy.md (always-on demo product surface 2026-04-28).
+const demoRefreshCron =
+	process.env.NODE_ENV === 'test' ? null : startDemoRefreshCron(sql, logger, {})
+
 // Notification dispatcher — polls notificationOutbox для pending rows and
 // sends through the email adapter chosen by env (M7.fix.2):
 //   POSTBOX_ENABLED=true + creds  → Yandex Cloud Postbox (production)
@@ -399,6 +407,7 @@ export async function stopApp(): Promise<void> {
 	logger.info({ count: allCdcConsumers.length }, 'shutdown: stopping CDC consumers + YDB driver')
 	await Promise.all(allCdcConsumers.map((c) => c.stop()))
 	if (nightAuditCron) await nightAuditCron.stop()
+	if (demoRefreshCron) await demoRefreshCron.stop()
 	if (notificationDispatcher) await notificationDispatcher.stop()
 	if (notificationCron) await notificationCron.stop()
 }
