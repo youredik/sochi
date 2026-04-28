@@ -29,6 +29,10 @@ import {
 import { Textarea } from '../../../components/ui/textarea.tsx'
 import { formatDateShort } from '../../../lib/format-ru.ts'
 import {
+	PassportScanDialog,
+	type PassportScanResult,
+} from '../../passport-scan/components/passport-scan-dialog.tsx'
+import {
 	migrationRegistrationDetailQueryOptions,
 	useCancelMigrationRegistration,
 	usePatchMigrationRegistration,
@@ -62,6 +66,7 @@ export function MigrationRegistrationDetailSheet({
 					{canManage ? (
 						<>
 							<OperatorNoteEditor row={data} />
+							<RescanSection row={data} />
 							{data.isFinal ? null : <CancelSection row={data} onCancelled={onClose} />}
 						</>
 					) : (
@@ -230,6 +235,68 @@ function OperatorNoteEditor({ row }: { row: MigrationRegistration }) {
 					<AlertDescription>{patchMut.error.message}</AlertDescription>
 				</Alert>
 			) : null}
+		</section>
+	)
+}
+
+function RescanSection({ row }: { row: MigrationRegistration }) {
+	const headingId = useId()
+	const [scanOpen, setScanOpen] = useState(false)
+	const [lastScan, setLastScan] = useState<PassportScanResult | null>(null)
+
+	return (
+		<section aria-labelledby={headingId} className="border-t pt-4">
+			<h3 id={headingId} className="text-sm font-medium mb-2">
+				Пересканировать паспорт гостя
+			</h3>
+			<p className="text-xs text-muted-foreground mb-3">
+				При обнаружении неточностей в данных гостя — повторное сканирование через Yandex Vision.
+				152-ФЗ согласие требуется отдельно (separate document, 2025-09-01). Реальная интеграция с
+				обновлением guestDocument lands в M9.
+			</p>
+			<Button variant="outline" onClick={() => setScanOpen(true)}>
+				Открыть сканер
+			</Button>
+			{lastScan ? (
+				<Alert className="mt-3">
+					<AlertTitle>OCR данные получены</AlertTitle>
+					<AlertDescription className="text-xs space-y-1 mt-1">
+						<div>
+							Гость: {lastScan.entities.surname} {lastScan.entities.name}{' '}
+							{lastScan.entities.middleName ?? ''}
+						</div>
+						<div>
+							Документ: {lastScan.entities.documentNumber} • {lastScan.entities.citizenshipIso3}
+						</div>
+						<div className="text-muted-foreground">
+							Уверенность: {(lastScan.confidenceHeuristic * 100).toFixed(0)}% • outcome:{' '}
+							{lastScan.outcome}
+						</div>
+						<div className="text-muted-foreground">
+							152-ФЗ согласие v{lastScan.consent152fzVersion} от {lastScan.consent152fzAcceptedAt}
+						</div>
+						<div className="text-muted-foreground italic">
+							Persistence в guestDocument deferred до M9 booking integration.
+						</div>
+					</AlertDescription>
+				</Alert>
+			) : null}
+			<PassportScanDialog
+				open={scanOpen}
+				onClose={() => setScanOpen(false)}
+				onSave={(result) => {
+					setLastScan(result)
+					setScanOpen(false)
+				}}
+				guestAlreadyConsentedToVersion={null}
+			/>
+			<input
+				type="hidden"
+				value={row.guestId}
+				readOnly
+				aria-hidden="true"
+				data-testid={`rescan-guest-id-${row.id}`}
+			/>
 		</section>
 	)
 }

@@ -20,6 +20,8 @@ import { createMigrationRegistrationFactory } from './domains/epgu/registration/
 import { createMigrationRegistrationRoutes } from './domains/epgu/registration/registration.routes.ts'
 import { createMockRklCheck } from './domains/epgu/rkl/mock-rkl.ts'
 import { createMockEpguTransport } from './domains/epgu/transport/mock-epgu.ts'
+import { createMockVisionOcr } from './domains/epgu/vision/mock-vision.ts'
+import { createVisionRoutes } from './domains/epgu/vision/vision.routes.ts'
 import { createFolioFactory } from './domains/folio/folio.factory.ts'
 import { createFolioRoutes } from './domains/folio/folio.routes.ts'
 import { createGuestFactory } from './domains/guest/guest.factory.ts'
@@ -116,6 +118,19 @@ registerAdapter({
 	description:
 		'In-process Контур.ФМС simulator (99/0.5/0.5 distribution clean/match/inconclusive, ' +
 		'50-300ms latency, daily registry revision). Replace with HTTP client in M8.A.live.',
+})
+// M8.A.6 — Yandex Vision passport OCR adapter (Mock сейчас, Live при
+// empirical-verification per scripts/verify-vision-empirical.ts +
+// feedback_empirical_mock_verification.md).
+const visionOcrAdapter = createMockVisionOcr()
+registerAdapter({
+	name: 'vision.mock',
+	category: 'vision',
+	mode: 'mock',
+	description:
+		'Behaviour-faithful Yandex Vision passport OCR (9 entities, 20-country whitelist, ' +
+		'computeHeuristicConfidence ввиду apiConfidenceRaw broken upstream). Real Yandex AI Studio ' +
+		'integration после empirical-verify (M8.A.6.empirical script ready).',
 })
 // M8.A.5.archive — behaviour-faithful Скала-ЕПГУ archive builder. Demo
 // тенанты используют ВСЕГДА (Mock pipeline end-to-end). Real КриптоПро CSP
@@ -462,6 +477,7 @@ const routes = app
 	.route('/api/v1', createPaymentRoutes(paymentFactory, idempotency))
 	.route('/api/v1', createRefundRoutes(refundFactory, idempotency))
 	.route('/api/v1', createMigrationRegistrationRoutes(migrationRegistrationFactory, idempotency))
+	.route('/api/v1', createVisionRoutes(visionOcrAdapter))
 	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
 	.route('/api/admin', createAdminNotificationsRoutes(notificationFactory.service))
 	.get('/health', (c) =>
