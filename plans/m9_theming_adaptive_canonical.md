@@ -4,7 +4,7 @@
 **Источник:** 5 раундов web-research (2026-04-28) + 3 senior self-audit iterations + npm-empirical-verify всех версий + grep-проверка apps/frontend/src/ + apps/backend/src/
 **Confidence:** High (verified deps + sub-phase decomposition + anti-patterns + risks). Medium (точные OKLCH/letter-spacing values — start values, требуют empirical visual tuning в M9.5)
 **Aesthetic motto:** «современный + строгость + простота» = Linear/Vercel/Stripe ethos
-**Запуск:** ПОСЛЕ закрытия M8.A.5 (in progress)
+**Запуск:** ПОСЛЕ закрытия M8.A.5 — ✅ **closed 2026-04-28** (commit `b566fcd9` M8.A.5.note, all 8/8 sub-phases). M9 ready to start с M9.0 pre-flight
 
 ---
 
@@ -46,8 +46,8 @@ ADD (новые deps в M9):
   @simplewebauthn/browser        13.3.0   (Better Auth passkey client peer)
   @radix-ui/colors                3.0.0   (12-step OKLCH palette platform для brand accent — M9.5)
   @fontsource-variable/geist-mono 5.2.7   (Geist Mono для tabular financial data — M9.5)
-  @aws-sdk/s3-presigned-post     <verify> (M9.7 media swap, npm view перед install)
-  @aws-sdk/client-s3             <verify> (M9.7 media swap, npm view перед install)
+  @aws-sdk/s3-presigned-post     3.1038.0 (M9.7 media swap — verified 2026-04-28)
+  @aws-sdk/client-s3             3.1038.0 (M9.7 media swap — verified 2026-04-28)
 
 ALREADY in stack — no version change:
   React              19.2.5 ✓
@@ -1009,6 +1009,21 @@ Self-audit reflects `feedback_empirical_method.md` (observe→hypothesize→test
 
 **Конфликт:** Existing convention ставит M-canonical в memory, не в repo. User explicit request — repo копию. **Senior decision: оба места** — memory (для cross-session quick context) + repo `plans/m9_theming_adaptive_canonical.md` (для PR-review visibility, team-shareable). При drift — repo = canonical, memory pointer обновляется. Это **5-я hallucination iteration session**: я предположил convention без grep'а repo. Lesson: **`ls plans/ docs/ notes/` ОБЯЗАТЕЛЬНО перед any "конечно там нет" claim.**
 
+### Iteration 5 — post-commit expert audit (2026-04-28)
+
+После commit `dbb1f88` пользователь запросил expert self-audit. Empirical-проверка committed state выявила **3 проблемы**:
+
+**🔴 Critical — half-measure violation:**
+- **`<verify>` placeholders попали в committed файл** (строки 49-50 для @aws-sdk/s3-presigned-post + @aws-sdk/client-s3). Это TODO markers что я обещал resolve до commit. `npm view` сейчас выдаёт `3.1038.0`. Fix: explicit values committed в follow-up.
+
+**🟡 Important — стейт-дрифт после concurrent neighbor session:**
+- **HEAD changed** во время моей работы — соседняя сессия закрыла M8.A.5 полностью (`b566fcd9` M8.A.5.note, все 8/8 sub-phases). Pre-condition «запуск после M8.A.5» теперь ✅ удовлетворён. Doc «Запуск» note был «in progress» — обновлён на closed status с commit hash.
+- **Migration numbering hint устарел** — `003X_passkey.ydb.sql` в file-tree указывал на устаревший baseline. Latest сейчас `0041` (M8.A.5.note). M9.4 passkey migration будет `0042+`. Fix: explicit `0042_passkey_better_auth.sql`.
+
+**Lesson learned для concurrent sessions:** **Перед finalising file-tree migration numbers — `ls migrations/ | tail -1` для current baseline.** Plan может устареть по timing если параллельная сессия добавляет migrations в той же window.
+
+**6-я hallucination iteration session caught:** half-measure = `<verify>` placeholders в production-grade canon. Future M-canonical: **grep committed file для `<verify>|<TODO>|<FIXME>|<placeholder>` ПЕРЕД `git commit`.**
+
 ## §13. Commit/PR strategy
 
 ### Per-sub-phase commit conventions (per `project_m8_a_0_done.md` pattern)
@@ -1078,7 +1093,7 @@ apps/backend/
     db/
       better-auth-adapter.ts                      [M9.4: extend для passkey table]
       migrations/
-        003X_passkey.ydb.sql                      [M9.4 NEW: manual YDB DDL]
+        0042_passkey_better_auth.sql              [M9.4 NEW: manual YDB DDL — latest baseline 0041 M8.A.5.note]
     domains/
       property/
         media.routes.ts                           [M9.7 NEW: /sign + /confirm]
