@@ -35,6 +35,11 @@ const router = createRouter({
 	context: { queryClient },
 	defaultPreload: 'intent',
 	defaultPreloadStaleTime: 0,
+	// M9.5: page cross-fade between routes via View Transitions API.
+	// Browser handles `prefers-reduced-motion` automatically (View Transitions
+	// API spec). Single line — Vercel-в-проде canon (Round 5 research,
+	// TanStack Router official example). Plan §M9.5 5.8.
+	defaultViewTransition: true,
 })
 
 declare module '@tanstack/react-router' {

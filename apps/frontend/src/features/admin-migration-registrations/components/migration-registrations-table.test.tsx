@@ -56,10 +56,13 @@ const FIXTURE: MigrationRegistration = {
 }
 
 describe('MigrationRegistrationsTable — render', () => {
-	test('[T1] empty items → empty state, NO table', () => {
+	test('[T1] empty items → EmptyState, NO table', () => {
 		render(<MigrationRegistrationsTable items={[]} onRowClick={vi.fn()} />)
 		expect(screen.queryByRole('table')).toBeNull()
-		expect(screen.getByText(/Нет регистраций миграционного учёта/)).toBeTruthy()
+		expect(screen.getByRole('heading', { level: 3, name: 'Нет регистраций' })).toBeTruthy()
+		expect(
+			screen.getByText(/Миграционный учёт создаётся автоматически при заселении гостя/),
+		).toBeTruthy()
 	})
 
 	test('[T2] non-empty → table rendered с column headers', () => {

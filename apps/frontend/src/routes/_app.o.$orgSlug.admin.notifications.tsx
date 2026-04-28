@@ -18,7 +18,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import * as React from 'react'
 import { z } from 'zod'
-import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert.tsx'
+import { ErrorState } from '../components/error-state.tsx'
 import { Button } from '../components/ui/button.tsx'
 import { NotificationDetailSheet } from '../features/admin-notifications/components/notification-detail-sheet.tsx'
 import {
@@ -109,12 +109,13 @@ function AdminNotificationsSkeleton() {
 function AdminNotificationsErrorPanel({ error }: { error: Error }) {
 	return (
 		<main className="container mx-auto p-6">
-			<Alert variant="destructive" role="alert">
-				<AlertTitle>Не удалось загрузить уведомления</AlertTitle>
-				<AlertDescription>
-					{error.message || 'Попробуйте обновить страницу через несколько секунд.'}
-				</AlertDescription>
-			</Alert>
+			<ErrorState
+				title="Не удалось загрузить уведомления"
+				error={error}
+				onRetry={() => {
+					window.location.reload()
+				}}
+			/>
 		</main>
 	)
 }

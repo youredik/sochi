@@ -25,7 +25,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useId } from 'react'
 import { z } from 'zod'
-import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert.tsx'
+import { ErrorState } from '../components/error-state.tsx'
 import { Button } from '../components/ui/button.tsx'
 import { TaxFilterBar } from '../features/admin-tax/components/tax-filter-bar.tsx'
 import { TaxKpiCards } from '../features/admin-tax/components/tax-kpi-cards.tsx'
@@ -115,12 +115,13 @@ function AdminTaxSkeleton() {
 function AdminTaxErrorPanel({ error }: { error: Error }) {
 	return (
 		<main className="container mx-auto p-6">
-			<Alert variant="destructive" role="alert">
-				<AlertTitle>Не удалось загрузить отчёт по туристическому налогу</AlertTitle>
-				<AlertDescription>
-					{error.message || 'Попробуйте обновить страницу через несколько секунд.'}
-				</AlertDescription>
-			</Alert>
+			<ErrorState
+				title="Не удалось загрузить отчёт по туристическому налогу"
+				error={error}
+				onRetry={() => {
+					window.location.reload()
+				}}
+			/>
 		</main>
 	)
 }

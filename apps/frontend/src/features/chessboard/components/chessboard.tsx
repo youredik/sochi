@@ -1,4 +1,7 @@
+import { CalendarRangeIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BookingCreateDialog } from '../../bookings/components/booking-create-dialog'
@@ -191,9 +194,10 @@ export function Chessboard() {
 	if (isError) {
 		return (
 			<main className="mx-auto max-w-7xl px-6 py-10">
-				<p className="text-destructive" role="alert">
-					Не удалось загрузить шахматку. Проверьте соединение и обновите страницу.
-				</p>
+				<ErrorState
+					title="Не удалось загрузить шахматку"
+					onRetry={() => window.location.reload()}
+				/>
 			</main>
 		)
 	}
@@ -249,9 +253,11 @@ export function Chessboard() {
 					<Skeleton className="h-10 w-full" />
 				</div>
 			) : roomTypes.length === 0 ? (
-				<p className="text-muted-foreground text-sm">
-					Нет типов номеров. Завершите настройку гостиницы.
-				</p>
+				<EmptyState
+					icon={CalendarRangeIcon}
+					title="Нет типов номеров"
+					description="Чтобы увидеть Шахматку с бронированиями, сначала добавьте типы номеров в настройках гостиницы."
+				/>
 			) : (
 				<div
 					ref={gridRef}

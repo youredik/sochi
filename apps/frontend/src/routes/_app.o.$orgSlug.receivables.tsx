@@ -24,7 +24,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useId } from 'react'
-import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert.tsx'
+import { ErrorState } from '../components/error-state.tsx'
 import { Button } from '../components/ui/button.tsx'
 import { AgingBreakdownCard, KpiCards } from '../features/receivables/components/kpi-cards.tsx'
 import { ReceivablesTable } from '../features/receivables/components/receivables-table.tsx'
@@ -73,12 +73,13 @@ function ReceivablesSkeleton() {
 function ReceivablesErrorPanel({ error }: { error: Error }) {
 	return (
 		<main className="container mx-auto p-6">
-			<Alert variant="destructive" role="alert">
-				<AlertTitle>Не удалось загрузить дебиторку</AlertTitle>
-				<AlertDescription>
-					{error.message || 'Попробуйте обновить страницу через несколько секунд.'}
-				</AlertDescription>
-			</Alert>
+			<ErrorState
+				title="Не удалось загрузить дебиторку"
+				error={error}
+				onRetry={() => {
+					window.location.reload()
+				}}
+			/>
 		</main>
 	)
 }

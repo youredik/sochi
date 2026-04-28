@@ -20,8 +20,9 @@ import {
 	type SortingState,
 	useReactTable,
 } from '@tanstack/react-table'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, FileTextIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { EmptyState } from '../../../components/empty-state.tsx'
 import { Badge } from '../../../components/ui/badge.tsx'
 import { formatDateShort } from '../../../lib/format-ru.ts'
 import { CHANNEL_LABEL_RU, statusBadgeFor } from '../lib/migration-status-labels.ts'
@@ -132,9 +133,11 @@ export function MigrationRegistrationsTable({
 
 	if (items.length === 0) {
 		return (
-			<p className="text-sm text-muted-foreground p-4">
-				Нет регистраций миграционного учёта. Они создаются автоматически при заселении гостя.
-			</p>
+			<EmptyState
+				icon={FileTextIcon}
+				title="Нет регистраций"
+				description="Миграционный учёт создаётся автоматически при заселении гостя — заявки появятся здесь после первого check-in."
+			/>
 		)
 	}
 

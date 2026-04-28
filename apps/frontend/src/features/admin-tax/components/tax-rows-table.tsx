@@ -15,8 +15,9 @@ import {
 	type SortingState,
 	useReactTable,
 } from '@tanstack/react-table'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, BedDoubleIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { EmptyState } from '../../../components/empty-state.tsx'
 import { Money } from '../../../components/money.tsx'
 import { Badge } from '../../../components/ui/badge.tsx'
 import { formatDateShort } from '../../../lib/format-ru.ts'
@@ -134,9 +135,11 @@ export function TaxRowsTable({ rows }: { rows: TourismTaxOrgReportRow[] }) {
 
 	if (rows.length === 0) {
 		return (
-			<p className="py-8 text-center text-muted-foreground">
-				За выбранный период бронирований с туристическим налогом нет.
-			</p>
+			<EmptyState
+				icon={BedDoubleIcon}
+				title="Бронирований нет"
+				description="За выбранный период не найдено бронирований, попадающих под туристический налог — расширьте диапазон или выберите другой объект."
+			/>
 		)
 	}
 

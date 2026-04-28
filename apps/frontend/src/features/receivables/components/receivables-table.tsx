@@ -23,8 +23,9 @@ import {
 	type SortingState,
 	useReactTable,
 } from '@tanstack/react-table'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, ReceiptIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { EmptyState } from '../../../components/empty-state.tsx'
 import { Money } from '../../../components/money.tsx'
 import { Badge } from '../../../components/ui/badge.tsx'
 import { Button } from '../../../components/ui/button.tsx'
@@ -154,9 +155,11 @@ export function ReceivablesTable({
 
 	if (rows.length === 0) {
 		return (
-			<p className="py-8 text-center text-muted-foreground">
-				Нет открытых счетов с положительным балансом.
-			</p>
+			<EmptyState
+				icon={ReceiptIcon}
+				title="Нет открытых счетов"
+				description="Все счета закрыты или ещё не выставлены — проверьте новые бронирования и статусы фолио."
+			/>
 		)
 	}
 

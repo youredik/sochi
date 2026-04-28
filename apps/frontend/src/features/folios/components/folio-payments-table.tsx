@@ -7,6 +7,8 @@
  * Вынесен из folio route в отдельный файл per shadcn 4.5 + Fast Refresh канон.
  */
 import type { Payment } from '@horeca/shared'
+import { CreditCardIcon } from 'lucide-react'
+import { EmptyState } from '../../../components/empty-state.tsx'
 import { Money } from '../../../components/money.tsx'
 import { RbacButton } from '../../../components/rbac-button.tsx'
 import { Badge } from '../../../components/ui/badge.tsx'
@@ -25,7 +27,13 @@ export function FolioPaymentsTable({
 	// Server также блокирует requirePermission middleware'ом; этот hook — UX hint.
 	const canRefund = useCan({ refund: ['create'] })
 	if (payments.length === 0) {
-		return <p className="py-8 text-center text-muted-foreground">Платежей пока нет.</p>
+		return (
+			<EmptyState
+				icon={CreditCardIcon}
+				title="Платежей пока нет"
+				description="Платёж появится здесь после успешного списания через ЮKassa или ручного отметки оплаты администратором."
+			/>
+		)
 	}
 	return (
 		<div className="overflow-x-auto rounded-md border">

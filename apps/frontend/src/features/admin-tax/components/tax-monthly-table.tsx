@@ -6,6 +6,8 @@
  * Hand-composed `<table>` (НЕ shadcn DataTable) per receivables canon —
  * у нас фиксированное число строк (≤3 для квартала), сортировка не нужна.
  */
+import { CalendarRangeIcon } from 'lucide-react'
+import { EmptyState } from '../../../components/empty-state.tsx'
 import { Money } from '../../../components/money.tsx'
 import { formatMonthRu } from '../lib/format-month.ts'
 import { microsToKopecks } from '../lib/micros-to-kopecks.ts'
@@ -14,9 +16,12 @@ import type { TourismTaxOrgReportMonthly } from '../types.ts'
 export function TaxMonthlyTable({ monthly }: { monthly: TourismTaxOrgReportMonthly[] }) {
 	if (monthly.length === 0) {
 		return (
-			<p className="py-4 text-center text-sm text-muted-foreground">
-				За выбранный период начислений нет.
-			</p>
+			<EmptyState
+				icon={CalendarRangeIcon}
+				title="Начислений нет"
+				description="За выбранный период туристический налог не начислялся — попробуйте расширить диапазон."
+				className="py-6"
+			/>
 		)
 	}
 	return (

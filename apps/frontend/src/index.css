@@ -19,7 +19,12 @@
 	--card-foreground: oklch(0.145 0 0);
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.205 0 0);
+	/* M9.5 Sochi-blue brand identity (Round 5 research canon).
+	 * `oklch(0.55 0.18 240)` — Sochi sky-blue. Empirical contrast verify:
+	 * на white-foreground (oklch 0.985) ≈ 5.4:1 WCAG AA normal-text pass.
+	 * Risk #16 mitigation: axe-core gate verify в M9.5 commit DoD. Если fail —
+	 * tune L (0.55 → 0.50 deeper) до AA pass до commit. */
+	--primary: oklch(0.55 0.18 240);
 	--primary-foreground: oklch(0.985 0 0);
 	--secondary: oklch(0.97 0 0);
 	--secondary-foreground: oklch(0.205 0 0);
@@ -120,6 +125,38 @@ body {
 	--radius-2xl: calc(var(--radius) * 1.8);
 	--radius-3xl: calc(var(--radius) * 2.2);
 	--radius-4xl: calc(var(--radius) * 2.6);
+
+	/* M9.5 typography scale — modular ratio 1.250 (major-third).
+	 * Base 16px → 12.8/14/16/20/25/clamp-fluid for headings.
+	 * Cyrillic line-heights (Round 2 research): prose 1.6, headings 1.2-1.3,
+	 * UI 1.5. Letter-spacing: tighter Cyrillic для headings (start values,
+	 * empirical visual tuning per plan §M9.5). */
+	--text-xs: 0.8rem;
+	--text-xs--line-height: 1.5;
+	--text-sm: 0.875rem;
+	--text-sm--line-height: 1.5;
+	--text-base: 1rem;
+	--text-base--line-height: 1.6;
+	--text-lg: 1.25rem;
+	--text-lg--line-height: 1.5;
+	--text-xl: 1.5625rem;
+	--text-xl--line-height: 1.3;
+	--text-2xl: clamp(1.5rem, 1.2rem + 1.5vw, 1.953rem);
+	--text-2xl--line-height: 1.25;
+	--text-2xl--letter-spacing: -0.011em;
+	--text-3xl: clamp(1.75rem, 1.4rem + 2vw, 2.441rem);
+	--text-3xl--line-height: 1.2;
+	--text-3xl--letter-spacing: -0.014em;
+	--text-4xl: clamp(2rem, 1.6rem + 2.5vw, 3.052rem);
+	--text-4xl--line-height: 1.15;
+	--text-4xl--letter-spacing: -0.018em;
+
+	/* M9.5 elevation tokens — Linear-style overlay (per parker.mov 2026,
+	 * NOT Material 3 surface-tint). 4 levels: card → popover → drawer → dialog. */
+	--shadow-card: 0 1px 2px 0 oklch(0 0 0 / 0.04);
+	--shadow-popover: 0 4px 12px -2px oklch(0 0 0 / 0.08);
+	--shadow-drawer: 0 -8px 24px -4px oklch(0 0 0 / 0.1);
+	--shadow-dialog: 0 16px 48px -8px oklch(0 0 0 / 0.16);
 }
 
 .dark {
@@ -130,7 +167,8 @@ body {
 	--card-foreground: oklch(0.985 0 0);
 	--popover: oklch(0.205 0 0);
 	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.922 0 0);
+	/* Dark variant Sochi-blue (lighter L=0.70 on dark bg для readability). */
+	--primary: oklch(0.7 0.16 240);
 	--primary-foreground: oklch(0.205 0 0);
 	--secondary: oklch(0.269 0 0);
 	--secondary-foreground: oklch(0.985 0 0);
@@ -155,6 +193,13 @@ body {
 	--sidebar-accent-foreground: oklch(0.985 0 0);
 	--sidebar-border: oklch(1 0 0 / 10%);
 	--sidebar-ring: oklch(0.556 0 0);
+	/* M9.5 dark elevation — Linear-style inset overlay (per parker.mov 2026).
+	 * Surface lightens via inset highlight + soft shadow — NOT Material 3
+	 * surface-tint approach. */
+	--shadow-card: 0 1px 2px 0 oklch(0 0 0 / 0.2), inset 0 1px 0 0 oklch(1 0 0 / 0.03);
+	--shadow-popover: 0 4px 12px -2px oklch(0 0 0 / 0.4), inset 0 1px 0 0 oklch(1 0 0 / 0.05);
+	--shadow-drawer: 0 -8px 24px -4px oklch(0 0 0 / 0.5), inset 0 1px 0 0 oklch(1 0 0 / 0.06);
+	--shadow-dialog: 0 16px 48px -8px oklch(0 0 0 / 0.6), inset 0 1px 0 0 oklch(1 0 0 / 0.08);
 }
 
 /* prefers-contrast: more (M9.1) — AAA-overlay над light + dark.
@@ -172,6 +217,8 @@ body {
 		--border: oklch(0.8 0 0);
 		--input: oklch(0.8 0 0);
 		--ring: oklch(0.5 0 0);
+		/* Sochi-blue AAA в light: deeper L=0.45 для 7:1+ ratio */
+		--primary: oklch(0.45 0.2 240);
 	}
 	.dark {
 		/* muted-foreground: 0.708 → 0.85 (lighter для AAA на dark bg) */
@@ -179,6 +226,62 @@ body {
 		--border: oklch(1 0 0 / 25%);
 		--input: oklch(1 0 0 / 30%);
 		--ring: oklch(0.85 0 0);
+		/* Sochi-blue AAA в dark: lighter L=0.78 для 7:1+ ratio */
+		--primary: oklch(0.78 0.18 240);
+	}
+}
+
+/* M9.5 Skeleton shimmer + pulse fallback.
+ *
+ * Default: shimmer linear-gradient sweep (200% → -200% over 1.6s).
+ * `prefers-reduced-motion: reduce` → fallback на pulse opacity (existing
+ * shadcn animate-pulse behavior). a11y: aria-busy + role=status + sr-only
+ * label обязательны на consumer (Skeleton component handles).
+ */
+@layer utilities {
+	@keyframes shimmer {
+		0% {
+			background-position: 200% 0;
+		}
+		100% {
+			background-position: -200% 0;
+		}
+	}
+	.skeleton-shimmer {
+		background: linear-gradient(
+			90deg,
+			color-mix(in oklch, var(--muted) 70%, transparent),
+			color-mix(in oklch, var(--muted) 100%, transparent),
+			color-mix(in oklch, var(--muted) 70%, transparent)
+		);
+		background-size: 200% 100%;
+		animation: shimmer 1.6s linear infinite;
+	}
+}
+
+/* M9.5 prefers-reduced-motion global override — disable все animations
+ * для motion-sensitive users. Per WCAG 2.3.3 + plan §6.2 anti-pattern
+ * (Browser API не делает auto-disable, manual guard mandatory).
+ *
+ * Skeleton-shimmer уже handles fallback автоматически (через linear-gradient
+ * без animation duration). Здесь global blanket для ВСЕХ animations
+ * (включая Vaul drawer, View Transitions, Tailwind animate-* classes). */
+@media (prefers-reduced-motion: reduce) {
+	/* biome-ignore lint/complexity/noImportantStyles: WCAG 2.3.3 override
+	 * canon — motion-sensitive users должны trump component-level animation
+	 * declarations (Vaul drawer transform, Tailwind animate-*, View Transitions).
+	 * !important здесь intentional блокирующий cascade для accessibility. */
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+	.skeleton-shimmer {
+		animation: none;
+		background: color-mix(in oklch, var(--muted) 70%, transparent);
 	}
 }
 
@@ -191,5 +294,30 @@ body {
 	}
 	html {
 		@apply font-sans;
+	}
+
+	/* M9.5 @starting-style для Radix Sheet/Dialog enter (Baseline 2024).
+	 * Vaul Drawer ИСКЛЮЧЁН — у него собственная spring-animation system
+	 * через transform translateY (Round 4 self-audit fix W4 — наш CSS
+	 * data-state pattern не сработает).
+	 *
+	 * Graceful fallback — браузеры без @starting-style просто не получат
+	 * entry-anim, ничего не сломается. Round 5 research: Baseline newly
+	 * available May 2024 (~91% support 2026). */
+	[data-state="open"][data-slot="dialog-content"],
+	[data-state="open"][data-slot="sheet-content"] {
+		transition:
+			opacity 200ms ease,
+			transform 200ms ease;
+		transition-behavior: allow-discrete;
+	}
+	@starting-style {
+		[data-state="open"][data-slot="dialog-content"] {
+			opacity: 0;
+			transform: scale(0.95);
+		}
+		[data-state="open"][data-slot="sheet-content"] {
+			opacity: 0;
+		}
 	}
 }

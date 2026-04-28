@@ -36,9 +36,9 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useId, useState } from 'react'
 import { z } from 'zod'
+import { ErrorState } from '../components/error-state.tsx'
 import { Money } from '../components/money.tsx'
 import { RbacButton } from '../components/rbac-button.tsx'
-import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert.tsx'
 import { Button } from '../components/ui/button.tsx'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card.tsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs.tsx'
@@ -103,12 +103,13 @@ function FolioSkeleton() {
 function FolioErrorPanel({ error }: { error: Error }) {
 	return (
 		<main className="container mx-auto p-6">
-			<Alert variant="destructive" role="alert">
-				<AlertTitle>Не удалось загрузить фолио</AlertTitle>
-				<AlertDescription>
-					{error.message || 'Попробуйте обновить страницу через несколько секунд.'}
-				</AlertDescription>
-			</Alert>
+			<ErrorState
+				title="Не удалось загрузить фолио"
+				error={error}
+				onRetry={() => {
+					window.location.reload()
+				}}
+			/>
 		</main>
 	)
 }

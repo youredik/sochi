@@ -14,8 +14,9 @@ import {
 	type SortingState,
 	useReactTable,
 } from '@tanstack/react-table'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, MailIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { EmptyState } from '../../../components/empty-state.tsx'
 import { Badge } from '../../../components/ui/badge.tsx'
 import { formatDateShort } from '../../../lib/format-ru.ts'
 import { notificationKindLabel, notificationStatusBadge } from '../lib/notification-labels.ts'
@@ -105,7 +106,11 @@ export function NotificationsTable({
 
 	if (items.length === 0) {
 		return (
-			<p className="py-8 text-center text-muted-foreground">Уведомлений с такими фильтрами нет.</p>
+			<EmptyState
+				icon={MailIcon}
+				title="Уведомлений нет"
+				description="С такими фильтрами outbox пуст — попробуйте сбросить статус или расширить диапазон дат."
+			/>
 		)
 	}
 

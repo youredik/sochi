@@ -4,7 +4,7 @@
  *
  * Test plan:
  *   Render correctness:
- *     [R1] empty items → "Уведомлений с такими фильтрами нет" placeholder
+ *     [R1] empty items → EmptyState (h3 «Уведомлений нет» + description)
  *     [R2] N items → renders N <tr> rows in tbody
  *     [R3] caption sr-only present (a11y)
  *     [R4] all 6 column headers rendered with scope="col"
@@ -55,10 +55,11 @@ function buildRow(overrides: Partial<Notification> = {}): Notification {
 }
 
 describe('<NotificationsTable> — render correctness', () => {
-	test('[R1] empty items → placeholder text, NO table', () => {
+	test('[R1] empty items → EmptyState, NO table', () => {
 		const onRowClick = vi.fn()
 		render(<NotificationsTable items={[]} onRowClick={onRowClick} />)
-		expect(screen.getByText('Уведомлений с такими фильтрами нет.')).toBeDefined()
+		expect(screen.getByRole('heading', { level: 3, name: 'Уведомлений нет' })).toBeDefined()
+		expect(screen.getByText(/С такими фильтрами outbox пуст/)).toBeDefined()
 		expect(screen.queryByRole('table')).toBeNull()
 	})
 

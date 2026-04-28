@@ -17,7 +17,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import * as React from 'react'
 import { z } from 'zod'
-import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert.tsx'
+import { ErrorState } from '../components/error-state.tsx'
 import { MigrationRegistrationDetailSheet } from '../features/admin-migration-registrations/components/migration-registration-detail-sheet.tsx'
 import { MigrationRegistrationsTable } from '../features/admin-migration-registrations/components/migration-registrations-table.tsx'
 import { migrationRegistrationsListQueryOptions } from '../features/admin-migration-registrations/hooks/use-migration-registrations.ts'
@@ -67,12 +67,13 @@ function AdminMigrationRegistrationsSkeleton() {
 function AdminMigrationRegistrationsErrorPanel({ error }: { error: Error }) {
 	return (
 		<main className="container mx-auto p-6">
-			<Alert variant="destructive" role="alert">
-				<AlertTitle>Не удалось загрузить регистрации</AlertTitle>
-				<AlertDescription>
-					{error.message || 'Попробуйте обновить страницу через несколько секунд.'}
-				</AlertDescription>
-			</Alert>
+			<ErrorState
+				title="Не удалось загрузить регистрации"
+				error={error}
+				onRetry={() => {
+					window.location.reload()
+				}}
+			/>
 		</main>
 	)
 }

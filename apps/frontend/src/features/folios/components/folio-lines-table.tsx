@@ -6,13 +6,21 @@
  * экспортировать только Route).
  */
 import type { FolioLine } from '@horeca/shared'
+import { ListIcon } from 'lucide-react'
+import { EmptyState } from '../../../components/empty-state.tsx'
 import { Money } from '../../../components/money.tsx'
 import { Badge } from '../../../components/ui/badge.tsx'
 import { formatDateShort } from '../../../lib/format-ru.ts'
 
 export function FolioLinesTable({ lines }: { lines: FolioLine[] }) {
 	if (lines.length === 0) {
-		return <p className="py-8 text-center text-muted-foreground">Начислений ещё нет.</p>
+		return (
+			<EmptyState
+				icon={ListIcon}
+				title="Начислений нет"
+				description="Строки фолио появятся после ночного прогона аудита либо при ручном posting."
+			/>
+		)
 	}
 	return (
 		<div className="overflow-x-auto rounded-md border">

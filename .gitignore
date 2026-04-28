@@ -11,6 +11,8 @@ node_modules/
 dist/
 build/
 .output/
+# PWA dev artifacts (vite-plugin-pwa generates SW + workbox в dev mode под dev-dist/).
+dev-dist/
 
 # IDE / editors
 .vscode/
