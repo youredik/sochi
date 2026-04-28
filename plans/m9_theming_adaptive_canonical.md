@@ -1888,7 +1888,30 @@ delivered (migration + adapter extend + plugin + client + 2 buttons).
 Real-device smoke документирован как operator manual verification (cannot
 автоматизировать без physical hardware authenticator).
 
-### M9.6 — Web Vitals + a11y polish — pending
+### M9.6 — Web Vitals + tabular-nums ✅ done 2026-04-29
+
+**Commit:** `16b2c28`
+
+**Delivered:**
+- `web-vitals@5.2.0` installed (latest stable, INP replaces FID per
+  W3C 2024 measurement update)
+- `lib/web-vitals.ts` `reportWebVitals()` wires 5 metric handlers
+  (CLS/INP/LCP/FCP/TTFB) → OTel tracer `frontend-vitals`. Each emits
+  `vital.${name}` span с `vital.value` + `vital.rating` + `vital.id`
+  attributes per OTel semantic-conventions vitals draft 2026
+- Wired в `main.tsx` после setupOtel() — production-grade с первой
+  строчки, exporter no-op до Monium activation
+- `.tabular-nums` utility class в `index.css` @layer utilities
+  (Geist Variable + Inter Variable both ship `tnum` OpenType feature)
+- @starting-style уже shipped в Phase A (`7d30605`) — no-op для M9.6
+
+**Tests:** +5 strict (W1 5-handler registration + W5 tracer name +
+W2 span name + W3 attribute keys + W4 span.end leak guard). Frontend
+test:run **962 passed** (56 files; 0 regressions).
+
+**Quality gates:** lint 0/0, typecheck clean, lefthook 5/5 ✅.
+
+### M9.7 — Media upload swap — pending
 
 ### M9.6 — Media upload swap — pending
 
@@ -1909,4 +1932,5 @@ Real-device smoke документирован как operator manual verificati
 | M9.5 Phase D | 12 (Enroll 7 + Signin 5) | `cb31acb` + `2e27c01` 2026/2027 hardening | ✅ WebAuthn passkey + L3 hardening (platform attachment + userVerification required + residentKey + Conditional Mediation UI) |
 | M9.6 | — | — | pending |
 | M9.7 | — | — | pending |
-| **Cumulative** | **167** | **17 + 1 chore + 3 docs** | **7/9 sub-phases done (M9.5 Phase D passkey complete; M9.6 web-vitals + M9.7 media swap pending) (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
+| M9.6 | 5 | `16b2c28` | ✅ web-vitals 5 → OTel + tabular-nums utility |
+| **Cumulative** | **172** | **18 + 1 chore + 3 docs** | **8/9 sub-phases done (M9.5 Phase D passkey complete; M9.6 web-vitals + M9.7 media swap pending) (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |

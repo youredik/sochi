@@ -54,7 +54,7 @@ describe('reportWebVitals — registration', () => {
 })
 
 describe('reportWebVitals — span emission', () => {
-	it('[W2] callback creates span с name vital.${name}', () => {
+	it('[W2] callback creates span с name vital.<metricName>', () => {
 		startSpanMock.mockReturnValue({
 			setAttribute: setAttributeMock,
 			end: endMock,
