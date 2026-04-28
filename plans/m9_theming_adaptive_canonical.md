@@ -1387,7 +1387,41 @@ Live status per sub-phase. Updated после каждого commit. Read для
 - 'fit' ResizeObserver actual viewport-fit (M9.5)
 - Bnovo-parity status colors mapping (M9.5)
 
-### M9.4 — PWA install + Better Auth passkey — pending
+### M9.4 — PWA install ✅ done 2026-04-28 / Passkey 🟡 deferred к M9.5 (per Risk #4 mitigation)
+
+**Commit:** `5ff7a76` (PWA part). Passkey explicitly deferred per plan §8 Risk #4: «Если migration не пройдёт за 0.5 дня — passkey фича отщепляется в отдельную M-фазу, не блокирует M9 release».
+
+**Delivered (PWA part):**
+- vite-plugin-pwa 1.2.0 + workbox-window 7.4.0 (Vite 8 cosmetic peer warning per GitHub vite-pwa #918+#923 — empirically functional). devOptions.enabled для local manifest serving.
+- @vite-pwa/assets-generator 1.0.2 minimal-2023 preset → 4 icons (pwa-64/192/512 + maskable-512) + apple-touch-icon-180 + favicon.ico generated from logo.svg.
+- Manifest: name «HoReCa Sochi», short «HoReCa», display: standalone, theme_color #0a0a0a, lang: ru, scope: /, start_url: /. Workbox autoUpdate SW + navigateFallbackDenylist /api + /health (per plan §6.13).
+- HOST + PUBLIC_BASE_URL env vars (Risk #15 pre-condition mitigation для будущей passkey integration).
+- InstallPrompt component (mobile-only, dismissable, persisted Zustand `horeca-install-prompt`). 3 paths: Android beforeinstallprompt → native prompt; iOS Safari → ShareIcon hint «Поделиться → На экран Домой»; standalone → hide.
+- public/logo.svg — Sochi-blue HoReCa monogram (M9.5 brand will adjust к OKLCH 0.55 0.18 240).
+
+**Tests:** 10 strict (install-prompt store I1/I2/M1/P1, isIosSafari D1.a-d 4 UA paths, isStandalone D2.a-b match modes). Hoisted localStorage stub (Iteration 7 lesson applied).
+
+**Quality gates:**
+- typecheck OK
+- biome 0/0 (auto-fix format на 2 files)
+- frontend test:serial: **890 passed** (45 files) — vs 880 baseline → +10 new, **0 regressions**
+- `pnpm build`: PWA v1.2.0 generateSW mode, 78 precache entries (1280.82 KiB), sw.js + workbox-XXX.js generated ✓
+- **Live PWA smoke 10/10** (Playwright + dev server):
+  ✓ manifest.webmanifest 200 OK + name='HoReCa Sochi' + display=standalone + 4 icons + lang=ru
+  ✓ apple-touch-icon-180 + favicon.ico + logo.svg 200 OK
+  ✓ &lt;link rel=manifest&gt; + &lt;link rel=apple-touch-icon&gt; в HTML
+
+**Passkey deferred к M9.5 — explicit:**
+- Better Auth custom ydbAdapter requires manual YDB migration `0043_passkey_better_auth.sql` (passkey table: id Utf8 PK, publicKey String, userId Utf8 FK, credentialID Utf8 UNIQUE, counter Uint64, deviceType Utf8, backedUp Bool, transports Utf8, createdAt Timestamp).
+- ydbAdapter passkey-model extension (CRUD CustomAdapter contract).
+- backend: passkey() plugin + `rpName` + `rpID: env.HOST` + `origin: env.PUBLIC_BASE_URL` (env vars готовы).
+- frontend: passkeyClient() + PasskeyEnrollButton + PasskeySigninButton.
+- Real-device manual smoke (Touch ID iPad Mac).
+- Bundle с M9.5 visual polish (где @starting-style + Sheet→Drawer + Bnovo-status mapping + Day/Month UI + calendar picker + native popover + ResizeObserver уже stacked).
+
+**Real-device manual smoke note (post-deploy):**
+  iPhone Safari iOS 26+ → Share → «На экран Домой» (default ON since 2025-09 Apple release).
+  Chromium desktop → URL bar Install button. PWA standalone display verified.
 
 ### M9.5 — Visual Polish + (deferred) Sheet→Drawer swap — pending
 
@@ -1405,8 +1439,8 @@ Live status per sub-phase. Updated после каждого commit. Read для
 | M9.1 | 32 | `9f6bed6`, `d198639` | ✅ |
 | M9.2 | 14 | `7b5bbd2` | ✅ |
 | M9.3 | 19 | `25d05b8` | 🟨 first-iter (Day/Month UI + popover + status mapping → M9.5) |
-| M9.4 | — | — | pending |
-| M9.5 | — | — | pending |
+| M9.4 | 10 | `5ff7a76` | ✅ PWA done (manifest + SW + icons + InstallPrompt). Passkey 🟡 deferred → M9.5 (per Risk #4) |
+| M9.5 | — | — | pending (Visual Polish + deferred: Sheet→Drawer + passkey + Bnovo-status + Day/Month UI + popover + @container + ResizeObserver) |
 | M9.6 | — | — | pending |
 | M9.7 | — | — | pending |
-| **Cumulative** | **65** | **4 + 1 chore** | **3/9 sub-phases (M9.3 first-iter); +14 live post-auth visual screenshots evidence (M9.1×4 + M9.2×4 + M9.3×5 + 1 dashboard); +9 self-audit iterations с 11 cumulative hallucinations honestly logged; docker-compose YDB cert hardening (`235c7eb` chore)** |
+| **Cumulative** | **75** | **5 + 1 chore + 1 docs** | **4/9 sub-phases done (M9.3 first-iter, M9.4 PWA done passkey deferred); +14 live post-auth visual screenshots + 10 PWA smoke checks; +9 self-audit iterations с 11 cumulative hallucinations honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` docs)** |
