@@ -30,6 +30,7 @@ import {
 	type EpguErrorCategory,
 	isEpguFinalStatus,
 } from '@horeca/shared'
+import type { ArchiveBuilder } from '../archive/types.ts'
 import type { RklCheckAdapter, RklCheckRequest } from '../rkl/types.ts'
 import type { EpguTransport } from '../transport/types.ts'
 
@@ -53,6 +54,14 @@ export interface RegistrationServiceDeps {
 	readonly rkl: RklCheckAdapter
 	/** Persistence layer — wired в M8.A.5.repo. */
 	readonly repo: RegistrationRepoOps
+	/**
+	 * Archive builder — wired в M8.A.5.archive. Behaviour-faithful Mock
+	 * (`createMockArchiveBuilder`) для demo тенантов навсегда; real КриптоПро
+	 * impl в M8.B при МВД ОВМ onboarding completion. Service exposes
+	 * the dependency unmodified so callers (tests, future M8.A.6 UI flow)
+	 * can build archives explicitly when needed.
+	 */
+	readonly archive: ArchiveBuilder
 	readonly now?: () => Date
 }
 

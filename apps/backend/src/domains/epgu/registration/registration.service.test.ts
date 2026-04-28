@@ -29,6 +29,7 @@
  *     [Cy2] 1 transient throw → cycle continues, others updated
  */
 import { afterEach, describe, expect, test } from 'vitest'
+import { createMockArchiveBuilder } from '../archive/mock-archive.ts'
 import { createMockRklCheck } from '../rkl/mock-rkl.ts'
 import { createMockEpguTransport } from '../transport/mock-epgu.ts'
 import {
@@ -158,7 +159,10 @@ describe('RegistrationService — enqueue', () => {
 		const repo = buildInMemoryRepo()
 		const transport = createMockEpguTransport({ random: makeRng(1) })
 		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
-		const svc = createRegistrationService({ transport, rkl, repo }, idGen)
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, archive: createMockArchiveBuilder() },
+			idGen,
+		)
 		const { id } = await svc.enqueue(ENQ_INPUT)
 		const row = repo.rows.get(id)
 		expect(row).toBeDefined()
@@ -169,7 +173,10 @@ describe('RegistrationService — enqueue', () => {
 		const repo = buildInMemoryRepo()
 		const transport = createMockEpguTransport({ random: makeRng(1) })
 		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'match' })
-		const svc = createRegistrationService({ transport, rkl, repo }, idGen)
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, archive: createMockArchiveBuilder() },
+			idGen,
+		)
 		await expect(svc.enqueue(ENQ_INPUT)).rejects.toBeInstanceOf(RklBlockedError)
 		expect(repo.rows.size).toBe(0)
 	})
@@ -178,7 +185,10 @@ describe('RegistrationService — enqueue', () => {
 		const repo = buildInMemoryRepo()
 		const transport = createMockEpguTransport({ random: makeRng(1) })
 		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'inconclusive' })
-		const svc = createRegistrationService({ transport, rkl, repo }, idGen)
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, archive: createMockArchiveBuilder() },
+			idGen,
+		)
 		const { id } = await svc.enqueue(ENQ_INPUT)
 		expect(repo.rows.get(id)).toBeDefined()
 	})
@@ -193,7 +203,10 @@ describe('RegistrationService — submit', () => {
 		const repo = buildInMemoryRepo()
 		const transport = createMockEpguTransport({ random: makeRng(1) })
 		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
-		const svc = createRegistrationService({ transport, rkl, repo }, idGen)
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, archive: createMockArchiveBuilder() },
+			idGen,
+		)
 		const { id } = await svc.enqueue(ENQ_INPUT)
 		const archive = new Uint8Array([0x50, 0x4b, 0x03, 0x04]) // ZIP magic
 		const { epguOrderId } = await svc.submit(ENQ_INPUT.tenantId, id, archive)
@@ -208,7 +221,10 @@ describe('RegistrationService — submit', () => {
 		const repo = buildInMemoryRepo()
 		const transport = createMockEpguTransport({ random: makeRng(1) })
 		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
-		const svc = createRegistrationService({ transport, rkl, repo }, idGen)
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, archive: createMockArchiveBuilder() },
+			idGen,
+		)
 		const { id } = await svc.enqueue(ENQ_INPUT)
 		const archive = new Uint8Array([0x50, 0x4b, 0x03, 0x04])
 		await svc.submit(ENQ_INPUT.tenantId, id, archive)
@@ -219,7 +235,10 @@ describe('RegistrationService — submit', () => {
 		const repo = buildInMemoryRepo()
 		const transport = createMockEpguTransport({ random: makeRng(1) })
 		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
-		const svc = createRegistrationService({ transport, rkl, repo }, idGen)
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, archive: createMockArchiveBuilder() },
+			idGen,
+		)
 		await expect(
 			svc.submit(ENQ_INPUT.tenantId, 'never-existed', new Uint8Array([1])),
 		).rejects.toThrow(/not found/)
@@ -242,7 +261,10 @@ describe('RegistrationService — pollOne', () => {
 		})
 		const repo = buildInMemoryRepo()
 		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
-		const svc = createRegistrationService({ transport, rkl, repo, now }, idGen)
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, now, archive: createMockArchiveBuilder() },
+			idGen,
+		)
 		const { id } = await svc.enqueue(ENQ_INPUT)
 		await svc.submit(ENQ_INPUT.tenantId, id, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
 		return {
@@ -311,7 +333,10 @@ describe('RegistrationService — pollOne', () => {
 		const repo = buildInMemoryRepo()
 		const transport = createMockEpguTransport({ random: makeRng(1) })
 		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
-		const svc = createRegistrationService({ transport, rkl, repo }, idGen)
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, archive: createMockArchiveBuilder() },
+			idGen,
+		)
 		const { id } = await svc.enqueue(ENQ_INPUT)
 		await expect(svc.pollOne(ENQ_INPUT.tenantId, id)).rejects.toThrow(/no orderId/)
 	})
@@ -365,7 +390,7 @@ describe('RegistrationService — runPollCycle', () => {
 		const repo = buildInMemoryRepo()
 		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
 		const svc = createRegistrationService(
-			{ transport, rkl, repo, now: () => new Date(nowVal) },
+			{ transport, rkl, repo, now: () => new Date(nowVal), archive: createMockArchiveBuilder() },
 			idGen,
 		)
 		// Enqueue + submit 3

@@ -34,6 +34,7 @@
 		"@ydbjs/value": "6.0.7",
 		"better-auth": "^1.6.9",
 		"croner": "^10.0.1",
+		"fflate": "0.8.2",
 		"hono": "^4.12.15",
 		"hono-pino": "^0.10.3",
 		"pino": "^10.3.1",

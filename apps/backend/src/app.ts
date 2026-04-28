@@ -15,6 +15,7 @@ import { createAvailabilityFactory } from './domains/availability/availability.f
 import { createAvailabilityRoutes } from './domains/availability/availability.routes.ts'
 import { createBookingFactory } from './domains/booking/booking.factory.ts'
 import { createBookingRoutes } from './domains/booking/booking.routes.ts'
+import { createMockArchiveBuilder } from './domains/epgu/archive/mock-archive.ts'
 import { createMigrationRegistrationFactory } from './domains/epgu/registration/registration.factory.ts'
 import { createMigrationRegistrationRoutes } from './domains/epgu/registration/registration.routes.ts'
 import { createMockRklCheck } from './domains/epgu/rkl/mock-rkl.ts'
@@ -116,10 +117,25 @@ registerAdapter({
 		'In-process Контур.ФМС simulator (99/0.5/0.5 distribution clean/match/inconclusive, ' +
 		'50-300ms latency, daily registry revision). Replace with HTTP client in M8.A.live.',
 })
+// M8.A.5.archive — behaviour-faithful Скала-ЕПГУ archive builder. Demo
+// тенанты используют ВСЕГДА (Mock pipeline end-to-end). Real КриптоПро CSP
+// integration land в M8.B при МВД ОВМ onboarding completion. Swap = factory
+// binding изменение, без domain-code changes.
+const archiveBuilder = createMockArchiveBuilder()
+registerAdapter({
+	name: 'archive.mock',
+	category: 'epgu',
+	mode: 'mock',
+	description:
+		'Behaviour-faithful Скала-ЕПГУ archive builder (req.xml + attach.xml + ' +
+		'до 6 scans + ГОСТ-shaped placeholder signatures). Real КриптоПро CSP ' +
+		'integration в M8.B (требует МВД ОВМ onboarding agreement + commercial license).',
+})
 const migrationRegistrationFactory = createMigrationRegistrationFactory({
 	sql,
 	transport: epguTransport,
 	rkl: rklAdapter,
+	archive: archiveBuilder,
 	idGen: () => newId('migrationRegistration'),
 })
 // V1 demo: stub payment provider (synchronous-success autocapture mirror of SBP).
