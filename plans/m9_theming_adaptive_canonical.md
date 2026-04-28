@@ -1812,7 +1812,81 @@ cognitive-load drop-in API parity.
 flows покрыты, drop-in API без consumer changes, mobile drag-handle
 + desktop close-button preserved per primitive.
 
-### M9.5 Phase D — pending
+### M9.5 Phase D — WebAuthn passkey ✅ done 2026-04-29
+
+**Commit:** `cb31acb`
+
+Per plan §M9.4 Risk #4 mitigation — passkey deferred к M9.5 для bundling
+с visual polish. Now delivered с modern 2026/2027 stack.
+
+**Empirical research correction (April 2026):**
+- Better Auth 1.6.7 stock — `passkey()` plugin NOT exported via main pkg
+  (verified empirically via tarball inspection + plugins/index.d.mts grep)
+- **Canonical:** `@better-auth/passkey@1.6.9` separate npm package
+  (per better-auth.com/docs/plugins/passkey)
+- Underlying: `@simplewebauthn/server@13.2.3` + `browser@13.2.2`
+  (WebAuthn L3 spec, current 2026 baseline)
+- Plan canon claim «passkey() plugin built-in» был outdated — fixed
+  с empirical npm view evidence
+
+**Delivered:**
+
+- **YDB migration `0043_passkey_better_auth.sql`:**
+  - `passkey` table (id typeid pk_*, name nullable, publicKey, userId,
+    credentialID UNIQUE, counter Uint64 anti-replay, deviceType,
+    backedUp Bool, transports nullable, createdAt)
+  - 2 secondary indexes: ixPasskeyUser + ixPasskeyCredential
+
+- **Backend (apps/backend):**
+  - `auth.ts` wired `passkey()` plugin с canonical config:
+    rpName: 'HoReCa Sochi' + rpID: env.HOST + origin: env.PUBLIC_BASE_URL
+  - `better-auth-adapter.ts` extended COLUMN_TYPES для passkey model
+  - `BA_MODEL_TO_ENTITY` + `shared/ids.ts` — added passkey → 'passkey'
+    mapping для typeid `pk_*` generator
+
+- **Frontend (apps/frontend):**
+  - `auth-client.ts` added `passkeyClient()` к plugins
+  - NEW `PasskeyEnrollButton` (Fingerprint icon + UA-derived deviceName
+    fallback + toast feedback + loader spinner)
+  - NEW `PasskeySigninButton` (passwordless signin path)
+  - Wired в `sign-in-form.tsx` под password с «или» divider — parallel
+    auth path canonical 2026 UX
+
+- **Tests:** +12 strict (Enroll 7 + Signin 5) covering render + click
+  flow + onSuccess + error paths + custom name override
+
+**Quality gates:**
+- pnpm lint: 0/0
+- pnpm typecheck: clean
+- pnpm migrate: 43 migrations applied (incl 0043 passkey table)
+- frontend test:run: **957 passed** (55 files; +12 passkey, 0 regressions)
+- e2e bundled: 15/15 (smoke + axe incl /login axe pass с new
+  PasskeySigninButton — Fingerprint icon + secondary variant + WCAG
+  contrast preserved)
+- pre-commit lefthook 5/5 ✅
+- Live screenshot evidence: `16-login-light.png` показывает «Войти»
+  Sochi-blue + «или» divider + «Войти через passkey» с Fingerprint
+
+**Modern 2026/2027 patterns:**
+- WebAuthn Level 3 spec (W3C 2026 PR-stage)
+- Conditional Mediation UI ready (autofill-style enrollment hints)
+- Platform attachment (Touch/Face ID, Windows Hello, Android fingerprint)
+- `attestation: 'none'` privacy-preserving (no AAGUID disclosure)
+- Phishing-resistant via origin binding (rpID + origin enforced)
+- 152-ФЗ compliant: биометрия НЕ покидает device, server stores public
+  key + counter only
+
+**Real-device manual smoke (deferred к operator post-deploy):**
+- Touch ID на Mac (Safari 17+ / Chrome 130+)
+- Face ID на iPhone iOS 18+
+- Windows Hello на Windows 11
+- Android fingerprint via Chrome
+- Cross-device hybrid via iCloud Keychain QR
+
+**Senior canon: 0 residuals** для Phase D — все plan §M9.4 deferred items
+delivered (migration + adapter extend + plugin + client + 2 buttons).
+Real-device smoke документирован как operator manual verification (cannot
+автоматизировать без physical hardware authenticator).
 
 ### M9.6 — Web Vitals + a11y polish — pending
 
@@ -1832,7 +1906,7 @@ flows покрыты, drop-in API без consumer changes, mobile drag-handle
 | M9.5 Phase A | 13 + 0 (senior-pass v2) | `7d30605` + `2bd1dd4` + `4825e9e` | ✅ visual foundation done (Sochi-blue + 1.250 modular + tonal dark elevation + Skeleton shimmer + EmptyState/ErrorState sweep ×9 sites + page cross-fade + @starting-style + axe gate 20/20 + 18 live smoke screenshots) |
 | M9.5 Phase B | 39 (palette 5+viewMode 6+fit 7+date 5+guard 2+tooltip 9+Calendar 5) | `d0ca7c0` + `cadaa2b` + `bfe72d6` + `9263424` + `f68c4b8` | ✅ Bnovo-parity + native popover tooltip + 0 residuals |
 | M9.5 Phase C | 8 | `ff66c96` | ✅ Sheet→Drawer mobile swap (ResponsiveSheet + 4 feature sheets) |
-| M9.5 Phase D | — | — | pending (passkey) |
+| M9.5 Phase D | 12 (Enroll 7 + Signin 5) | `cb31acb` | ✅ WebAuthn passkey (@better-auth/passkey 1.6.9 + @simplewebauthn 13.x + YDB 0043 + Enroll/Signin buttons + login wire) |
 | M9.6 | — | — | pending |
 | M9.7 | — | — | pending |
-| **Cumulative** | **143** | **14 + 1 chore + 3 docs** | **6/9 sub-phases done (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
+| **Cumulative** | **155** | **15 + 1 chore + 3 docs** | **7/9 sub-phases done (M9.5 Phase D passkey complete; M9.6 web-vitals + M9.7 media swap pending) (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
