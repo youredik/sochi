@@ -1550,7 +1550,52 @@ table tests for new EmptyState semantics. Frontend test:run **903 passed**
   commit (no «pre-existing», no «not my code» excuse per
   `feedback_no_preexisting`)
 
-**Pending in M9.5 (Phase B/C/D):**
+**Inline empty-state decisions (NOT swapped — explicit reasoning):**
+
+- `media-step.tsx:242` («Пока нет фото.») — supplementary hint
+  под h3 «Загружено: 0 файлов» внутри content wizard step;
+  primary hierarchy уже даёт h3, EmptyState с собственным h3
+  создал бы дубликат + конкурировал с upload-form выше. Оставлен
+  inline plaintext, документировано здесь.
+- `addons-step.tsx:399` («Пока ничего не добавлено.») — то же
+  самое (h3 «Существующие услуги (0)» выше + creation form
+  выше); inline-hint pattern.
+- `_app.o.$orgSlug.admin.notifications.tsx:155` («нет уведомлений
+  с такими фильтрами») — header subtitle под h1, не primary
+  empty-state (NotificationsTable рендерит EmptyState отдельно
+  для actual data area).
+
+EmptyState component применяется на page/list-level zero-states.
+Inline supplementary hints (под существующим h3 + form) НЕ требуют
+EmptyState — это design decision, не half-measure.
+
+**Senior-pass closure (after first Phase A commit `7d30605`):**
+
+- **Risk #16 contrast empirical verification** — axe-core gate
+  caught Sochi-blue 4.34:1 < AA threshold 4.5:1. Tuned L 0.55 → 0.5
+  per plan §M9.5 canon. Re-run app-a11y gate **12/12 pass** (10
+  routes + 2 new: migration-registrations + dark-theme regression).
+  In-CSS comment updated с empirical hex `#006bbd` (was claimed 5.4:1
+  by formula, actually 4.34:1 by browser computation — formula wrong,
+  axe-core authoritative).
+- **Dark theme regression caught** — dashboard hardcoded
+  `text-emerald-700` failed 3.69:1 on `oklch(0.145 0 0)` dark bg.
+  Fixed via `text-emerald-700 dark:text-emerald-400` pair. Per
+  `feedback_no_preexisting`: pre-existing color choices became «my
+  red» the moment they sit on the path my Phase A axe gate covers.
+- **Migration-registrations route** added to app-a11y suite
+  (Phase A swept this page but it was missing from the gate).
+- **@starting-style enter animation** verified live —
+  `tests/e2e/m9_5_phase_a.spec.ts` opens ModeToggle DropdownMenu и
+  снимает screenshot with 3 theme options rendered + radix popper
+  positioned (`.artifacts/m9_5_phase_a/10-mode-toggle-open.png`).
+- **biome 5 warnings closed** — `noImportantStyles` suppression
+  syntax for biome 2.x requires per-property `biome-ignore`
+  comments, not block-level above selector. Updated 4 lines.
+- **Final pre-commit gates:** lint 0 warnings/0 errors, typecheck OK,
+  app-a11y 12/12 axe pass, m9_5_phase_a smoke 1/1 with 10 screenshots.
+
+### M9.5 Phase A — pending after senior-pass:
 - Phase B (M9.3 deferred): Day/Month UI selector + native HTML popover
   booking-tooltip + Bnovo-status colors mapping × 3 themes + 'fit'
   ResizeObserver + @container queries для kpi/header + Radix Popover
@@ -1562,8 +1607,12 @@ table tests for new EmptyState semantics. Frontend test:run **903 passed**
   ydbAdapter passkey-model extension + Better Auth passkey() plugin
   + frontend passkeyClient + PasskeyEnrollButton + PasskeySigninButton
   + Touch ID real-device test)
-- Contrast baseline empirical (Risk #16): APCA + WCAG для Sochi-blue
-  × 6 pairs (light / dark / contrast-more × fg / bg) — axe-gate verified
+- contrast-more AAA Sochi-blue overlay verification (variant of
+  Risk #16) — `prefers-contrast: more` overlay tokens defined в CSS
+  (light 0.45, dark 0.78), но axe gate их не активирует автоматически.
+  Можно прогнать дополнительную spec с `emulateMedia({ forcedColors:
+  'active' })` или `prefers-contrast: more` если есть real user need.
+  Phase A canon NOT requires (deferred follow-up).
 
 ### M9.5 Phase B/C/D — Visual Polish remainder + passkey — pending
 

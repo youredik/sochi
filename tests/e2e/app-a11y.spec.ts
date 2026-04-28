@@ -64,6 +64,40 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		await runAxe(page, 'admin-tax-tourism')
 	})
 
+	test('/o/{slug}/admin/migration-registrations passes WCAG 2.2 AA (M9.5 Phase A)', async ({
+		page,
+	}) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+		await page.goto('/o/' + page.url().match(/\/o\/([^/]+)/)![1] + '/admin/migration-registrations')
+		await expect(
+			page.getByRole('heading', { name: /Миграционный учёт МВД/, level: 1 }),
+		).toBeVisible()
+		// Empty-state EmptyState (M9.5 Phase A) рендерится при первом заходе —
+		// scan включает ReceiptIcon badge + h3 + description.
+		await runAxe(page, 'admin-migration-registrations')
+	})
+
+	test('M9.5 Phase A dark theme — dashboard + receivables pass WCAG 2.2 AA', async ({ page }) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+		const slug = page.url().match(/\/o\/([^/]+)/)![1]
+		// Force dark theme via class toggle (theme-store читает Zustand persist;
+		// безопаснее напрямую apply'ить .dark на html для axe scan, без зависимости
+		// от ThemeProvider race).
+		await page.evaluate(() => document.documentElement.classList.add('dark'))
+		// Wait for any in-flight view-transition snapshot to clear.
+		await page.waitForTimeout(800)
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+		await runAxe(page, 'dashboard-dark')
+
+		await page.goto(`/o/${slug}/receivables`)
+		await page.evaluate(() => document.documentElement.classList.add('dark'))
+		await page.waitForTimeout(800)
+		await expect(page.getByRole('heading', { name: /Дебиторская задолженность/ })).toBeVisible()
+		await runAxe(page, 'receivables-dark')
+	})
+
 	test('/o/{slug}/admin/notifications passes WCAG 2.2 AA (M7.fix.3.d)', async ({ page }) => {
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)

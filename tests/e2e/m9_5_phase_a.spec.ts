@@ -109,5 +109,15 @@ test('M9.5 Phase A visual smoke — every touched route, light + dark', async ({
 	await forceDark(page)
 	await page.screenshot({ path: `${OUT}/09-admin-tax-dark.png`, fullPage: true })
 
+	// --- Open ModeToggle DropdownMenu — verifies @starting-style enter animation
+	// + radix Popper portal renders against light theme baseline. Screenshot
+	// captures rendered dropdown с 3 theme options live. ---
+	await page.evaluate(() => document.documentElement.classList.remove('dark'))
+	await page.goto(`/o/${slug}/`)
+	await settle(page)
+	await page.getByRole('button', { name: /Тема оформления/ }).click()
+	await page.waitForTimeout(300)
+	await page.screenshot({ path: `${OUT}/10-mode-toggle-open.png`, fullPage: true })
+
 	expect(consoleErrors, `unexpected console errors: ${consoleErrors.join('\n')}`).toEqual([])
 })

@@ -19,12 +19,13 @@
 	--card-foreground: oklch(0.145 0 0);
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.145 0 0);
-	/* M9.5 Sochi-blue brand identity (Round 5 research canon).
-	 * `oklch(0.55 0.18 240)` — Sochi sky-blue. Empirical contrast verify:
-	 * на white-foreground (oklch 0.985) ≈ 5.4:1 WCAG AA normal-text pass.
-	 * Risk #16 mitigation: axe-core gate verify в M9.5 commit DoD. Если fail —
-	 * tune L (0.55 → 0.50 deeper) до AA pass до commit. */
-	--primary: oklch(0.55 0.18 240);
+	/* M9.5 Sochi-blue brand identity (Round 5 research canon + Risk #16 fix).
+	 * `oklch(0.50 0.18 240)` — Sochi sky-blue tuned deeper. Initial L=0.55
+	 * gave empirical contrast 4.34:1 on primary-foreground oklch(0.985 0 0)
+	 * — FAIL WCAG 2.2 AA normal-text 4.5:1 (axe-core caught 2026-04-28).
+	 * Tuned per plan §M9.5: L 0.55 → 0.50 deeper. Hex ≈ #006bbd → 5.0:1+ AA.
+	 * Verified empirically via app-a11y axe gate. */
+	--primary: oklch(0.5 0.18 240);
 	--primary-foreground: oklch(0.985 0 0);
 	--secondary: oklch(0.97 0 0);
 	--secondary-foreground: oklch(0.205 0 0);
@@ -267,16 +268,20 @@ body {
  * без animation duration). Здесь global blanket для ВСЕХ animations
  * (включая Vaul drawer, View Transitions, Tailwind animate-* classes). */
 @media (prefers-reduced-motion: reduce) {
-	/* biome-ignore lint/complexity/noImportantStyles: WCAG 2.3.3 override
-	 * canon — motion-sensitive users должны trump component-level animation
-	 * declarations (Vaul drawer transform, Tailwind animate-*, View Transitions).
-	 * !important здесь intentional блокирующий cascade для accessibility. */
+	/* WCAG 2.3.3 override canon — motion-sensitive users должны trump
+	 * component-level animation declarations (Vaul drawer transform,
+	 * Tailwind animate-*, View Transitions API). !important здесь
+	 * intentional блокирующий cascade для accessibility. */
 	*,
 	*::before,
 	*::after {
+		/* biome-ignore lint/complexity/noImportantStyles: a11y override */
 		animation-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: a11y override */
 		animation-iteration-count: 1 !important;
+		/* biome-ignore lint/complexity/noImportantStyles: a11y override */
 		transition-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: a11y override */
 		scroll-behavior: auto !important;
 	}
 	.skeleton-shimmer {
