@@ -1,0 +1,24 @@
+-- 0042_organization_profile_mode.sql — M8.A.demo
+-- per project_demo_strategy.md (always-on demo as permanent product surface)
+-- + project_north_star_canonical.md (tenant.mode is canonical architecture).
+--
+-- Adds `mode` column to organizationProfile. Two values:
+--   - 'production' (default) — real tenant; receives Live adapters
+--     (epgu.scala, rkl.kontur, vision.yandex, payment.yookassa, ...).
+--     В M8.A.5 timeframe Live адаптеры ещё не написаны → production
+--     тенантам показываются Mock'и с явным /health/adapters warning, но
+--     route resolution готов к swap'у.
+--   - 'demo' — acquisition showcase tenant; receives Mock adapters
+--     ВСЕГДА. Used для public demo deployment где prospects кликают
+--     «попробовать» → попадают в живой PMS с заранее seeded гостями /
+--     бронированиями / шахматкой. Mock pipeline gives 0₽ API cost +
+--     no real МВД ОВМ submissions during demo sessions.
+--
+-- Default 'production' (NOT 'demo') — safer для existing tenants.
+-- New demo tenants explicitly set mode='demo' через seeder script.
+--
+-- Application-level Zod validation enforces 2 valid values; DB column
+-- is permissive Utf8 для forward-compat (e.g. future 'sandbox' mode для
+-- staging tenants с mixed Mock+Live).
+
+ALTER TABLE organizationProfile ADD COLUMN mode Utf8;
