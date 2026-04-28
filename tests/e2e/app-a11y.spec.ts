@@ -78,6 +78,21 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		await runAxe(page, 'admin-migration-registrations')
 	})
 
+	test('M9.5 Phase B prefers-contrast: more — dashboard + chessboard pass WCAG 2.2 AAA Sochi-blue overlay', async ({
+		page,
+	}) => {
+		await page.emulateMedia({ contrast: 'more' })
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+		const slug = page.url().match(/\/o\/([^/]+)/)![1]
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+		await runAxe(page, 'dashboard-contrast-more')
+
+		await page.goto(`/o/${slug}/grid`)
+		await expect(page.getByRole('grid')).toBeVisible()
+		await runAxe(page, 'chessboard-contrast-more')
+	})
+
 	test('M9.5 Phase A dark theme — dashboard + receivables pass WCAG 2.2 AA', async ({ page }) => {
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)

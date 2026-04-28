@@ -63,10 +63,14 @@ const PAGE_STEP = 5
 
 export function Chessboard() {
 	const windowDaysPref = useChessboardPrefsStore((state) => state.windowDays)
+	const viewMode = useChessboardPrefsStore((state) => state.viewMode)
 	// Outer container (M9.5 Phase B @container query host + fit measurement).
 	const containerRef = useRef<HTMLElement>(null)
 	const fitDays = useFitWindowDays(containerRef)
-	const windowDays = windowDaysPref === 'fit' ? fitDays : windowDaysPref
+	// Phase B viewMode binding: 'month' forces 30-day window (Bnovo-parity
+	// monthly aggregation) regardless of windowDays pref. 'day' uses pref.
+	// Result: ToggleGroup is functional, NOT decorative UI.
+	const windowDays = viewMode === 'month' ? 30 : windowDaysPref === 'fit' ? fitDays : windowDaysPref
 	const [windowFrom, setWindowFrom] = useState(todayIso)
 	const windowTo = useMemo(() => addDays(windowFrom, windowDays - 1), [windowFrom, windowDays])
 	const dates = useMemo(() => iterateDates(windowFrom, windowTo), [windowFrom, windowTo])
@@ -261,7 +265,7 @@ export function Chessboard() {
 			) : (
 				<div
 					ref={gridRef}
-					className="border-border relative overflow-x-auto rounded-lg border"
+					className="border-border relative overflow-x-auto rounded-lg border snap-x snap-mandatory @md/chessboard:snap-none"
 					role="grid"
 					aria-rowcount={roomTypes.length + 1}
 					aria-colcount={dates.length + 1}
@@ -298,7 +302,7 @@ export function Chessboard() {
 							{dates.map((d, i) => (
 								<div
 									key={d}
-									className={`border-border bg-muted sticky top-0 z-10 border-b p-2 text-center font-medium ${
+									className={`border-border bg-muted sticky top-0 z-10 snap-start border-b p-2 text-center font-medium ${
 										i === todayIdx ? 'bg-blue-100 text-blue-900' : ''
 									}`}
 									role="columnheader"
