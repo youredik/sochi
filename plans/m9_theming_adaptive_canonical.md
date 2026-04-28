@@ -1993,6 +1993,28 @@ flow через Yandex Object Storage S3-compat, modern 2026/2027 stack.
 автоматизировать без real Yandex Cloud credentials + bucket — same
 pattern как Phase D Touch ID).
 
+### M9.7 + Phase D senior-pass v3 ✅ done 2026-04-29
+
+**Commit:** `ee1e039`
+
+User prompt «M9 идеален?» поймал 2 critical residuals — eradicated:
+
+**1. M9.7 frontend integration:** `media-step.tsx` wizard всё ещё
+использовал legacy /upload. Now `useUploadMedia` adaptive: production
+split-flow (sign → PUT direct → register → process) с auto-fallback на
+multipart `/upload` когда backend Stub returns `stub.media.local` URL
+(sandbox dev parity). Single hook, runtime adaptation, zero-config
+switching. Modern: fetch + browser Image() для dimensions, no AWS SDK
+на frontend.
+
+**2. PasskeyEnrollButton wired:** new `/o/$orgSlug/account/security`
+TanStack Router route с PasskeyEnrollButton + registered passkeys
+list (`authClient.useListPasskeys()` nanostore atom) + per-passkey
+delete + a11y header + 152-ФЗ disclaimer. Knip warning eliminated.
+
+Quality gates: lint 0/0 + typecheck + 967/967 frontend tests +
+lefthook 5/5 ✅.
+
 ### M9.6 — Media upload swap — pending
 
 ### M9.7 — Pre-done audit — pending
