@@ -1444,7 +1444,128 @@ Live status per sub-phase. Updated после каждого commit. Read для
   iPhone Safari iOS 26+ → Share → «На экран Домой» (default ON since 2025-09 Apple release).
   Chromium desktop → URL bar Install button. PWA standalone display verified.
 
-### M9.5 — Visual Polish + (deferred) Sheet→Drawer swap — pending
+### M9.5 Phase A — Visual foundation 🟨 done 2026-04-28
+
+**Commit:** `7d30605`
+
+**Delivered:**
+
+- Sochi-blue brand identity applied (index.css):
+  - `--primary: oklch(0.55 0.18 240)` light / `oklch(0.7 0.16 240)` dark
+  - `prefers-contrast: more` AAA overlay (light 0.45 / dark 0.78)
+- Modular typography ratio 1.250 (major-third) с Cyrillic line-heights
+  (prose 1.6, headings 1.2-1.3, UI 1.5) + clamp() fluid sizing для
+  text-2xl/3xl/4xl
+- 4-level Linear-style tonal dark elevation (shadow-card / popover /
+  drawer / dialog) — NOT M3 surface-tint
+- Skeleton shimmer linear-gradient sweep + .skeleton-shimmer utility,
+  components/ui/skeleton.tsx переписан
+- Global `prefers-reduced-motion: reduce` override
+  (animation-duration: 0.01ms !important на * — accessibility canon)
+- `@starting-style` для Sheet/Dialog enter animations (Baseline 2024)
+- main.tsx: `defaultViewTransition: true` в TanStack Router createRouter
+  (page cross-fade)
+
+**NEW primitives:**
+
+- `components/empty-state.tsx` — lucide icon → h3 title → muted
+  description → optional ReactNode action slot
+- `components/error-state.tsx` — `role=alert` + AlertCircleIcon +
+  h3 title + collapsible `<details>` для error.message + optional
+  retry Button
+
+**EmptyState/ErrorState production sweep — 9 sites:**
+
+- chessboard.tsx — error → ErrorState; zero roomTypes → EmptyState
+- receivables-table.tsx — zero rows → EmptyState (ReceiptIcon)
+- notifications-table.tsx — zero items → EmptyState (MailIcon)
+- migration-registrations-table.tsx — zero items → EmptyState (FileTextIcon)
+- folio-lines-table.tsx — zero lines → EmptyState (ListIcon)
+- folio-payments-table.tsx — zero payments → EmptyState (CreditCardIcon)
+- tax-rows-table.tsx — zero rows → EmptyState (BedDoubleIcon)
+- tax-monthly-table.tsx — zero monthly → EmptyState (CalendarRangeIcon, py-6)
+- 5 route error panels swapped destructive Alert → ErrorState с retry:
+  receivables / admin.notifications / admin.migration-registrations /
+  bookings folio / admin.tax
+
+**Tests:** +13 new strict (EmptyState 6 + ErrorState 7) + 2 updated
+table tests for new EmptyState semantics. Frontend test:run **903 passed**
+(48 files), 0 regressions vs 890 baseline.
+
+**Visual smoke spec:** `tests/e2e/m9_5_phase_a.spec.ts`
+- Auto-runs auth.setup → captures 9 screenshots (dashboard, chessboard,
+  receivables, notifications, migration-registrations, admin-tax —
+  light; dashboard, receivables, admin-tax — dark)
+- `settle()` helper waits 2× rAF + 400ms для cross-document view-transition
+  pseudo-element clear (initial smoke captured washed-out cards as
+  false-positive contrast bug; fixed by 800ms post-class-toggle wait
+  for transition snapshot to clear before screenshot — empirical fix
+  attempt before declaring blocker, lesson #3)
+- Console errors fail spec (clean run)
+
+**Quality gates:**
+- typecheck OK
+- biome 5 cosmetic warnings (`noImportantStyles` suppression-comment
+  parser mismatch on `@media prefers-reduced-motion` block — pre-
+  existing biome 2.x issue, intentional !important для WCAG 2.3.3)
+- 0 lint errors / 0 typecheck errors
+- pre-commit lefthook ✅ all 5 checks (sherif / biome / depcruise /
+  knip / typecheck)
+- test:serial root: **3692 passed | 1 skipped** (vs 3691 baseline → +1
+  EmptyState component-level coverage)
+- **Live post-auth visual evidence:** 9 screenshots, all touched
+  routes verified light + dark, Sochi-blue brand visible (HoReCa
+  monogram + buttons), Skeleton shimmer animated, EmptyState icon
+  badge muted-circle + h3 + description + optional button rendering
+  per design canon, ErrorState role=alert + collapsible details
+  rendering correctly
+- **Known flake observed (NOT regression):** payment.repo.test.ts
+  U4 UNIQUE-race surfaced generic `Error: Transaction failed.` vs
+  `PaymentIdempotencyKeyTakenError` under parallel YDB load on first
+  test:serial run; clean on isolated rerun + clean on full re-run
+  test:serial. Root cause: catch-block `err.cause.code === 400120`
+  narrow check; YDB driver may surface concurrency race с code
+  400110 (ABORTED) или nested cause level. Plan: broaden translation
+  в follow-up commit with helper `isYdbUniqueConflict(err)` walking
+  cause chain + checking message «Conflict with existing key».
+  NOT bundled в Phase A — out of scope. Per `feedback_no_preexisting`:
+  documented + tracked, NOT ignored.
+
+**Lessons applied (recurring patterns):**
+
+- #1 — live post-auth visual smoke = mandatory DoD per sub-phase
+  (auto e2e spec, NOT manual screenshot review)
+- #2 — actualization-commit auto после sub-phase commit
+  (this §17 update)
+- #3 — empirical fix attempts before declaring blocker
+  (washed-out cards → debug → 800ms transition wait → green smoke;
+  not «looks broken on dark theme»)
+- #4 — honest senior self-audit pre-commit caught half-measure
+  — initially called Phase A done after route-level Alert → ErrorState
+  swap, smoke screenshots revealed 2 sub-component empty-states
+  still plaintext («Уведомлений с такими фильтрами нет» +
+  «Нет регистраций миграционного учёта»); senior recall on user
+  prompt «Вспомни кто ты и делай соответственно» → full inventory
+  grep `length === 0` → 8 sub-tables found → all swapped в same
+  commit (no «pre-existing», no «not my code» excuse per
+  `feedback_no_preexisting`)
+
+**Pending in M9.5 (Phase B/C/D):**
+- Phase B (M9.3 deferred): Day/Month UI selector + native HTML popover
+  booking-tooltip + Bnovo-status colors mapping × 3 themes + 'fit'
+  ResizeObserver + @container queries для kpi/header + Radix Popover
+  calendar picker
+- Phase C (M9.2 deferred): Sheet → Drawer mobile swap (ResponsiveSheet
+  wrapper + 3 feature sheets: refund-sheet, mark-paid-sheet,
+  notification-detail-sheet)
+- Phase D (M9.4 deferred): passkey (manual YDB migration 0043 +
+  ydbAdapter passkey-model extension + Better Auth passkey() plugin
+  + frontend passkeyClient + PasskeyEnrollButton + PasskeySigninButton
+  + Touch ID real-device test)
+- Contrast baseline empirical (Risk #16): APCA + WCAG для Sochi-blue
+  × 6 pairs (light / dark / contrast-more × fg / bg) — axe-gate verified
+
+### M9.5 Phase B/C/D — Visual Polish remainder + passkey — pending
 
 ### M9.6 — Web Vitals + a11y polish — pending
 
@@ -1461,7 +1582,8 @@ Live status per sub-phase. Updated после каждого commit. Read для
 | M9.2 | 14 | `7b5bbd2` | ✅ |
 | M9.3 | 19 | `25d05b8` | 🟨 first-iter (Day/Month UI + popover + status mapping → M9.5) |
 | M9.4 | 10 | `5ff7a76` | ✅ PWA done (manifest + SW + icons + InstallPrompt). Passkey 🟡 deferred → M9.5 (per Risk #4) |
-| M9.5 | — | — | pending (Visual Polish + deferred: Sheet→Drawer + passkey + Bnovo-status + Day/Month UI + popover + @container + ResizeObserver) |
+| M9.5 Phase A | 13 | `7d30605` | 🟨 visual foundation done (Sochi-blue + 1.250 modular + tonal dark elevation + Skeleton shimmer + EmptyState/ErrorState sweep ×9 sites + page cross-fade + @starting-style) |
+| M9.5 Phase B/C/D | — | — | pending (Day/Month UI + popover + status mapping + fit + @container + calendar picker + Sheet→Drawer + passkey) |
 | M9.6 | — | — | pending |
 | M9.7 | — | — | pending |
-| **Cumulative** | **75** | **5 + 1 chore + 1 docs** | **4/9 sub-phases done (M9.3 first-iter, M9.4 PWA done passkey deferred); +14 live post-auth visual screenshots + 10 PWA smoke checks; +9 self-audit iterations с 11 cumulative hallucinations honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` docs)** |
+| **Cumulative** | **88** | **6 + 1 chore + 1 docs** | **4.5/9 sub-phases done (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A done; M9.5 Phase B/C/D + passkey pending); +23 live post-auth visual screenshots + 10 PWA smoke checks; +10 self-audit iterations с 12 cumulative hallucinations + half-measure caught honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` docs)** |
