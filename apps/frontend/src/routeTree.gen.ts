@@ -22,6 +22,7 @@ import { Route as AppOOrgSlugReceivablesRouteImport } from './routes/_app.o.$org
 import { Route as AppOOrgSlugGridRouteImport } from './routes/_app.o.$orgSlug.grid'
 import { Route as AppOOrgSlugAdminTaxRouteImport } from './routes/_app.o.$orgSlug.admin.tax'
 import { Route as AppOOrgSlugAdminNotificationsRouteImport } from './routes/_app.o.$orgSlug.admin.notifications'
+import { Route as AppOOrgSlugAdminMigrationRegistrationsRouteImport } from './routes/_app.o.$orgSlug.admin.migration-registrations'
 import { Route as AppOOrgSlugPropertiesPropertyIdContentRouteImport } from './routes/_app.o.$orgSlug.properties.$propertyId.content'
 import { Route as AppOOrgSlugBookingsBookingIdFoliosFolioIdRouteImport } from './routes/_app.o.$orgSlug.bookings.$bookingId.folios.$folioId'
 
@@ -90,6 +91,12 @@ const AppOOrgSlugAdminNotificationsRoute =
     path: '/admin/notifications',
     getParentRoute: () => AppOOrgSlugRoute,
   } as any)
+const AppOOrgSlugAdminMigrationRegistrationsRoute =
+  AppOOrgSlugAdminMigrationRegistrationsRouteImport.update({
+    id: '/admin/migration-registrations',
+    path: '/admin/migration-registrations',
+    getParentRoute: () => AppOOrgSlugRoute,
+  } as any)
 const AppOOrgSlugPropertiesPropertyIdContentRoute =
   AppOOrgSlugPropertiesPropertyIdContentRouteImport.update({
     id: '/properties/$propertyId/content',
@@ -114,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
+  '/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   '/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
   '/o/$orgSlug/properties/$propertyId/content': typeof AppOOrgSlugPropertiesPropertyIdContentRoute
@@ -129,6 +137,7 @@ export interface FileRoutesByTo {
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/o/$orgSlug': typeof AppOOrgSlugIndexRoute
+  '/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   '/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
   '/o/$orgSlug/properties/$propertyId/content': typeof AppOOrgSlugPropertiesPropertyIdContentRoute
@@ -147,6 +156,7 @@ export interface FileRoutesById {
   '/_app/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/_app/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/_app/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
+  '/_app/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   '/_app/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/_app/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
   '/_app/o/$orgSlug/properties/$propertyId/content': typeof AppOOrgSlugPropertiesPropertyIdContentRoute
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
     | '/o/$orgSlug/'
+    | '/o/$orgSlug/admin/migration-registrations'
     | '/o/$orgSlug/admin/notifications'
     | '/o/$orgSlug/admin/tax'
     | '/o/$orgSlug/properties/$propertyId/content'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
     | '/o/$orgSlug'
+    | '/o/$orgSlug/admin/migration-registrations'
     | '/o/$orgSlug/admin/notifications'
     | '/o/$orgSlug/admin/tax'
     | '/o/$orgSlug/properties/$propertyId/content'
@@ -197,6 +209,7 @@ export interface FileRouteTypes {
     | '/_app/o/$orgSlug/receivables'
     | '/_app/o/$orgSlug/setup'
     | '/_app/o/$orgSlug/'
+    | '/_app/o/$orgSlug/admin/migration-registrations'
     | '/_app/o/$orgSlug/admin/notifications'
     | '/_app/o/$orgSlug/admin/tax'
     | '/_app/o/$orgSlug/properties/$propertyId/content'
@@ -303,6 +316,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugAdminNotificationsRouteImport
       parentRoute: typeof AppOOrgSlugRoute
     }
+    '/_app/o/$orgSlug/admin/migration-registrations': {
+      id: '/_app/o/$orgSlug/admin/migration-registrations'
+      path: '/admin/migration-registrations'
+      fullPath: '/o/$orgSlug/admin/migration-registrations'
+      preLoaderRoute: typeof AppOOrgSlugAdminMigrationRegistrationsRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
+    }
     '/_app/o/$orgSlug/properties/$propertyId/content': {
       id: '/_app/o/$orgSlug/properties/$propertyId/content'
       path: '/properties/$propertyId/content'
@@ -325,6 +345,7 @@ interface AppOOrgSlugRouteChildren {
   AppOOrgSlugReceivablesRoute: typeof AppOOrgSlugReceivablesRoute
   AppOOrgSlugSetupRoute: typeof AppOOrgSlugSetupRoute
   AppOOrgSlugIndexRoute: typeof AppOOrgSlugIndexRoute
+  AppOOrgSlugAdminMigrationRegistrationsRoute: typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   AppOOrgSlugAdminNotificationsRoute: typeof AppOOrgSlugAdminNotificationsRoute
   AppOOrgSlugAdminTaxRoute: typeof AppOOrgSlugAdminTaxRoute
   AppOOrgSlugPropertiesPropertyIdContentRoute: typeof AppOOrgSlugPropertiesPropertyIdContentRoute
@@ -336,6 +357,8 @@ const AppOOrgSlugRouteChildren: AppOOrgSlugRouteChildren = {
   AppOOrgSlugReceivablesRoute: AppOOrgSlugReceivablesRoute,
   AppOOrgSlugSetupRoute: AppOOrgSlugSetupRoute,
   AppOOrgSlugIndexRoute: AppOOrgSlugIndexRoute,
+  AppOOrgSlugAdminMigrationRegistrationsRoute:
+    AppOOrgSlugAdminMigrationRegistrationsRoute,
   AppOOrgSlugAdminNotificationsRoute: AppOOrgSlugAdminNotificationsRoute,
   AppOOrgSlugAdminTaxRoute: AppOOrgSlugAdminTaxRoute,
   AppOOrgSlugPropertiesPropertyIdContentRoute:

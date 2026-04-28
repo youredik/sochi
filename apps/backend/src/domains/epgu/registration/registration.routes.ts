@@ -52,6 +52,25 @@ export function createMigrationRegistrationRoutesInner(f: MigrationRegistrationF
 	const { repo, service } = f
 	return new Hono<AppEnv>()
 		.get(
+			'/migration-registrations',
+			requirePermission({ migrationRegistration: ['read'] }),
+			zValidator(
+				'query',
+				z.object({
+					limit: z
+						.string()
+						.regex(/^\d+$/)
+						.transform((v) => Number(v))
+						.optional(),
+				}),
+			),
+			async (c) => {
+				const { limit } = c.req.valid('query')
+				const data = await repo.listForTenant(c.var.tenantId, limit ?? 100)
+				return c.json({ data }, 200)
+			},
+		)
+		.get(
 			'/bookings/:bookingId/migration-registrations',
 			zValidator('param', bookingIdParamSchema),
 			requirePermission({ migrationRegistration: ['read'] }),

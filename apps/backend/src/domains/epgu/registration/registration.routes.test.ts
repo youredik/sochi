@@ -110,6 +110,7 @@ function buildFactory(opts: FakeFactoryOpts = {}): MigrationRegistrationFactory 
 				({ ...FAKE_REGISTRATION, ...input }) as typeof FAKE_REGISTRATION,
 			getById: async () => ('getReturns' in opts ? (opts.getReturns ?? null) : FAKE_REGISTRATION),
 			listByBooking: async () => [FAKE_REGISTRATION],
+			listForTenant: async () => [FAKE_REGISTRATION],
 			listPendingPoll: async () => [FAKE_REGISTRATION],
 			updateAfterReserve: async () => undefined,
 			updateAfterPoll: async () => undefined,
@@ -148,6 +149,13 @@ describe('migration-registrations routes — RBAC matrix', () => {
 	test('[R1] staff GET list → 200', async () => {
 		const res = await buildApp('staff').request('/api/v1/bookings/book-1/migration-registrations')
 		expect(res.status).toBe(200)
+	})
+
+	test('[R1b] staff GET tenant-wide list → 200', async () => {
+		const res = await buildApp('staff').request('/api/v1/migration-registrations')
+		expect(res.status).toBe(200)
+		const body = (await res.json()) as { data: unknown[] }
+		expect(Array.isArray(body.data)).toBe(true)
 	})
 
 	test('[R2] staff GET single → 200', async () => {

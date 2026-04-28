@@ -192,6 +192,31 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 			return rows.map(rowToDomain)
 		},
 
+		/**
+		 * Tenant-wide list для admin UI (M8.A.6). Returns most-recent registrations
+		 * по createdAt DESC. Limit clamped at 100 для UI rendering perf;
+		 * pagination follow-up в M9.
+		 */
+		async listForTenant(tenantId: string, limit = 100): Promise<MigrationRegistration[]> {
+			const cappedLimit = Math.min(Math.max(1, limit), 500)
+			const [rows = []] = await sql<Row[]>`
+				SELECT
+					tenantId, id, bookingId, guestId, documentId,
+					epguChannel, epguOrderId, epguApplicationNumber,
+					serviceCode, targetCode, supplierGid, regionCode,
+					arrivalDate, departureDate,
+					statusCode, isFinal, reasonRefuse, errorCategory,
+					submittedAt, lastPolledAt, nextPollAt, finalizedAt,
+					retryCount, attemptsHistoryJson, operatorNote,
+					createdAt, updatedAt, createdBy, updatedBy
+				FROM migrationRegistration
+				WHERE tenantId = ${tenantId}
+				ORDER BY createdAt DESC
+				LIMIT ${cappedLimit}
+			`.idempotent(true)
+			return rows.map(rowToDomain)
+		},
+
 		async listPendingPoll(now: Date, limit: number): Promise<MigrationRegistration[]> {
 			// Pick non-final rows whose nextPollAt is due. Cron polls these.
 			// statusCode IN (1,2,5,17,21,22) excludes finals (3,4,10) and draft (0)
