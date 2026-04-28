@@ -1761,7 +1761,58 @@ explicitly per `feedback_no_halfway`):
   semantic OR secondary info button — design pass needed before
   user testing. Trackable в M9.6+.
 
-### M9.5 Phase C/D — pending
+### M9.5 Phase C — Sheet → Drawer mobile swap ✅ done 2026-04-29
+
+**Commit:** `ff66c96`
+
+Per plan §M9.2 deferred + Vercel Vaul 2026 canon: business-feature
+Sheets рендерятся как right-side Sheet (≥md, 768px) на desktop и
+как bottom Drawer (Vaul) на mobile (<md) — canonical thumb-reach
+pattern.
+
+**Delivered:**
+
+- New `ResponsiveSheet` primitive (`components/ui/responsive-sheet.tsx`):
+  - 7 component exports — drop-in replacement для `Sheet` (same names)
+  - Internal switch via `useMediaQuery('(min-width: 768px)')` +
+    React Context-shared `isMobile` (single subscription, all
+    children agree)
+  - `side` prop applies к desktop Sheet only; mobile Drawer = bottom
+  - `showCloseButton` — conditional spread для exactOptionalPropertyTypes
+  - 8 strict tests (D1-D3 desktop primitive picking + M1-M3 mobile +
+    C1-C1.b open propagation)
+
+- 4 feature sheets migrated (3 from plan canon + 1 от M8.A.6 added later):
+  - `folios/refund-sheet.tsx`
+  - `folios/mark-paid-sheet.tsx`
+  - `admin-notifications/notification-detail-sheet.tsx`
+  - `admin-migration-registrations/migration-registration-detail-sheet.tsx`
+
+**Migration cost:** rename `Sheet` → `ResponsiveSheet` в imports + JSX
+tags (sed-driven). Children prop'ы compat без изменений. Zero-
+cognitive-load drop-in API parity.
+
+**Quality gates:**
+- pnpm lint: 0/0
+- pnpm typecheck: clean
+- frontend test:run: **945 passed** (53 files; +8 ResponsiveSheet
+  tests, 0 regressions от 4 migrated sheets)
+- e2e bundled gate: **15/15** (m9_5 smoke 2/2 + app-a11y 13/13 incl
+  contrast-more + dark theme)
+- pre-commit lefthook 5/5 ✅
+- Coverage frontend: maintained ≥81/81/76/82
+
+**Modern 2026/2027 patterns:**
+- Vercel Vaul (production canonical, used by Linear/Vercel/Cal.com)
+- React Context для cross-primitive state propagation (NOT prop-drill)
+- shadcn drop-in API parity (zero-cognitive-load migration)
+- exactOptionalPropertyTypes-friendly conditional spread
+
+**Senior canon: 0 residuals** для Phase C — все 4 Sheet-using feature
+flows покрыты, drop-in API без consumer changes, mobile drag-handle
++ desktop close-button preserved per primitive.
+
+### M9.5 Phase D — pending
 
 ### M9.6 — Web Vitals + a11y polish — pending
 
@@ -1779,8 +1830,9 @@ explicitly per `feedback_no_halfway`):
 | M9.3 | 19 | `25d05b8` | 🟨 first-iter (Day/Month UI + popover + status mapping → M9.5) |
 | M9.4 | 10 | `5ff7a76` | ✅ PWA done (manifest + SW + icons + InstallPrompt). Passkey 🟡 deferred → M9.5 (per Risk #4) |
 | M9.5 Phase A | 13 + 0 (senior-pass v2) | `7d30605` + `2bd1dd4` + `4825e9e` | ✅ visual foundation done (Sochi-blue + 1.250 modular + tonal dark elevation + Skeleton shimmer + EmptyState/ErrorState sweep ×9 sites + page cross-fade + @starting-style + axe gate 20/20 + 18 live smoke screenshots) |
-| M9.5 Phase B | 25 + 5 (Calendar) | `d0ca7c0` + `cadaa2b` + `bfe72d6` + `9263424` | ✅ Bnovo-parity + senior-pass v4 eradication (status palette + Day/Month + fit + Calendar v9 ru-RU + isYdbUniqueConflict + seedBookingFixture; +24 live screenshots incl seeded green band) |
-| M9.5 Phase C/D | — | — | pending (Sheet→Drawer + passkey) |
+| M9.5 Phase B | 39 (palette 5+viewMode 6+fit 7+date 5+guard 2+tooltip 9+Calendar 5) | `d0ca7c0` + `cadaa2b` + `bfe72d6` + `9263424` + `f68c4b8` | ✅ Bnovo-parity + native popover tooltip + 0 residuals |
+| M9.5 Phase C | 8 | `ff66c96` | ✅ Sheet→Drawer mobile swap (ResponsiveSheet + 4 feature sheets) |
+| M9.5 Phase D | — | — | pending (passkey) |
 | M9.6 | — | — | pending |
 | M9.7 | — | — | pending |
-| **Cumulative** | **118** | **11 + 1 chore + 2 docs** | **5/9 sub-phases done (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
+| **Cumulative** | **143** | **14 + 1 chore + 3 docs** | **6/9 sub-phases done (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
