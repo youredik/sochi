@@ -10,6 +10,7 @@ import { setupOtel } from './features/observability/setup-otel.ts'
 import { ErrorBoundary } from './lib/error-boundary.tsx'
 import { logger } from './lib/logger.ts'
 import { ThemeProvider } from './lib/theme-provider.tsx'
+import { reportWebVitals } from './lib/web-vitals.ts'
 import { routeTree } from './routeTree.gen.ts'
 import './index.css'
 
@@ -20,6 +21,9 @@ import './index.css'
 // events (pino-shape, console transport in dev, backend-POST in prod).
 setupOtel()
 setupI18n()
+// M9.6 — wire web-vitals 5 (CLS/INP/LCP/FCP/TTFB) к OTel tracer. Spans no-op
+// до Monium activation, but data collection production-grade с первой строчки.
+reportWebVitals()
 
 const queryClient = new QueryClient({
 	defaultOptions: {

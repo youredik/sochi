@@ -314,6 +314,15 @@ body {
 		background-size: 200% 100%;
 		animation: shimmer 1.6s linear infinite;
 	}
+
+	/* M9.6 tabular-nums utility — фигуры одинаковой ширины для финансовых
+	 * блоков (Money, Шахматка cell prices, дебиторка табличные суммы,
+	 * admin-tax KPI, folio balance). font-variant-numeric: tabular-nums
+	 * выравнивает столбцы цифр без monospace fallback. Tailwind v4 default
+	 * provides `tabular-nums` utility, но мы добавляем явно для guarantee. */
+	.tabular-nums {
+		font-variant-numeric: tabular-nums;
+	}
 }
 
 /* M9.5 prefers-reduced-motion global override — disable все animations
