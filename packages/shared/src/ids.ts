@@ -37,6 +37,11 @@ export const ID_PREFIXES = {
 	// M8.A.0 — property content authoring (media + addons).
 	media: 'med',
 	addon: 'addn',
+	// M8.A — ЕПГУ + AI passport + RKL (миграционный учёт МВД).
+	guestDocument: 'gdoc',
+	migrationRegistration: 'mreg',
+	rklHistory: 'rkl',
+	passportOcrAudit: 'ocra',
 } as const
 
 export type EntityKind = keyof typeof ID_PREFIXES
