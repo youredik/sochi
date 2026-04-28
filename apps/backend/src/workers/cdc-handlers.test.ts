@@ -202,6 +202,96 @@ describe('buildActivitiesFromEvent (pure)', () => {
 		const anonymous: CdcEvent = { key: bookingKey, newImage: { status: 'x' } }
 		expect(buildActivitiesFromEvent(anonymous, 'booking')[0]?.actorUserId).toBe('system')
 	})
+
+	// M8.A.5.cdc.B — STATUS_FIELD_BY_OBJECT_TYPE override coverage
+	describe('per-objectType status field override', () => {
+		test('[SF1] migrationRegistration: statusCode change → statusChange (NOT fieldChange)', () => {
+			const event: CdcEvent = {
+				key: ['org_abc', 'mreg_xyz'], // 2D PK
+				oldImage: {
+					statusCode: 0,
+					retryCount: 0,
+					updatedBy: 'system:enqueuer',
+				},
+				newImage: {
+					statusCode: 17,
+					retryCount: 0,
+					updatedBy: 'system:submitter',
+				},
+			}
+			const acts = buildActivitiesFromEvent(event, 'migrationRegistration')
+			expect(acts).toHaveLength(1)
+			expect(acts[0]?.activityType).toBe('statusChange')
+			expect(acts[0]?.diffJson).toEqual({
+				field: 'statusCode',
+				oldValue: 0,
+				newValue: 17,
+			})
+		})
+
+		test('[SF2] migrationRegistration: statusCode + non-status field → 1 statusChange + 1 fieldChange', () => {
+			const event: CdcEvent = {
+				key: ['org_abc', 'mreg_xyz'],
+				oldImage: {
+					statusCode: 17,
+					reasonRefuse: null,
+					retryCount: 0,
+					updatedBy: 'system',
+				},
+				newImage: {
+					statusCode: 4,
+					reasonRefuse: 'invalid signature',
+					retryCount: 1,
+					updatedBy: 'system',
+				},
+			}
+			const acts = buildActivitiesFromEvent(event, 'migrationRegistration')
+			// statusCode + reasonRefuse + retryCount → 1 statusChange + 2 fieldChange
+			expect(acts.length).toBe(3)
+			expect(acts[0]?.activityType).toBe('statusChange')
+			expect(acts[0]?.diffJson).toMatchObject({
+				field: 'statusCode',
+				oldValue: 17,
+				newValue: 4,
+			})
+			const fieldActs = acts.slice(1)
+			expect(fieldActs.every((a) => a.activityType === 'fieldChange')).toBe(true)
+			const fields = fieldActs.map((a) =>
+				typeof a.diffJson === 'object' && a.diffJson && 'field' in a.diffJson
+					? (a.diffJson as { field: string }).field
+					: '',
+			)
+			expect(fields).toContain('reasonRefuse')
+			expect(fields).toContain('retryCount')
+		})
+
+		test('[SF3] migrationRegistration: literal `status` field change → fieldChange (NOT statusChange — wrong column for this domain)', () => {
+			// migrationRegistration не имеет string `status` column. Если бы по
+			// какой-то причине прилетел такой diff (например, stale image
+			// из ранней миграции) — не должен быть классифицирован как FSM transition.
+			const event: CdcEvent = {
+				key: ['org_abc', 'mreg_xyz'],
+				oldImage: { statusCode: 0, status: 'foo', updatedBy: 'system' },
+				newImage: { statusCode: 0, status: 'bar', updatedBy: 'system' },
+			}
+			const acts = buildActivitiesFromEvent(event, 'migrationRegistration')
+			expect(acts).toHaveLength(1)
+			expect(acts[0]?.activityType).toBe('fieldChange')
+			expect(acts[0]?.diffJson).toMatchObject({ field: 'status' })
+		})
+
+		test('[SF4] booking domain still uses default `status` field (no regression)', () => {
+			const event: CdcEvent = {
+				key: ['org_abc', 'prop_1', '2027-07-01', 'book_123'],
+				oldImage: { ...base, status: 'confirmed', updatedBy: 'usr_x' },
+				newImage: { ...base, status: 'in_house', updatedBy: 'usr_x' },
+			}
+			const acts = buildActivitiesFromEvent(event, 'booking')
+			expect(acts).toHaveLength(1)
+			expect(acts[0]?.activityType).toBe('statusChange')
+			expect(acts[0]?.diffJson).toMatchObject({ field: 'status' })
+		})
+	})
 })
 
 // ---------------------------------------------------------------------------

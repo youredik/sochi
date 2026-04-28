@@ -132,6 +132,18 @@ const THREE_D_PK_DOMAINS: ReadonlySet<ActivityObjectType> = new Set([
 	'dispute',
 ])
 
+/**
+ * Per-objectType override для FSM-status field name. Default = `'status'`.
+ * Domains where the FSM column is named differently must opt in here so
+ * `statusChange` activities fire correctly (vs being mis-classified as
+ * generic `fieldChange`).
+ */
+const STATUS_FIELD_BY_OBJECT_TYPE: Partial<Record<ActivityObjectType, string>> = {
+	// migrationRegistration FSM использует Int32 statusCode (14 ЕПГУ codes)
+	// per migration 0035; нет string `status` column.
+	migrationRegistration: 'statusCode',
+}
+
 function extractIdentity(
 	event: CdcEvent,
 	objectType: ActivityObjectType,
@@ -203,8 +215,9 @@ export function buildActivitiesFromEvent(
 		const diffs = diffFields(event.oldImage, event.newImage)
 		if (diffs.length === 0) return []
 
-		const statusDiff = diffs.find((d) => d.field === 'status')
-		const fieldDiffs = diffs.filter((d) => d.field !== 'status')
+		const statusFieldName = STATUS_FIELD_BY_OBJECT_TYPE[objectType] ?? 'status'
+		const statusDiff = diffs.find((d) => d.field === statusFieldName)
+		const fieldDiffs = diffs.filter((d) => d.field !== statusFieldName)
 
 		const out: ActivityInsertInput[] = []
 		if (statusDiff) {
@@ -212,7 +225,7 @@ export function buildActivitiesFromEvent(
 				...base,
 				activityType: 'statusChange' satisfies ActivityType,
 				diffJson: {
-					field: 'status',
+					field: statusFieldName,
 					oldValue: statusDiff.oldValue,
 					newValue: statusDiff.newValue,
 				},

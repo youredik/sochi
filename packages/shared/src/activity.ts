@@ -35,6 +35,9 @@ const activityObjectTypeValues = [
 	'dispute',
 	// M7.fix.3.c — operator manual actions on notification outbox
 	'notification',
+	// M8.A.5.cdc.B — миграционный учёт МВД (Боль 1.1). FSM transitions
+	// 0 → 17 → 3/4/10 проектируются в activity для audit + operator UI.
+	'migrationRegistration',
 ] as const
 export const activityObjectTypeSchema = z.enum(activityObjectTypeValues)
 export type ActivityObjectType = z.infer<typeof activityObjectTypeSchema>

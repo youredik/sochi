@@ -190,6 +190,15 @@ const disputeActivityConsumer = startCdcConsumer(driver, sql, {
 	projection: createActivityCdcHandler(activityFactory.repo, 'dispute'),
 	label: 'activity:dispute',
 })
+// M8.A.5.cdc.B — миграционный учёт audit projection. FSM transitions
+// 0 → 17 → 3/4/10 эмитят statusChange activities (statusCode column,
+// per STATUS_FIELD_BY_OBJECT_TYPE override в cdc-handlers.ts).
+const migrationRegistrationActivityConsumer = startCdcConsumer(driver, sql, {
+	topic: 'migrationRegistration/migrationRegistration_events',
+	consumer: 'activity_writer',
+	projection: createActivityCdcHandler(activityFactory.repo, 'migrationRegistration'),
+	label: 'activity:migrationRegistration',
+})
 
 // folio_balance_writer fan-out: 3 topics × same factory with per-source key
 // extraction. folio source is a no-op (would loop) — handler returns early.
@@ -341,6 +350,7 @@ const allCdcConsumers = [
 	refundCreatorConsumer,
 	folioCreatorConsumer,
 	migrationRegistrationEnqueuerConsumer,
+	migrationRegistrationActivityConsumer,
 	tourismTaxConsumer,
 	cancelFeeConsumer,
 ] as const
