@@ -166,27 +166,35 @@ export function createMigrationRegistrationRoutesInner(f: MigrationRegistrationF
 			async (c) => {
 				const { id } = c.req.valid('param')
 				const patch = c.req.valid('json')
-				// Map UI patch → repo patch (UI exposes retryRequested boolean
-				// → repo retryCount += 1 + reset nextPollAt to now-ish).
-				if (patch.retryRequested === true) {
-					const row = await repo.getById(c.var.tenantId, id)
-					if (!row) {
-						return c.json(
-							{
-								error: {
-									code: 'NOT_FOUND',
-									message: `Migration registration '${id}' not found`,
-								},
+				// Map UI patch → repo patch:
+				//   - retryRequested=true → retryCount += 1 + reset nextPollAt to now
+				//   - operatorNote (string|null|undefined): three-state passthrough
+				const row = await repo.getById(c.var.tenantId, id)
+				if (!row) {
+					return c.json(
+						{
+							error: {
+								code: 'NOT_FOUND',
+								message: `Migration registration '${id}' not found`,
 							},
-							404,
-						)
-					}
-					await repo.patch(
-						c.var.tenantId,
-						id,
-						{ retryCount: row.retryCount + 1, nextPollAt: new Date() },
-						c.var.user.id,
+						},
+						404,
 					)
+				}
+				const repoPatch: {
+					retryCount?: number
+					nextPollAt?: Date | null
+					operatorNote?: string | null
+				} = {}
+				if (patch.retryRequested === true) {
+					repoPatch.retryCount = row.retryCount + 1
+					repoPatch.nextPollAt = new Date()
+				}
+				if (patch.operatorNote !== undefined) {
+					repoPatch.operatorNote = patch.operatorNote
+				}
+				if (Object.keys(repoPatch).length > 0) {
+					await repo.patch(c.var.tenantId, id, repoPatch, c.var.user.id)
 				}
 				const result = await repo.getById(c.var.tenantId, id)
 				if (!result) {

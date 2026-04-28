@@ -284,6 +284,73 @@ describe('migration-registrations routes — patch retry trigger', () => {
 	})
 })
 
+describe('migration-registrations routes — PATCH operatorNote (M8.A.5.note)', () => {
+	test('[Pn1] PATCH operatorNote=value → repo.patch вызван с operatorNote string', async () => {
+		const captured: unknown[] = []
+		const res = await buildApp('owner', {
+			patchSpy: (p) => captured.push(p),
+		}).request('/api/v1/migration-registrations/mreg-1', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ operatorNote: 'Operator note text' }),
+		})
+		expect(res.status).toBe(200)
+		expect(captured.length).toBe(1)
+		const arg = captured[0] as { operatorNote: string }
+		expect(arg.operatorNote).toBe('Operator note text')
+	})
+
+	test('[Pn2] PATCH operatorNote=null (clear) → repo.patch вызван с operatorNote=null', async () => {
+		const captured: unknown[] = []
+		const res = await buildApp('owner', {
+			patchSpy: (p) => captured.push(p),
+		}).request('/api/v1/migration-registrations/mreg-1', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ operatorNote: null }),
+		})
+		expect(res.status).toBe(200)
+		expect(captured.length).toBe(1)
+		const arg = captured[0] as { operatorNote: string | null }
+		expect(arg.operatorNote).toBeNull()
+	})
+
+	test('[Pn3] PATCH retryRequested + operatorNote → repo.patch вызван с обоими', async () => {
+		const captured: unknown[] = []
+		const res = await buildApp('owner', {
+			patchSpy: (p) => captured.push(p),
+		}).request('/api/v1/migration-registrations/mreg-1', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ retryRequested: true, operatorNote: 'Combined' }),
+		})
+		expect(res.status).toBe(200)
+		expect(captured.length).toBe(1)
+		const arg = captured[0] as { retryCount: number; operatorNote: string; nextPollAt: Date }
+		expect(arg.retryCount).toBe(FAKE_REGISTRATION.retryCount + 1)
+		expect(arg.operatorNote).toBe('Combined')
+		expect(arg.nextPollAt).toBeInstanceOf(Date)
+	})
+
+	test('[Pn4] PATCH operatorNote 2001 chars → 400 (Zod max=2000)', async () => {
+		const res = await buildApp('owner').request('/api/v1/migration-registrations/mreg-1', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ operatorNote: 'x'.repeat(2001) }),
+		})
+		expect(res.status).toBe(400)
+	})
+
+	test('[Pn5] staff PATCH operatorNote → 403 (manage permission required)', async () => {
+		const res = await buildApp('staff').request('/api/v1/migration-registrations/mreg-1', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ operatorNote: 'attempted' }),
+		})
+		expect(res.status).toBe(403)
+	})
+})
+
 describe('migration-registrations routes — POST /:id/cancel (M8.A.5.cancel)', () => {
 	test('[Cn-R1] staff POST cancel → 403 (manage permission required)', async () => {
 		const res = await buildApp('staff').request('/api/v1/migration-registrations/mreg-1/cancel', {

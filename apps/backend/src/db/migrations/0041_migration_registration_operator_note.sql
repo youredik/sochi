@@ -1,0 +1,24 @@
+-- 0041_migration_registration_operator_note.sql — M8.A.5.note
+-- per project_initial_framing.md (Боль 1.1) + 152-ФЗ ст.6 audit canon.
+--
+-- Adds free-form `operatorNote` (Utf8?, max 2000 chars при validation)
+-- к migrationRegistration. Operator wraps context для каждой регистрации
+-- (e.g. «Гость предоставил замену паспорта», «РКЛ false-positive
+-- разрешён», «Doc series translated from Korean»).
+--
+-- Why audit value:
+--   - 152-ФЗ ст.6 ч.3: audit trail обязателен для personal data ops
+--   - Forensic context: при ЕПГУ-разногласиях operator может объяснить
+--     manual decisions
+--   - UX: reviewing другой operator может прочитать context за решением
+--
+-- Audit projection: existing migrationRegistration_events CHANGEFEED
+-- (migration 0040, cdc.B) + activity_writer consumer проектирует diff
+-- автоматически. operatorNote НЕ в SYSTEM_FIELDS (cdc-handlers.ts) →
+-- эмитит fieldChange activity на каждое UPDATE.
+--
+-- Forward-compat: schema validation (Zod) ограничивает 2000 chars; repo
+-- accepts любую строку. Migration 0041 не constraint'ит column length —
+-- application-level guard.
+
+ALTER TABLE migrationRegistration ADD COLUMN operatorNote Utf8;

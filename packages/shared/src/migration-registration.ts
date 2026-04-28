@@ -158,6 +158,7 @@ export const migrationRegistrationSchema = z.object({
 	finalizedAt: z.string().datetime().nullable(),
 	retryCount: z.number().int().min(0),
 	attemptsHistoryJson: z.unknown().nullable(),
+	operatorNote: z.string().nullable(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
 	createdBy: z.string(),
@@ -216,19 +217,24 @@ export function checkStayPeriodInvariant(
 
 /**
  * Patch input — only fields actually wired through to the repo. Status FSM
- * advances by cron, NOT by client. Schema is intentionally narrow: every
- * field MUST have an end-to-end path through routes → repo → DB column.
+ * advances by cron / cancel endpoint, NOT by generic patch.
  *
- * Future fields (deferred so the schema stays honest, not aspirational):
- *   - `manuallyCancelled`: requires dedicated cancel endpoint that sets
- *     statusCode=10/isFinal=true/finalizedAt=now and emits CDC notification.
- *     Lands in M8.A.5.cancel together with the «отозвать уведомление» UI.
- *   - `operatorNote`: requires Utf8? column on migrationRegistration plus
- *     audit trail in activity domain. Lands in M8.A.5.note.
+ * Wired fields:
+ *   - `retryRequested`: triggers retry via repo.patch (retryCount += 1 +
+ *     reset nextPollAt). Manual operator action.
+ *   - `operatorNote`: free-form text (max 2000 chars), three-state semantic:
+ *     undefined → no change, null → clear, value → set. Audit projection
+ *     auto via migrationRegistration_events CHANGEFEED → activity (fieldChange).
+ *
+ * Future (NOT in this schema yet — must be wired before adding):
+ *   - `manuallyCancelled` lives как dedicated POST /:id/cancel endpoint
+ *     (M8.A.5.cancel done) — НЕ через generic patch (FSM transition должен
+ *     быть explicit).
  */
 export const migrationRegistrationPatchSchema = z
 	.object({
 		retryRequested: z.boolean().optional(),
+		operatorNote: z.string().max(2000).nullable().optional(),
 	})
 	.refine((obj) => Object.keys(obj).length > 0, 'At least one field must be provided')
 export type MigrationRegistrationPatch = z.infer<typeof migrationRegistrationPatchSchema>

@@ -531,6 +531,70 @@ describe('migrationRegistration.repo — patch (three-state semantics)', {
 		expect(after?.retryCount).toBe(3)
 		expect(after?.nextPollAt).toBe(t.toISOString())
 	})
+
+	// M8.A.5.note: operatorNote three-state semantic + immutability
+	test('[P7] patch operatorNote=value → row.operatorNote set', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		const created = await repo.create(input)
+		expect(created.operatorNote).toBeNull()
+		const note = 'Гость предоставил замену паспорта'
+		const after = await repo.patch(TENANT_A, input.id, { operatorNote: note }, ACTOR)
+		expect(after?.operatorNote).toBe(note)
+	})
+
+	test('[P8] patch operatorNote=null (clear) → DB column null', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		await repo.patch(TENANT_A, input.id, { operatorNote: 'initial' }, ACTOR)
+		const after = await repo.patch(TENANT_A, input.id, { operatorNote: null }, ACTOR)
+		expect(after?.operatorNote).toBeNull()
+	})
+
+	test('[P9] patch operatorNote=undefined → existing value preserved', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		await repo.patch(TENANT_A, input.id, { operatorNote: 'РКЛ false-positive resolved' }, ACTOR)
+		// patch only retryCount, leaving operatorNote absent → must preserve
+		const after = await repo.patch(TENANT_A, input.id, { retryCount: 1 }, ACTOR)
+		expect(after?.operatorNote).toBe('РКЛ false-positive resolved')
+		expect(after?.retryCount).toBe(1)
+	})
+
+	test('[P10] patch retryCount + operatorNote одновременно → оба applied', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const after = await repo.patch(
+			TENANT_A,
+			input.id,
+			{ retryCount: 7, operatorNote: 'Doc series translated from Korean' },
+			ACTOR,
+		)
+		expect(after?.retryCount).toBe(7)
+		expect(after?.operatorNote).toBe('Doc series translated from Korean')
+	})
+
+	test('[P11] full-row UPSERT preserves all immutable fields (id/tenantId/bookingId/createdAt/createdBy)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		const created = await repo.create(input)
+		// Apply patch
+		await repo.patch(TENANT_A, input.id, { operatorNote: 'note' }, ACTOR)
+		const after = await repo.getById(TENANT_A, input.id)
+		// Immutables preserved verbatim
+		expect(after?.id).toBe(created.id)
+		expect(after?.tenantId).toBe(created.tenantId)
+		expect(after?.bookingId).toBe(created.bookingId)
+		expect(after?.guestId).toBe(created.guestId)
+		expect(after?.documentId).toBe(created.documentId)
+		expect(after?.createdAt).toBe(created.createdAt)
+		expect(after?.createdBy).toBe(created.createdBy)
+		// updatedBy moves to ACTOR
+		expect(after?.updatedBy).toBe(ACTOR)
+	})
 })
 
 describe('migrationRegistration.repo — updatedAt monotonic', {

@@ -21,6 +21,7 @@ import {
 	NULL_TIMESTAMP,
 	textOpt,
 	timestampOpt,
+	toJson,
 	toTs,
 } from '../../../db/ydb-helpers.ts'
 
@@ -51,6 +52,7 @@ type Row = {
 	finalizedAt: Date | null
 	retryCount: number | bigint
 	attemptsHistoryJson: unknown | null
+	operatorNote: string | null
 	createdAt: Date
 	updatedAt: Date
 	createdBy: string
@@ -84,6 +86,7 @@ function rowToDomain(r: Row): MigrationRegistration {
 		finalizedAt: r.finalizedAt ? r.finalizedAt.toISOString() : null,
 		retryCount: Number(r.retryCount),
 		attemptsHistoryJson: r.attemptsHistoryJson ?? null,
+		operatorNote: r.operatorNote,
 		createdAt: r.createdAt.toISOString(),
 		updatedAt: r.updatedAt.toISOString(),
 		createdBy: r.createdBy,
@@ -127,7 +130,7 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 					\`arrivalDate\`, \`departureDate\`,
 					\`statusCode\`, \`isFinal\`, \`reasonRefuse\`, \`errorCategory\`,
 					\`submittedAt\`, \`lastPolledAt\`, \`nextPollAt\`, \`finalizedAt\`,
-					\`retryCount\`,
+					\`retryCount\`, \`operatorNote\`,
 					\`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
 				) VALUES (
 					${input.tenantId}, ${input.id}, ${input.bookingId},
@@ -139,7 +142,7 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 					${dateFromIso(input.departureDate)},
 					${input.statusCode}, ${false}, ${NULL_TEXT}, ${NULL_TEXT},
 					${NULL_TIMESTAMP}, ${NULL_TIMESTAMP}, ${NULL_TIMESTAMP}, ${NULL_TIMESTAMP},
-					${0},
+					${0}, ${NULL_TEXT},
 					${nowTs}, ${nowTs}, ${input.actorId}, ${input.actorId}
 				)
 			`
@@ -161,7 +164,7 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 					arrivalDate, departureDate,
 					statusCode, isFinal, reasonRefuse, errorCategory,
 					submittedAt, lastPolledAt, nextPollAt, finalizedAt,
-					retryCount, attemptsHistoryJson,
+					retryCount, attemptsHistoryJson, operatorNote,
 					createdAt, updatedAt, createdBy, updatedBy
 				FROM migrationRegistration
 				WHERE tenantId = ${tenantId} AND id = ${id}
@@ -180,7 +183,7 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 					arrivalDate, departureDate,
 					statusCode, isFinal, reasonRefuse, errorCategory,
 					submittedAt, lastPolledAt, nextPollAt, finalizedAt,
-					retryCount, attemptsHistoryJson,
+					retryCount, attemptsHistoryJson, operatorNote,
 					createdAt, updatedAt, createdBy, updatedBy
 				FROM migrationRegistration
 				WHERE tenantId = ${tenantId} AND bookingId = ${bookingId}
@@ -210,7 +213,7 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 					arrivalDate, departureDate,
 					statusCode, isFinal, reasonRefuse, errorCategory,
 					submittedAt, lastPolledAt, nextPollAt, finalizedAt,
-					retryCount, attemptsHistoryJson,
+					retryCount, attemptsHistoryJson, operatorNote,
 					createdAt, updatedAt, createdBy, updatedBy
 				FROM migrationRegistration
 				WHERE isFinal = false
@@ -277,14 +280,22 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 		/**
 		 * Operator-facing patch — only fields exposed through the PATCH UI route.
 		 * Three-state semantics per nullable column:
-		 *   - undefined ⇒ no change
-		 *   - null ⇒ clear (e.g. reset nextPollAt after retry)
+		 *   - undefined ⇒ no change (preserve current value)
+		 *   - null ⇒ clear (allowed только для nullable columns)
 		 *   - value ⇒ overwrite
 		 *
-		 * FSM-controlled columns (statusCode, isFinal, reasonRefuse, finalizedAt)
-		 * are intentionally NOT in the patch surface — they advance only via
-		 * updateAfterReserve / updateAfterPoll on the cron path, keeping the
-		 * audit trail clean. Status overrides land via M8.A.5.cancel.
+		 * Implementation: full-row UPSERT (per YDB gotcha #14 «full-row UPSERT
+		 * для many-nullable tables»). Read current row → apply three-state
+		 * patch semantics → UPSERT all columns. Avoids combinatorial branch
+		 * explosion (3 fields × 3 states = 27 SET combinations) и keeps
+		 * UPSERT idempotent под YDB semantics.
+		 *
+		 * FSM-controlled columns (statusCode, isFinal, reasonRefuse, finalizedAt,
+		 * lastPolledAt, errorCategory, submittedAt, epguOrderId, ...) НЕ в patch
+		 * surface — they advance via updateAfterReserve / updateAfterPoll /
+		 * cancel pathways, keeping FSM transitions auditable. Generic patch
+		 * предназначен для operator-side mutations: retry retryCount + nextPollAt
+		 * + operatorNote.
 		 */
 		async patch(
 			tenantId: string,
@@ -292,39 +303,70 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 			patch: {
 				readonly retryCount?: number
 				readonly nextPollAt?: Date | null
+				readonly operatorNote?: string | null
 			},
 			actorId: string,
 		): Promise<MigrationRegistration | null> {
-			const nowTs = toTs(new Date())
-			if (patch.retryCount === undefined && patch.nextPollAt === undefined) {
+			const allUndefined =
+				patch.retryCount === undefined &&
+				patch.nextPollAt === undefined &&
+				patch.operatorNote === undefined
+			if (allUndefined) {
 				return this.getById(tenantId, id)
 			}
-			if (patch.retryCount !== undefined && patch.nextPollAt !== undefined) {
-				await sql`
-					UPDATE migrationRegistration
-					SET \`retryCount\` = ${patch.retryCount},
-					    \`nextPollAt\` = ${timestampOpt(patch.nextPollAt)},
-					    \`updatedAt\` = ${nowTs},
-					    \`updatedBy\` = ${actorId}
-					WHERE \`tenantId\` = ${tenantId} AND \`id\` = ${id}
-				`
-			} else if (patch.retryCount !== undefined) {
-				await sql`
-					UPDATE migrationRegistration
-					SET \`retryCount\` = ${patch.retryCount},
-					    \`updatedAt\` = ${nowTs},
-					    \`updatedBy\` = ${actorId}
-					WHERE \`tenantId\` = ${tenantId} AND \`id\` = ${id}
-				`
-			} else if (patch.nextPollAt !== undefined) {
-				await sql`
-					UPDATE migrationRegistration
-					SET \`nextPollAt\` = ${timestampOpt(patch.nextPollAt)},
-					    \`updatedAt\` = ${nowTs},
-					    \`updatedBy\` = ${actorId}
-					WHERE \`tenantId\` = ${tenantId} AND \`id\` = ${id}
-				`
-			}
+			const current = await this.getById(tenantId, id)
+			if (!current) return null
+
+			// Apply three-state semantics per field.
+			const nextRetryCount = patch.retryCount ?? current.retryCount
+			const nextNextPollAt =
+				patch.nextPollAt === undefined
+					? current.nextPollAt
+						? new Date(current.nextPollAt)
+						: null
+					: patch.nextPollAt
+			const nextOperatorNote =
+				patch.operatorNote === undefined ? current.operatorNote : patch.operatorNote
+
+			const now = new Date()
+			const nowTs = toTs(now)
+
+			// Full-row UPSERT — preserve все non-patched fields verbatim.
+			await sql`
+				UPSERT INTO migrationRegistration (
+					\`tenantId\`, \`id\`, \`bookingId\`, \`guestId\`, \`documentId\`,
+					\`epguChannel\`, \`epguOrderId\`, \`epguApplicationNumber\`,
+					\`serviceCode\`, \`targetCode\`, \`supplierGid\`, \`regionCode\`,
+					\`arrivalDate\`, \`departureDate\`,
+					\`statusCode\`, \`isFinal\`, \`reasonRefuse\`, \`errorCategory\`,
+					\`submittedAt\`, \`lastPolledAt\`, \`nextPollAt\`, \`finalizedAt\`,
+					\`retryCount\`, \`attemptsHistoryJson\`, \`operatorNote\`,
+					\`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
+				) VALUES (
+					${current.tenantId}, ${current.id}, ${current.bookingId},
+					${current.guestId}, ${current.documentId},
+					${current.epguChannel},
+					${textOpt(current.epguOrderId)},
+					${textOpt(current.epguApplicationNumber)},
+					${current.serviceCode}, ${current.targetCode},
+					${current.supplierGid}, ${current.regionCode},
+					${dateFromIso(current.arrivalDate)},
+					${dateFromIso(current.departureDate)},
+					${current.statusCode}, ${current.isFinal},
+					${textOpt(current.reasonRefuse)},
+					${textOpt(current.errorCategory)},
+					${timestampOpt(current.submittedAt ? new Date(current.submittedAt) : null)},
+					${timestampOpt(current.lastPolledAt ? new Date(current.lastPolledAt) : null)},
+					${timestampOpt(nextNextPollAt)},
+					${timestampOpt(current.finalizedAt ? new Date(current.finalizedAt) : null)},
+					${nextRetryCount},
+					${toJson(current.attemptsHistoryJson)},
+					${textOpt(nextOperatorNote)},
+					${toTs(new Date(current.createdAt))},
+					${nowTs},
+					${current.createdBy}, ${actorId}
+				)
+			`
 			return this.getById(tenantId, id)
 		},
 	}
