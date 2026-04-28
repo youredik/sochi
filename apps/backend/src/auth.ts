@@ -1,3 +1,4 @@
+import { passkey } from '@better-auth/passkey'
 import { type EntityKind, newId } from '@horeca/shared'
 import { betterAuth } from 'better-auth'
 import { organization } from 'better-auth/plugins/organization'
@@ -35,6 +36,8 @@ const BA_MODEL_TO_ENTITY: Record<string, EntityKind> = {
 	organization: 'organization',
 	member: 'member',
 	invitation: 'invitation',
+	// M9.5 Phase D — passkey() plugin model.
+	passkey: 'passkey',
 }
 
 const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
@@ -85,6 +88,25 @@ export const auth = betterAuth({
 		},
 	},
 	plugins: [
+		/**
+		 * M9.5 Phase D — WebAuthn passkey support.
+		 *
+		 * Modern 2026/2027 canon (per @better-auth/passkey 1.6.9 + WebAuthn L3
+		 * spec):
+		 *   - `rpID` — eTLD+1 of the production origin (env.HOST)
+		 *   - `origin` — full origin URL (env.PUBLIC_BASE_URL) — RP origin
+		 *     binding mandatory против phishing attacks
+		 *   - `attestation: 'none'` — privacy-preserving (no AAGUID disclosure)
+		 *   - Platform attachment по умолчанию (Touch/Face ID, Windows Hello)
+		 *
+		 * 152-ФЗ compliance: биометрия НЕ покидает device, server stores только
+		 * public key + counter. iCloud Keychain / Google PM sync — client-side.
+		 */
+		passkey({
+			rpName: 'HoReCa Sochi',
+			rpID: env.HOST,
+			origin: env.PUBLIC_BASE_URL,
+		}),
 		organization({
 			ac,
 			roles: { owner, manager, staff },

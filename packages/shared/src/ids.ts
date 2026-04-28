@@ -42,6 +42,8 @@ export const ID_PREFIXES = {
 	migrationRegistration: 'mreg',
 	rklHistory: 'rkl',
 	passportOcrAudit: 'ocra',
+	// M9.5 Phase D — Better Auth passkey plugin (WebAuthn).
+	passkey: 'pk',
 } as const
 
 export type EntityKind = keyof typeof ID_PREFIXES

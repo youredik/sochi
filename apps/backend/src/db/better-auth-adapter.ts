@@ -75,6 +75,11 @@ const COLUMN_TYPES: Record<
 	invitation: {
 		role: TEXT_TYPE,
 	},
+	passkey: {
+		// Per Better Auth passkey() schema (1.6.x): name + transports nullable.
+		name: TEXT_TYPE,
+		transports: TEXT_TYPE,
+	},
 }
 
 /** Convert JS null → typed YDB Optional(null, Type). Non-null values pass through. */

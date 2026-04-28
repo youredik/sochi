@@ -1,3 +1,4 @@
+import { passkeyClient } from '@better-auth/passkey/client'
 import type { auth as ServerAuth } from '@horeca/backend/auth'
 import { queryOptions } from '@tanstack/react-query'
 import { inferAdditionalFields, organizationClient } from 'better-auth/client/plugins'
@@ -22,7 +23,14 @@ import { createAuthClient } from 'better-auth/react'
  */
 export const authClient = createAuthClient({
 	baseURL: import.meta.env.VITE_API_URL,
-	plugins: [organizationClient(), inferAdditionalFields<typeof ServerAuth>()],
+	plugins: [
+		organizationClient(),
+		// M9.5 Phase D — passkey client (WebAuthn enrollment + signin).
+		// Uses native `navigator.credentials` API под капотом (@simplewebauthn/
+		// browser 13.x). Conditional Mediation UI supported via opts (autofill).
+		passkeyClient(),
+		inferAdditionalFields<typeof ServerAuth>(),
+	],
 })
 
 /**

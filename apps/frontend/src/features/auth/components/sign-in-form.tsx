@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useSignInEmail } from '../hooks/use-auth-mutations.ts'
 import type { LocalizedError } from '../lib/errors.ts'
+import { PasskeySigninButton } from './passkey-signin-button.tsx'
 
 /**
  * Sign-in form — shadcn primitives (Button/Input/Label) + plain `useState`
@@ -87,6 +88,14 @@ export function SignInForm({ redirect }: { redirect?: string | undefined }) {
 			>
 				{signIn.isPending ? 'Входим…' : 'Войти'}
 			</Button>
+
+			{/* M9.5 Phase D — passkey signin (parallel auth path). */}
+			<div className="flex items-center gap-3 text-xs text-muted-foreground">
+				<span className="bg-border h-px flex-1" />
+				<span>или</span>
+				<span className="bg-border h-px flex-1" />
+			</div>
+			<PasskeySigninButton />
 
 			<p className="text-center text-sm text-muted-foreground">
 				Нет аккаунта?{' '}
