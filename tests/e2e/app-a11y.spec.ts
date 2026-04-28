@@ -93,6 +93,35 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		await runAxe(page, 'chessboard-contrast-more')
 	})
 
+	test('M9.6 mobile axe extension — dashboard + receivables × 2 themes pass WCAG 2.2 AA', async ({
+		page,
+	}) => {
+		// Plan §M9.6 canon: axe extension на mobile breakpoint × 2 themes
+		// (light + dark) для catching regressions invisible на desktop matrix.
+		await page.setViewportSize({ width: 390, height: 844 }) // iPhone 14
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+		const slug = page.url().match(/\/o\/([^/]+)/)![1]
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+		await runAxe(page, 'dashboard-mobile-light')
+
+		// Dark theme на mobile.
+		await page.evaluate(() => document.documentElement.classList.add('dark'))
+		await page.waitForTimeout(800)
+		await runAxe(page, 'dashboard-mobile-dark')
+
+		// Receivables mobile — financial blocks с tabular-nums utility класс.
+		await page.evaluate(() => document.documentElement.classList.remove('dark'))
+		await page.waitForTimeout(400)
+		await page.goto(`/o/${slug}/receivables`)
+		await expect(page.getByRole('heading', { name: /Дебиторская задолженность/ })).toBeVisible()
+		await runAxe(page, 'receivables-mobile-light')
+
+		await page.evaluate(() => document.documentElement.classList.add('dark'))
+		await page.waitForTimeout(800)
+		await runAxe(page, 'receivables-mobile-dark')
+	})
+
 	test('M9.5 Phase A dark theme — dashboard + receivables pass WCAG 2.2 AA', async ({ page }) => {
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
