@@ -29,6 +29,14 @@ services:
       - MON_PORT=8865
       - YDB_USE_IN_MEMORY_PDISKS=true
       - YDB_DEFAULT_LOG_LEVEL=NOTICE
+      # M9-debug 2026-04-28: YDB_GRPC_ENABLE_TLS=false disables TLS-port
+      # (default true triggers init script cert generation, which fails on
+      # fresh container с named-volume /ydb_certs). Empirical verified via
+      # `docker run --entrypoint cat .../initialize_local_ydb` —
+      # `YDB_GRPC_ENABLE_TLS=${YDB_GRPC_ENABLE_TLS:-true}` toggle. Dev-only
+      # gate: prod uses TLS via deploy-phase TF (deferred per
+      # `project_deferred_deploy_plan.md`).
+      - YDB_GRPC_ENABLE_TLS=false
     healthcheck:
       test: ['CMD-SHELL', '/ydb -e grpc://localhost:2236 -d /local --no-discovery sql -s "SELECT 1"']
       interval: 10s
@@ -38,6 +46,13 @@ services:
     volumes:
       - ./schema:/schema:ro
       - ydb_data:/ydb_data
+      # ydb_certs (M9-debug 2026-04-28): YDB init script generates self-signed
+      # cert в /ydb_certs/cert.pem на FIRST start (для GRPC_TLS_PORT=2235).
+      # Без persistent volume — `docker compose down ydb` теряет cert; fresh
+      # `up` падает: «Can't find /ydb_certs/cert.pem». Per canonical YDB docs
+      # (ydb.tech/docs/en/reference/docker/start) — ydb_certs ОБЯЗАТЕЛЬНО
+      # persistent. Empirical fix verified 2026-04-28 после web-research pass.
+      - ydb_certs:/ydb_certs
 
   # MinIO — S3-совместимое хранилище (локальная замена Yandex Object Storage).
   # Host-порты: 9100 S3 API, 9101 web UI (http://localhost:9101, minioadmin/minioadmin).
@@ -93,4 +108,5 @@ services:
 
 volumes:
   ydb_data:
+  ydb_certs:
   minio_data:
