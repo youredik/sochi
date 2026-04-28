@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { BookingCreateDialog } from '../../bookings/components/booking-create-dialog'
 import { BookingEditDialog } from '../../bookings/components/booking-edit-dialog'
 import { useGridData } from '../hooks/use-grid-data'
 import { styleFor } from '../lib/booking-palette'
+import { useChessboardPrefsStore, type WindowDays } from '../lib/chessboard-prefs-store'
 import { addDays, iterateDates, todayIso } from '../lib/date-range'
 import {
 	type FocusPosition,
@@ -13,6 +15,19 @@ import {
 	type RowNav,
 } from '../lib/keymap'
 import { bandPosition } from '../lib/layout'
+import { ChessboardWindowSelector } from './chessboard-window-selector'
+
+/**
+ * Resolve `WindowDays` pref → numeric days count для grid window.
+ *
+ * `'fit'` value defaults к 15 (existing canon) — visual selector preserves
+ * 'fit' user preference, runtime resolves к 15 numeric. M9.5 visual polish
+ * phase будет добавит ResizeObserver-based actual viewport fit.
+ */
+function resolveWindowDays(pref: WindowDays): number {
+	if (pref === 'fit') return 15
+	return pref
+}
 
 interface ClickedCell {
 	roomTypeId: string
@@ -52,11 +67,11 @@ const PAGE_STEP = 5
  * for chain customers with 100+ rooms.
  */
 
-const WINDOW_DAYS = 15
-
 export function Chessboard() {
+	const windowDaysPref = useChessboardPrefsStore((state) => state.windowDays)
+	const windowDays = resolveWindowDays(windowDaysPref)
 	const [windowFrom, setWindowFrom] = useState(todayIso)
-	const windowTo = useMemo(() => addDays(windowFrom, WINDOW_DAYS - 1), [windowFrom])
+	const windowTo = useMemo(() => addDays(windowFrom, windowDays - 1), [windowFrom, windowDays])
 	const dates = useMemo(() => iterateDates(windowFrom, windowTo), [windowFrom, windowTo])
 	const [clickedCell, setClickedCell] = useState<ClickedCell | null>(null)
 	const [editingBookingId, setEditingBookingId] = useState<string | null>(null)
@@ -194,12 +209,13 @@ export function Chessboard() {
 					{propertyName ? <p className="text-muted-foreground text-sm">{propertyName}</p> : null}
 				</div>
 				<div className="flex items-center gap-2">
+					<ChessboardWindowSelector />
 					<Button
 						type="button"
 						variant="outline"
 						size="sm"
-						onClick={() => setWindowFrom(addDays(windowFrom, -WINDOW_DAYS))}
-						aria-label="Предыдущие 15 дней"
+						onClick={() => setWindowFrom(addDays(windowFrom, -windowDays))}
+						aria-label={`Предыдущие ${windowDays} дней`}
 					>
 						← Назад
 					</Button>
@@ -215,8 +231,8 @@ export function Chessboard() {
 						type="button"
 						variant="outline"
 						size="sm"
-						onClick={() => setWindowFrom(addDays(windowFrom, WINDOW_DAYS))}
-						aria-label="Следующие 15 дней"
+						onClick={() => setWindowFrom(addDays(windowFrom, windowDays))}
+						aria-label={`Следующие ${windowDays} дней`}
 					>
 						Вперёд →
 					</Button>
@@ -224,7 +240,14 @@ export function Chessboard() {
 			</header>
 
 			{isLoading ? (
-				<p className="text-muted-foreground text-sm">Загружаем…</p>
+				<div className="space-y-2" role="status" aria-busy="true" aria-live="polite">
+					<span className="sr-only">Загружаем шахматку</span>
+					<Skeleton className="h-10 w-full" />
+					<Skeleton className="h-10 w-full" />
+					<Skeleton className="h-10 w-full" />
+					<Skeleton className="h-10 w-full" />
+					<Skeleton className="h-10 w-full" />
+				</div>
 			) : roomTypes.length === 0 ? (
 				<p className="text-muted-foreground text-sm">
 					Нет типов номеров. Завершите настройку гостиницы.
