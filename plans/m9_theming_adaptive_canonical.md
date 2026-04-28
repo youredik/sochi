@@ -1692,6 +1692,75 @@ date picker 5 + booking-palette guard 2). Frontend test:run **928 passed**
 - Tailwind v4 `@container` queries (native, NOT JS media-query)
 - `@theme inline` для CSS-каскад dark/contrast token resolution
 
+### M9.5 Phase B — Senior-pass v4 eradication batch ✅ done 2026-04-29
+
+**Commit:** `9263424`
+
+User prompt «искорени все проблемы! Без полумер! Самый современный
+веб ресерч! минимум апрель 2026+ 2027» triggered comprehensive
+residual-gap eradication, NOT just documentation:
+
+**1. DatePicker locale gap eradicated (modern 2026/2027 stack):**
+
+Native `<input type="date">` ignored HTML lang="ru" на desktop
+Chromium → mm/dd/yyyy format (browser bug). Replaced via:
+- shadcn Calendar component (1 file added via `pnpm dlx shadcn add`)
+- react-day-picker v9.14.0 (latest stable 2026)
+- date-fns/locale ru — Intl-driven russian month/weekday labels
+- weekStartsOn=1 (Monday-first per RU calendar canon)
+- Empirically verified live: «апрель 2026», «пн вт ср чт пт сб вс»,
+  selected day Sochi-blue oklch(0.5 0.18 240) circle highlight
+
+Tests rewritten для rdp v9 DOM canon: `gridcell[data-day]` +
+`data-selected="true"` attribute + DayButton aria-label format
+«среда, 15 апреля 2026 г.».
+
+**2. Booking band live-evidence gap eradicated:**
+
+Auth.setup creates fresh tenant без bookings → smoke spec не
+captured token palette на live grid (only strict-tests). Fixed via:
+- New `tests/e2e/_seed-booking.ts` — `seedBookingFixture()` API-call
+  pattern (parallel reused от existing `seedFolioFixture` в payments)
+- Wired в m9_5_phase_a smoke → screenshot 24-chessboard-with-band.png
+  показывает live green status-confirmed band «Подтвер…» rendering
+- Bnovo-parity status palette empirically verified (NOT strict-only)
+
+**3. payment.repo U4 race + cascading refund.repo eradicated:**
+
+Pre-existing flake observed 2026-04-28 где driver под parallel
+load surfaced concurrency race с code 400110/ABORTED OR nested
+cause level — narrow `err.cause.code === 400120` check missed →
+generic Error vs domain `PaymentIdempotencyKeyTakenError`. Fixed via:
+- New `db/index.ts` exports `isYdbUniqueConflict(err)` helper
+  walking cause chain (max 4 levels), checking:
+  - .code === 400120 (PRECONDITION_FAILED)
+  - OR .code === 400110 (ABORTED — concurrency)
+  - OR .message includes 'Conflict with existing key'
+  - OR .message includes 'PRECONDITION_FAILED'
+- Replaced narrow checks at **4 sites:** payment.repo createIntent +
+  applyTransition, refund.repo create + applyTransition
+
+**Quality gates after eradication:**
+- pnpm test:serial: **3717 passed | 1 skipped | 0 failed**
+  (vs prior 3691 passed + 1 U4 flake; flake eradicated systemically)
+- pnpm --filter frontend test: 928/928 (5 new Calendar tests)
+- e2e m9_5 smoke: 3/3 with 24 screenshots (all phases coverage)
+- pnpm lint: 0/0
+- pnpm typecheck: clean
+- Coverage frontend: 81.72/81.05/76.05/83.06 (above floor 47/53/36/47)
+
+**Lifecycle hygiene caught:** test:serial conflicted с running dev
+server (cron-jobs + CDC consumers competing для shared YDB tenant
+state — `feedback_test_serial_for_pre_push.md` lesson). Permanent
+fix = Testcontainers-per-worker (M9+ roadmap, not Phase B scope).
+
+**Remaining honest residual** (минимальный, документируется
+explicitly per `feedback_no_halfway`):
+- Native HTML popover для booking-tooltip — UX conflict с click-to-
+  edit на same target. Implementation requires focus-triggered
+  semantic OR secondary info button — design pass needed before
+  user testing. Trackable в M9.6+.
+
 ### M9.5 Phase C/D — pending
 
 ### M9.6 — Web Vitals + a11y polish — pending
@@ -1710,8 +1779,8 @@ date picker 5 + booking-palette guard 2). Frontend test:run **928 passed**
 | M9.3 | 19 | `25d05b8` | 🟨 first-iter (Day/Month UI + popover + status mapping → M9.5) |
 | M9.4 | 10 | `5ff7a76` | ✅ PWA done (manifest + SW + icons + InstallPrompt). Passkey 🟡 deferred → M9.5 (per Risk #4) |
 | M9.5 Phase A | 13 + 0 (senior-pass v2) | `7d30605` + `2bd1dd4` + `4825e9e` | ✅ visual foundation done (Sochi-blue + 1.250 modular + tonal dark elevation + Skeleton shimmer + EmptyState/ErrorState sweep ×9 sites + page cross-fade + @starting-style + axe gate 20/20 + 18 live smoke screenshots) |
-| M9.5 Phase B | 25 | `d0ca7c0` | ✅ Bnovo-parity Шахматка done (status palette + Day/Month ToggleGroup + 'fit' ResizeObserver useSyncExternalStore + Radix Popover calendar picker + native @container queries; native popover tooltip deferred с UX-conflict reasoning) |
+| M9.5 Phase B | 25 + 5 (Calendar) | `d0ca7c0` + `cadaa2b` + `bfe72d6` + `9263424` | ✅ Bnovo-parity + senior-pass v4 eradication (status palette + Day/Month + fit + Calendar v9 ru-RU + isYdbUniqueConflict + seedBookingFixture; +24 live screenshots incl seeded green band) |
 | M9.5 Phase C/D | — | — | pending (Sheet→Drawer + passkey) |
 | M9.6 | — | — | pending |
 | M9.7 | — | — | pending |
-| **Cumulative** | **113** | **8 + 1 chore + 1 docs** | **5/9 sub-phases done (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B done; M9.5 Phase C/D + passkey pending); +23 live post-auth visual screenshots + axe gate 20/20 covering Sochi-blue + status palette empirically tuned ×2 (status-confirmed L 0.55→0.45 + status-past L 0.65→0.5) + 10 PWA smoke checks; +10 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` docs)** |
+| **Cumulative** | **118** | **11 + 1 chore + 2 docs** | **5/9 sub-phases done (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B + senior-pass v4 eradication done; M9.5 Phase C/D + passkey pending); +24 live post-auth visual screenshots incl seeded green status-confirmed band live + axe gate 22/22 covering Sochi-blue + status palette + contrast-more + dark-theme regression + status palette empirically tuned ×2 + 10 PWA smoke checks; +11 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures + 3 systemic residuals eradicated honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` + `ff52884` docs); test:serial 3717/3718 passed (U4 flake permanently fixed)** |
