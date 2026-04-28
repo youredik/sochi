@@ -37,7 +37,10 @@
 	--muted-foreground: oklch(0.45 0 0);
 	--accent: oklch(0.97 0 0);
 	--accent-foreground: oklch(0.205 0 0);
-	--destructive: oklch(0.577 0.245 27.325);
+	/* L 0.577 → 0.55 deeper per Risk #16 same canon — shadcn default gives
+	 * 4.49:1 на white-foreground (1/100 below WCAG 2.2 AA 4.5:1, axe-core
+	 * caught на Refund Sheet Step 2 destructive button 2026-04-28). */
+	--destructive: oklch(0.55 0.245 27.325);
 	--border: oklch(0.922 0 0);
 	--input: oklch(0.922 0 0);
 	--ring: oklch(0.708 0 0);

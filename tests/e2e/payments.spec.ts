@@ -251,6 +251,13 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 		// Wait for submit button to be enabled to avoid phantom contrast violation
 		// (opacity-50 disabled state breaks contrast checks).
 		await expect(dialog.getByRole('button', { name: /^Принять$/ })).toBeEnabled()
+		// Wait for Sheet enter-animation (fade-in-0 + slide-in-from-right-10) to
+		// settle — without this, axe samples button at ~84% opacity composited
+		// with bg-popover, surfacing Sochi-blue at 3.94:1 vs 4.5:1 AA. Same canon
+		// as Refund Step 1.
+		await page.waitForFunction(() =>
+			document.getAnimations().every((a) => a.playState !== 'running'),
+		)
 
 		const results = await new AxeBuilder({ page })
 			.include('[role="dialog"]')
@@ -333,6 +340,11 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 		await expect(
 			dialog.getByRole('button', { name: /Подтвердить возврат/ }),
 		).toBeEnabled()
+		// Step transition animations (slide-in-from-right) must settle to avoid
+		// transient opacity sampled by axe — same canon as Step 1 + Mark Paid.
+		await page.waitForFunction(() =>
+			document.getAnimations().every((a) => a.playState !== 'running'),
+		)
 
 		const results = await new AxeBuilder({ page })
 			.include('[role="dialog"]')
