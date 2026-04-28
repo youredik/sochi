@@ -2,9 +2,44 @@
 <html lang="ru">
 	<head>
 		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<meta name="theme-color" content="#0a0a0a" />
+		<!--
+			interactive-widget=resizes-content (M9.1):
+			required чтобы на iOS Safari layout сжимался под virtual keyboard,
+			иначе svh/dvh units на формы не реагируют (Round 4 self-audit finding).
+		-->
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+		/>
+		<!--
+			Hybrid theme-color (M9.1):
+			Two static <meta media=> tags обеспечивают FOUC-free initial render
+			для system-mode users. ThemeProvider patch'ит дополнительный
+			no-media <meta> ниже только при explicit user choice.
+		-->
+		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
+		<meta name="theme-color" content="" />
 		<title>HoReCa Portal</title>
+		<!--
+			FOUC-prevention script (M9.1):
+			Apply'ит .dark класс ПЕРЕД React mount чтобы избежать flash при reload
+			на dark-странице. Storage key 'horeca-theme' match'ится с useThemeStore
+			(src/lib/theme-store.ts) — НЕ менять без одновременного обновления.
+			color-scheme управляется CSS-каскадом (:root + .dark), не JS-style.
+		-->
+		<script>
+			;(() => {
+				try {
+					const t = localStorage.getItem('horeca-theme')
+					const stored = t ? JSON.parse(t).state.theme : 'system'
+					const d =
+						stored === 'dark' ||
+						(stored === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+					if (d) document.documentElement.classList.add('dark')
+				} catch {}
+			})()
+		</script>
 	</head>
 	<body>
 		<div id="root"></div>

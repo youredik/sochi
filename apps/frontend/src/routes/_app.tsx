@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { ModeToggle } from '../components/mode-toggle.tsx'
 import { LogoutButton } from '../features/auth/components/logout-button.tsx'
 import { OrgSwitcher } from '../features/tenancy/components/org-switcher.tsx'
 import { authClient, sessionQueryOptions } from '../lib/auth-client.ts'
@@ -80,8 +81,9 @@ function AppLayout() {
 			<header className="border-b border-border bg-background/80 backdrop-blur">
 				<div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
 					<span className="text-sm font-semibold tracking-tight text-foreground">HoReCa</span>
-					<div className="flex items-center gap-4">
+					<div className="flex items-center gap-2">
 						<OrgSwitcher />
+						<ModeToggle />
 						<LogoutButton />
 					</div>
 				</div>

@@ -9,6 +9,7 @@ import { i18n, setupI18n } from './features/i18n/setup.ts'
 import { setupOtel } from './features/observability/setup-otel.ts'
 import { ErrorBoundary } from './lib/error-boundary.tsx'
 import { logger } from './lib/logger.ts'
+import { ThemeProvider } from './lib/theme-provider.tsx'
 import { routeTree } from './routeTree.gen.ts'
 import './index.css'
 
@@ -72,10 +73,18 @@ createRoot(rootEl, {
 		<ErrorBoundary>
 			<I18nProvider i18n={i18n}>
 				<MotionConfig reducedMotion="user">
-					<QueryClientProvider client={queryClient}>
-						<RouterProvider router={router} />
-						<Toaster position="top-right" richColors closeButton expand={false} visibleToasts={3} />
-					</QueryClientProvider>
+					<ThemeProvider>
+						<QueryClientProvider client={queryClient}>
+							<RouterProvider router={router} />
+							<Toaster
+								position="top-right"
+								richColors
+								closeButton
+								expand={false}
+								visibleToasts={3}
+							/>
+						</QueryClientProvider>
+					</ThemeProvider>
 				</MotionConfig>
 			</I18nProvider>
 		</ErrorBoundary>

@@ -1093,7 +1093,7 @@ apps/backend/
     db/
       better-auth-adapter.ts                      [M9.4: extend для passkey table]
       migrations/
-        0042_passkey_better_auth.sql              [M9.4 NEW: manual YDB DDL — latest baseline 0041 M8.A.5.note]
+        0043_passkey_better_auth.sql              [M9.4 NEW: manual YDB DDL — latest baseline 0042 organization_profile_mode (M8.A.demo.foundation)]
     domains/
       property/
         media.routes.ts                           [M9.7 NEW: /sign + /confirm]

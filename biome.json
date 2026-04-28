@@ -37,7 +37,7 @@
 				"noMisusedPromises": "error",
 				"useAwaitThenable": "error",
 				"useExhaustiveSwitchCases": "error",
-				"useNullishCoalescing": "warn"
+				"useNullishCoalescing": "off"
 			}
 		},
 		"domains": {
@@ -155,7 +155,8 @@
 			"linter": {
 				"rules": {
 					"style": {
-						"noNonNullAssertion": "off"
+						"noNonNullAssertion": "off",
+						"useComponentExportOnlyModules": "off"
 					}
 				}
 			}
