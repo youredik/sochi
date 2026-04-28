@@ -1614,7 +1614,85 @@ EmptyState — это design decision, не half-measure.
   'active' })` или `prefers-contrast: more` если есть real user need.
   Phase A canon NOT requires (deferred follow-up).
 
-### M9.5 Phase B/C/D — Visual Polish remainder + passkey — pending
+### M9.5 Phase B — Bnovo-parity Шахматка ✅ done 2026-04-28
+
+**Commit:** `d0ca7c0` (feat) + `<actualize>` (docs)
+
+**Delivered (5 of 6 plan items, 1 deferred с UX-conflict reasoning):**
+
+1. **Bnovo-parity status palette (token-based, theme-aware):**
+   - `index.css` — 4 status tokens × 3 contexts (light/dark/contrast-more):
+     `--status-confirmed` (green oklch 0.45) → новые/pre-arrival
+     `--status-occupied` (Sochi-blue 0.5) → currently in-house
+     `--status-past` (grey 0.5) → checked_out + cancelled
+     `--status-issue` (red 0.55) → no_show
+   - `@theme inline` binding generates Tailwind v4 utility classes
+     `bg-status-{confirmed,occupied,past,issue}` + `text-*-foreground`
+   - `prefers-contrast: more` AAA overlays (deeper L per status)
+   - `booking-palette.ts` rewritten: token classes (NOT hardcoded
+     `bg-blue-/bg-neutral-`). 2024 → 2026 modern theme-aware pattern
+   - `booking-palette.test.ts`: token-based assertions + «no
+     hardcoded shadcn neutral palette» strict guard
+   - **Empirically axe-tuned 2026-04-28:** initial L=0.55 confirmed
+     gave 4.32:1 < AA на white-fg, tuned к 0.45 → 5.0:1+ AA pass
+
+2. **Day/Month viewMode UI selector** (Radix ToggleGroup +
+   lucide CalendarDaysIcon/CalendarIcon + aria-label «Режим
+   просмотра шахматки»; 6 strict tests R1-R3 + S1-S3 incl.
+   adversarial S2 «click-same suppress reset»)
+
+3. **'fit' ResizeObserver runtime** — `useFitWindowDays` hook
+   с `useSyncExternalStore` (React 18+ canonical: SSR-safe +
+   concurrent-mode-safe + tearing-free). Formula `floor((width -
+   180) / 40)`, clamped к [3, 60]. 7 strict tests F1-F7 incl resize
+   re-evaluation. Integration: `chessboard.tsx` containerRef + ternary
+   `windowDaysPref === 'fit' ? fitDays : windowDaysPref`
+
+4. **Calendar picker** (Radix Popover + native `<input type="date">`)
+   — preserves OS-level locale picker (iOS wheel, Android calendar,
+   Windows grid) + Radix focus-trap/ESC. 5 strict tests R1-R2 + O1-O2 +
+   S1-S2 (empty-string suppress)
+
+5. **@container queries** для chessboard header — Tailwind v4
+   `@container/chessboard` + `@md/chessboard:` switches stack→row
+   layout по container width (NOT viewport)
+
+6. **Native HTML popover для booking-tooltip — DEFERRED:** Plan canon
+   §M9.3 envisioned `popovertarget` на cell для tooltip-on-focus.
+   UX conflict empirically caught во время implementation: cell click
+   already opens BookingEditDialog (canonical action). Adding popover
+   to same target requires double-click semantic OR secondary info
+   button. Both UX patterns require dedicated design pass + user
+   testing. Trackable в follow-up M-фазе. **Senior decision** — НЕ
+   silently downscope, document explicitly per `feedback_no_halfway`.
+
+**Tests:** +25 new strict (palette tokens 5 + viewMode 6 + fit 7 +
+date picker 5 + booking-palette guard 2). Frontend test:run **928 passed**
+(51 files), **0 regressions** vs 903 baseline. Coverage 81.72/81.05/76.05/
+83.06 — все выше floor 47/53/36/47 (за +25 tests +).
+
+**Quality gates:**
+- pnpm lint: 0/0
+- pnpm typecheck: clean
+- pre-commit lefthook 5/5 ✅
+- e2e gate: m9_5_phase_a + app-a11y → all green; grid-a11y 4/5
+  (1 booking-EDIT order-dependent flake — relies on bands from prior
+  tests, passes в full chromium suite)
+- **Live screenshot evidence:** `02-chessboard-light.png` показывает
+  3 new controls (Day/Month ToggleGroup active «День» + WindowSelector
+  «15 дней» + DatePicker «28.04.2026») + status-confirmed green band
+  «Подтвер…» — Bnovo-parity rendering live
+
+**Modern 2026 patterns applied (per user prompt «действуй максимально
+современно»):**
+- Token-based palette (var()-driven) over hardcoded Tailwind colors
+- `useSyncExternalStore` over useState+useEffect для external store
+- Radix ToggleGroup over custom toggle
+- Native input[type=date] inside Popover (OS picker UX preserved)
+- Tailwind v4 `@container` queries (native, NOT JS media-query)
+- `@theme inline` для CSS-каскад dark/contrast token resolution
+
+### M9.5 Phase C/D — pending
 
 ### M9.6 — Web Vitals + a11y polish — pending
 
@@ -1631,8 +1709,9 @@ EmptyState — это design decision, не half-measure.
 | M9.2 | 14 | `7b5bbd2` | ✅ |
 | M9.3 | 19 | `25d05b8` | 🟨 first-iter (Day/Month UI + popover + status mapping → M9.5) |
 | M9.4 | 10 | `5ff7a76` | ✅ PWA done (manifest + SW + icons + InstallPrompt). Passkey 🟡 deferred → M9.5 (per Risk #4) |
-| M9.5 Phase A | 13 | `7d30605` | 🟨 visual foundation done (Sochi-blue + 1.250 modular + tonal dark elevation + Skeleton shimmer + EmptyState/ErrorState sweep ×9 sites + page cross-fade + @starting-style) |
-| M9.5 Phase B/C/D | — | — | pending (Day/Month UI + popover + status mapping + fit + @container + calendar picker + Sheet→Drawer + passkey) |
+| M9.5 Phase A | 13 + 0 (senior-pass v2) | `7d30605` + `2bd1dd4` + `4825e9e` | ✅ visual foundation done (Sochi-blue + 1.250 modular + tonal dark elevation + Skeleton shimmer + EmptyState/ErrorState sweep ×9 sites + page cross-fade + @starting-style + axe gate 20/20 + 18 live smoke screenshots) |
+| M9.5 Phase B | 25 | `d0ca7c0` | ✅ Bnovo-parity Шахматка done (status palette + Day/Month ToggleGroup + 'fit' ResizeObserver useSyncExternalStore + Radix Popover calendar picker + native @container queries; native popover tooltip deferred с UX-conflict reasoning) |
+| M9.5 Phase C/D | — | — | pending (Sheet→Drawer + passkey) |
 | M9.6 | — | — | pending |
 | M9.7 | — | — | pending |
-| **Cumulative** | **88** | **6 + 1 chore + 1 docs** | **4.5/9 sub-phases done (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A done; M9.5 Phase B/C/D + passkey pending); +23 live post-auth visual screenshots + 10 PWA smoke checks; +10 self-audit iterations с 12 cumulative hallucinations + half-measure caught honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` docs)** |
+| **Cumulative** | **113** | **8 + 1 chore + 1 docs** | **5/9 sub-phases done (M9.3 first-iter + M9.4 PWA done + M9.5 Phase A + M9.5 Phase B done; M9.5 Phase C/D + passkey pending); +23 live post-auth visual screenshots + axe gate 20/20 covering Sochi-blue + status palette empirically tuned ×2 (status-confirmed L 0.55→0.45 + status-past L 0.65→0.5) + 10 PWA smoke checks; +10 self-audit iterations с 12 cumulative hallucinations + 2 captured half-measures honestly logged; docker-compose YDB cert hardening (`235c7eb` chore); plan actualization (`3064739` docs)** |
