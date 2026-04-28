@@ -2,19 +2,25 @@
  * MigrationRegistration repo — YDB integration tests, strict canon
  * per `feedback_strict_tests.md` + `feedback_pre_done_audit.md`.
  *
- * Pre-done checklist (paste-and-fill):
- *   ✓ cross-tenant × every method (create/getById/listByBooking/
- *     listPendingPoll/updateAfterReserve/updateAfterPoll/patch)
- *   ✓ PK-separation: same id allowed in different tenants
- *   ✓ enum FULL coverage: epguChannel × 3 values, errorCategory × 8 values
- *   ✓ null-patch vs undefined-patch (three-state semantics) per field
- *   ✓ Date columns roundtrip (arrivalDate / departureDate / submittedAt /
- *     lastPolledAt / nextPollAt / finalizedAt)
- *   ✓ Bool isFinal roundtrip true/false (no truthy coercion)
- *   ✓ Int32 retryCount roundtrip
- *   ✓ FSM ordering: rows with same nextPollAt sorted deterministically
- *   ✓ listPendingPoll filters: isFinal=true excluded, NULL orderId excluded
- *   ✓ updatedAt strictly monotonic on every successful update
+ * Pre-done checklist (paste-and-fill, evidence-mapped):
+ *   [X] cross-tenant on EVERY read method:
+ *         getById [CT1], listByBooking [L2], listPendingPoll [Pol5]
+ *   [X] cross-tenant no-op on EVERY write method:
+ *         updateAfterReserve [U4], updateAfterPoll [U6], patch [P5]
+ *   [X] PK-separation: same id allowed in different tenants [CT2]
+ *   [X] enum FULL coverage: epguChannel × 3 [E1-E3],
+ *         errorCategory × 8 [U3 loop]
+ *   [X] null-patch vs undefined-patch (three-state):
+ *         retryCount undefined-preserve [P1], retryCount value [P2],
+ *         nextPollAt null-clear [P3], nextPollAt undefined-preserve [P6]
+ *   [X] Date columns roundtrip: arrivalDate/departureDate [C1],
+ *         submittedAt [U1], finalizedAt [U2], nextPollAt [P3/Pol3]
+ *   [X] Bool isFinal roundtrip true [U2/U3], false [U5] (no truthy coerce)
+ *   [X] Int32 retryCount roundtrip [U2 retryCount=5 / P2]
+ *   [X] listPendingPoll filters: isFinal=true excluded [Pol1],
+ *         NULL orderId excluded [Pol2], due-now included [Pol3], limit [Pol4]
+ *   [X] updatedAt strictly monotonic on every successful update [M1]
+ *   [X] N/A — no UNIQUE indexes on migrationRegistration (only secondary)
  *
  * Requires local YDB (docker-compose up ydb).
  */
@@ -231,6 +237,41 @@ describe('migrationRegistration.repo — listPendingPoll', { tags: ['db'], timeo
 		expect(pending.find((r) => r.id === input.id)).toBeDefined()
 	})
 
+	test('[Pol5] tenantId carried through (cron-internal scan, per-row routing)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const now = new Date()
+		// Seed одну pending row в TENANT_A и одну в TENANT_B
+		const inputA = baseInput({ tenantId: TENANT_A })
+		const inputB = baseInput({ tenantId: TENANT_B })
+		await repo.create(inputA)
+		await repo.create(inputB)
+		for (const inp of [inputA, inputB]) {
+			await repo.updateAfterReserve(inp.tenantId, inp.id, {
+				epguOrderId: `order-${inp.id}`,
+				statusCode: 17,
+				submittedAt: now,
+			})
+			await repo.updateAfterPoll(inp.tenantId, inp.id, {
+				statusCode: 17,
+				isFinal: false,
+				reasonRefuse: null,
+				errorCategory: null,
+				retryCount: 0,
+				lastPolledAt: now,
+				nextPollAt: now,
+				finalizedAt: null,
+			})
+		}
+		const pending = await repo.listPendingPoll(new Date(now.getTime() + 1000), 100)
+		// listPendingPoll is cron-internal (not tenant-scoped) — both rows
+		// reachable, but each carries its own tenantId. Verify the rows are
+		// distinguishable by tenantId so the cron handler can route correctly.
+		const a = pending.find((r) => r.id === inputA.id)
+		const b = pending.find((r) => r.id === inputB.id)
+		expect(a?.tenantId).toBe(TENANT_A)
+		expect(b?.tenantId).toBe(TENANT_B)
+	})
+
 	test('[Pol4] limit honored: создаём 5, limit=2 → ≤2 returned', async () => {
 		const repo = createMigrationRegistrationRepo(getTestSql())
 		const ids: string[] = []
@@ -362,6 +403,39 @@ describe('migrationRegistration.repo — updateAfterReserve + updateAfterPoll', 
 		expect(got?.epguOrderId).toBeNull() // unchanged
 	})
 
+	test('[U6] cross-tenant updateAfterPoll: tenant B не может изменить row tenant A', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput({ tenantId: TENANT_A })
+		await repo.create(input)
+		const now = new Date()
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: 'order-poll-leak',
+			statusCode: 17,
+			submittedAt: now,
+		})
+		// Capture state after legitimate update
+		const before = await repo.getById(TENANT_A, input.id)
+		expect(before?.statusCode).toBe(17)
+		// Try malicious cross-tenant write
+		await repo.updateAfterPoll(TENANT_B, input.id, {
+			statusCode: 4,
+			isFinal: true,
+			reasonRefuse: 'Attempted cross-tenant overwrite',
+			errorCategory: 'validation_format',
+			retryCount: 99,
+			lastPolledAt: now,
+			nextPollAt: null,
+			finalizedAt: now,
+		})
+		const after = await repo.getById(TENANT_A, input.id)
+		// All fields preserved (статус 17, не 4; isFinal остался false)
+		expect(after?.statusCode).toBe(17)
+		expect(after?.isFinal).toBe(false)
+		expect(after?.reasonRefuse).toBeNull()
+		expect(after?.errorCategory).toBeNull()
+		expect(after?.retryCount).toBe(0)
+	})
+
 	test('[U5] isFinal=false roundtrip (NOT truthy coercion to boolean)', async () => {
 		const repo = createMigrationRegistrationRepo(getTestSql())
 		const input = baseInput()
@@ -420,9 +494,79 @@ describe('migrationRegistration.repo — patch (three-state semantics)', {
 		expect(result?.nextPollAt).toBeNull()
 	})
 
-	test('[P4] patch unknown id (cross-tenant) → returns null', async () => {
+	test('[P4] patch unknown id → returns null', async () => {
 		const repo = createMigrationRegistrationRepo(getTestSql())
 		const result = await repo.patch(TENANT_A, 'never-existed', { retryCount: 99 }, ACTOR)
 		expect(result).toBeNull()
+	})
+
+	test('[P5] patch cross-tenant: tenant B patch row tenant A → no-op + null', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput({ tenantId: TENANT_A })
+		const created = await repo.create(input)
+		// TENANT_B пытается обновить row TENANT_A
+		const result = await repo.patch(TENANT_B, input.id, { retryCount: 999 }, ACTOR)
+		expect(result).toBeNull()
+		// row у TENANT_A осталась с retryCount=0
+		const got = await repo.getById(TENANT_A, input.id)
+		expect(got?.retryCount).toBe(created.retryCount)
+		expect(got?.retryCount).toBe(0)
+	})
+
+	test('[P6] patch undefined-preserve: nextPollAt absent → existing value сохраняется', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		// Set initial nextPollAt
+		const t = new Date('2026-06-01T12:00:00Z')
+		const seeded = await repo.patch(TENANT_A, input.id, { nextPollAt: t }, ACTOR)
+		expect(seeded?.nextPollAt).toBe(t.toISOString())
+		// Now patch ONLY retryCount — nextPollAt should remain
+		const after = await repo.patch(TENANT_A, input.id, { retryCount: 3 }, ACTOR)
+		expect(after?.retryCount).toBe(3)
+		expect(after?.nextPollAt).toBe(t.toISOString())
+	})
+})
+
+describe('migrationRegistration.repo — updatedAt monotonic', {
+	tags: ['db'],
+	timeout: 60_000,
+}, () => {
+	test('[M1] updatedAt strictly monotonic across reserve → poll → patch', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		const created = await repo.create(input)
+		const t0 = new Date(created.updatedAt).getTime()
+
+		await new Promise((resolve) => setTimeout(resolve, 5))
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: 'order-mono',
+			statusCode: 17,
+			submittedAt: new Date(),
+		})
+		const r1 = await repo.getById(TENANT_A, input.id)
+		const t1 = new Date(r1?.updatedAt ?? '').getTime()
+		expect(t1).toBeGreaterThan(t0)
+
+		await new Promise((resolve) => setTimeout(resolve, 5))
+		await repo.updateAfterPoll(TENANT_A, input.id, {
+			statusCode: 17,
+			isFinal: false,
+			reasonRefuse: null,
+			errorCategory: null,
+			retryCount: 1,
+			lastPolledAt: new Date(),
+			nextPollAt: new Date(),
+			finalizedAt: null,
+		})
+		const r2 = await repo.getById(TENANT_A, input.id)
+		const t2 = new Date(r2?.updatedAt ?? '').getTime()
+		expect(t2).toBeGreaterThan(t1)
+
+		await new Promise((resolve) => setTimeout(resolve, 5))
+		await repo.patch(TENANT_A, input.id, { retryCount: 5 }, ACTOR)
+		const r3 = await repo.getById(TENANT_A, input.id)
+		const t3 = new Date(r3?.updatedAt ?? '').getTime()
+		expect(t3).toBeGreaterThan(t2)
 	})
 })

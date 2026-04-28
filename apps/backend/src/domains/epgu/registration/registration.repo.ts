@@ -265,11 +265,16 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 		},
 
 		/**
-		 * Patch input fields exposed via Hono PATCH route. Three-state semantics:
+		 * Operator-facing patch — only fields exposed through the PATCH UI route.
+		 * Three-state semantics per nullable column:
 		 *   - undefined ⇒ no change
-		 *   - null ⇒ clear (e.g. operator clears note)
-		 * Distinguished from updateAfterReserve/Poll which are cron-internal
-		 * field-precise updates.
+		 *   - null ⇒ clear (e.g. reset nextPollAt after retry)
+		 *   - value ⇒ overwrite
+		 *
+		 * FSM-controlled columns (statusCode, isFinal, reasonRefuse, finalizedAt)
+		 * are intentionally NOT in the patch surface — they advance only via
+		 * updateAfterReserve / updateAfterPoll on the cron path, keeping the
+		 * audit trail clean. Status overrides land via M8.A.5.cancel.
 		 */
 		async patch(
 			tenantId: string,
@@ -277,48 +282,13 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 			patch: {
 				readonly retryCount?: number
 				readonly nextPollAt?: Date | null
-				readonly statusCode?: number
-				readonly isFinal?: boolean
-				readonly reasonRefuse?: string | null
-				readonly finalizedAt?: Date | null
 			},
 			actorId: string,
 		): Promise<MigrationRegistration | null> {
 			const nowTs = toTs(new Date())
-			const sets: string[] = []
-			const values: Array<unknown> = []
-			if (patch.retryCount !== undefined) {
-				sets.push('retryCount')
-				values.push(patch.retryCount)
-			}
-			if (patch.nextPollAt !== undefined) {
-				sets.push('nextPollAt')
-				values.push(patch.nextPollAt)
-			}
-			if (patch.statusCode !== undefined) {
-				sets.push('statusCode')
-				values.push(patch.statusCode)
-			}
-			if (patch.isFinal !== undefined) {
-				sets.push('isFinal')
-				values.push(patch.isFinal)
-			}
-			if (patch.reasonRefuse !== undefined) {
-				sets.push('reasonRefuse')
-				values.push(patch.reasonRefuse)
-			}
-			if (patch.finalizedAt !== undefined) {
-				sets.push('finalizedAt')
-				values.push(patch.finalizedAt)
-			}
-			if (sets.length === 0) {
+			if (patch.retryCount === undefined && patch.nextPollAt === undefined) {
 				return this.getById(tenantId, id)
 			}
-			// Two-field branches cover the operator UI surface (retry +
-			// nextPollAt). Other fields (statusCode/isFinal/reasonRefuse/
-			// finalizedAt) are mutated via dedicated cron paths
-			// (updateAfterReserve / updateAfterPoll) rather than through
-			// generic patch — keeps FSM transitions auditable.
 			if (patch.retryCount !== undefined && patch.nextPollAt !== undefined) {
 				await sql`
 					UPDATE migrationRegistration

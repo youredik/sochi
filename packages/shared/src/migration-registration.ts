@@ -198,17 +198,20 @@ export function checkStayPeriodInvariant(
 }
 
 /**
- * Patch input — only mutable fields exposed (status FSM advances by
- * cron, NOT by client). Used for retry-trigger / manual-cancel from UI.
+ * Patch input — only fields actually wired through to the repo. Status FSM
+ * advances by cron, NOT by client. Schema is intentionally narrow: every
+ * field MUST have an end-to-end path through routes → repo → DB column.
+ *
+ * Future fields (deferred so the schema stays honest, not aspirational):
+ *   - `manuallyCancelled`: requires dedicated cancel endpoint that sets
+ *     statusCode=10/isFinal=true/finalizedAt=now and emits CDC notification.
+ *     Lands in M8.A.5.cancel together with the «отозвать уведомление» UI.
+ *   - `operatorNote`: requires Utf8? column on migrationRegistration plus
+ *     audit trail in activity domain. Lands in M8.A.5.note.
  */
 export const migrationRegistrationPatchSchema = z
 	.object({
-		// Manually trigger re-submit on previous failure
 		retryRequested: z.boolean().optional(),
-		// Manually mark as cancelled (e.g. РКЛ false-positive resolved)
-		manuallyCancelled: z.boolean().optional(),
-		// Operator note for audit
-		operatorNote: z.string().max(2000).optional(),
 	})
 	.refine((obj) => Object.keys(obj).length > 0, 'At least one field must be provided')
 export type MigrationRegistrationPatch = z.infer<typeof migrationRegistrationPatchSchema>
