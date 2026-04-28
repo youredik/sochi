@@ -48,7 +48,8 @@ async function clearDark(page: Page) {
 }
 
 test.describe('M9.5 Phase A — live-user visual smoke', () => {
-	test('authenticated journey: light + dark + ModeToggle + mobile', async ({
+	test.setTimeout(120_000)
+	test('authenticated journey: light + dark + ModeToggle + mobile + Phase B', async ({
 		page,
 		context,
 	}) => {
@@ -147,6 +148,53 @@ test.describe('M9.5 Phase A — live-user visual smoke', () => {
 			path: `${OUT}/15-dashboard-reduced-motion.png`,
 			fullPage: true,
 		})
+
+		// --- M9.5 Phase B chessboard comprehensive ---
+		await page.emulateMedia({ reducedMotion: null })
+		await page.setViewportSize(DESKTOP)
+		await page.goto(`/o/${slug}/grid`)
+		await expect(page.getByRole('grid')).toBeVisible()
+		await settle(page)
+
+		// Month toggle — viewMode binds к 30-day window (not decorative).
+		await page.getByRole('radio', { name: 'Месяц' }).click()
+		await settle(page)
+		await page.screenshot({ path: `${OUT}/19-chessboard-month-30day.png`, fullPage: true })
+
+		// Reset back к Day for subsequent tests.
+		await page.getByRole('radio', { name: 'День' }).click()
+		await settle(page)
+
+		// Calendar picker open — Radix Popover + native input visible.
+		await page.getByRole('button', { name: 'Перейти к дате' }).click()
+		await page.waitForTimeout(300)
+		await page.screenshot({ path: `${OUT}/20-chessboard-date-picker-open.png`, fullPage: true })
+		await page.keyboard.press('Escape')
+
+		// Chessboard dark theme — Bnovo status palette на bands.
+		await forceDark(page)
+		await page.screenshot({ path: `${OUT}/21-chessboard-dark.png`, fullPage: true })
+
+		// Chessboard contrast-more — AAA palette.
+		await clearDark(page)
+		await page.emulateMedia({ contrast: 'more' })
+		await page.goto(`/o/${slug}/grid`)
+		await settle(page)
+		await page.screenshot({ path: `${OUT}/22-chessboard-contrast-more.png`, fullPage: true })
+
+		// --- M9.2 mobile SidebarDrawer (Vaul drawer) ---
+		await page.emulateMedia({ contrast: null })
+		await page.setViewportSize(MOBILE)
+		await page.goto(`/o/${slug}/`)
+		await settle(page)
+		// Bottom-tab «Ещё» triggers Vaul drawer (M9.2 mobile shell).
+		const moreTab = page.getByRole('tab', { name: /Ещё/ })
+		if (await moreTab.isVisible().catch(() => false)) {
+			await moreTab.click()
+			await page.waitForTimeout(500)
+			await page.screenshot({ path: `${OUT}/23-mobile-sidebar-drawer.png`, fullPage: true })
+			await page.keyboard.press('Escape')
+		}
 
 		expect(consoleErrors, `console errors: ${consoleErrors.join('\n')}`).toEqual([])
 	})
