@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BookingCreateDialog } from '../../bookings/components/booking-create-dialog'
 import { BookingEditDialog } from '../../bookings/components/booking-edit-dialog'
+import { useFitWindowDays } from '../hooks/use-fit-window-days'
 import { useGridData } from '../hooks/use-grid-data'
 import { styleFor } from '../lib/booking-palette'
-import { useChessboardPrefsStore, type WindowDays } from '../lib/chessboard-prefs-store'
+import { useChessboardPrefsStore } from '../lib/chessboard-prefs-store'
 import { addDays, iterateDates, todayIso } from '../lib/date-range'
 import {
 	type FocusPosition,
@@ -18,19 +19,9 @@ import {
 	type RowNav,
 } from '../lib/keymap'
 import { bandPosition } from '../lib/layout'
+import { ChessboardDatePicker } from './chessboard-date-picker'
+import { ChessboardViewModeSelector } from './chessboard-view-mode-selector'
 import { ChessboardWindowSelector } from './chessboard-window-selector'
-
-/**
- * Resolve `WindowDays` pref → numeric days count для grid window.
- *
- * `'fit'` value defaults к 15 (existing canon) — visual selector preserves
- * 'fit' user preference, runtime resolves к 15 numeric. M9.5 visual polish
- * phase будет добавит ResizeObserver-based actual viewport fit.
- */
-function resolveWindowDays(pref: WindowDays): number {
-	if (pref === 'fit') return 15
-	return pref
-}
 
 interface ClickedCell {
 	roomTypeId: string
@@ -72,7 +63,10 @@ const PAGE_STEP = 5
 
 export function Chessboard() {
 	const windowDaysPref = useChessboardPrefsStore((state) => state.windowDays)
-	const windowDays = resolveWindowDays(windowDaysPref)
+	// Outer container (M9.5 Phase B @container query host + fit measurement).
+	const containerRef = useRef<HTMLElement>(null)
+	const fitDays = useFitWindowDays(containerRef)
+	const windowDays = windowDaysPref === 'fit' ? fitDays : windowDaysPref
 	const [windowFrom, setWindowFrom] = useState(todayIso)
 	const windowTo = useMemo(() => addDays(windowFrom, windowDays - 1), [windowFrom, windowDays])
 	const dates = useMemo(() => iterateDates(windowFrom, windowTo), [windowFrom, windowTo])
@@ -206,14 +200,20 @@ export function Chessboard() {
 	const todayIdx = dates.indexOf(today)
 
 	return (
-		<main className="mx-auto max-w-7xl px-6 py-8">
-			<header className="mb-4 flex items-center justify-between gap-4">
+		<main ref={containerRef} className="@container/chessboard mx-auto max-w-7xl px-6 py-8">
+			{/* M9.5 Phase B: @container queries — header переключается между
+			 * stack (mobile/narrow) и row layout на @md+ container width,
+			 * НЕ viewport. Per plan §M9.3 + §6.7 anti-pattern (no shadcn
+			 * dup): Tailwind v4 native syntax. */}
+			<header className="@md/chessboard:flex-row @md/chessboard:items-center @md/chessboard:justify-between mb-4 flex flex-col gap-4">
 				<div>
 					<h1 className="text-2xl font-semibold tracking-tight">Шахматка</h1>
 					{propertyName ? <p className="text-muted-foreground text-sm">{propertyName}</p> : null}
 				</div>
-				<div className="flex items-center gap-2">
+				<div className="flex flex-wrap items-center gap-2">
+					<ChessboardViewModeSelector />
 					<ChessboardWindowSelector />
+					<ChessboardDatePicker value={windowFrom} onChange={setWindowFrom} />
 					<Button
 						type="button"
 						variant="outline"

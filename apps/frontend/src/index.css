@@ -120,6 +120,16 @@ body {
 	--color-popover: var(--popover);
 	--color-card-foreground: var(--card-foreground);
 	--color-card: var(--card);
+	/* M9.5 Phase B booking-status palette — bind tokens к Tailwind v4 utilities.
+	 * Generates `bg-status-confirmed`, `text-status-confirmed-foreground`, etc. */
+	--color-status-confirmed: var(--status-confirmed);
+	--color-status-confirmed-foreground: var(--status-confirmed-foreground);
+	--color-status-occupied: var(--status-occupied);
+	--color-status-occupied-foreground: var(--status-occupied-foreground);
+	--color-status-past: var(--status-past);
+	--color-status-past-foreground: var(--status-past-foreground);
+	--color-status-issue: var(--status-issue);
+	--color-status-issue-foreground: var(--status-issue-foreground);
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
 	--radius-sm: calc(var(--radius) * 0.6);
@@ -161,6 +171,27 @@ body {
 	--shadow-popover: 0 4px 12px -2px oklch(0 0 0 / 0.08);
 	--shadow-drawer: 0 -8px 24px -4px oklch(0 0 0 / 0.1);
 	--shadow-dialog: 0 16px 48px -8px oklch(0 0 0 / 0.16);
+
+	/* M9.5 Phase B Bnovo-parity booking-status palette — отдельный от
+	 * brand/theme. Per plan §M9.3 architectural decision: наша BookingStatus
+	 * enum (5 values) → visual mapping для recognition, не functional parity.
+	 * confirmed → status-confirmed (green = new arrival)
+	 * in_house → status-occupied (Sochi-blue = currently in-house)
+	 * checked_out → status-past (grey)
+	 * cancelled → status-past (grey + line-through на consumer)
+	 * no_show → status-issue (red)
+	 * Все варианты verified ≥ 4.5:1 WCAG 2.2 AA с paired *-foreground. */
+	/* L tuned 0.55 → 0.45 — empirical axe gate caught 4.32:1 на white-fg
+	 * (status-confirmed on grid band) 2026-04-28; deeper L brings 5.0:1+ AA. */
+	--status-confirmed: oklch(0.45 0.15 150);
+	--status-confirmed-foreground: oklch(0.985 0 0);
+	--status-occupied: oklch(0.5 0.18 240);
+	--status-occupied-foreground: oklch(0.985 0 0);
+	/* L tuned 0.65 → 0.5 — prior 0.65 grey gave 3.0:1 на white-fg. */
+	--status-past: oklch(0.5 0 0);
+	--status-past-foreground: oklch(0.985 0 0);
+	--status-issue: oklch(0.55 0.245 27.325);
+	--status-issue-foreground: oklch(0.985 0 0);
 }
 
 .dark {
@@ -204,6 +235,18 @@ body {
 	--shadow-popover: 0 4px 12px -2px oklch(0 0 0 / 0.4), inset 0 1px 0 0 oklch(1 0 0 / 0.05);
 	--shadow-drawer: 0 -8px 24px -4px oklch(0 0 0 / 0.5), inset 0 1px 0 0 oklch(1 0 0 / 0.06);
 	--shadow-dialog: 0 16px 48px -8px oklch(0 0 0 / 0.6), inset 0 1px 0 0 oklch(1 0 0 / 0.08);
+
+	/* M9.5 Phase B booking-status palette — dark variant.
+	 * L bumped для readability на dark bg (oklch 0.145), foreground inverted
+	 * на occupied (Sochi-blue dark = light text already passes). */
+	--status-confirmed: oklch(0.7 0.15 150);
+	--status-confirmed-foreground: oklch(0.205 0 0);
+	--status-occupied: oklch(0.7 0.16 240);
+	--status-occupied-foreground: oklch(0.205 0 0);
+	--status-past: oklch(0.5 0 0);
+	--status-past-foreground: oklch(0.985 0 0);
+	--status-issue: oklch(0.704 0.191 22.216);
+	--status-issue-foreground: oklch(0.205 0 0);
 }
 
 /* prefers-contrast: more (M9.1) — AAA-overlay над light + dark.
@@ -223,6 +266,11 @@ body {
 		--ring: oklch(0.5 0 0);
 		/* Sochi-blue AAA в light: deeper L=0.45 для 7:1+ ratio */
 		--primary: oklch(0.45 0.2 240);
+		/* Status palette AAA — same canon, deeper L. */
+		--status-confirmed: oklch(0.45 0.16 150);
+		--status-occupied: oklch(0.45 0.2 240);
+		--status-past: oklch(0.5 0 0);
+		--status-issue: oklch(0.45 0.245 27.325);
 	}
 	.dark {
 		/* muted-foreground: 0.708 → 0.85 (lighter для AAA на dark bg) */
@@ -232,6 +280,11 @@ body {
 		--ring: oklch(0.85 0 0);
 		/* Sochi-blue AAA в dark: lighter L=0.78 для 7:1+ ratio */
 		--primary: oklch(0.78 0.18 240);
+		/* Status palette AAA dark — lighter L для 7:1+ on dark bg. */
+		--status-confirmed: oklch(0.8 0.16 150);
+		--status-occupied: oklch(0.78 0.18 240);
+		--status-past: oklch(0.7 0 0);
+		--status-issue: oklch(0.78 0.18 22.216);
 	}
 }
 

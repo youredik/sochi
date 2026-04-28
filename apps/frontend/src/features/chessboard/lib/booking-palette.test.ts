@@ -2,7 +2,7 @@ import type { BookingStatus } from '@horeca/shared'
 import { describe, expect, it } from 'vitest'
 import { BOOKING_CELL_STYLES, styleFor } from './booking-palette.ts'
 
-describe('booking-palette', () => {
+describe('booking-palette (M9.5 Phase B Bnovo-parity tokens)', () => {
 	const ALL_STATUSES: readonly BookingStatus[] = [
 		'confirmed',
 		'in_house',
@@ -11,11 +11,11 @@ describe('booking-palette', () => {
 		'no_show',
 	] as const
 
-	describe('exhaustiveness (every backend status has a style)', () => {
+	describe('exhaustiveness — every backend status has a style', () => {
 		it.each(ALL_STATUSES)('styleFor(%s) returns style with bg+text+label', (status) => {
 			const s = styleFor(status)
-			expect(s.bg).toMatch(/^bg-/)
-			expect(s.text).toMatch(/^text-/)
+			expect(s.bg).toMatch(/^bg-status-/)
+			expect(s.text).toMatch(/^text-status-/)
 			expect(s.label.length).toBeGreaterThan(0)
 		})
 	})
@@ -38,25 +38,38 @@ describe('booking-palette', () => {
 		})
 	})
 
-	describe('Mews 2026 palette rules', () => {
-		it('confirmed is blue (action color)', () => {
-			expect(styleFor('confirmed').bg).toMatch(/bg-blue-/)
+	describe('Bnovo-parity token mapping', () => {
+		it('confirmed → status-confirmed (green = pre-arrival)', () => {
+			expect(styleFor('confirmed').bg).toBe('bg-status-confirmed hover:brightness-95')
+			expect(styleFor('confirmed').text).toBe('text-status-confirmed-foreground')
 		})
-		it('in_house is dark (occupied, black-family)', () => {
-			expect(styleFor('in_house').bg).toMatch(/bg-neutral-9/)
+		it('in_house → status-occupied (Sochi-blue = currently in-house)', () => {
+			expect(styleFor('in_house').bg).toBe('bg-status-occupied hover:brightness-95')
+			expect(styleFor('in_house').text).toBe('text-status-occupied-foreground')
 		})
-		it('no_show is yellow (alert, not cancelled)', () => {
-			expect(styleFor('no_show').bg).toMatch(/bg-yellow-/)
+		it('checked_out → status-past (grey)', () => {
+			expect(styleFor('checked_out').bg).toBe('bg-status-past hover:brightness-95')
 		})
-		it('cancelled has line-through visual', () => {
-			expect(styleFor('cancelled').bg).toMatch(/line-through/)
+		it('cancelled → status-past + line-through visual', () => {
+			expect(styleFor('cancelled').bg).toBe('bg-status-past line-through hover:brightness-95')
+		})
+		it('no_show → status-issue (red — exception requiring action)', () => {
+			expect(styleFor('no_show').bg).toBe('bg-status-issue hover:brightness-95')
+			expect(styleFor('no_show').text).toBe('text-status-issue-foreground')
 		})
 	})
 
-	describe('immutability (frozen-style table)', () => {
-		it('BOOKING_CELL_STYLES is frozen-read at TS level — mutation fails to compile', () => {
-			// Runtime `Object.freeze` not enforced (TS-level readonly) — we
-			// assert referential stability across calls as a proxy.
+	describe('no hardcoded shadcn neutral palette (theme-aware tokens only)', () => {
+		it.each(ALL_STATUSES)('styleFor(%s) NOT use bg-neutral-/bg-blue-/bg-yellow-', (status) => {
+			const bg = styleFor(status).bg
+			expect(bg).not.toMatch(/bg-neutral-/)
+			expect(bg).not.toMatch(/bg-blue-\d/)
+			expect(bg).not.toMatch(/bg-yellow-\d/)
+		})
+	})
+
+	describe('immutability — frozen-style table', () => {
+		it('BOOKING_CELL_STYLES referentially stable across calls', () => {
 			expect(styleFor('confirmed')).toBe(BOOKING_CELL_STYLES.confirmed)
 			expect(styleFor('confirmed')).toBe(styleFor('confirmed'))
 		})

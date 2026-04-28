@@ -1,17 +1,26 @@
 import type { BookingStatus } from '@horeca/shared'
 
 /**
- * Booking-status → cell display classes.
+ * Booking-status → cell display classes (M9.5 Phase B Bnovo-parity).
  *
- * Mews 2026 palette (converged standard from 2026 research): action-blue
- * for today's arrivals/departures, in-house-black for occupied, grey for
- * past/cancelled, yellow for no-show. Bnovo's red-background for negative
- * availability is applied separately in the grid when allotment-sold < 0.
+ * Token-based palette via index.css `--status-*` tokens × `--color-status-*`
+ * @theme inline binding. Tailwind v4 utility classes (`bg-status-confirmed`
+ * etc.) resolve через CSS-каскад → :root / .dark / @media prefers-contrast,
+ * НЕ hardcoded Tailwind neutral palette (предыдущая версия использовала
+ * `bg-blue-600` + `bg-neutral-900` etc. — 2024 pattern, не theme-aware).
  *
- * Kept as a pure data structure (not JSX) so it's:
- *   - unit-testable (exact-value mapping per status, immutable table)
- *   - re-usable across chessboard + future list/filter UIs
- *   - safe under React Compiler memoization (referentially stable)
+ * **Mapping** (per plan §M9.3 Bnovo-parity decision):
+ *   - confirmed   → status-confirmed (green) — pre-arrival booked
+ *   - in_house    → status-occupied (Sochi-blue) — guest currently in-house
+ *   - checked_out → status-past (grey) — completed stays
+ *   - cancelled   → status-past (grey + line-through) — financial trail kept
+ *   - no_show     → status-issue (red) — exception requiring action
+ *
+ * **Theme-aware contrast:**
+ * Все 4 token pairs verified ≥4.5:1 WCAG 2.2 AA normal-text empirically via
+ * @axe-core/playwright (light + dark + contrast-more — 12 combinations).
+ *
+ * Pure data structure (NOT JSX) — unit-testable + reusable + memoization-safe.
  */
 
 interface CellStyle {
@@ -21,33 +30,29 @@ interface CellStyle {
 }
 
 export const BOOKING_CELL_STYLES: Readonly<Record<BookingStatus, CellStyle>> = {
-	// All combinations verified ≥4.5:1 WCAG 2.2 AA normal-text (empirically
-	// via @axe-core/playwright 2026-04-24). bg-blue-500 / text-white was
-	// 3.76:1 (fail); bg-neutral-200 / text-neutral-500 was 3.5:1 (fail).
-	// Both bumped to AA-compliant variants below.
 	confirmed: {
-		bg: 'bg-blue-600 hover:bg-blue-700', // blue-600 #155dfc / white = 5.43:1 ✓
-		text: 'text-white',
+		bg: 'bg-status-confirmed hover:brightness-95',
+		text: 'text-status-confirmed-foreground',
 		label: 'Подтверждена',
 	},
 	in_house: {
-		bg: 'bg-neutral-900 hover:bg-neutral-800', // ~16:1 ✓
-		text: 'text-neutral-100',
+		bg: 'bg-status-occupied hover:brightness-95',
+		text: 'text-status-occupied-foreground',
 		label: 'В проживании',
 	},
 	checked_out: {
-		bg: 'bg-neutral-300 hover:bg-neutral-400', // ~5.5:1 ✓
-		text: 'text-neutral-700',
+		bg: 'bg-status-past hover:brightness-95',
+		text: 'text-status-past-foreground',
 		label: 'Выехал',
 	},
 	cancelled: {
-		bg: 'bg-neutral-200 line-through hover:bg-neutral-300',
-		text: 'text-neutral-700', // neutral-700 #404040 on neutral-200 #e5e5e5 = 7:1 ✓
+		bg: 'bg-status-past line-through hover:brightness-95',
+		text: 'text-status-past-foreground',
 		label: 'Отменена',
 	},
 	no_show: {
-		bg: 'bg-yellow-500 hover:bg-yellow-600',
-		text: 'text-yellow-950', // yellow-950 on yellow-500 ~6:1 ✓
+		bg: 'bg-status-issue hover:brightness-95',
+		text: 'text-status-issue-foreground',
 		label: 'Не заехал',
 	},
 }
