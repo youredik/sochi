@@ -162,6 +162,14 @@ test.describe('M9.5 Phase A — live-user visual smoke', () => {
 		// New screenshot: chessboard с seeded green status-confirmed band live.
 		await page.screenshot({ path: `${OUT}/24-chessboard-with-band.png`, fullPage: true })
 
+		// M9.5 Phase B v5: native HTML popover tooltip — hover band → tooltip
+		// shows guest details (status + roomType + checkIn — checkOut). Click
+		// preserved для edit dialog (NO conflict).
+		const band = page.locator('[data-booking-id]').first()
+		await band.hover()
+		await page.waitForTimeout(200)
+		await page.screenshot({ path: `${OUT}/25-band-tooltip-hover.png`, fullPage: true })
+
 		// Month toggle — viewMode binds к 30-day window (not decorative).
 		await page.getByRole('radio', { name: 'Месяц' }).click()
 		await settle(page)

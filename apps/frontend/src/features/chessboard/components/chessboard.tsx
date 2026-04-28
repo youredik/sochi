@@ -19,6 +19,7 @@ import {
 	type RowNav,
 } from '../lib/keymap'
 import { bandPosition } from '../lib/layout'
+import { BookingBandTooltip } from './booking-band-tooltip'
 import { ChessboardDatePicker } from './chessboard-date-picker'
 import { ChessboardViewModeSelector } from './chessboard-view-mode-selector'
 import { ChessboardWindowSelector } from './chessboard-window-selector'
@@ -339,28 +340,45 @@ export function Chessboard() {
 										const style = styleFor(band.status)
 										const tabStop = isTabStop(rowIdx, ariaColIdx)
 										return (
-											<button
+											<BookingBandTooltip
 												key={`${rt.id}:${ariaColIdx}`}
-												type="button"
-												className={`focus-visible:outline-ring border-border flex h-10 items-center overflow-hidden border-b px-2 text-[11px] focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${style.bg} ${style.text}`}
-												style={{ gridColumn: `span ${band.span}` }}
-												role="gridcell"
-												aria-colindex={ariaColIdx}
-												aria-colspan={band.span}
-												aria-label={`${style.label}, ${rt.name}, ${band.checkIn} — ${band.checkOut}. Enter — открыть действия.`}
-												data-booking-id={band.id}
-												data-row-idx={rowIdx}
-												data-col-idx={ariaColIdx}
-												tabIndex={tabStop ? 0 : -1}
-												onClick={() => setEditingBookingId(band.id)}
-												onFocus={() => setFocus({ rowIdx, colIdx: ariaColIdx })}
+												bookingId={band.id}
+												statusLabel={style.label}
+												roomTypeName={rt.name}
+												checkIn={band.checkIn}
+												checkOut={band.checkOut}
 											>
-												<span className="truncate">
-													{band.truncatedLeft ? '…' : ''}
-													{style.label}
-													{band.truncatedRight ? '…' : ''}
-												</span>
-											</button>
+												{({ popoverId, onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
+													<button
+														type="button"
+														className={`focus-visible:outline-ring border-border flex h-10 items-center overflow-hidden border-b px-2 text-[11px] focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${style.bg} ${style.text}`}
+														style={{ gridColumn: `span ${band.span}` }}
+														role="gridcell"
+														aria-colindex={ariaColIdx}
+														aria-colspan={band.span}
+														aria-label={`${style.label}, ${rt.name}, ${band.checkIn} — ${band.checkOut}. Enter — открыть действия.`}
+														aria-details={popoverId}
+														data-booking-id={band.id}
+														data-row-idx={rowIdx}
+														data-col-idx={ariaColIdx}
+														tabIndex={tabStop ? 0 : -1}
+														onClick={() => setEditingBookingId(band.id)}
+														onMouseEnter={onMouseEnter}
+														onMouseLeave={onMouseLeave}
+														onBlur={onBlur}
+														onFocus={() => {
+															onFocus()
+															setFocus({ rowIdx, colIdx: ariaColIdx })
+														}}
+													>
+														<span className="truncate">
+															{band.truncatedLeft ? '…' : ''}
+															{style.label}
+															{band.truncatedRight ? '…' : ''}
+														</span>
+													</button>
+												)}
+											</BookingBandTooltip>
 										)
 									}
 									if (covered.has(colIdx)) return null // already spanned by band
