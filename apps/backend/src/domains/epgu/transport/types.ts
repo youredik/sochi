@@ -94,6 +94,36 @@ export interface EpguStatusResponse {
 }
 
 /**
+ * Cancellation request. Initiates withdrawal of a previously submitted
+ * notification (e.g., after booking cancellation, RKL false-positive resolved).
+ *
+ * Real impl: `POST /gu-smev-api/api/gusmev/order/{orderId}/cancel` with reason.
+ * Pre-conditions:
+ *   - orderId должен быть submitted (statusCode=17/21) или intermediate
+ *     (14/15) — finalized rows (3/4/10) уже не cancelable
+ *   - operator должен иметь permissions на отзыв (legal action)
+ *
+ * Behaviour:
+ *   - Server-side ЕПГУ принимает cancel request → row переходит в
+ *     statusCode=9 (cancellation_pending) intermediate
+ *   - Followup poll цикл eventually advances row → statusCode=10
+ *     (cancelled, FINAL) либо обратно в submitted/refused если
+ *     cancel rejected (rare race с in-flight processing)
+ */
+export interface EpguCancelRequest {
+	readonly orderId: string
+	/** Operator-provided reason text (free-form, RU). */
+	readonly reason: string
+}
+
+export interface EpguCancelResponse {
+	readonly orderId: string
+	readonly accepted: boolean
+	/** Resulting status (typically 9 — cancellation_pending). */
+	readonly statusCode: number
+}
+
+/**
  * Channel-agnostic ЕПГУ transport interface. M8.A's adapter implements
  * the application-level service over this transport.
  */
@@ -106,6 +136,8 @@ export interface EpguTransport {
 	pushArchive(req: EpguPushRequest): Promise<EpguPushResponse>
 	/** Poll the current status. Caller decides cadence. */
 	getStatus(req: EpguStatusRequest): Promise<EpguStatusResponse>
+	/** Cancel a submitted notification (M8.A.5.cancel). */
+	cancelOrder(req: EpguCancelRequest): Promise<EpguCancelResponse>
 }
 
 /**

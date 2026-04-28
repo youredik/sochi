@@ -10,6 +10,8 @@
  * interface refactor.
  */
 import {
+	type EpguCancelRequest,
+	type EpguCancelResponse,
 	type EpguOrderRequest,
 	type EpguOrderResponse,
 	type EpguPushRequest,
@@ -38,6 +40,9 @@ export function createSvoksTransport(_opts: SvoksTransportOptions): EpguTranspor
 		},
 		async getStatus(_req: EpguStatusRequest): Promise<EpguStatusResponse> {
 			throw new EpguTransportNotImplementedError('svoks', 'getStatus')
+		},
+		async cancelOrder(_req: EpguCancelRequest): Promise<EpguCancelResponse> {
+			throw new EpguTransportNotImplementedError('svoks', 'cancelOrder')
 		},
 	}
 }

@@ -193,6 +193,15 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 			// Pick non-final rows whose nextPollAt is due. Cron polls these.
 			// statusCode IN (1,2,5,17,21,22) excludes finals (3,4,10) and draft (0)
 			// + drafts are also picked up if nextPollAt becomes due (manual retry).
+			//
+			// ORDER BY (nextPollAt IS NULL DESC, nextPollAt ASC): FIFO по due-date
+			// чтобы honor 24h ЕПГУ deadline (Постановление №1668) — oldest
+			// pending получают priority. NULL nextPollAt идёт первым (manual
+			// retry case без scheduled re-poll), потом oldest scheduled.
+			//
+			// YDB doesn't support `NULLS FIRST` syntax — used boolean DESC
+			// pattern (true sorts after false in default; DESC inverts to NULLs first).
+			// Determinism для test'ов: same query → same order.
 			const [rows = []] = await sql<Row[]>`
 				SELECT
 					tenantId, id, bookingId, guestId, documentId,
@@ -207,6 +216,7 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 				WHERE isFinal = false
 				  AND epguOrderId IS NOT NULL
 				  AND (nextPollAt IS NULL OR nextPollAt <= ${now})
+				ORDER BY (nextPollAt IS NULL) DESC, nextPollAt ASC
 				LIMIT ${limit}
 			`.idempotent(true)
 			return rows.map(rowToDomain)

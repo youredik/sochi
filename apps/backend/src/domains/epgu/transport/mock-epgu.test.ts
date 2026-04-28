@@ -420,3 +420,112 @@ describe('MockEpguTransport — determinism + adversarial', () => {
 		expect(s.statusCode).toBe(3)
 	})
 })
+
+// ────────────────────────────────────────────────────────────────────
+// cancelOrder (M8.A.5.cancel) — withdrawal flow
+// ────────────────────────────────────────────────────────────────────
+
+describe('MockEpguTransport — cancelOrder', () => {
+	test('[X1] cancel after push → accepted=true, statusCode=9 (cancellation_pending)', async () => {
+		let nowVal = 0
+		const m = createMockEpguTransport({
+			random: makeRng(1),
+			now: () => nowVal,
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const { orderId } = await m.reserveOrder(ORDER_REQ)
+		await m.pushArchive({ ...PUSH_REQ, orderId })
+		nowVal = 60_000 // 1 min after push
+		const cancel = await m.cancelOrder({ orderId, reason: 'guest cancelled booking' })
+		expect(cancel.accepted).toBe(true)
+		expect(cancel.statusCode).toBe(9)
+		expect(cancel.orderId).toBe(orderId)
+	})
+
+	test('[X2] cancel before push → throws "not yet pushed"', async () => {
+		const m = createMockEpguTransport({
+			random: makeRng(1),
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const { orderId } = await m.reserveOrder(ORDER_REQ)
+		// no pushArchive
+		await expect(m.cancelOrder({ orderId, reason: 'too early' })).rejects.toThrow(/not yet pushed/)
+	})
+
+	test('[X3] cancel unknown orderId → throws "not found"', async () => {
+		const m = createMockEpguTransport({ random: makeRng(1) })
+		await expect(m.cancelOrder({ orderId: 'nonexistent', reason: 'x' })).rejects.toThrow(
+			/not found/,
+		)
+	})
+
+	test('[X4] empty reason → throws "reason is required"', async () => {
+		const m = createMockEpguTransport({
+			random: makeRng(1),
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const { orderId } = await m.reserveOrder(ORDER_REQ)
+		await m.pushArchive({ ...PUSH_REQ, orderId })
+		await expect(m.cancelOrder({ orderId, reason: '' })).rejects.toThrow(/reason is required/)
+	})
+
+	test('[X5] cancel after final (3 executed) → throws "already in final"', async () => {
+		let nowVal = 0
+		const m = createMockEpguTransport({
+			random: makeRng(1),
+			now: () => nowVal,
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const { orderId } = await m.reserveOrder(ORDER_REQ)
+		await m.pushArchive({ ...PUSH_REQ, orderId })
+		nowVal = 120 * 60_000 // 2 hours — well past final
+		const status = await m.getStatus({ orderId })
+		expect(status.isFinal).toBe(true)
+		expect(status.statusCode).toBe(3)
+		await expect(m.cancelOrder({ orderId, reason: 'too late' })).rejects.toThrow(/already in final/)
+	})
+
+	test('[X6] after cancel, getStatus eventually returns 10 (cancelled FINAL)', async () => {
+		let nowVal = 0
+		const m = createMockEpguTransport({
+			random: makeRng(1),
+			now: () => nowVal,
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const { orderId } = await m.reserveOrder(ORDER_REQ)
+		await m.pushArchive({ ...PUSH_REQ, orderId })
+		nowVal = 60_000
+		await m.cancelOrder({ orderId, reason: 'reason text' })
+		// Immediately after cancel, status is 9 (intermediate)
+		const s1 = await m.getStatus({ orderId })
+		expect(s1.statusCode).toBe(9)
+		expect(s1.isFinal).toBe(false)
+		// After advance time, status → 10 (cancelled FINAL)
+		nowVal = 62_000 // +2s past cancel
+		const s2 = await m.getStatus({ orderId })
+		expect(s2.statusCode).toBe(10)
+		expect(s2.isFinal).toBe(true)
+	})
+
+	test('[X7] reasonRefuse from cancel preserved in subsequent getStatus', async () => {
+		let nowVal = 0
+		const m = createMockEpguTransport({
+			random: makeRng(1),
+			now: () => nowVal,
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const { orderId } = await m.reserveOrder(ORDER_REQ)
+		await m.pushArchive({ ...PUSH_REQ, orderId })
+		nowVal = 60_000
+		const reason = 'РКЛ false-positive resolved'
+		await m.cancelOrder({ orderId, reason })
+		const s = await m.getStatus({ orderId })
+		expect(s.reasonRefuse).toBe(reason)
+	})
+})

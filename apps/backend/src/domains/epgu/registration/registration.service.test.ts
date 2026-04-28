@@ -378,6 +378,132 @@ describe('classifyReasonRefuse', () => {
 // runPollCycle (cron entry)
 // ────────────────────────────────────────────────────────────────────
 
+describe('RegistrationService — cancel', () => {
+	test('[Cn1] cancel after submit → row.statusCode=9, reasonRefuse=reason, nextPollAt set', async () => {
+		let nowVal = 1_000_000_000_000
+		const transport = createMockEpguTransport({
+			random: makeRng(1),
+			now: () => nowVal,
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const repo = buildInMemoryRepo()
+		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, now: () => new Date(nowVal), archive: createMockArchiveBuilder() },
+			idGen,
+		)
+		const { id } = await svc.enqueue(ENQ_INPUT)
+		await svc.submit(ENQ_INPUT.tenantId, id, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+		nowVal += 30_000
+		const result = await svc.cancel(ENQ_INPUT.tenantId, id, 'guest cancelled booking')
+		expect(result.statusCode).toBe(9)
+		const row = repo.rows.get(id)
+		expect(row?.statusCode).toBe(9)
+		expect(row?.reasonRefuse).toBe('guest cancelled booking')
+		expect(row?.isFinal).toBe(false)
+		expect(row?.nextPollAt).not.toBeNull()
+	})
+
+	test('[Cn2] cancel without orderId (draft) → throws "not yet submitted"', async () => {
+		const transport = createMockEpguTransport({ random: makeRng(1) })
+		const repo = buildInMemoryRepo()
+		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, archive: createMockArchiveBuilder() },
+			idGen,
+		)
+		const { id } = await svc.enqueue(ENQ_INPUT)
+		// no submit
+		await expect(svc.cancel(ENQ_INPUT.tenantId, id, 'too early')).rejects.toThrow(
+			/not yet submitted/,
+		)
+	})
+
+	test('[Cn3] cancel unknown id → throws "not found"', async () => {
+		const transport = createMockEpguTransport({ random: makeRng(1) })
+		const repo = buildInMemoryRepo()
+		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, archive: createMockArchiveBuilder() },
+			idGen,
+		)
+		await expect(svc.cancel(ENQ_INPUT.tenantId, 'never-existed', 'reason text')).rejects.toThrow(
+			/not found/,
+		)
+	})
+
+	test('[Cn4] empty/blank reason → throws (validation)', async () => {
+		const nowVal = 1_000_000_000_000
+		const transport = createMockEpguTransport({
+			random: makeRng(1),
+			now: () => nowVal,
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const repo = buildInMemoryRepo()
+		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, now: () => new Date(nowVal), archive: createMockArchiveBuilder() },
+			idGen,
+		)
+		const { id } = await svc.enqueue(ENQ_INPUT)
+		await svc.submit(ENQ_INPUT.tenantId, id, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+		await expect(svc.cancel(ENQ_INPUT.tenantId, id, '')).rejects.toThrow(/reason is required/)
+		await expect(svc.cancel(ENQ_INPUT.tenantId, id, '   ')).rejects.toThrow(/reason is required/)
+	})
+
+	test('[Cn5] cancel after final (3 executed) → throws "already in final"', async () => {
+		let nowVal = 1_000_000_000_000
+		const transport = createMockEpguTransport({
+			random: makeRng(1),
+			now: () => nowVal,
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const repo = buildInMemoryRepo()
+		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, now: () => new Date(nowVal), archive: createMockArchiveBuilder() },
+			idGen,
+		)
+		const { id } = await svc.enqueue(ENQ_INPUT)
+		await svc.submit(ENQ_INPUT.tenantId, id, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+		nowVal += 120 * 60_000 // 2 hours past submit
+		await svc.pollOne(ENQ_INPUT.tenantId, id) // finalizes to 3
+		await expect(svc.cancel(ENQ_INPUT.tenantId, id, 'too late')).rejects.toThrow(/already in final/)
+	})
+
+	test('[Cn6] poll after cancel eventually finalizes to 10 (cancelled FINAL)', async () => {
+		let nowVal = 1_000_000_000_000
+		const transport = createMockEpguTransport({
+			random: makeRng(1),
+			now: () => nowVal,
+			errorRateMultiplier: 0,
+			speedUpFactor: 1,
+		})
+		const repo = buildInMemoryRepo()
+		const rkl = createMockRklCheck({ random: makeRng(2), forceStatus: 'clean' })
+		const svc = createRegistrationService(
+			{ transport, rkl, repo, now: () => new Date(nowVal), archive: createMockArchiveBuilder() },
+			idGen,
+		)
+		const { id } = await svc.enqueue(ENQ_INPUT)
+		await svc.submit(ENQ_INPUT.tenantId, id, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+		nowVal += 30_000
+		await svc.cancel(ENQ_INPUT.tenantId, id, 'reason for cancel')
+		// Immediately after cancel — row in pending state (9)
+		expect(repo.rows.get(id)?.statusCode).toBe(9)
+		// Advance clock + pollOne
+		nowVal += 5_000
+		const polled = await svc.pollOne(ENQ_INPUT.tenantId, id)
+		expect(polled.isFinal).toBe(true)
+		expect(repo.rows.get(id)?.statusCode).toBe(10)
+		expect(repo.rows.get(id)?.isFinal).toBe(true)
+		expect(repo.rows.get(id)?.finalizedAt).not.toBeNull()
+	})
+})
+
 describe('RegistrationService — runPollCycle', () => {
 	test('[Cy1] 3 pending rows → all polled, scanned=3', async () => {
 		let nowVal = 1_000_000_000_000

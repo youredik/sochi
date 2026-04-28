@@ -40,6 +40,14 @@ const submitBodySchema = z.object({
 	channel: z.enum(['gost-tls', 'svoks', 'proxy-via-partner']).optional(),
 })
 
+/**
+ * Cancel body — operator must provide reason text для audit trail.
+ * Min 5 chars (защита от пустых/случайных), max 500 (UI-side limit).
+ */
+const cancelBodySchema = z.object({
+	reason: z.string().min(5).max(500),
+})
+
 export function createMigrationRegistrationRoutesInner(f: MigrationRegistrationFactory) {
 	const { repo, service } = f
 	return new Hono<AppEnv>()
@@ -113,6 +121,41 @@ export function createMigrationRegistrationRoutesInner(f: MigrationRegistrationF
 					)
 				}
 				return c.json({ data: { ...data, polled: result } }, 200)
+			},
+		)
+		.post(
+			'/migration-registrations/:id/cancel',
+			requirePermission({ migrationRegistration: ['manage'] }),
+			zValidator('param', idParamSchema),
+			zValidator('json', cancelBodySchema),
+			async (c) => {
+				const { id } = c.req.valid('param')
+				const { reason } = c.req.valid('json')
+				try {
+					const result = await service.cancel(c.var.tenantId, id, reason)
+					const data = await repo.getById(c.var.tenantId, id)
+					if (!data) {
+						return c.json(
+							{
+								error: {
+									code: 'NOT_FOUND',
+									message: `Migration registration '${id}' not found`,
+								},
+							},
+							404,
+						)
+					}
+					return c.json({ data: { ...data, cancel: result } }, 200)
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : 'cancel failed'
+					if (msg.includes('not found')) {
+						return c.json({ error: { code: 'NOT_FOUND', message: msg } }, 404)
+					}
+					if (msg.includes('not yet submitted') || msg.includes('already in final')) {
+						return c.json({ error: { code: 'CONFLICT', message: msg } }, 409)
+					}
+					throw err
+				}
 			},
 		)
 		.patch(

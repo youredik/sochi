@@ -10,6 +10,8 @@
  * is `createGostTlsTransport` body — no public API changes.
  */
 import {
+	type EpguCancelRequest,
+	type EpguCancelResponse,
 	type EpguOrderRequest,
 	type EpguOrderResponse,
 	type EpguPushRequest,
@@ -48,6 +50,9 @@ export function createGostTlsTransport(_opts: GostTlsTransportOptions): EpguTran
 		},
 		async getStatus(_req: EpguStatusRequest): Promise<EpguStatusResponse> {
 			throw new EpguTransportNotImplementedError('gost-tls', 'getStatus')
+		},
+		async cancelOrder(_req: EpguCancelRequest): Promise<EpguCancelResponse> {
+			throw new EpguTransportNotImplementedError('gost-tls', 'cancelOrder')
 		},
 	}
 }

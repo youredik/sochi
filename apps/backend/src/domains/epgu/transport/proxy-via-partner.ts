@@ -11,6 +11,8 @@
  * shape (reserve → push → poll). The interface boundary is identical.
  */
 import {
+	type EpguCancelRequest,
+	type EpguCancelResponse,
 	type EpguOrderRequest,
 	type EpguOrderResponse,
 	type EpguPushRequest,
@@ -41,6 +43,9 @@ export function createProxyViaPartnerTransport(
 		},
 		async getStatus(_req: EpguStatusRequest): Promise<EpguStatusResponse> {
 			throw new EpguTransportNotImplementedError('proxy-via-partner', 'getStatus')
+		},
+		async cancelOrder(_req: EpguCancelRequest): Promise<EpguCancelResponse> {
+			throw new EpguTransportNotImplementedError('proxy-via-partner', 'cancelOrder')
 		},
 	}
 }

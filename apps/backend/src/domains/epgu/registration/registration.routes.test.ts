@@ -98,6 +98,9 @@ interface FakeFactoryOpts {
 	submitReturns?: { epguOrderId: string }
 	submitThrows?: Error
 	pollReturns?: { isFinal: boolean }
+	cancelReturns?: { statusCode: number }
+	cancelThrows?: Error
+	cancelSpy?: (reason: string) => void
 }
 
 function buildFactory(opts: FakeFactoryOpts = {}): MigrationRegistrationFactory {
@@ -123,6 +126,11 @@ function buildFactory(opts: FakeFactoryOpts = {}): MigrationRegistrationFactory 
 			},
 			pollOne: async () => opts.pollReturns ?? { isFinal: false },
 			runPollCycle: async () => ({ scanned: 0, finalized: 0 }),
+			cancel: async (_t: string, _id: string, reason: string) => {
+				opts.cancelSpy?.(reason)
+				if (opts.cancelThrows) throw opts.cancelThrows
+				return opts.cancelReturns ?? { statusCode: 9 }
+			},
 		},
 	} as unknown as MigrationRegistrationFactory
 }
@@ -273,5 +281,106 @@ describe('migration-registrations routes — patch retry trigger', () => {
 		const arg = captured[0] as { retryCount: number; nextPollAt: Date }
 		expect(arg.retryCount).toBe(FAKE_REGISTRATION.retryCount + 1)
 		expect(arg.nextPollAt).toBeInstanceOf(Date)
+	})
+})
+
+describe('migration-registrations routes — POST /:id/cancel (M8.A.5.cancel)', () => {
+	test('[Cn-R1] staff POST cancel → 403 (manage permission required)', async () => {
+		const res = await buildApp('staff').request('/api/v1/migration-registrations/mreg-1/cancel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'guest cancelled booking' }),
+		})
+		expect(res.status).toBe(403)
+	})
+
+	test('[Cn-R2] manager POST cancel → 200 + statusCode in response', async () => {
+		const res = await buildApp('manager').request('/api/v1/migration-registrations/mreg-1/cancel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'guest cancelled booking' }),
+		})
+		expect(res.status).toBe(200)
+		const body = (await res.json()) as { data: { cancel: { statusCode: number } } }
+		expect(body.data.cancel.statusCode).toBe(9)
+	})
+
+	test('[Cn-R3] owner POST cancel → 200 + reason passed через', async () => {
+		let capturedReason = ''
+		const res = await buildApp('owner', {
+			cancelSpy: (r) => {
+				capturedReason = r
+			},
+		}).request('/api/v1/migration-registrations/mreg-1/cancel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'РКЛ false-positive resolved' }),
+		})
+		expect(res.status).toBe(200)
+		expect(capturedReason).toBe('РКЛ false-positive resolved')
+	})
+
+	test('[Cn-Z1] empty reason → 400 (Zod min length 5)', async () => {
+		const res = await buildApp('owner').request('/api/v1/migration-registrations/mreg-1/cancel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: '' }),
+		})
+		expect(res.status).toBe(400)
+	})
+
+	test('[Cn-Z2] reason 4 chars → 400 (below min length)', async () => {
+		const res = await buildApp('owner').request('/api/v1/migration-registrations/mreg-1/cancel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'abcd' }),
+		})
+		expect(res.status).toBe(400)
+	})
+
+	test('[Cn-Z3] reason 501 chars → 400 (above max length)', async () => {
+		const res = await buildApp('owner').request('/api/v1/migration-registrations/mreg-1/cancel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'x'.repeat(501) }),
+		})
+		expect(res.status).toBe(400)
+	})
+
+	test('[Cn-N1] cancel for not-yet-submitted → 409 CONFLICT', async () => {
+		const res = await buildApp('owner', {
+			cancelThrows: new Error(
+				`registration mreg-1 not yet submitted (no orderId) — nothing to cancel`,
+			),
+		}).request('/api/v1/migration-registrations/mreg-1/cancel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'too early to cancel' }),
+		})
+		expect(res.status).toBe(409)
+	})
+
+	test('[Cn-N2] cancel for already-final → 409 CONFLICT', async () => {
+		const res = await buildApp('owner', {
+			cancelThrows: new Error(
+				`registration mreg-1 already in final state (statusCode=3); cancellation rejected`,
+			),
+		}).request('/api/v1/migration-registrations/mreg-1/cancel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'too late to cancel' }),
+		})
+		expect(res.status).toBe(409)
+	})
+
+	test('[Cn-N3] cancel for missing id → 404', async () => {
+		const res = await buildApp('owner', {
+			cancelThrows: new Error(`registration mreg-missing not found in tenant org-test`),
+		}).request('/api/v1/migration-registrations/mreg-missing/cancel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'reason for missing' }),
+		})
+		expect(res.status).toBe(404)
 	})
 })

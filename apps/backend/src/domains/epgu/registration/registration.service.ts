@@ -259,6 +259,63 @@ export function createRegistrationService(deps: RegistrationServiceDeps, idGen: 
 	}
 
 	/**
+	 * cancel() — operator-initiated withdrawal of a submitted notification.
+	 *
+	 * Per ЕПГУ FSM: row → statusCode=9 (cancellation_pending), polled
+	 * cycle eventually advances to 10 (cancelled, FINAL). Operator может
+	 * вызвать только если row уже submitted (17/14/15) и НЕ finalized.
+	 *
+	 * Reason text required (operator audit trail). На canonical use case'и:
+	 *   - «Booking cancelled by guest before arrival»
+	 *   - «РКЛ false-positive resolved manually»
+	 *   - «Wrong guest data — re-submit pending»
+	 *
+	 * Updates immediately:
+	 *   - statusCode → 9 (intermediate)
+	 *   - reasonRefuse → reason (operator note)
+	 *   - errorCategory → null (cancel != error)
+	 *   - lastPolledAt → now (cancel сам по себе = poll-like event)
+	 *   - nextPollAt → now + 1s (force quick re-poll to catch final 10)
+	 *
+	 * Status 10 (cancelled FINAL) lands via pollOne на следующий cron tick.
+	 */
+	async function cancel(
+		tenantId: string,
+		id: string,
+		reason: string,
+	): Promise<{ statusCode: number }> {
+		if (!reason || reason.trim().length === 0) {
+			throw new Error('cancel reason is required')
+		}
+		const row = await deps.repo.getById(tenantId, id)
+		if (!row) throw new Error(`registration ${id} not found in tenant ${tenantId}`)
+		if (!row.epguOrderId) {
+			throw new Error(`registration ${id} not yet submitted (no orderId) — nothing to cancel`)
+		}
+		if (row.isFinal) {
+			throw new Error(
+				`registration ${id} already in final state (statusCode=${row.statusCode}); cancellation rejected`,
+			)
+		}
+		const cancelResp = await deps.transport.cancelOrder({
+			orderId: row.epguOrderId,
+			reason,
+		})
+		const t = now()
+		await deps.repo.updateAfterPoll(tenantId, id, {
+			statusCode: cancelResp.statusCode,
+			isFinal: false, // 9 is intermediate; 10 lands via pollOne
+			reasonRefuse: reason,
+			errorCategory: null, // cancel is operator action, not ЕПГУ error
+			retryCount: row.retryCount,
+			lastPolledAt: t,
+			nextPollAt: new Date(t.getTime() + 1000), // force quick re-poll for 10
+			finalizedAt: null,
+		})
+		return { statusCode: cancelResp.statusCode }
+	}
+
+	/**
 	 * pollOne() — fetch latest status from transport, advance FSM, schedule
 	 * next poll если не final. Idempotent: safe to call repeatedly.
 	 */
@@ -310,7 +367,7 @@ export function createRegistrationService(deps: RegistrationServiceDeps, idGen: 
 		return { scanned: rows.length, finalized }
 	}
 
-	return { enqueue, submit, pollOne, runPollCycle }
+	return { enqueue, submit, cancel, pollOne, runPollCycle }
 }
 
 /**

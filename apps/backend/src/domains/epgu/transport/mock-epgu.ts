@@ -29,6 +29,8 @@
  *   * memory project_demo_strategy.md (Demo ≠ халтура)
  */
 import type {
+	EpguCancelRequest,
+	EpguCancelResponse,
 	EpguChannel,
 	EpguOrderRequest,
 	EpguOrderResponse,
@@ -391,6 +393,53 @@ export function createMockEpguTransport(opts: MockEpguTransportOptions = {}): Ep
 				statusCode: state.statusCode,
 				isFinal: state.isFinal,
 				...(state.reasonRefuse !== null ? { reasonRefuse: state.reasonRefuse } : {}),
+			}
+		},
+
+		async cancelOrder(req: EpguCancelRequest): Promise<EpguCancelResponse> {
+			const state = store.get(req.orderId)
+			if (!state) {
+				throw new Error(`MockEpguTransport.cancelOrder: orderId '${req.orderId}' not found`)
+			}
+			if (!req.reason || req.reason.length === 0) {
+				throw new Error('MockEpguTransport.cancelOrder: reason is required')
+			}
+			if (state.pushedAt === null) {
+				throw new Error(
+					`MockEpguTransport.cancelOrder: orderId '${req.orderId}' not yet pushed (call pushArchive first)`,
+				)
+			}
+			if (state.isFinal) {
+				throw new Error(
+					`MockEpguTransport.cancelOrder: orderId '${req.orderId}' already in final state (${state.statusCode}); cancellation no-op`,
+				)
+			}
+			// Behaviour-faithful: ЕПГУ accepts cancel → row → 9 (cancellation_pending).
+			// Override trajectory: clear remaining steps + queue 10 (cancelled, FINAL)
+			// для следующего polled тика. Mirrors real flow where ЕПГУ confirms
+			// cancellation asynchronously.
+			state.statusCode = 9
+			state.isFinal = false
+			state.reasonRefuse = req.reason
+			// Clear pending trajectory + push final cancelled at near-future tick.
+			// atOffsetMs measured from `pushedAt` per buildTrajectory canon — use
+			// (now - pushedAt) + 1000ms so advance() picks this step on next poll.
+			const offsetMs = now() - (state.pushedAt ?? now()) + 1000
+			state.trajectory = [
+				{
+					atOffsetMs: offsetMs,
+					statusCode: 10,
+					isFinal: true,
+					errorCategory: null,
+					reasonRefuse: null,
+				},
+			]
+			state.trajectoryIndex = 0
+			state.nextTransitionAt = now() + 1000
+			return {
+				orderId: state.orderId,
+				accepted: true,
+				statusCode: state.statusCode,
 			}
 		},
 

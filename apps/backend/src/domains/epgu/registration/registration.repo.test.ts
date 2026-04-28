@@ -233,7 +233,11 @@ describe('migrationRegistration.repo — listPendingPoll', { tags: ['db'], timeo
 			nextPollAt: now, // due NOW
 			finalizedAt: null,
 		})
-		const pending = await repo.listPendingPoll(new Date(now.getTime() + 1000), 100)
+		// Higher limit чтобы избежать pollution от prior test files в shared YDB.
+		// Per `feedback_test_serial_for_pre_push.md` — single shared YDB не
+		// изолирован между test files; LIMIT=100 может не вернуть нашу row
+		// если ≥100 pending rows накоплено от прошлых тестов.
+		const pending = await repo.listPendingPoll(new Date(now.getTime() + 1000), 10_000)
 		expect(pending.find((r) => r.id === input.id)).toBeDefined()
 	})
 
@@ -262,7 +266,8 @@ describe('migrationRegistration.repo — listPendingPoll', { tags: ['db'], timeo
 				finalizedAt: null,
 			})
 		}
-		const pending = await repo.listPendingPoll(new Date(now.getTime() + 1000), 100)
+		// Higher limit чтобы избежать pollution от prior test files в shared YDB.
+		const pending = await repo.listPendingPoll(new Date(now.getTime() + 1000), 10_000)
 		// listPendingPoll is cron-internal (not tenant-scoped) — both rows
 		// reachable, but each carries its own tenantId. Verify the rows are
 		// distinguishable by tenantId so the cron handler can route correctly.
