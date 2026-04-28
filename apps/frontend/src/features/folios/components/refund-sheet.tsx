@@ -16,8 +16,8 @@
  *   - **Idempotency-Key**: `useMemo(crypto.randomUUID(), [])` per-mount.
  *
  * **A11y per axe-core 4.11:**
- *   - `<SheetTitle>` обязателен (Radix throws on missing).
- *   - `<SheetDescription>` либо `aria-describedby={undefined}`.
+ *   - `<ResponsiveSheetTitle>` обязателен (Radix throws on missing).
+ *   - `<ResponsiveSheetDescription>` либо `aria-describedby={undefined}`.
  *   - Step 2 — `<Alert role="alert">` для предупреждения о необратимости.
  *   - Auto-focus first interactive on step transitions.
  */
@@ -32,15 +32,15 @@ import { MoneyInput } from '../../../components/money.tsx'
 import { Alert, AlertDescription, AlertTitle } from '../../../components/ui/alert.tsx'
 import { Button } from '../../../components/ui/button.tsx'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../../../components/ui/field.tsx'
-import { Separator } from '../../../components/ui/separator.tsx'
 import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetFooter,
-	SheetHeader,
-	SheetTitle,
-} from '../../../components/ui/sheet.tsx'
+	ResponsiveSheet,
+	ResponsiveSheetContent,
+	ResponsiveSheetDescription,
+	ResponsiveSheetFooter,
+	ResponsiveSheetHeader,
+	ResponsiveSheetTitle,
+} from '../../../components/ui/responsive-sheet.tsx'
+import { Separator } from '../../../components/ui/separator.tsx'
 import { Textarea } from '../../../components/ui/textarea.tsx'
 import { authClient } from '../../../lib/auth-client.ts'
 import { formatDateShort, formatMoney, moneyKopecksSchema } from '../../../lib/format-ru.ts'
@@ -141,16 +141,18 @@ export function RefundSheet({ open, onOpenChange, payment, folioId }: RefundShee
 	}
 
 	return (
-		<Sheet open={open} onOpenChange={handleOpenChange}>
-			<SheetContent side="right" className="w-full sm:max-w-md flex flex-col">
-				<SheetHeader>
-					<SheetTitle>{step === 'form' ? 'Возврат платежа' : 'Подтвердите возврат'}</SheetTitle>
-					<SheetDescription id={descId}>
+		<ResponsiveSheet open={open} onOpenChange={handleOpenChange}>
+			<ResponsiveSheetContent side="right" className="w-full sm:max-w-md flex flex-col">
+				<ResponsiveSheetHeader>
+					<ResponsiveSheetTitle>
+						{step === 'form' ? 'Возврат платежа' : 'Подтвердите возврат'}
+					</ResponsiveSheetTitle>
+					<ResponsiveSheetDescription id={descId}>
 						{step === 'form'
 							? `Платёж от ${formatDateShort(payment.createdAt)} · ${formatMoney(capturedMinor)}`
 							: 'Возврат необратим после успешной обработки.'}
-					</SheetDescription>
-				</SheetHeader>
+					</ResponsiveSheetDescription>
+				</ResponsiveSheetHeader>
 
 				<div className="flex-1 overflow-y-auto px-1 py-4">
 					{step === 'form' ? (
@@ -253,7 +255,7 @@ export function RefundSheet({ open, onOpenChange, payment, folioId }: RefundShee
 					)}
 				</div>
 
-				<SheetFooter className="flex flex-row gap-2 justify-end border-t pt-4">
+				<ResponsiveSheetFooter className="flex flex-row gap-2 justify-end border-t pt-4">
 					{step === 'form' ? (
 						<>
 							<Button
@@ -309,9 +311,9 @@ export function RefundSheet({ open, onOpenChange, payment, folioId }: RefundShee
 							</Button>
 						</>
 					)}
-				</SheetFooter>
-			</SheetContent>
-		</Sheet>
+				</ResponsiveSheetFooter>
+			</ResponsiveSheetContent>
+		</ResponsiveSheet>
 	)
 }
 

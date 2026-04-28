@@ -11,7 +11,12 @@ import { RbacButton } from '../../../components/rbac-button.tsx'
 import { Alert, AlertDescription, AlertTitle } from '../../../components/ui/alert.tsx'
 import { Badge } from '../../../components/ui/badge.tsx'
 import { Button } from '../../../components/ui/button.tsx'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../../../components/ui/sheet.tsx'
+import {
+	ResponsiveSheet,
+	ResponsiveSheetContent,
+	ResponsiveSheetHeader,
+	ResponsiveSheetTitle,
+} from '../../../components/ui/responsive-sheet.tsx'
 import { formatDateLong } from '../../../lib/format-ru.ts'
 import { useCan } from '../../../lib/use-can.ts'
 import { notificationDetailQueryOptions, useRetryNotification } from '../hooks/use-notifications.ts'
@@ -28,11 +33,11 @@ export function NotificationDetailSheet({
 	onOpenChange: (open: boolean) => void
 }) {
 	return (
-		<Sheet open={open} onOpenChange={onOpenChange}>
-			<SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+		<ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+			<ResponsiveSheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
 				<NotificationDetailBody id={id} onClose={() => onOpenChange(false)} />
-			</SheetContent>
-		</Sheet>
+			</ResponsiveSheetContent>
+		</ResponsiveSheet>
 	)
 }
 
@@ -49,9 +54,11 @@ function NotificationDetailBody({ id, onClose }: { id: string; onClose: () => vo
 
 	return (
 		<>
-			<SheetHeader>
-				<SheetTitle>{notificationKindLabel(detail.notification.kind)}</SheetTitle>
-			</SheetHeader>
+			<ResponsiveSheetHeader>
+				<ResponsiveSheetTitle>
+					{notificationKindLabel(detail.notification.kind)}
+				</ResponsiveSheetTitle>
+			</ResponsiveSheetHeader>
 
 			<dl className="mt-4 grid gap-3 text-sm">
 				<DlRow label="Статус">

@@ -134,7 +134,9 @@ test.describe('M9.5 Phase A — live-user visual smoke', () => {
 		// prefers-contrast: more — AAA Sochi-blue overlay (oklch 0.45 0.20 240 light).
 		await clearDark(page)
 		await page.setViewportSize(DESKTOP)
-		await context.emulateContrast?.({ contrast: 'more' }).catch(() => null)
+		// emulateMedia does the actual prefers-contrast emulation; context.emulateContrast
+		// not exposed на BrowserContext type (was speculative).
+		void context
 		await page.emulateMedia({ contrast: 'more' })
 		await page.goto(`/o/${slug}/`)
 		await settle(page)

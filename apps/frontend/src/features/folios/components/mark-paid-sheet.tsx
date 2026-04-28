@@ -14,8 +14,8 @@
  *     primitive — Oct 2025 shadcn change).
  *
  * **A11y mandates per axe-core 4.11:**
- *   - `<SheetTitle>` mandatory (Radix throws on missing).
- *   - `<SheetDescription>` OR `aria-describedby={undefined}`.
+ *   - `<ResponsiveSheetTitle>` mandatory (Radix throws on missing).
+ *   - `<ResponsiveSheetDescription>` OR `aria-describedby={undefined}`.
  *   - Auto-focus first interactive on open + return-to-trigger on close
  *     (Radix-built-in, verified React 19).
  *   - Non-color status indication: RU labels enforce non-color signal.
@@ -39,13 +39,13 @@ import {
 import { Input } from '../../../components/ui/input.tsx'
 import { RadioGroup, RadioGroupItem } from '../../../components/ui/radio-group.tsx'
 import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetFooter,
-	SheetHeader,
-	SheetTitle,
-} from '../../../components/ui/sheet.tsx'
+	ResponsiveSheet,
+	ResponsiveSheetContent,
+	ResponsiveSheetDescription,
+	ResponsiveSheetFooter,
+	ResponsiveSheetHeader,
+	ResponsiveSheetTitle,
+} from '../../../components/ui/responsive-sheet.tsx'
 import { formatMoney, moneyKopecksSchema } from '../../../lib/format-ru.ts'
 import { useMarkPaid } from '../hooks/use-folio-queries.ts'
 
@@ -141,14 +141,14 @@ export function MarkPaidSheet({
 	})
 
 	return (
-		<Sheet open={open} onOpenChange={onOpenChange}>
-			<SheetContent side="right" className="w-full sm:max-w-md flex flex-col">
-				<SheetHeader>
-					<SheetTitle>Принять оплату</SheetTitle>
-					<SheetDescription id={refReceiptDescId}>
+		<ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+			<ResponsiveSheetContent side="right" className="w-full sm:max-w-md flex flex-col">
+				<ResponsiveSheetHeader>
+					<ResponsiveSheetTitle>Принять оплату</ResponsiveSheetTitle>
+					<ResponsiveSheetDescription id={refReceiptDescId}>
 						Текущий баланс к оплате: {formatMoney(currentBalanceMinor)}
-					</SheetDescription>
-				</SheetHeader>
+					</ResponsiveSheetDescription>
+				</ResponsiveSheetHeader>
 
 				<form
 					id={formId}
@@ -249,7 +249,7 @@ export function MarkPaidSheet({
 					</form.Field>
 				</form>
 
-				<SheetFooter className="flex flex-row gap-2 justify-end border-t pt-4">
+				<ResponsiveSheetFooter className="flex flex-row gap-2 justify-end border-t pt-4">
 					<Button
 						type="button"
 						variant="outline"
@@ -280,9 +280,9 @@ export function MarkPaidSheet({
 							'Принять'
 						)}
 					</Button>
-				</SheetFooter>
-			</SheetContent>
-		</Sheet>
+				</ResponsiveSheetFooter>
+			</ResponsiveSheetContent>
+		</ResponsiveSheet>
 	)
 }
 

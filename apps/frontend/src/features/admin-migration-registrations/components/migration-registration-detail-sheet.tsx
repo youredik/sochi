@@ -20,12 +20,12 @@ import { Badge } from '../../../components/ui/badge.tsx'
 import { Button } from '../../../components/ui/button.tsx'
 import { Label } from '../../../components/ui/label.tsx'
 import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetHeader,
-	SheetTitle,
-} from '../../../components/ui/sheet.tsx'
+	ResponsiveSheet,
+	ResponsiveSheetContent,
+	ResponsiveSheetDescription,
+	ResponsiveSheetHeader,
+	ResponsiveSheetTitle,
+} from '../../../components/ui/responsive-sheet.tsx'
 import { Textarea } from '../../../components/ui/textarea.tsx'
 import { formatDateShort } from '../../../lib/format-ru.ts'
 import {
@@ -52,14 +52,16 @@ export function MigrationRegistrationDetailSheet({
 }) {
 	const { data } = useSuspenseQuery(migrationRegistrationDetailQueryOptions(id))
 	return (
-		<Sheet open onOpenChange={(open) => (open ? null : onClose())}>
-			<SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
-				<SheetHeader>
-					<SheetTitle id={`mreg-detail-title-${id}`}>Регистрация {id}</SheetTitle>
-					<SheetDescription>
+		<ResponsiveSheet open onOpenChange={(open) => (open ? null : onClose())}>
+			<ResponsiveSheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+				<ResponsiveSheetHeader>
+					<ResponsiveSheetTitle id={`mreg-detail-title-${id}`}>
+						Регистрация {id}
+					</ResponsiveSheetTitle>
+					<ResponsiveSheetDescription>
 						Миграционный учёт МВД через ЕПГУ • Бронирование {data.bookingId}
-					</SheetDescription>
-				</SheetHeader>
+					</ResponsiveSheetDescription>
+				</ResponsiveSheetHeader>
 				<div className="mt-6 space-y-6">
 					<RegistrationSummary row={data} />
 					<RegistrationTimeline row={data} />
@@ -78,8 +80,8 @@ export function MigrationRegistrationDetailSheet({
 						</Alert>
 					)}
 				</div>
-			</SheetContent>
-		</Sheet>
+			</ResponsiveSheetContent>
+		</ResponsiveSheet>
 	)
 }
 
