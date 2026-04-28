@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  HoReCa monogram — minimalist «H» letter в Geist-derived geometry.
+  Square 512×512 viewBox. Sochi-blue accent (M9.5 brand).
+  Used by @vite-pwa/assets-generator для icon-set generation:
+    apple-touch-icon (180), favicon-32, manifest-192/512, maskable-512.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="96" fill="#0a0a0a"/>
+  <path
+    d="M 132 128 L 132 384 L 188 384 L 188 282 L 324 282 L 324 384 L 380 384 L 380 128 L 324 128 L 324 226 L 188 226 L 188 128 Z"
+    fill="#ffffff"
+  />
+</svg>

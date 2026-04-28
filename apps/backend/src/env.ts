@@ -13,6 +13,20 @@ export const envSchema = z.object({
 	PORT: z.coerce.number().int().min(1).max(65535).default(3000),
 	LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 
+	// PWA + WebAuthn host identity (M9.4 Risk #15 pre-condition).
+	//
+	// `HOST` — bare hostname WITHOUT protocol/port (WebAuthn `rpID` requirement
+	// per W3C spec). Examples: `localhost` (dev), `app.sochi-horeca.ru` (prod).
+	// Used by Better Auth passkey plugin для relying-party identity binding;
+	// MUST match cookie domain. Mismatch silently fails passkey enroll/signin.
+	//
+	// `PUBLIC_BASE_URL` — full origin URL с protocol + port (passkey
+	// `origin` parameter). Examples: `http://localhost:5173` (dev),
+	// `https://app.sochi-horeca.ru` (prod). WebAuthn cross-checks request
+	// origin header против этого value — must match exactly per protocol scheme.
+	HOST: z.string().default('localhost'),
+	PUBLIC_BASE_URL: z.string().url().default('http://localhost:5173'),
+
 	// Sandbox / Production gate (M8.0 prep — see plans/local-complete-system-v2.md §6).
 	//
 	// `APP_MODE` is independent from `NODE_ENV`. Same prod-built artefact runs

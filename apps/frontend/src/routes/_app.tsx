@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Outlet, redirect, useParams, useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { InstallPrompt } from '../components/install-prompt.tsx'
 import { MobileNav } from '../components/mobile-nav.tsx'
 import { useMobileNavMore } from '../components/mobile-nav-state.ts'
 import { ModeToggle } from '../components/mode-toggle.tsx'
@@ -123,6 +124,8 @@ function AppLayout() {
 					<SidebarDrawer orgSlug={orgSlug} open={mobileNav.open} onOpenChange={mobileNav.setOpen} />
 				</>
 			) : null}
+			{/* PWA install hint (mobile только, dismissable, persists). */}
+			<InstallPrompt />
 		</div>
 	)
 }

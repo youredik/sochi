@@ -20,6 +20,17 @@
 		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
 		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
 		<meta name="theme-color" content="" />
+		<!--
+			PWA assets (M9.4):
+			apple-touch-icon — для iOS «Open as Web App» (iOS 26 Share menu default ON 2025-09).
+			favicon — desktop browser tab.
+			Manifest auto-injected via vite-plugin-pwa runtime.
+		-->
+		<link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+		<link rel="icon" href="/favicon.ico" sizes="any" />
+		<link rel="icon" href="/logo.svg" type="image/svg+xml" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 		<title>HoReCa Portal</title>
 		<!--
 			FOUC-prevention script (M9.1):
