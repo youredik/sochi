@@ -45,6 +45,7 @@ import type {
 import { newId } from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
 import type { sql as SQL } from '../../db/index.ts'
+import { isYdbUniqueConflict } from '../../db/index.ts'
 import {
 	NULL_FLOAT,
 	NULL_TEXT,
@@ -407,19 +408,13 @@ export function createPaymentRepo(sql: SqlInstance) {
 					return { kind: 'created' as const, payment }
 				})
 			} catch (err) {
-				// UNIQUE-key race past our SELECT pre-check: two concurrent createIntent
-				// with same idempotencyKey both saw "no existing row", both attempted
-				// UPSERT, second one hit the UNIQUE index. YDB surfaces this as
-				// `PRECONDITION_FAILED, ERROR(2012): Conflict with existing key.` wrapped
-				// in `Error('Transaction failed.', { cause: YDBError(code=400120) })`.
-				// Translate to domain error so caller can decide replay vs reject.
-				if (
-					err instanceof Error &&
-					err.cause &&
-					typeof err.cause === 'object' &&
-					'code' in err.cause &&
-					err.cause.code === 400120
-				) {
+				// UNIQUE-key race past our SELECT pre-check (concurrent createIntent
+				// same idempotencyKey). `isYdbUniqueConflict` walks cause chain +
+				// matches code 400120/400110 + message «Conflict with existing key»
+				// — broader than narrow `cause.code === 400120` (M9.5 Phase B
+				// follow-up — eradicates U4 flake observed 2026-04-28 под parallel
+				// YDB load).
+				if (isYdbUniqueConflict(err)) {
 					throw new PaymentIdempotencyKeyTakenError(input.idempotencyKey)
 				}
 				throw err
@@ -540,15 +535,10 @@ export function createPaymentRepo(sql: SqlInstance) {
 					throw err.cause
 				if (err instanceof Error && err.cause instanceof ProviderPaymentIdTakenError)
 					throw err.cause
-				// UNIQUE collision: YDB surfaces as `PRECONDITION_FAILED, ERROR(2012):
-				// Conflict with existing key.` wrapped in `Error('Transaction failed.', { cause })`.
-				// Code 400120 = PRECONDITION_FAILED. Translate to domain error.
+				// UNIQUE collision на providerPaymentId index. Broadened check via
+				// isYdbUniqueConflict — eradicates narrow code=400120 brittleness.
 				if (
-					err instanceof Error &&
-					err.cause &&
-					typeof err.cause === 'object' &&
-					'code' in err.cause &&
-					err.cause.code === 400120 &&
+					isYdbUniqueConflict(err) &&
 					next.providerPaymentId !== undefined &&
 					next.providerPaymentId !== null
 				) {

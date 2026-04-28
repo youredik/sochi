@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
+import { seedBookingFixture } from './_seed-booking'
 
 /**
  * M9.5 Phase A — comprehensive live-user visual smoke.
@@ -152,9 +153,14 @@ test.describe('M9.5 Phase A — live-user visual smoke', () => {
 		// --- M9.5 Phase B chessboard comprehensive ---
 		await page.emulateMedia({ reducedMotion: null })
 		await page.setViewportSize(DESKTOP)
+		// Seed 1 booking (status=confirmed) для live Bnovo-status palette
+		// rendering evidence — eradicates prior «strict-tests-only» residual gap.
+		await seedBookingFixture(page, { futureDays: 1, docSuffix: 'm9phaseB' })
 		await page.goto(`/o/${slug}/grid`)
 		await expect(page.getByRole('grid')).toBeVisible()
 		await settle(page)
+		// New screenshot: chessboard с seeded green status-confirmed band live.
+		await page.screenshot({ path: `${OUT}/24-chessboard-with-band.png`, fullPage: true })
 
 		// Month toggle — viewMode binds к 30-day window (not decorative).
 		await page.getByRole('radio', { name: 'Месяц' }).click()

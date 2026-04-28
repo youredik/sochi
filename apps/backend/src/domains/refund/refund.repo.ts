@@ -35,6 +35,7 @@ import type { Refund, RefundCausality, RefundStatus } from '@horeca/shared'
 import { encodeCausalityId, newId } from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
 import type { sql as SQL } from '../../db/index.ts'
+import { isYdbUniqueConflict } from '../../db/index.ts'
 import { NULL_TEXT, NULL_TIMESTAMP, textOpt, timestampOpt, toTs } from '../../db/ydb-helpers.ts'
 import {
 	InvalidRefundTransitionError,
@@ -317,16 +318,8 @@ export function createRefundRepo(sql: SqlInstance) {
 				if (err instanceof Error && err.cause instanceof RefundExceedsCaptureError) throw err.cause
 				if (err instanceof Error && err.cause instanceof RefundCausalityCollisionError)
 					throw err.cause
-				// UNIQUE-race past our SELECT pre-check: causalityId collision in the
-				// commit phase. Translate.
-				if (
-					err instanceof Error &&
-					err.cause &&
-					typeof err.cause === 'object' &&
-					'code' in err.cause &&
-					err.cause.code === 400120 &&
-					causalityIdStr !== null
-				) {
+				// UNIQUE-race past our SELECT pre-check (broadened M9.5 Phase B).
+				if (isYdbUniqueConflict(err) && causalityIdStr !== null) {
 					throw new RefundCausalityCollisionError(causalityIdStr)
 				}
 				throw err
@@ -416,11 +409,7 @@ export function createRefundRepo(sql: SqlInstance) {
 				if (err instanceof Error && err.cause instanceof InvalidRefundTransitionError)
 					throw err.cause
 				if (
-					err instanceof Error &&
-					err.cause &&
-					typeof err.cause === 'object' &&
-					'code' in err.cause &&
-					err.cause.code === 400120 &&
+					isYdbUniqueConflict(err) &&
 					next.providerRefundId !== undefined &&
 					next.providerRefundId !== null
 				) {
