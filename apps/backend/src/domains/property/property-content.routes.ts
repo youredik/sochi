@@ -78,6 +78,23 @@ const setManyAmenitiesSchema = z.object({
 })
 
 /**
+ * M9.7 — split-flow presign request.
+ * - `kind` chooses derived-pipeline parameters
+ * - `mimeType` validated against allowed set (matches multipart route)
+ * - `sizeBytes` capped 50 MB (Yandex S3 PUT limit per route — chunked upload
+ *   для files > 50 MB не поддерживается на старте; M10 multipart upload).
+ */
+const mediaSignRequestSchema = z.object({
+	kind: mediaKindSchema,
+	mimeType: mediaMimeTypeSchema,
+	sizeBytes: z
+		.number()
+		.int()
+		.positive()
+		.max(50 * 1024 * 1024, 'Файл превышает 50 МБ — загрузка по частям пока не поддерживается'),
+})
+
+/**
  * Inner router — handlers + RBAC, NO auth/tenant. Tests mount via
  * `createTestRouter(ctx)` for fast unit-level coverage. Production wrapper
  * `createPropertyContentRoutes` adds auth + tenant.
@@ -284,6 +301,54 @@ export function createPropertyContentRoutesInner(f: PropertyContentFactory) {
 					)
 				},
 			)
+			/**
+			 * M9.7 — `POST /media/sign` split-flow presign endpoint.
+			 *
+			 * Modern 2026/2027 canonical pattern: browser → backend (sign) →
+			 * direct PUT к Object Storage. Bypasses Hono body limit, низкая
+			 * latency, exclusive backend cost для metadata-only.
+			 *
+			 * Returns: `{ mediaId, presignedUrl, headers, expiresAt, originalKey }`
+			 * Caller responsibilities:
+			 *   1. PUT bytes к presignedUrl с returned headers
+			 *   2. POST /properties/:p/media с originalKey + dimensions
+			 *   3. POST /properties/:p/media/:id/process для derived variants
+			 */
+			.post(
+				'/properties/:propertyId/media/sign',
+				zValidator('param', propertyIdParamSchema),
+				zValidator('json', mediaSignRequestSchema),
+				requirePermission({ media: ['create'] }),
+				async (c) => {
+					const { propertyId } = c.req.valid('param')
+					const { kind: _kind, mimeType, sizeBytes } = c.req.valid('json')
+					const ext = mimeType.split('/')[1] ?? 'bin'
+					const mediaId = newId('media')
+					const originalKey = buildMediaOriginalKey({
+						tenantId: c.var.tenantId,
+						propertyId,
+						mediaId,
+						ext,
+					})
+					const signed = await mediaStorage.getPresignedPut({
+						key: originalKey,
+						contentType: mimeType,
+						maxBytes: sizeBytes,
+					})
+					return c.json(
+						{
+							data: {
+								mediaId,
+								originalKey,
+								presignedUrl: signed.url,
+								headers: signed.headers,
+								expiresAt: signed.expiresAt,
+							},
+						},
+						200,
+					)
+				},
+			)
 			.post(
 				'/properties/:propertyId/media/upload',
 				zValidator('param', propertyIdParamSchema),
@@ -291,9 +356,10 @@ export function createPropertyContentRoutesInner(f: PropertyContentFactory) {
 				async (c) => {
 					// Multipart end-to-end upload (dev-friendly: combines presign +
 					// browser PUT + create + process in one server-side call).
-					// Real prod path is the split flow (POST /media → PUT to Object
-					// Storage → POST /media/:id/process). This handler exists so the
-					// admin UI can demo the pipeline without a Cloud Function.
+					// Real prod path is the split flow (POST /media/sign → PUT to
+					// Object Storage → POST /media → POST /media/:id/process).
+					// This handler exists so the admin UI can demo the pipeline
+					// without a Cloud Function — preserved для local dev parity.
 					const { propertyId } = c.req.valid('param')
 					const body = await c.req.parseBody()
 					const file = body.file

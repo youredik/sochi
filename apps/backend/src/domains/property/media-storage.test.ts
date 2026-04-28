@@ -12,7 +12,7 @@ import { __resetAdapterRegistry, getAdapter } from '../../lib/adapters/index.ts'
 import {
 	__resetMediaStorageForTests,
 	createStubMediaStorage,
-	getMediaStorage,
+	getStubMediaStorage as getMediaStorage,
 } from './media-storage.ts'
 
 describe('StubMediaStorage', () => {

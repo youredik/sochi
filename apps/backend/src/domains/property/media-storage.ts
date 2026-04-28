@@ -172,11 +172,13 @@ export function createStubMediaStorage(opts: StubMediaStorageOptions = {}): Medi
 let registered: MediaStorage | null = null
 
 /**
- * Lazy singleton. The first call creates the Stub and registers it in the
- * adapter registry; subsequent calls return the same instance. Tests that
- * need isolation should call `__resetMediaStorageForTests`.
+ * Lazy Stub singleton. Default sandbox media storage. Production dispatch
+ * lives в `media-storage-resolve.ts` (avoids circular import — Yandex S3
+ * impl depends on this file's `MediaStorage` interface).
+ *
+ * Tests that need isolation call `__resetMediaStorageForTests`.
  */
-export function getMediaStorage(): MediaStorage {
+export function getStubMediaStorage(): MediaStorage {
 	if (registered) return registered
 	registered = createStubMediaStorage()
 	registerAdapter({
@@ -184,7 +186,7 @@ export function getMediaStorage(): MediaStorage {
 		category: 'storage',
 		mode: 'mock',
 		description:
-			'In-process media storage stub (presigned PUT + getPublicUrl). Replace with media.yandex-s3 in M9 deploy.',
+			'In-process media storage stub (presigned PUT + getPublicUrl). Used in APP_MODE=sandbox; production swaps к media.yandex-s3.',
 	})
 	return registered
 }

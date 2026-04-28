@@ -3,7 +3,8 @@ import { createAddonsRepo } from './addons.repo.ts'
 import { createAmenitiesRepo } from './amenities.repo.ts'
 import { createPropertyDescriptionsRepo } from './descriptions.repo.ts'
 import { createMediaRepo } from './media.repo.ts'
-import { getMediaStorage, type MediaStorage } from './media-storage.ts'
+import type { MediaStorage } from './media-storage.ts'
+import { getMediaStorage } from './media-storage-resolve.ts'
 
 /**
  * Wires up M8.A.0 property-content domain (amenities + descriptions +
