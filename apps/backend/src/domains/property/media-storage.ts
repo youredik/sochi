@@ -186,7 +186,7 @@ export function getStubMediaStorage(): MediaStorage {
 		category: 'storage',
 		mode: 'mock',
 		description:
-			'In-process media storage stub (presigned PUT + getPublicUrl). Used in APP_MODE=sandbox; production swaps к media.yandex-s3.',
+			'In-process media storage stub (presigned PUT + getPublicUrl). Used in APP_MODE=sandbox; production swaps к media.yandex-s3 (M9.7).',
 	})
 	return registered
 }
