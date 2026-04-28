@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import { createPortal } from 'react-dom'
 import { formatDateShort } from '@/lib/format-ru'
 
 interface PopoverHandlers {
@@ -72,6 +73,23 @@ export function BookingBandTooltip({
 		}
 	}
 
+	const tooltip = (
+		<div
+			id={popoverId}
+			popover="manual"
+			role="tooltip"
+			className="bg-popover text-popover-foreground border-border rounded-md border p-3 text-xs shadow-popover"
+		>
+			<div className="font-medium">{statusLabel}</div>
+			<div className="text-muted-foreground mt-1">{roomTypeName}</div>
+			<div className="text-muted-foreground mt-1">
+				<time dateTime={checkIn}>{formatDateShort(checkIn)}</time>
+				{' — '}
+				<time dateTime={checkOut}>{formatDateShort(checkOut)}</time>
+			</div>
+		</div>
+	)
+
 	return (
 		<>
 			{children({
@@ -81,20 +99,12 @@ export function BookingBandTooltip({
 				onFocus: showPopover,
 				onBlur: hidePopover,
 			})}
-			<div
-				id={popoverId}
-				popover="manual"
-				role="tooltip"
-				className="bg-popover text-popover-foreground border-border rounded-md border p-3 text-xs shadow-popover"
-			>
-				<div className="font-medium">{statusLabel}</div>
-				<div className="text-muted-foreground mt-1">{roomTypeName}</div>
-				<div className="text-muted-foreground mt-1">
-					<time dateTime={checkIn}>{formatDateShort(checkIn)}</time>
-					{' — '}
-					<time dateTime={checkOut}>{formatDateShort(checkOut)}</time>
-				</div>
-			</div>
+			{/* Portal к document.body — escapes role="row" parent so axe
+			 * `aria-required-children` is satisfied (rows only allow gridcell/
+			 * rowheader/columnheader children). Native popover API already
+			 * elevates render-layer к top-layer, but ARIA tree placement
+			 * matters; portal aligns с screen-reader tree expectations. */}
+			{typeof document !== 'undefined' ? createPortal(tooltip, document.body) : null}
 		</>
 	)
 }

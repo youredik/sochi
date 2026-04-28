@@ -125,6 +125,13 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		// text in the description appears ONLY after ratePlan loaded.
 		await expect(dialog.getByText(/тариф Базовый тариф/)).toBeVisible()
 		await expect(dialog.getByRole('button', { name: /Создать бронирование/ })).toBeEnabled()
+		// Wait for Sheet/Dialog enter-animation (fade-in-0 + slide-from-*-10)
+		// to fully settle — без этого axe captures composite frame с button at
+		// ~84% opacity blended с bg-popover, surfacing primary button at
+		// ~4.37:1 vs 4.5:1 AA. Same canon как payments.spec.ts senior-pass.
+		await page.waitForFunction(() =>
+			document.getAnimations().every((a) => a.playState !== 'running'),
+		)
 
 		const results = await new AxeBuilder({ page })
 			.include('[role="dialog"]')
@@ -155,6 +162,10 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		// Either TerminalView ("Бронь завершена") or ActionView ("Бронь:") —
 		// both pass through the same Dialog primitive so scan either.
 		await expect(dialog.getByRole('heading')).toBeVisible()
+		// Wait for animations to settle — same canon как booking-CREATE.
+		await page.waitForFunction(() =>
+			document.getAnimations().every((a) => a.playState !== 'running'),
+		)
 
 		const results = await new AxeBuilder({ page })
 			.include('[role="dialog"]')

@@ -53,14 +53,14 @@ test.describe('anonymous', () => {
 		await expect(page.getByRole('heading', { name: /Вход/ })).toBeVisible()
 		await expect(page.getByLabel('Email')).toBeVisible()
 		await expect(page.getByLabel('Пароль')).toBeVisible()
-		await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible()
+		await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
 	})
 
 	test('wrong password → stays on /login + inline error', async ({ page }) => {
 		await page.goto('/login')
 		await page.getByLabel('Email').fill('nobody@sochi.local')
 		await page.getByLabel('Пароль').fill('wrong-password-xyz')
-		await page.getByRole('button', { name: 'Войти' }).click()
+		await page.getByRole('button', { name: 'Войти', exact: true }).click()
 		await expect(page.getByRole('alert')).toContainText(/Неверный|слишком много/i)
 		await expect(page).toHaveURL(/\/login/)
 	})

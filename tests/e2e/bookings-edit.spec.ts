@@ -62,7 +62,7 @@ test.describe('booking-edit dialog', () => {
 	}) => {
 		const { band } = await createConfirmedBooking(page, 11)
 		await expect(band).toContainText('Подтверждена')
-		await expect(band).toHaveClass(/bg-blue-600/)
+		await expect(band).toHaveClass(/bg-status-confirmed/)
 
 		await band.click()
 		const dialog = page.getByRole('dialog')
@@ -74,7 +74,7 @@ test.describe('booking-edit dialog', () => {
 		await expect(dialog).not.toBeVisible()
 
 		await expect(band).toContainText('В проживании')
-		await expect(band).toHaveClass(/bg-neutral-900/)
+		await expect(band).toHaveClass(/bg-status-occupied/)
 	})
 
 	test('cancel: empty reason → submit disabled + hint shown', async ({ page }) => {
@@ -116,7 +116,7 @@ test.describe('booking-edit dialog', () => {
 		await expect(dialog).not.toBeVisible()
 
 		await expect(band).toContainText('Отменена')
-		await expect(band).toHaveClass(/bg-neutral-200/)
+		await expect(band).toHaveClass(/bg-status-past/)
 		await expect(band).toHaveClass(/line-through/)
 	})
 
@@ -160,14 +160,14 @@ test.describe('booking-edit dialog', () => {
 		// Days must be within [1..14] (grid window). Avoid collisions with
 		// other tests (11, 12, 13, 14 used above, and bookings.spec.ts 5, 6).
 		const { band } = await createConfirmedBooking(page, 1)
-		await expect(band).toHaveClass(/bg-blue-600/)
+		await expect(band).toHaveClass(/bg-status-confirmed/)
 
 		// Check in
 		await band.click()
 		let dialog = page.getByRole('dialog')
 		await dialog.getByRole('button', { name: 'Заезд' }).click()
 		await expect(page.getByText('Гость заселён')).toBeVisible()
-		await expect(band).toHaveClass(/bg-neutral-900/)
+		await expect(band).toHaveClass(/bg-status-occupied/)
 
 		// Check out — verify enum-guard: only checkOut + cancel available from
 		// in_house (NOT checkIn, NOT noShow).
@@ -180,7 +180,7 @@ test.describe('booking-edit dialog', () => {
 
 		await dialog.getByRole('button', { name: 'Выезд' }).click()
 		await expect(page.getByText('Гость выселен')).toBeVisible()
-		await expect(band).toHaveClass(/bg-neutral-300/)
+		await expect(band).toHaveClass(/bg-status-past/)
 		await expect(band).toContainText('Выехал')
 	})
 
@@ -199,7 +199,7 @@ test.describe('booking-edit dialog', () => {
 		await dialog.getByRole('button', { name: 'Отметить: не заехал' }).click()
 
 		await expect(page.getByText('Отмечено: гость не заехал')).toBeVisible()
-		await expect(band).toHaveClass(/bg-yellow-500/)
+		await expect(band).toHaveClass(/bg-status-issue/)
 		await expect(band).toContainText('Не заехал')
 
 		// Terminal re-open: reason persisted, no action buttons
@@ -226,7 +226,7 @@ test.describe('booking-edit dialog', () => {
 		await submit.click()
 
 		await expect(page.getByText('Отмечено: гость не заехал')).toBeVisible()
-		await expect(band).toHaveClass(/bg-yellow-500/)
+		await expect(band).toHaveClass(/bg-status-issue/)
 	})
 
 	test('terminal state (checked_out): read-only dialog, no actions (enum-coverage)', async ({
