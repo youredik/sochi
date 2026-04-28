@@ -54,7 +54,10 @@
 html,
 body,
 #root {
-	min-height: 100vh;
+	/* M9.2: 100vh → 100svh (small viewport) — iOS Safari address bar shrink
+	 * больше НЕ скакает контент. Baseline Widely Available June 2025
+	 * (~95% поддержка 2026). Round 4 self-audit fix. */
+	min-height: 100svh;
 }
 
 body {
@@ -71,6 +74,14 @@ body {
 @theme inline {
 	--font-heading: var(--font-sans);
 	--font-sans: "Geist Variable", sans-serif;
+	/* M9.2: safe-area-inset utility tokens — env() resolves к device runtime
+	 * value (iOS notch / home indicator / Dynamic Island). pt-safe-top,
+	 * pb-safe-bottom etc генерируются автоматом из --spacing-* token namespace.
+	 * Только для PWA standalone-mode значения > 0; в обычном browser = 0. */
+	--spacing-safe-top: env(safe-area-inset-top);
+	--spacing-safe-right: env(safe-area-inset-right);
+	--spacing-safe-bottom: env(safe-area-inset-bottom);
+	--spacing-safe-left: env(safe-area-inset-left);
 	--color-sidebar-ring: var(--sidebar-ring);
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

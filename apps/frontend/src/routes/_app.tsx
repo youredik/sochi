@@ -1,7 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Outlet, redirect, useParams, useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { MobileNav } from '../components/mobile-nav.tsx'
+import { useMobileNavMore } from '../components/mobile-nav-state.ts'
 import { ModeToggle } from '../components/mode-toggle.tsx'
+import { SidebarDrawer } from '../components/sidebar-drawer.tsx'
 import { LogoutButton } from '../features/auth/components/logout-button.tsx'
 import { OrgSwitcher } from '../features/tenancy/components/org-switcher.tsx'
 import { authClient, sessionQueryOptions } from '../lib/auth-client.ts'
@@ -60,6 +63,9 @@ export const Route = createFileRoute('/_app')({
 function AppLayout() {
 	const queryClient = useQueryClient()
 	const router = useRouter()
+	const params = useParams({ strict: false })
+	const orgSlug = params.orgSlug as string | undefined
+	const mobileNav = useMobileNavMore()
 
 	useEffect(
 		() =>
@@ -77,20 +83,46 @@ function AppLayout() {
 	)
 
 	return (
-		<div className="flex min-h-screen flex-col">
-			<header className="border-b border-border bg-background/80 backdrop-blur">
-				<div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
+		<div className="flex min-h-svh flex-col">
+			{/*
+			 * Top header — sticky на mobile + desktop. Mobile показывает только
+			 * brand + ModeToggle (OrgSwitcher/Logout уехали в SidebarDrawer
+			 * под More-tab); desktop (md+) сохраняет existing layout полностью.
+			 * pt-safe-top — для iOS PWA standalone (notch/Dynamic Island).
+			 */}
+			<header className="border-b border-border bg-background/80 pt-safe-top sticky top-0 z-40 backdrop-blur">
+				<div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
 					<span className="text-sm font-semibold tracking-tight text-foreground">HoReCa</span>
 					<div className="flex items-center gap-2">
-						<OrgSwitcher />
+						<div className="hidden md:block">
+							<OrgSwitcher />
+						</div>
 						<ModeToggle />
-						<LogoutButton />
+						<div className="hidden md:block">
+							<LogoutButton />
+						</div>
 					</div>
 				</div>
 			</header>
-			<div className="flex-1">
+			{/*
+			 * Outlet — pb-20 на mobile (запас под bottom-nav 64px высота),
+			 * pb-0 desktop. flex-1 заполняет verticai space между header и
+			 * bottom-nav.
+			 */}
+			<div className="flex-1 pb-20 md:pb-0">
 				<Outlet />
 			</div>
+			{/*
+			 * Bottom-tab + SidebarDrawer — только при наличии orgSlug (вне
+			 * o-select / signup). Drawer mounted один раз — multiple MobileNav
+			 * instances невозможны (single AppLayout per app).
+			 */}
+			{orgSlug ? (
+				<>
+					<MobileNav orgSlug={orgSlug} onMoreClick={mobileNav.onMoreClick} />
+					<SidebarDrawer orgSlug={orgSlug} open={mobileNav.open} onOpenChange={mobileNav.setOpen} />
+				</>
+			) : null}
 		</div>
 	)
 }

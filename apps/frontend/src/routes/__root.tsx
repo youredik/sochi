@@ -13,7 +13,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootLayout() {
 	return (
-		<div className="min-h-screen">
+		<div className="min-h-svh">
 			<Outlet />
 		</div>
 	)
