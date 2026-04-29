@@ -40,21 +40,32 @@ async function main(): Promise<void> {
 			colorScheme: view.theme,
 		})
 		const page = await context.newPage()
-		// Set theme via localStorage + class (matches our M9.1 theme infra)
 		await page.addInitScript((theme) => {
 			localStorage.setItem('horeca-theme', theme)
 			if (theme === 'dark') document.documentElement.classList.add('dark')
 		}, view.theme)
 		await page.goto(WIDGET_URL, { waitUntil: 'networkidle' })
-		// Wait for h1 (means data loaded)
 		await page.getByRole('heading', { level: 1 }).waitFor({ timeout: 10_000 })
 		const path = `${OUT_DIR}/widget-${view.name}.png`
 		await page.screenshot({ path, fullPage: true })
 		console.log(`  ✅ ${view.name}: ${path} (${view.viewport.width}×${view.viewport.height})`)
 		await context.close()
 	}
+	// Also screenshot not-found state (unknown tenant URL) для UX verification
+	console.log('📷 Not-found state verify')
+	const ctx = await browser.newContext({
+		viewport: { width: 1280, height: 800 },
+		colorScheme: 'light',
+	})
+	const page = await ctx.newPage()
+	await page.goto(`${BASE_URL}/widget/never-exists-12345`, { waitUntil: 'networkidle' })
+	await page.getByRole('heading', { level: 1 }).waitFor({ timeout: 10_000 })
+	const nfPath = `${OUT_DIR}/widget-not-found.png`
+	await page.screenshot({ path: nfPath, fullPage: true })
+	console.log(`  ✅ not-found: ${nfPath}`)
+	await ctx.close()
 	await browser.close()
-	console.log(`\n📁 4 screenshots saved to: ${OUT_DIR}/`)
+	console.log(`\n📁 5 screenshots saved to: ${OUT_DIR}/`)
 	console.log('   Read them back via Read tool to verify visual quality.')
 }
 
