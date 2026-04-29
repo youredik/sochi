@@ -12,28 +12,8 @@
  * flow (search/extras/guest+pay/confirmation) — M9.widget.2-5 sub-phases.
  */
 import { useQuery } from '@tanstack/react-query'
+import { ruPlural } from '../lib/ru-plural.ts'
 import { listPublicProperties } from '../lib/widget-api.ts'
-
-/**
- * RU plural rules — three forms (one / few / many) per CLDR canonical.
- * Used для «N объект/объекта/объектов» badge в widget header.
- *
- * Rules:
- *   - mod100 in 11..14 → many (объектов): «11 объектов», «14 объектов»
- *   - mod10 === 1 → one (объект): «1 объект», «21 объект», «101 объект»
- *   - mod10 in 2..4 → few (объекта): «2 объекта», «23 объекта»
- *   - else → many (объектов): «5 объектов», «10 объектов»
- *
- * Negative numbers / non-integers — caller must guard (zero-config widget).
- */
-export function ruPlural(n: number, one: string, few: string, many: string): string {
-	const mod10 = n % 10
-	const mod100 = n % 100
-	if (mod100 >= 11 && mod100 <= 14) return many
-	if (mod10 === 1) return one
-	if (mod10 >= 2 && mod10 <= 4) return few
-	return many
-}
 
 export interface WidgetPageProps {
 	readonly tenantSlug: string
