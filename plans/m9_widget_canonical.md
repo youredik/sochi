@@ -779,9 +779,42 @@ These = mandatory legal verify before launching M9.widget.4 (consent block sub-p
 - Lines 63.94% (floor 47%, +16.94) ✅
 - ABOVE plan §10 post-M9.widget target 50/55/40/50 уже после M9.widget.1.
 
-### Iteration 8+ (carry-forward — будут добавлены при M9.widget.2 pre-flight execution)
+### Iteration 8 — Visual polish caught after «truly идеал» claim (user pushback round 4)
 
-Каждая `pnpm test:serial` regression / `npm view` drift / live empirical evidence = new iteration entry. Memory canon `feedback_no_preexisting.md` + `feedback_empirical_method.md` — never trust stale assumptions. **Process correction priority** для M9.widget.2: paste-and-fill audit BEFORE commit, не как fix-up.
+27. **Claimed «truly идеал» БЕЗ запуска dev server и реального просмотра widget'а в browser**. System prompt canon: «For UI changes, start the dev server and use the feature in a browser before reporting the task as complete». Тесты проверяют correctness, не UX. Real visual = Playwright screenshot 4 viewports → Read через tool.
+
+28. **Initial render skeleton-feel diagnosis** через Read screenshots: bare h1 + bordered list + amber «warning» demo banner + vast emptiness ниже content + property card visually dead → НЕ «modern + convenient + beautiful» как plan §1 promises.
+
+29. **Visual polish iteration applied** (commit 11e0998): hero gradient `from-primary/5` + `min-h-svh` (Baseline 2025-06-12, fresh research verified) + eyebrow kicker + Sochi-blue info pill demo banner + property card semantic `<button>` с focus-visible + value-prop «3 простых шага» numbered + footer «экономия до 17% против OTA». `scripts/widget-visual-verify.ts` reusable.
+
+### Iteration 9 — RU pluralization grammatical bug (user pushback round 5)
+
+30. **Bug 1 (fixed commit 9f59fb2)**: `n === 1 ? 'объект' : 'объектов'` грамматически неправильно для RU. Lesson: NEVER 2-form ternary для RU (RU имеет three-form CLDR: one/few/many). New `lib/ru-plural.ts` per CLDR: mod10=1 NOT mod100=11 → one; mod10 in 2..4 NOT mod100 in 12..14 → few; else → many.
+
+31. **Bug 2 (fixed commit 9f59fb2)**: E2E [W6] would FAIL pre-push. Playwright `getByText` не match'ает across element boundaries (split through nested tabular-nums span). Fix pattern: `parent.textContent` regex assertion. **Same applies к React Testing Library.**
+
+32. **+25 strict adversarial tests for ruPlural** (mod10=1: 1/21/101/1001 + mod10 in 2..4: 2/3/4/22/33/104 + many basic: 0/5/9/10 + 11..14 special: always many despite mod10 + 111..114 mod100 propagation + 121/122 fall-through).
+
+### Iteration 10 — Vite Fast Refresh canon (commit 01de05c)
+
+33. **Biome warning `lint/style/useComponentExportOnlyModules`** — `ruPlural` lived в `widget-page.tsx` mixed с component export. Vite Fast Refresh требует component files exported ТОЛЬКО components (HMR boundary). Fix: extract `lib/ru-plural.ts`. **Lesson:** mixed exports НЕ разрешены — extract utilities в `lib/` per Vite canon.
+
+### Cumulative honest hallucinations / process gaps log: 33 (was 26 в Iteration 7)
+
+**Final M9.widget.1 metrics** (after 7-commit sub-phase + 5 senior-iteration rounds):
+- 117 strict tests (target ~30, +87 over) + 8 E2E
+- 4-theme axe matrix complete (light + dark + mobile + contrast-more)
+- Visual smoke 4/4 viewports verified empirically через screenshots
+- Coverage 62.95/64.01/56.35/63.94 — ABOVE plan §10 target 50/55/40/50
+- 9 process corrections applied для M9.widget.2 onward (memory `project_m9_widget_1_done.md`)
+
+### Iteration 11+ (carry-forward — будут добавлены при M9.widget.2 execution)
+
+Каждая `pnpm test:serial` regression / `npm view` drift / live empirical evidence = new iteration entry. Memory canon `feedback_no_preexisting.md` + `feedback_empirical_method.md` — never trust stale assumptions. **Process correction priority** для M9.widget.2:
+- Paste-and-fill audit BEFORE commit (Iteration 7 lesson #25)
+- Visual smoke 4 viewports + Read screenshots BEFORE «done» (Iteration 8 lesson #27)
+- RU plural CLDR canon (Iteration 9 lesson #30) — use `ruPlural()` for any count strings
+- Vite Fast Refresh canon (Iteration 10 lesson #33) — utilities в `lib/` отдельно от components
 
 **Carry-forward to M9.widget.4 pre-flight:**
 - ПП РФ №1912 от 2025-11-27 — verify exact thresholds на pravo.gov.ru (cancellation deadline / no-show cap / hold time)
