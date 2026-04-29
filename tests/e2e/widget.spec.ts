@@ -83,8 +83,12 @@ test.describe('widget public route — anonymous + axe', () => {
 		await page.getByRole('heading', { level: 1 }).waitFor()
 		// Demo tenant seeded property = "Гостиница Сириус — Морская резиденция"
 		await expect(page.getByText(/Морская резиденция/)).toBeVisible()
-		// Tourism tax rendered as percentage из 200 bps = 2.0%
-		await expect(page.getByText(/Туристический налог 2\.0%/)).toBeVisible()
+		// Tourism tax rendered as percentage из 200 bps = 2.0%. Number wrapped
+		// в tabular-nums span — Playwright getByText не match'ает across nodes;
+		// assert через section's textContent.
+		const propertiesSection = page.getByRole('region', { name: 'Список объектов размещения' })
+		await expect(propertiesSection).toBeVisible()
+		expect(await propertiesSection.textContent()).toMatch(/Туристический налог\s*·?\s*2\.0%/)
 	})
 
 	test('[W7] CSP headers present on widget API endpoint', async ({ request }) => {
