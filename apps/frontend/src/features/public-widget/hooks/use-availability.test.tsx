@@ -178,6 +178,51 @@ describe('useAvailability', () => {
 		expect(fetchSpy).not.toHaveBeenCalled()
 	})
 
+	test('[UA6] 500 server error → query.error generic Error (NOT WidgetApiInputError) → caller renders fallback', async () => {
+		globalThis.fetch = vi
+			.fn()
+			.mockResolvedValue(new Response('Internal error', { status: 500 })) as unknown as typeof fetch
+
+		const capture = { value: null as ReturnType<typeof useAvailability> | null }
+		renderProbe({
+			tenantSlug: 'demo',
+			propertyId: 'p1',
+			checkIn: '2026-06-01',
+			checkOut: '2026-06-03',
+			adults: 2,
+			childrenCount: 0,
+			onResult: (r) => {
+				capture.value = r
+			},
+		})
+		await waitFor(() => expect(capture.value?.isError).toBe(true), { timeout: 3000 })
+		// Generic Error — NOT WidgetApiInputError — search-and-pick рендерит generic fallback
+		expect(capture.value?.error).toBeInstanceOf(Error)
+		expect(capture.value?.error).not.toBeInstanceOf(WidgetApiInputError)
+		expect(capture.value?.error?.message).toMatch(/HTTP 500/)
+	})
+
+	test('[UA7] network failure (fetch reject) → query.error TypeError (NOT silent loading)', async () => {
+		globalThis.fetch = vi
+			.fn()
+			.mockRejectedValue(new TypeError('Network failure')) as unknown as typeof fetch
+
+		const capture = { value: null as ReturnType<typeof useAvailability> | null }
+		renderProbe({
+			tenantSlug: 'demo',
+			propertyId: 'p1',
+			checkIn: '2026-06-01',
+			checkOut: '2026-06-03',
+			adults: 2,
+			childrenCount: 0,
+			onResult: (r) => {
+				capture.value = r
+			},
+		})
+		await waitFor(() => expect(capture.value?.isError).toBe(true), { timeout: 3000 })
+		expect(capture.value?.isLoading).toBe(false)
+	})
+
 	test('[UA5] different adults param → different queryKey (no cross-leak)', async () => {
 		const fetchSpy = vi
 			.fn()

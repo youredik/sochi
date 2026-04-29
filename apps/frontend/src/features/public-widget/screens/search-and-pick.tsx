@@ -12,7 +12,7 @@
  * Picks default rate plan (BAR Flex / isDefault=true) when first rendered →
  * sticky summary populates с pricing, Continue CTA enabled.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DateRangePicker } from '../components/date-range-picker.tsx'
 import { GuestSelector } from '../components/guest-selector.tsx'
 import { RateCard } from '../components/rate-card.tsx'
@@ -65,8 +65,10 @@ export function SearchAndPick({
 		children: childrenCount,
 	})
 
-	// Auto-select first sellable offering + default ratePlan когда results arrive
-	useMemo(() => {
+	// Auto-select first sellable offering + default ratePlan когда results arrive.
+	// useEffect (NOT useMemo) — setState side-effect canon (React docs: useMemo
+	// для derivation only, useEffect для effects).
+	useEffect(() => {
 		if (!query.data) return
 		if (selectedRoomTypeId !== null) return
 		const first = query.data.offerings.find((o) => o.sellable && o.rateOptions.length > 0)
@@ -76,9 +78,14 @@ export function SearchAndPick({
 		if (defaultRate) setSelectedRatePlanId(defaultRate.ratePlanId)
 	}, [query.data, selectedRoomTypeId])
 
+	// Notify route wrapper когда API returns 404 — useEffect (NOT during render).
+	// Route's TanStack Router `notFound()` handler renders dedicated not-found UI;
+	// rendering fallback here protects если onNotFound пропущен.
+	useEffect(() => {
+		if (query.data === null && onNotFound) onNotFound()
+	}, [query.data, onNotFound])
+
 	if (query.data === null) {
-		// 404 → notify route wrapper for canonical TanStack Router notFound()
-		onNotFound?.()
 		return (
 			<main className="mx-auto max-w-3xl p-4 sm:p-6 md:p-8" lang="ru">
 				<h1 className="text-2xl font-semibold">Не найдено</h1>
@@ -98,6 +105,33 @@ export function SearchAndPick({
 				>
 					<p className="font-medium">Проверьте параметры поиска</p>
 					<p className="mt-1 text-sm">{query.error.reason}</p>
+				</div>
+			</main>
+		)
+	}
+
+	// Catch-all server/network error (non-404, non-422) → user-actionable fallback
+	// instead of infinite skeleton (real UX bug caught в senior-pass v2).
+	if (query.error) {
+		return (
+			<main className="mx-auto max-w-3xl p-4 sm:p-6 md:p-8" lang="ru">
+				<div
+					role="alert"
+					data-testid="widget-error-fallback"
+					className="rounded-lg border border-destructive/50 bg-destructive/5 p-4"
+				>
+					<p className="font-medium">Не удалось загрузить варианты размещения</p>
+					<p className="mt-1 text-sm text-muted-foreground">
+						Проверьте интернет-соединение и обновите страницу. Если проблема повторится, свяжитесь с
+						отелем напрямую.
+					</p>
+					<button
+						type="button"
+						onClick={() => query.refetch()}
+						className="mt-3 rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+					>
+						Попробовать ещё раз
+					</button>
 				</div>
 			</main>
 		)
