@@ -26,6 +26,7 @@ const searchSchema = z.object({
 export const Route = createFileRoute('/widget/$tenantSlug_/$propertyId')({
 	component: PropertyBookingPage,
 	notFoundComponent: PropertyNotFound,
+	errorComponent: PropertyRouteError,
 	validateSearch: searchSchema,
 })
 
@@ -72,6 +73,39 @@ function PropertyBookingPage() {
 				throw notFound()
 			}}
 		/>
+	)
+}
+
+/**
+ * Route-level error boundary — fires когда validateSearch (Zod) rejects
+ * invalid query params (e.g. `?adults=abc` или `?checkIn=not-a-date`),
+ * либо при unexpected component-tree crash. Renders user-actionable
+ * fallback с reset-to-defaults link instead of blank page.
+ */
+function PropertyRouteError({ error, reset }: { error: Error; reset: () => void }) {
+	return (
+		<main
+			className="mx-auto max-w-3xl p-4 sm:p-6 md:p-8"
+			lang="ru"
+			role="alert"
+			data-testid="route-error-fallback"
+		>
+			<h1 className="text-2xl font-semibold">Что-то пошло не так</h1>
+			<p className="mt-2 text-sm text-muted-foreground">
+				Параметры поиска некорректны или произошла ошибка. Попробуйте обновить страницу или начать
+				поиск заново.
+			</p>
+			{error?.message ? (
+				<p className="mt-2 text-xs text-muted-foreground">Подробности: {error.message}</p>
+			) : null}
+			<button
+				type="button"
+				onClick={reset}
+				className="mt-4 rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+			>
+				Попробовать ещё раз
+			</button>
+		</main>
 	)
 }
 

@@ -239,4 +239,13 @@ test.describe('widget Screen 1 Search & Pick — happy + adversarial + axe matri
 		const res = await request.get(url)
 		expect(res.status()).toBe(422)
 	})
+
+	test('[S12] invalid search param adults=abc → route errorComponent (NOT blank page)', async ({
+		page,
+	}) => {
+		// validateSearch Zod coerce.number rejects "abc" → throws → route errorComponent fires.
+		await page.goto(`${PROPERTY_URL}?adults=abc&checkIn=2026-06-01&checkOut=2026-06-03`)
+		await expect(page.getByTestId('route-error-fallback')).toBeVisible({ timeout: 5_000 })
+		await expect(page.getByRole('heading', { level: 1 })).toContainText('Что-то пошло не так')
+	})
 })
