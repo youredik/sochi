@@ -29,7 +29,7 @@
  *     [A2] aria-label на section для screen readers
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import * as widgetApi from '../lib/widget-api.ts'
 import { WidgetPage } from './widget-page.tsx'
@@ -140,7 +140,7 @@ describe('<WidgetPage> — properties list', () => {
 		expect(screen.getByText(/не опубликовал объекты/)).toBeTruthy()
 	})
 
-	test('[P2] non-empty properties → list с N items', async () => {
+	test('[P2] non-empty properties → list с N items (scoped к properties section)', async () => {
 		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: [
@@ -164,11 +164,13 @@ describe('<WidgetPage> — properties list', () => {
 		})
 		renderPage()
 		await screen.findByRole('heading', { level: 1 })
-		const items = screen.getAllByRole('listitem')
+		// Scope к properties section — иначе попадают и steps-section <ol> items
+		const propertiesSection = screen.getByRole('region', { name: 'Список объектов размещения' })
+		const items = within(propertiesSection).getAllByRole('listitem')
 		expect(items).toHaveLength(2)
 	})
 
-	test('[P3] tourism tax 200 bps → "2.0%" rendered', async () => {
+	test('[P3] tourism tax 200 bps → "2.0%" rendered (textContent join across spans)', async () => {
 		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: [
@@ -184,7 +186,10 @@ describe('<WidgetPage> — properties list', () => {
 		})
 		renderPage()
 		await screen.findByRole('heading', { level: 1 })
-		expect(screen.getByText(/Туристический налог 2\.0%/)).toBeTruthy()
+		// Number wrapped в tabular-nums span — text split by element boundary,
+		// getByText regex won't match across nodes. Assert via parent textContent.
+		const propertiesSection = screen.getByRole('region', { name: 'Список объектов размещения' })
+		expect(propertiesSection.textContent).toMatch(/Туристический налог\s*·?\s*2\.0%/)
 	})
 
 	test('[P4] tourismTaxRateBps=null → no tax string', async () => {

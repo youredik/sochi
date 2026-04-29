@@ -61,47 +61,127 @@ export function WidgetPage({ tenantSlug, onNotFound }: WidgetPageProps) {
 	}
 
 	return (
-		<main className="mx-auto max-w-3xl p-4 sm:p-6 md:p-8" lang="ru">
-			<header className="border-b pb-4">
-				<h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{data.tenant.name}</h1>
-				{data.tenant.mode === 'demo' ? (
-					<p
-						data-testid="demo-banner"
-						className="mt-2 inline-flex items-center gap-2 rounded-md bg-amber-50 px-3 py-1 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100"
-					>
-						<span aria-hidden>●</span>
-						<span>Демо-режим: данные не сохраняются. Это витрина продукта.</span>
+		<div
+			lang="ru"
+			className="min-h-svh bg-gradient-to-b from-primary/5 via-background to-background"
+		>
+			<main className="mx-auto max-w-3xl p-4 sm:p-6 md:p-8">
+				<header className="pt-2 pb-6 md:pt-6 md:pb-8">
+					<p className="text-xs font-medium uppercase tracking-wider text-primary">
+						Прямое бронирование · Сочи
 					</p>
-				) : null}
-			</header>
+					<h1 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
+						{data.tenant.name}
+					</h1>
+					{data.tenant.mode === 'demo' ? (
+						<p
+							data-testid="demo-banner"
+							className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary"
+						>
+							<span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
+							<span>Демо-режим — это живая витрина продукта</span>
+						</p>
+					) : null}
+				</header>
 
-			<section aria-label="Список объектов размещения" className="mt-6">
-				<h2 className="text-lg font-medium">Объекты размещения</h2>
-				{data.properties.length === 0 ? (
-					<p className="mt-2 text-sm text-muted-foreground">
-						Этот отель не опубликовал объекты для онлайн-бронирования. Свяжитесь с ресепшеном.
-					</p>
-				) : (
-					<ul className="mt-3 space-y-3">
-						{data.properties.map((p) => (
-							<li key={p.id} className="rounded-md border p-4 transition hover:border-primary">
-								<h3 className="font-medium">{p.name}</h3>
-								<p className="mt-1 text-sm text-muted-foreground">{p.address}</p>
-								<p className="mt-1 text-xs text-muted-foreground">
-									Часовой пояс: {p.timezone}
-									{p.tourismTaxRateBps !== null
-										? ` · Туристический налог ${(p.tourismTaxRateBps / 100).toFixed(1)}%`
-										: ''}
-								</p>
+				<section
+					aria-label="Список объектов размещения"
+					className="rounded-xl border bg-card p-4 shadow-sm md:p-6"
+				>
+					<div className="flex items-baseline justify-between">
+						<h2 className="text-lg font-medium">Объекты размещения</h2>
+						<span className="text-xs text-muted-foreground tabular-nums">
+							{data.properties.length} {data.properties.length === 1 ? 'объект' : 'объектов'}
+						</span>
+					</div>
+
+					{data.properties.length === 0 ? (
+						<p className="mt-4 text-sm text-muted-foreground">
+							Этот отель не опубликовал объекты для онлайн-бронирования. Свяжитесь с ресепшеном.
+						</p>
+					) : (
+						<ul className="mt-4 space-y-3">
+							{data.properties.map((p) => (
+								<li key={p.id}>
+									<button
+										type="button"
+										aria-label={`Открыть ${p.name}`}
+										className="group flex w-full items-start justify-between gap-4 rounded-lg border bg-background p-4 text-left transition hover:border-primary hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+									>
+										<div className="min-w-0 flex-1">
+											<h3 className="font-medium tracking-tight">{p.name}</h3>
+											<p className="mt-1 text-sm text-muted-foreground">{p.address}</p>
+											<p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+												<span>{p.timezone}</span>
+												{p.tourismTaxRateBps !== null ? (
+													<span>
+														· Туристический налог{' '}
+														<span className="tabular-nums">
+															{(p.tourismTaxRateBps / 100).toFixed(1)}%
+														</span>
+													</span>
+												) : null}
+											</p>
+										</div>
+										<svg
+											aria-hidden
+											role="presentation"
+											className="mt-1 h-5 w-5 flex-shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary"
+											viewBox="0 0 20 20"
+											fill="none"
+											stroke="currentColor"
+											strokeWidth="1.5"
+										>
+											<title></title>
+											<path d="M7.5 4l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+										</svg>
+									</button>
+								</li>
+							))}
+						</ul>
+					)}
+				</section>
+
+				<section aria-label="Что дальше" className="mt-6 md:mt-8">
+					<div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4 md:p-6">
+						<h2 className="text-base font-medium">3 простых шага бронирования</h2>
+						<ol className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+							<li className="flex items-start gap-2">
+								<span
+									aria-hidden
+									className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground tabular-nums"
+								>
+									1
+								</span>
+								<span>Выбираете даты и количество гостей</span>
 							</li>
-						))}
-					</ul>
-				)}
-			</section>
+							<li className="flex items-start gap-2">
+								<span
+									aria-hidden
+									className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground tabular-nums"
+								>
+									2
+								</span>
+								<span>Подбираете номер и тариф</span>
+							</li>
+							<li className="flex items-start gap-2">
+								<span
+									aria-hidden
+									className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground tabular-nums"
+								>
+									3
+								</span>
+								<span>Оплачиваете онлайн — без комиссии посредников</span>
+							</li>
+						</ol>
+					</div>
+				</section>
 
-			<footer className="mt-10 border-t pt-4 text-xs text-muted-foreground">
-				Скоро здесь — 3-экранный flow бронирования (поиск дат → выбор тарифа → оплата).
-			</footer>
-		</main>
+				<footer className="mt-8 flex flex-col gap-2 border-t pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+					<span>Прямое бронирование · экономия до 17% против OTA</span>
+					<span className="text-[10px] uppercase tracking-wider">Powered by Сочи HoReCa</span>
+				</footer>
+			</main>
+		</div>
 	)
 }
