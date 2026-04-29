@@ -32,18 +32,25 @@ import { toTs } from './ydb-helpers.ts'
 const TENANT_ID = 'demo-sochi-sirius'
 const SLUG = 'demo-sirius'
 
+// M9.widget.1 — MVP property + roomTypes для public widget endpoint.
+// Полный polish (5-7 rooms + photos + 14d availability + reviews + JSON-LD)
+// — М9.widget.8 demo polish sub-phase.
+const DEMO_PROPERTY_ID = 'demo-prop-sirius-main'
+const DEMO_ROOM_TYPE_DELUXE_ID = 'demo-roomtype-deluxe'
+const DEMO_ROOM_TYPE_STANDARD_ID = 'demo-roomtype-standard'
+
 export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	console.log(`🌱 Seeding demo tenant: ${TENANT_ID}`)
 	const now = new Date()
 	const nowTs = toTs(now)
 
-	console.log('  → Step 1/2: organization (BetterAuth row)')
+	console.log('  → Step 1/4: organization (BetterAuth row)')
 	await sql`
 		UPSERT INTO organization (id, name, slug, createdAt)
 		VALUES (${TENANT_ID}, ${'Гостиница Сириус (демо)'}, ${SLUG}, ${now})
 	`
 
-	console.log('  → Step 2/2: organizationProfile с mode=demo + ЕПГУ config')
+	console.log('  → Step 2/4: organizationProfile с mode=demo + ЕПГУ config')
 	await sql`
 		UPSERT INTO organizationProfile (
 			\`organizationId\`, \`plan\`, \`createdAt\`, \`updatedAt\`, \`mode\`,
@@ -54,8 +61,56 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		)
 	`
 
+	// M9.widget.1 — minimal property с isPublic=true для widget endpoint.
+	console.log('  → Step 3/4: property (public, active, Сочи tourism tax 2%)')
+	await sql`
+		UPSERT INTO property (
+			\`tenantId\`, \`id\`, \`name\`, \`address\`, \`city\`, \`timezone\`,
+			\`tourismTaxRateBps\`, \`isActive\`, \`isPublic\`,
+			\`createdAt\`, \`updatedAt\`
+		) VALUES (
+			${TENANT_ID}, ${DEMO_PROPERTY_ID},
+			${'Гостиница Сириус — Морская резиденция'},
+			${'Сириус, Олимпийский проспект 21'},
+			${'Сириус'},
+			${'Europe/Moscow'},
+			${200},
+			${true}, ${true},
+			${nowTs}, ${nowTs}
+		)
+	`
+
+	console.log('  → Step 4/4: 2 roomTypes (Deluxe Sea View + Standard Mountain)')
+	await sql`
+		UPSERT INTO roomType (
+			\`tenantId\`, \`id\`, \`propertyId\`, \`name\`, \`description\`,
+			\`maxOccupancy\`, \`baseBeds\`, \`extraBeds\`, \`areaSqm\`,
+			\`inventoryCount\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
+		) VALUES (
+			${TENANT_ID}, ${DEMO_ROOM_TYPE_DELUXE_ID}, ${DEMO_PROPERTY_ID},
+			${'Deluxe Sea View'},
+			${'25 м², 2 гостя, балкон с видом на море. Завтрак включён.'},
+			${2}, ${1}, ${0}, ${25},
+			${5}, ${true}, ${nowTs}, ${nowTs}
+		)
+	`
+	await sql`
+		UPSERT INTO roomType (
+			\`tenantId\`, \`id\`, \`propertyId\`, \`name\`, \`description\`,
+			\`maxOccupancy\`, \`baseBeds\`, \`extraBeds\`, \`areaSqm\`,
+			\`inventoryCount\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
+		) VALUES (
+			${TENANT_ID}, ${DEMO_ROOM_TYPE_STANDARD_ID}, ${DEMO_PROPERTY_ID},
+			${'Standard Mountain View'},
+			${'18 м², 2 гостя, вид на горы Красной Поляны.'},
+			${2}, ${1}, ${1}, ${18},
+			${10}, ${true}, ${nowTs}, ${nowTs}
+		)
+	`
+
 	console.log(`✅ Demo tenant ready: tenantId=${TENANT_ID} slug=${SLUG} mode=demo`)
-	console.log('   Full domain seed (property/rooms/bookings/guests) — M9 deploy phase.')
+	console.log('   M9.widget.1 MVP: 1 property + 2 roomTypes seeded (isPublic=true).')
+	console.log('   Full polish (photos / 14d availability / reviews / JSON-LD) — M9.widget.8.')
 	return { tenantId: TENANT_ID }
 }
 

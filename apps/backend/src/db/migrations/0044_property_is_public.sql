@@ -1,0 +1,30 @@
+-- 0044_property_is_public.sql — M9.widget.1
+-- per plans/m9_widget_canonical.md §M9.widget.1
+-- + project_m9_widget_canonical.md memory.
+--
+-- Adds explicit `isPublic` gate to `property` table for public booking
+-- widget visibility. Two values (NULL treated as false at app-level):
+--   - NULL / false (default) — property invisible на публичном виджете
+--     (`/widget/{slug}`); operator может его hide для drafts, internal
+--     team rooms, или ещё-не-classified properties перед КСР registry
+--     submission.
+--   - true — property exposed на публичном widget endpoint после
+--     successful КСР registration + verified amenities/photos/descriptions.
+--
+-- Default behaviour: existing rows → NULL (= private). New rows from
+-- M8.A.0 Content Wizard остаются NULL until explicit publish step через
+-- админ UI (deferred к M9.widget.8 demo polish — там demo tenant seeder
+-- explicitly sets isPublic=true для realistic Сочи rooms).
+--
+-- Application-level interpretation:
+--   * widget.repo.ts:   WHERE isPublic = true (NULL = excluded)
+--   * property.repo.ts: insert default = NULL; admin update = explicit
+--   * /health endpoint: NOT exposed (internal flag, не критично для ops)
+--
+-- Why nullable Bool, not NOT NULL DEFAULT false:
+--   YDB ALTER TABLE ADD COLUMN с NOT NULL constraint требует backfill в
+--   отдельной транзакции (migrations 0042, 0033 — same pattern). Nullable
+--   keeps migration single-step + idempotent.
+--   App-level `coalesce(isPublic, false)` semantically equivalent.
+
+ALTER TABLE property ADD COLUMN isPublic Bool;

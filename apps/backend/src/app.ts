@@ -47,6 +47,8 @@ import { createRoomTypeFactory } from './domains/roomType/roomType.factory.ts'
 import { createRoomTypeRoutes } from './domains/roomType/roomType.routes.ts'
 import { createTenantComplianceFactory } from './domains/tenant/compliance.factory.ts'
 import { createTenantComplianceRoutes } from './domains/tenant/compliance.routes.ts'
+import { createWidgetFactory } from './domains/widget/widget.factory.ts'
+import { createWidgetRoutes } from './domains/widget/widget.routes.ts'
 import { env } from './env.ts'
 import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
@@ -98,6 +100,9 @@ const activityFactory = createActivityFactory(sql)
 const notificationFactory = createNotificationFactory(sql, activityFactory.repo)
 const guestFactory = createGuestFactory(sql)
 const folioFactory = createFolioFactory(sql)
+// M9.widget.1 — public booking widget read surface (no auth, no tenant
+// middleware — slug-resolved tenant per request).
+const widgetFactory = createWidgetFactory(sql)
 // M8.A.5 — миграционный учёт МВД (функция 1.1).
 // Mock adapters wired по умолчанию (APP_MODE=mock|sandbox); swap на live
 // = factory binding в registry. Behaviour-faithful per research/epgu-rkl.md.
@@ -470,6 +475,10 @@ const otelIngest = createOtelIngest()
 
 const routes = app
 	.route('/api/otel', otelIngest)
+	// PUBLIC widget read surface — NO auth middleware, slug-resolved tenant.
+	// Mounted FIRST в chain so anonymous clients get clean 200/404 ответы
+	// без 401 от authMiddleware.
+	.route('/api/public/widget', createWidgetRoutes(widgetFactory.service))
 	.route('/api/v1/properties', createPropertyRoutes(propertyFactory))
 	.route('/api/v1', createPropertyContentRoutes(propertyContentFactory, idempotency))
 	.route('/api/v1', createTenantComplianceRoutes(tenantComplianceFactory, idempotency))
