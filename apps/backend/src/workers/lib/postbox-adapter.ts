@@ -82,9 +82,11 @@ export class StubAdapter implements EmailAdapter {
  * 12 h IAM-token TTL refresh dance — long-running worker stays connected.
  * SA needs `postbox.sender` role; key issued via `yc iam access-key create`.
  *
- * Endpoint: `postbox.<region>.cloud.yandex.net` (region = `ru-central1`
- * for Сочи). Region matters only for SigV4 signing (any non-empty value
- * Postbox accepts; conventional value is `ru-central1`).
+ * Endpoint: `postbox.cloud.yandex.net` (single global host — verified live
+ * 2026-04-29 docs `yandex.cloud/en/docs/postbox/aws-compatible-api/api-ref`).
+ * Region appears only in SigV4 signing string (`aws:amz:ru-central1:ses`),
+ * NOT in URL host. Earlier `<region>.cloud.yandex.net` shape was a
+ * misreading — Postbox accepts any non-empty SigV4 region value.
  *
  * Constructor accepts the AWS-SES-v2 client instance — caller wires
  * credentials + endpoint override. This keeps the worker test-friendly

@@ -300,6 +300,12 @@ function ConfirmStage({
 				value={entities.birthPlace ?? ''}
 				onChange={(v) => update('birthPlace', v)}
 			/>
+			<EntityRow
+				label="Срок действия"
+				value={entities.expirationDate ?? ''}
+				onChange={(v) => update('expirationDate', v)}
+				placeholder="YYYY-MM-DD (только загран/СНГ)"
+			/>
 		</div>
 	)
 }

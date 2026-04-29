@@ -109,6 +109,7 @@ describe('MockVisionOcr — heuristic confidence', () => {
 				birthPlace: 'г. Москва',
 				documentNumber: '4608 123456',
 				issueDate: '2010-03-20',
+				expirationDate: null,
 			},
 			today,
 		)
@@ -128,6 +129,7 @@ describe('MockVisionOcr — heuristic confidence', () => {
 				birthPlace: null,
 				documentNumber: '4608 123456',
 				issueDate: '2010-03-20',
+				expirationDate: null,
 			},
 			today,
 		)
@@ -148,6 +150,7 @@ describe('MockVisionOcr — heuristic confidence', () => {
 				birthPlace: 'г. Москва',
 				documentNumber: 'ABC-12345', // malformed
 				issueDate: '2010-03-20',
+				expirationDate: null,
 			},
 			today,
 		)
@@ -167,6 +170,7 @@ describe('MockVisionOcr — heuristic confidence', () => {
 				birthPlace: 'г. Москва',
 				documentNumber: '4608 123456',
 				issueDate: '2026-01-01',
+				expirationDate: null,
 			},
 			today,
 		)
@@ -186,6 +190,7 @@ describe('MockVisionOcr — heuristic confidence', () => {
 				birthPlace: null,
 				documentNumber: 'X', // bad regex
 				issueDate: null,
+				expirationDate: null,
 			},
 			today,
 		)
@@ -208,6 +213,7 @@ describe('MockVisionOcr — heuristic confidence', () => {
 				birthPlace: null,
 				documentNumber: null, // -0.2 again? no, OR'd с surname/name/doc check
 				issueDate: null,
+				expirationDate: null,
 			},
 			today,
 		)
@@ -232,6 +238,7 @@ describe('MockVisionOcr — heuristic confidence', () => {
 				birthPlace: 'г. Москва',
 				documentNumber: '4608 123456',
 				issueDate: '2010-03-20',
+				expirationDate: null,
 			},
 			today,
 		)

@@ -9,7 +9,21 @@
  * adapter interface itself.
  */
 
-/** 9 entities returned by Yandex Vision passport model (always together). */
+/**
+ * Entities returned by Yandex Vision `passport` model (always together).
+ *
+ * Canonical 9 fields per research-cache `plans/research/yandex-vision-passport.md`
+ * §2.3 (2026-04-27) + 1 conditional field (`expirationDate`) for загран/СНГ
+ * documents per §1.6. RU-internal паспорт returns `expirationDate: null`
+ * (РФ internal паспорт не имеет даты истечения).
+ *
+ * Fields explicitly NOT here per research-cache §2.3:
+ *   `subdivision` (код подразделения), `issuedBy` (issuing authority) —
+ *   these are NOT returned in Vision `entities[]`; they exist only in
+ *   `fullText` and require regex-parse on our side. When/if we surface
+ *   them, layer them through a separate `parseSubdivisionFromFullText`
+ *   helper, NOT через PassportEntities interface.
+ */
 export interface PassportEntities {
 	readonly surname: string | null
 	readonly name: string | null
@@ -24,6 +38,12 @@ export interface PassportEntities {
 	readonly documentNumber: string | null
 	/** YYYY-MM-DD (ISO 8601). */
 	readonly issueDate: string | null
+	/**
+	 * Passport expiration date (YYYY-MM-DD). NULL for RU-internal passports
+	 * (РФ internal без срока действия) and for any document without explicit
+	 * expiry. Populated for загран РФ + СНГ + foreign passports.
+	 */
+	readonly expirationDate: string | null
 }
 
 export interface RecognizePassportResponse {

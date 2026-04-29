@@ -62,21 +62,34 @@ const EVIDENCE_DIR = resolve(
 	'../apps/backend/src/domains/epgu/vision/_evidence',
 )
 
-// Yandex AI Studio passport model endpoint (verified docs Apr 2026).
-const VISION_ENDPOINT = 'https://vision.api.cloud.yandex.net/vision/v1/batchAnalyze'
+// Canonical Yandex AI Studio OCR endpoint 2026 — verified independently
+// 2x: research-cache `plans/research/yandex-vision-passport.md` (2026-04-27)
+// + live web-research 2026-04-29. Docs migrated cloud.yandex.ru/docs/vision
+// → aistudio.yandex.ru/docs/ru/vision (CAPTCHA-walled), API host unchanged.
+// Legacy `vision.api.cloud.yandex.net/vision/v1/batchAnalyze` still defined
+// in proto but template-recognition (passport) now points exclusively to
+// /ocr/v1/recognizeText per yandex-cloud/cloudapi `ai/ocr/v1/ocr_service.proto`.
+const VISION_ENDPOINT = 'https://ocr.api.cloud.yandex.net/ocr/v1/recognizeText'
 
-interface YandexVisionRawResponse {
-	results?: Array<{
-		results?: Array<{
-			error?: { code: number; message: string }
-			textDetection?: unknown
-			passportRegistration?: {
-				entities?: Array<{ type: string; text: string }>
-				confidence?: number
-			}
-			[key: string]: unknown
-		}>
-	}>
+interface VisionEntity {
+	name: string
+	text: string
+}
+interface VisionTextAnnotation {
+	width?: string
+	height?: string
+	entities?: VisionEntity[]
+	fullText?: string
+	[key: string]: unknown
+}
+/** Sync /ocr/v1/recognizeText returns chunked stream; per-chunk envelope. */
+interface YandexOcrChunk {
+	result?: {
+		textAnnotation?: VisionTextAnnotation
+		page?: string
+		[key: string]: unknown
+	}
+	error?: { code: number; message: string; details?: unknown[] }
 	[key: string]: unknown
 }
 
@@ -84,32 +97,32 @@ async function callRealVision(
 	apiKey: string,
 	folderId: string,
 	bytes: Uint8Array,
-): Promise<{ response: YandexVisionRawResponse; httpStatus: number; latencyMs: number }> {
+): Promise<{ response: YandexOcrChunk; httpStatus: number; latencyMs: number }> {
 	const t0 = Date.now()
 	const res = await fetch(VISION_ENDPOINT, {
 		method: 'POST',
 		headers: {
 			Authorization: `Api-Key ${apiKey}`,
 			'Content-Type': 'application/json',
+			// folderId required for Api-Key auth — passed as header per Yandex IAM
+			// canonical (Api-Key carries no folder context).
+			'x-folder-id': folderId,
+			'x-data-logging-enabled': 'false',
 		},
 		body: JSON.stringify({
-			folderId,
-			analyze_specs: [
-				{
-					content: Buffer.from(bytes).toString('base64'),
-					features: [
-						{
-							type: 'PASSPORT',
-							passport_features: { model: 'passport' },
-						},
-					],
-				},
-			],
+			content: Buffer.from(bytes).toString('base64'),
+			mimeType: 'image/jpeg',
+			languageCodes: ['ru', 'en'],
+			model: 'passport',
 		}),
 	})
 	const latencyMs = Date.now() - t0
 	const httpStatus = res.status
-	const response = (await res.json()) as YandexVisionRawResponse
+	// Sync endpoint returns chunked sequence of RecognizeTextResponse — each
+	// line is a JSON object. For passport (single page) typically 1 chunk.
+	const text = await res.text()
+	const firstChunk = text.split('\n').find((l) => l.trim().length > 0) ?? '{}'
+	const response = JSON.parse(firstChunk) as YandexOcrChunk
 	return { response, httpStatus, latencyMs }
 }
 
@@ -185,7 +198,7 @@ async function main(): Promise<void> {
 		)
 	}
 
-	console.log('🌐 Calling real Yandex Vision passport endpoint...')
+	console.log('🌐 Calling real Yandex Vision OCR /ocr/v1/recognizeText (model=passport)...')
 	const { response, httpStatus, latencyMs } = await callRealVision(apiKey, folderId, bytes)
 	console.log(`📊 HTTP ${httpStatus}, latency ${latencyMs}ms`)
 	saveEvidence('real-vision-response.json', { httpStatus, latencyMs, response })
@@ -199,8 +212,7 @@ async function main(): Promise<void> {
 	})
 	saveEvidence('mock-vision-response.json', mockResp)
 
-	console.log('\n=== Shape diff (Mock vs Real top-level) ===')
-	// Build canonical Mock shape mirroring real Vision API extraction logic.
+	console.log('\n=== Shape diff (Mock vs Real /ocr/v1) ===')
 	const mockShape: Record<string, unknown> = {
 		detectedCountryIso3: mockResp.detectedCountryIso3,
 		isCountryWhitelisted: mockResp.isCountryWhitelisted,
@@ -211,38 +223,35 @@ async function main(): Promise<void> {
 		latencyMs: mockResp.latencyMs,
 		httpStatus: mockResp.httpStatus,
 	}
-	// Real Vision top-level differs — Vision API returns `results: [{ results: [{...}] }]` envelope.
-	// We need to compare canonical adapter-level shape (after normalization).
-	// Real shape comes from Yandex's textDetection/passportRegistration sub-objects.
 	console.log('Mock RecognizePassportResponse fields:', Object.keys(mockShape))
-	console.log('Real Vision raw envelope fields:', Object.keys(response))
+	console.log('Real Vision OCR chunk fields:', Object.keys(response))
 
-	// Pull first result for shape comparison
-	const realInner = response.results?.[0]?.results?.[0]
-	if (realInner) {
-		console.log('Real first result fields:', Object.keys(realInner))
-		const passportData = (realInner as Record<string, unknown>).passportRegistration as
-			| Record<string, unknown>
-			| undefined
-		if (passportData) {
-			console.log('Real passportRegistration fields:', Object.keys(passportData))
-			const realEntities = passportData.entities as
-				| Array<{ type: string; text: string }>
-				| undefined
-			if (realEntities) {
-				const realEntityTypes = new Set(realEntities.map((e) => e.type))
-				const mockEntityKeys = new Set(Object.keys(mockResp.entities))
-				console.log('Real entity types:', Array.from(realEntityTypes))
-				console.log('Mock entity keys:', Array.from(mockEntityKeys))
-				const gaps = diffShape({ ...mockShape }, response, '')
-				if (gaps.length === 0) {
-					console.log('✅ No top-level gaps detected (subject to entity-name mapping verification).')
-				} else {
-					console.log(`⚠️  ${gaps.length} gaps detected:`)
-					for (const g of gaps) console.log(`   - ${g}`)
-				}
-			}
+	// New /ocr/v1 envelope: { result: { textAnnotation: { entities[], fullText, ... }, page } }
+	const realResult = response.result
+	if (realResult) {
+		console.log('Real result fields:', Object.keys(realResult))
+		const ann = realResult.textAnnotation
+		if (ann) {
+			console.log('Real textAnnotation fields:', Object.keys(ann))
+			const realEntities = ann.entities ?? []
+			const realEntityNames = new Set(realEntities.map((e) => e.name))
+			const mockEntityKeys = new Set(Object.keys(mockResp.entities))
+			console.log('Real entity names (snake_case from API):', Array.from(realEntityNames))
+			console.log('Mock entity keys (camelCase post-mapping):', Array.from(mockEntityKeys))
+			// Expected canonical 9 entities per research-cache 2026-04-27:
+			//   surname, name, middle_name, gender, citizenship, birth_date,
+			//   birth_place, number, issue_date.
+			// Possible additional 3 per live-research 2026-04-29 (загран/СНГ):
+			//   issued_by, subdivision, expiration_date.
+			// Empirical curl resolves the divergence — record exact set seen.
+			console.log(
+				'\n📌 Divergence source-of-truth: this curl evidence supersedes ' +
+					'research-cache + live-research synthesis. Patch Mock to match.',
+			)
 		}
+	}
+	if (response.error) {
+		console.log('⚠️  API returned error:', response.error)
 	}
 
 	console.log(`\n📁 Evidence files: ${EVIDENCE_DIR}/*.json`)

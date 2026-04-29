@@ -73,6 +73,17 @@ function pick<T>(arr: ReadonlyArray<T>, random: () => number): T {
 }
 
 function buildFullEntities(random: () => number): PassportEntities {
+	// 80% RU-internal (expirationDate=null), 20% загран/СНГ (with expiry).
+	// Real Yandex Vision returns expirationDate only for non-РФ-internal docs.
+	const isInternational = random() < 0.2
+	const issueDate = randomDateInRange(random, 2010, 2024)
+	let expirationDate: string | null = null
+	if (isInternational) {
+		// Загран РФ valid 10 years; СНГ similar — synth +10y from issueDate.
+		const issueYear = Number.parseInt(issueDate.slice(0, 4), 10)
+		const expiryYear = issueYear + 10
+		expirationDate = `${expiryYear}${issueDate.slice(4)}`
+	}
 	return {
 		surname: pick(SAMPLE_RUS_SURNAMES, random),
 		name: pick(SAMPLE_RUS_NAMES, random),
@@ -82,7 +93,8 @@ function buildFullEntities(random: () => number): PassportEntities {
 		birthDate: randomDateInRange(random, 1960, 2008),
 		birthPlace: pick(SAMPLE_RUS_PLACES, random),
 		documentNumber: randomPassportNumber(random),
-		issueDate: randomDateInRange(random, 2010, 2024),
+		issueDate,
+		expirationDate,
 	}
 }
 
@@ -111,6 +123,7 @@ function emptyEntities(): PassportEntities {
 		birthPlace: null,
 		documentNumber: null,
 		issueDate: null,
+		expirationDate: null,
 	}
 }
 

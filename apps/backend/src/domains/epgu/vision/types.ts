@@ -8,7 +8,15 @@
  * `passport` model spec).
  */
 
-/** 9 entities returned by Yandex Vision passport model (always together). */
+/**
+ * Vision `passport` model entities — 9 canonical + 1 conditional (`expirationDate`).
+ *
+ * Per research-cache `plans/research/yandex-vision-passport.md` §2.3 + §1.6:
+ *   - 9 always returned together (or all null on parse failure)
+ *   - `expirationDate` populated for загран РФ + СНГ + foreign; null for РФ-internal
+ *   - `subdivision` (код подразделения) and `issued_by` (кем выдан) are NOT
+ *     entities — must be parsed из fullText if needed (separate helper)
+ */
 export interface PassportEntities {
 	readonly surname: string | null
 	readonly name: string | null
@@ -23,6 +31,11 @@ export interface PassportEntities {
 	readonly documentNumber: string | null
 	/** YYYY-MM-DD (ISO 8601). */
 	readonly issueDate: string | null
+	/**
+	 * Expiration date (YYYY-MM-DD). NULL for РФ-internal паспорт (без срока).
+	 * Populated for загран РФ + СНГ + foreign documents.
+	 */
+	readonly expirationDate: string | null
 }
 
 export interface RecognizePassportRequest {
