@@ -63,6 +63,21 @@ test.describe('widget public route — anonymous + axe', () => {
 		expect(results.violations).toEqual([])
 	})
 
+	test('[W5b] axe-pass на /widget/demo-sirius (prefers-contrast: more — AAA overlay)', async ({
+		page,
+	}) => {
+		// Emulate forced-colors / high-contrast preference per M9.5 Phase A canon
+		// (AAA overlay token-set активируется через @media prefers-contrast: more).
+		// 4-я scan complete matrix: light + dark + mobile + contrast-more.
+		await page.emulateMedia({ forcedColors: 'active' })
+		await page.goto(WIDGET_URL)
+		await page.getByRole('heading', { level: 1 }).waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
 	test('[W6] tenant property visible в DOM (Сочи tourism tax 2% rendered)', async ({ page }) => {
 		await page.goto(WIDGET_URL)
 		await page.getByRole('heading', { level: 1 }).waitFor()

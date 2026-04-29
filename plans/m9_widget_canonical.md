@@ -748,9 +748,40 @@ These = mandatory legal verify before launching M9.widget.4 (consent block sub-p
 
 **Cumulative honest hallucinations log: 17** (was 9 in draft, +8 after sanity-check). User instinct «при малейшем сомнении — research» правильный — каждый approximation в плане requires empirical verify.
 
-### Iteration 7+ (carry-forward — будут добавлены при M9.widget.0 pre-flight execution)
+### Iteration 7 — M9.widget.1 implementation findings (2026-04-29)
 
-Каждая `pnpm test:serial` regression / `npm view` drift / live empirical evidence = new iteration entry. Memory canon `feedback_no_preexisting.md` + `feedback_empirical_method.md` — never trust stale assumptions.
+**During execution caught:**
+
+18. **roomType seed missed 3 NOT NULL columns** — `extraBeds Int32 NOT NULL`, `inventoryCount Int32 NOT NULL`, `isActive Bool NOT NULL` отсутствовали в первой версии `seed-demo-tenant.ts` extension. YDB returned error 1030 «Type annotation» — caught empirically через `pnpm seed:demo` retry. Fix: explicit values `${0}`, `${5}`, `${true}` + table schema re-grep ПЕРЕД любым новым UPSERT. **Lesson:** YDB schema requires explicit column → value mapping; nullable columns OK omit, NOT NULL columns MUST be supplied или ALTER TABLE добавил DEFAULT clause.
+
+19. **`erasableSyntaxOnly` TS mode rejects parameter properties** — initial `widget.service.ts` had `constructor(public readonly slug: string)` syntax → TS1294 error. Fix: explicit field declaration + assignment в constructor body. Pattern matches existing domain errors (`booking/errors`).
+
+20. **TanStack Router `routeTree.gen.ts` requires explicit regen** — adding `widget.$tenantSlug.tsx` к `apps/frontend/src/routes/` не updates routeTree until `pnpm exec vite build` (or dev server) runs `@tanstack/router-plugin/vite`. Fixed: ran `vite build --mode development` для regen. **Lesson:** новый file route → `vite build` step ОБЯЗАТЕЛЕН перед `pnpm typecheck` или route'ы будут TS2345 / TS2339.
+
+21. **knip discipline: unused exports = code rot** — `getPublicPropertyDetail` flagged как unused (consumer M9.widget.2). Initial impulse — remove. Senior course-correct: write tests that exercise the function (knip считает test-import legitimate), keeps API surface coherent. `WidgetFactory` type — truly unused внешне → kept as comment-only «restore in M9.widget.4».
+
+22. **Floating Promise lint (`fc.assert(...)`)** — biome nursery rule flags fast-check 0.4.0 `fc.assert()` since signature includes `Promise<void> | void` union. Fix: `void fc.assert(...)` prefix. Caught via pre-commit hook (NOT local biome run before commit) — automate-every-check violation. **Carry-forward action:** add explicit `pnpm exec biome check` step to my mental pre-commit checklist.
+
+23. **`exactOptionalPropertyTypes: true` rejects undefined-passing к optional props** — initial `<WidgetPage tenantSlug={...} onNotFound={onNotFound} />` где `onNotFound?: () => void`, prop value `undefined` triggers TS2375. Fix: conditional render ternary (`onNotFound !== undefined ? <Page ... onNotFound={onNotFound}/> : <Page ... />`). **Lesson:** with strict optional types, conditional spread is canonical для passing-or-omitting.
+
+24. **Service-layer dedicated tests должны быть в первом commit** — добавил в commit 2 (`5a03a52`) после уже-pushed первого. `feedback_no_halfway.md` violation: «задачи делать полностью, не скипать подшаги под предлогом добавим потом». **Process correction:** test layer pyramid (pure / repo / service / routes / component / E2E) — обязан быть COMPLETE в первом commit для sub-phase, не fixup.
+
+25. **Component test gap caught only after explicit user check** — `widget.$tenantSlug.test.tsx` отсутствовал в первых двух commits. Frontend route был покрыт только E2E. `feedback_pre_done_audit.md` paste-and-fill checklist должен прогоняться ПЕРЕД declared «done», не после user'ского sanity-check'а. **Process correction:** physically open §9 audit checklist в planning canon перед каждым sub-phase commit.
+
+26. **`prefers-contrast: more` axe scan missed in initial E2E** — plan §9 explicit «light + dark + mobile + contrast-more = 4 scans». Initial `tests/e2e/widget.spec.ts` имел 3 scans. Fix: добавлен `[W5b]` test с `page.emulateMedia({ forcedColors: 'active' })` per Playwright canonical 2026 для high-contrast emulation.
+
+### Cumulative honest hallucinations log: 26 (was 17, +9 caught в M9.widget.1 implementation phase)
+
+**Coverage verified 2026-04-29 после M9.widget.1 closure** (full `pnpm coverage` run):
+- Statements 62.95% (floor 47%, +15.95) ✅
+- Branches 64.01% (floor 53%, +11.01) ✅
+- Functions 56.35% (floor 36%, +20.35) ✅
+- Lines 63.94% (floor 47%, +16.94) ✅
+- ABOVE plan §10 post-M9.widget target 50/55/40/50 уже после M9.widget.1.
+
+### Iteration 8+ (carry-forward — будут добавлены при M9.widget.2 pre-flight execution)
+
+Каждая `pnpm test:serial` regression / `npm view` drift / live empirical evidence = new iteration entry. Memory canon `feedback_no_preexisting.md` + `feedback_empirical_method.md` — never trust stale assumptions. **Process correction priority** для M9.widget.2: paste-and-fill audit BEFORE commit, не как fix-up.
 
 **Carry-forward to M9.widget.4 pre-flight:**
 - ПП РФ №1912 от 2025-11-27 — verify exact thresholds на pravo.gov.ru (cancellation deadline / no-show cap / hold time)
