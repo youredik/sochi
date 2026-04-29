@@ -598,6 +598,48 @@ describe('widget.service — orchestration', { tags: ['db'], timeout: 60_000 }, 
 		).rejects.toBeInstanceOf(InvalidAvailabilityInputError)
 	})
 
+	test('[FC-AV] getAvailability — random adults/children/dates: resolves OR throws Invalid|TenantNotFound|PublicPropertyNotFound (никаких unknown errors)', async () => {
+		const { service } = createWidgetFactory(getTestSql())
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string({ minLength: 0, maxLength: 30 }),
+				fc.string({ minLength: 0, maxLength: 30 }),
+				fc.integer({ min: -2, max: 12 }),
+				fc.integer({ min: -1, max: 8 }),
+				fc.date({ min: new Date('2026-01-01'), max: new Date('2027-01-01') }),
+				fc.integer({ min: -10, max: 60 }),
+				async (slug, propId, adults, children, checkInDate, checkOutDelta) => {
+					const checkIn = checkInDate.toISOString().slice(0, 10)
+					const checkOutDate = new Date(checkInDate)
+					checkOutDate.setUTCDate(checkOutDate.getUTCDate() + checkOutDelta)
+					const checkOut = checkOutDate.toISOString().slice(0, 10)
+					try {
+						await service.getAvailability({
+							tenantSlug: slug,
+							propertyId: propId,
+							checkIn,
+							checkOut,
+							adults,
+							children,
+						})
+						return true
+					} catch (err) {
+						if (
+							err instanceof InvalidAvailabilityInputError ||
+							err instanceof TenantNotFoundError ||
+							err instanceof PublicPropertyNotFoundError
+						) {
+							return true
+						}
+						console.error('Unexpected error class:', err)
+						return false
+					}
+				},
+			),
+			{ numRuns: 25 }, // numRuns low — каждый run hits real DB
+		)
+	})
+
 	test('[AV12] kopecks values are JSON-safe numbers (no bigint leak в DTO)', async () => {
 		const { service } = createWidgetFactory(getTestSql())
 		const slug = `av12-${Date.now().toString(36)}`
