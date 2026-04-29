@@ -26,6 +26,7 @@
  *     [AL2] returned tenant DTO has only {slug, name, mode} — NO `id`
  *           leak (tenantId — internal, не должен попасть к anonymous)
  */
+import { fc } from '@fast-check/vitest'
 import { newId } from '@horeca/shared'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
@@ -150,6 +151,31 @@ describe('widget.service — orchestration', { tags: ['db'], timeout: 60_000 }, 
 		const firstProp = view.properties[0]!
 		expect('isPublic' in firstProp).toBe(false)
 		expect('isActive' in firstProp).toBe(false) // internal flag тоже не должен утечь
+	})
+
+	// ─── Property-based invariant ─────────────────────────────────
+	// Random string input → service.listProperties либо resolves либо throws
+	// ОНЛИ TenantNotFoundError. Никакого generic Error / TypeError leakage.
+	test('[FC-S1] listProperties — any input string: resolves OR TenantNotFoundError invariant', async () => {
+		const { service } = createWidgetFactory(getTestSql())
+		await fc.assert(
+			fc.asyncProperty(
+				// Bound length to avoid pathological-long strings hitting URL limits
+				fc.string({ minLength: 0, maxLength: 50 }),
+				async (input) => {
+					try {
+						await service.listProperties(input)
+						return true
+					} catch (err) {
+						if (err instanceof TenantNotFoundError) return true
+						// Adversarial canon: ANY other error class = test failure
+						console.error('Unexpected error class:', err)
+						return false
+					}
+				},
+			),
+			{ numRuns: 30 }, // numRuns low — каждый run hits real DB
+		)
 	})
 
 	test('[AL2] tenant DTO имеет только {slug,name,mode} — tenantId НЕ leaked', async () => {

@@ -173,4 +173,57 @@ describe('resolveTenantBySlug — integration', { tags: ['db'], timeout: 60_000 
 		expect(result).not.toBeNull()
 		expect(result?.mode).toBeNull()
 	})
+
+	// ─── Adversarial: organizationProfile.mode is Utf8 (free-form) ────────
+	// Schema permits any string; resolver's whitelist strict 'demo'|'production'.
+	// Anything else → mode=null. Tests guard against silent acceptance of
+	// dirty seeder data (uppercase / whitespace / typo / staging mode).
+
+	async function seedOrgWithRawMode(rawMode: string) {
+		const sql = getTestSql()
+		const id = newId('organization')
+		const slug = `am-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+		const now = new Date()
+		await sql`UPSERT INTO organization (id, name, slug, createdAt) VALUES (${id}, ${'Adv'}, ${slug}, ${now})`
+		await sql`
+			UPSERT INTO organizationProfile (organizationId, plan, createdAt, updatedAt, mode)
+			VALUES (${id}, ${'free'}, ${now}, ${now}, ${rawMode})
+		`
+		return { id, slug }
+	}
+
+	test('[R6] mode=empty string → mode=null (whitelist rejects)', async () => {
+		const { slug } = await seedOrgWithRawMode('')
+		const result = await resolveTenantBySlug(slug)
+		expect(result).not.toBeNull()
+		expect(result?.mode).toBeNull()
+	})
+
+	test('[R7] mode="DEMO" uppercase → mode=null (case-sensitive whitelist)', async () => {
+		const { slug } = await seedOrgWithRawMode('DEMO')
+		const result = await resolveTenantBySlug(slug)
+		expect(result).not.toBeNull()
+		expect(result?.mode).toBeNull()
+	})
+
+	test('[R8] mode="demo " trailing space → mode=null (no auto-trim)', async () => {
+		const { slug } = await seedOrgWithRawMode('demo ')
+		const result = await resolveTenantBySlug(slug)
+		expect(result).not.toBeNull()
+		expect(result?.mode).toBeNull()
+	})
+
+	test('[R9] mode="staging" (future-tense) → mode=null (whitelist closed)', async () => {
+		const { slug } = await seedOrgWithRawMode('staging')
+		const result = await resolveTenantBySlug(slug)
+		expect(result).not.toBeNull()
+		expect(result?.mode).toBeNull()
+	})
+
+	test('[R10] mode="Demo" mixed-case → mode=null (case-sensitive whitelist)', async () => {
+		const { slug } = await seedOrgWithRawMode('Demo')
+		const result = await resolveTenantBySlug(slug)
+		expect(result).not.toBeNull()
+		expect(result?.mode).toBeNull()
+	})
 })
