@@ -23,6 +23,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { z } from 'zod'
 import {
+	InvalidAvailabilityInputError,
 	PublicPropertyNotFoundError,
 	TenantNotFoundError,
 	type WidgetService,
@@ -35,6 +36,15 @@ const tenantSlugParam = z.object({
 const propertyParam = z.object({
 	tenantSlug: z.string().min(1).max(64),
 	propertyId: z.string().min(1).max(128),
+})
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+const availabilityQuery = z.object({
+	checkIn: z.string().regex(ISO_DATE, 'checkIn must be YYYY-MM-DD'),
+	checkOut: z.string().regex(ISO_DATE, 'checkOut must be YYYY-MM-DD'),
+	adults: z.coerce.number().int().min(1).max(10),
+	children: z.coerce.number().int().min(0).max(6).default(0),
 })
 
 /**
@@ -99,5 +109,35 @@ export function createWidgetRoutes(service: WidgetService) {
 				throw err
 			}
 		})
+		.get(
+			'/:tenantSlug/properties/:propertyId/availability',
+			zValidator('param', propertyParam),
+			zValidator('query', availabilityQuery),
+			async (c) => {
+				const { tenantSlug, propertyId } = c.req.valid('param')
+				const { checkIn, checkOut, adults, children } = c.req.valid('query')
+				try {
+					const availability = await service.getAvailability({
+						tenantSlug,
+						propertyId,
+						checkIn,
+						checkOut,
+						adults,
+						children,
+					})
+					// Wire format: bigint amounts already converted to kopecks (number)
+					// в service layer. JSON-safe.
+					return c.json({ data: availability }, 200)
+				} catch (err) {
+					if (err instanceof InvalidAvailabilityInputError) {
+						return c.json({ error: { code: 'INVALID_INPUT', message: err.reason } }, 422)
+					}
+					if (err instanceof TenantNotFoundError || err instanceof PublicPropertyNotFoundError) {
+						return c.json({ error: { code: 'NOT_FOUND', message: 'Resource not found' } }, 404)
+					}
+					throw err
+				}
+			},
+		)
 	return app
 }

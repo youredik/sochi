@@ -109,3 +109,134 @@ test.describe('widget public route — anonymous + axe', () => {
 		expect(res.headers()['referrer-policy']).toBe('strict-origin-when-cross-origin')
 	})
 })
+
+// ═════════════════════════════════════════════════════════════════════════
+// M9.widget.2 — Screen 1 Search & Pick (sub-route /widget/:slug/:propertyId)
+// ═════════════════════════════════════════════════════════════════════════
+
+const PROPERTY_URL = '/widget/demo-sirius/demo-prop-sirius-main'
+const todayPlus = (days: number) => {
+	const d = new Date()
+	d.setUTCHours(0, 0, 0, 0)
+	d.setUTCDate(d.getUTCDate() + days)
+	return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+}
+
+test.describe('widget Screen 1 Search & Pick — happy + adversarial + axe matrix', () => {
+	test('[S1] property card link → screen 1 sub-route loads (sticky-summary visible)', async ({
+		page,
+	}) => {
+		await page.goto(WIDGET_URL)
+		await page.getByTestId('property-link-demo-prop-sirius-main').click()
+		await page.waitForURL(/\/widget\/demo-sirius\/demo-prop-sirius-main/)
+		await expect(page.getByTestId('search-bar')).toBeVisible({ timeout: 10_000 })
+		await expect(page.getByTestId('sticky-summary')).toBeVisible()
+	})
+
+	test('[S2] availability search renders rate cards (BAR_FLEX + BAR_NR each room)', async ({
+		page,
+	}) => {
+		const url = `${PROPERTY_URL}?checkIn=${todayPlus(30)}&checkOut=${todayPlus(33)}&adults=2&children=0`
+		await page.goto(url)
+		await expect(page.getByTestId('rate-card-demo-roomtype-deluxe')).toBeVisible()
+		await expect(page.getByTestId('rate-card-demo-roomtype-standard')).toBeVisible()
+		// Default rate auto-selected (BAR_FLEX) → summary breakdown visible
+		await expect(page.getByTestId('summary-breakdown').first()).toBeVisible()
+		// Total kopecks rendered as RU money — must contain "₽"
+		await expect(page.getByTestId('summary-total-detail').first()).toContainText('₽')
+	})
+
+	test('[S3] tourism tax 2% line in summary breakdown', async ({ page }) => {
+		const url = `${PROPERTY_URL}?checkIn=${todayPlus(30)}&checkOut=${todayPlus(33)}&adults=2&children=0`
+		await page.goto(url)
+		const breakdown = page.getByTestId('summary-breakdown').first()
+		await expect(breakdown).toBeVisible()
+		await expect(breakdown).toContainText('Туристический налог')
+		expect(await breakdown.textContent()).toMatch(/2\.0%/)
+	})
+
+	test('[S4] free-cancel deadline rendered for refundable rate (BAR Flex default)', async ({
+		page,
+	}) => {
+		const url = `${PROPERTY_URL}?checkIn=${todayPlus(30)}&checkOut=${todayPlus(33)}&adults=2&children=0`
+		await page.goto(url)
+		await expect(page.getByTestId('summary-cancel-deadline').first()).toContainText(
+			'Отмена без штрафа',
+		)
+	})
+
+	test('[S5] axe-pass on screen 1 (light + desktop)', async ({ page }) => {
+		const url = `${PROPERTY_URL}?checkIn=${todayPlus(30)}&checkOut=${todayPlus(33)}&adults=2&children=0`
+		await page.goto(url)
+		await page.getByRole('heading', { level: 1 }).waitFor()
+		await page.getByTestId('summary-total-detail').first().waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[S6] axe-pass on screen 1 (dark + desktop)', async ({ page }) => {
+		await page.addInitScript(() => {
+			document.documentElement.classList.add('dark')
+			localStorage.setItem('horeca-theme', 'dark')
+		})
+		const url = `${PROPERTY_URL}?checkIn=${todayPlus(30)}&checkOut=${todayPlus(33)}&adults=2&children=0`
+		await page.goto(url)
+		await page.getByRole('heading', { level: 1 }).waitFor()
+		await page.getByTestId('summary-total-detail').first().waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[S7] axe-pass on screen 1 (mobile 360×740 — Vaul drawer mode)', async ({ page }) => {
+		await page.setViewportSize({ width: 360, height: 740 })
+		const url = `${PROPERTY_URL}?checkIn=${todayPlus(30)}&checkOut=${todayPlus(33)}&adults=2&children=0`
+		await page.goto(url)
+		await page.getByRole('heading', { level: 1 }).waitFor()
+		await page.getByTestId('summary-total').first().waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[S8] axe-pass on screen 1 (forced-colors / contrast-more)', async ({ page }) => {
+		await page.emulateMedia({ forcedColors: 'active' })
+		const url = `${PROPERTY_URL}?checkIn=${todayPlus(30)}&checkOut=${todayPlus(33)}&adults=2&children=0`
+		await page.goto(url)
+		await page.getByRole('heading', { level: 1 }).waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[S9] cross-tenant unknown property → not-found component rendered', async ({ page }) => {
+		await page.goto('/widget/demo-sirius/never-exists-prop-id')
+		await expect(page.getByRole('heading', { level: 1, name: 'Не найдено' })).toBeVisible()
+	})
+
+	test('[S10] availability API endpoint returns 200 + total kopecks JSON-safe', async ({
+		request,
+	}) => {
+		const url = `/api/public/widget/demo-sirius/properties/demo-prop-sirius-main/availability?checkIn=${todayPlus(30)}&checkOut=${todayPlus(33)}&adults=2&children=0`
+		const res = await request.get(url)
+		expect(res.status()).toBe(200)
+		const body = (await res.json()) as {
+			data: { offerings: Array<{ rateOptions: Array<{ totalKopecks: number }> }> }
+		}
+		expect(body.data.offerings.length).toBeGreaterThanOrEqual(1)
+		const firstRate = body.data.offerings[0]?.rateOptions[0]
+		expect(typeof firstRate?.totalKopecks).toBe('number')
+		expect(firstRate?.totalKopecks).toBeGreaterThan(0)
+	})
+
+	test('[S11] availability 422 on stay > 30 nights', async ({ request }) => {
+		const url = `/api/public/widget/demo-sirius/properties/demo-prop-sirius-main/availability?checkIn=${todayPlus(1)}&checkOut=${todayPlus(60)}&adults=2&children=0`
+		const res = await request.get(url)
+		expect(res.status()).toBe(422)
+	})
+})

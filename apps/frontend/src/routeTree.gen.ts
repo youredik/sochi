@@ -16,6 +16,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as WidgetTenantSlugRouteImport } from './routes/widget.$tenantSlug'
 import { Route as AppOSelectRouteImport } from './routes/_app.o-select'
+import { Route as WidgetTenantSlugPropertyIdRouteImport } from './routes/widget.$tenantSlug_.$propertyId'
 import { Route as AppOOrgSlugRouteImport } from './routes/_app.o.$orgSlug'
 import { Route as AppOOrgSlugIndexRouteImport } from './routes/_app.o.$orgSlug.index'
 import { Route as AppOOrgSlugSetupRouteImport } from './routes/_app.o.$orgSlug.setup'
@@ -62,6 +63,12 @@ const AppOSelectRoute = AppOSelectRouteImport.update({
   path: '/o-select',
   getParentRoute: () => AppRoute,
 } as any)
+const WidgetTenantSlugPropertyIdRoute =
+  WidgetTenantSlugPropertyIdRouteImport.update({
+    id: '/widget/$tenantSlug_/$propertyId',
+    path: '/widget/$tenantSlug/$propertyId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AppOOrgSlugRoute = AppOOrgSlugRouteImport.update({
   id: '/o/$orgSlug',
   path: '/o/$orgSlug',
@@ -131,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/o-select': typeof AppOSelectRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
   '/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
@@ -149,6 +157,7 @@ export interface FileRoutesByTo {
   '/o-select': typeof AppOSelectRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
   '/': typeof AppIndexRoute
+  '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
@@ -170,6 +179,7 @@ export interface FileRoutesById {
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
   '/_app/': typeof AppIndexRoute
   '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/widget/$tenantSlug_/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
   '/_app/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/_app/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/_app/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
@@ -191,6 +201,7 @@ export interface FileRouteTypes {
     | '/o-select'
     | '/widget/$tenantSlug'
     | '/o/$orgSlug'
+    | '/widget/$tenantSlug/$propertyId'
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
@@ -209,6 +220,7 @@ export interface FileRouteTypes {
     | '/o-select'
     | '/widget/$tenantSlug'
     | '/'
+    | '/widget/$tenantSlug/$propertyId'
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
@@ -229,6 +241,7 @@ export interface FileRouteTypes {
     | '/widget/$tenantSlug'
     | '/_app/'
     | '/_app/o/$orgSlug'
+    | '/widget/$tenantSlug_/$propertyId'
     | '/_app/o/$orgSlug/grid'
     | '/_app/o/$orgSlug/receivables'
     | '/_app/o/$orgSlug/setup'
@@ -247,6 +260,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   SignupRoute: typeof SignupRoute
   WidgetTenantSlugRoute: typeof WidgetTenantSlugRoute
+  WidgetTenantSlugPropertyIdRoute: typeof WidgetTenantSlugPropertyIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -299,6 +313,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/o-select'
       preLoaderRoute: typeof AppOSelectRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/widget/$tenantSlug_/$propertyId': {
+      id: '/widget/$tenantSlug_/$propertyId'
+      path: '/widget/$tenantSlug/$propertyId'
+      fullPath: '/widget/$tenantSlug/$propertyId'
+      preLoaderRoute: typeof WidgetTenantSlugPropertyIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/o/$orgSlug': {
       id: '/_app/o/$orgSlug'
@@ -433,6 +454,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   SignupRoute: SignupRoute,
   WidgetTenantSlugRoute: WidgetTenantSlugRoute,
+  WidgetTenantSlugPropertyIdRoute: WidgetTenantSlugPropertyIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

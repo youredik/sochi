@@ -12,6 +12,7 @@
  * flow (search/extras/guest+pay/confirmation) — M9.widget.2-5 sub-phases.
  */
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { ruPlural } from '../lib/ru-plural.ts'
 import { listPublicProperties } from '../lib/widget-api.ts'
 
@@ -108,10 +109,12 @@ export function WidgetPage({ tenantSlug, onNotFound }: WidgetPageProps) {
 						<ul className="mt-4 space-y-3">
 							{data.properties.map((p) => (
 								<li key={p.id}>
-									<button
-										type="button"
-										aria-label={`Открыть ${p.name}`}
-										className="group flex w-full items-start justify-between gap-4 rounded-lg border bg-background p-4 text-left transition hover:border-primary hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+									<Link
+										to="/widget/$tenantSlug/$propertyId"
+										params={{ tenantSlug, propertyId: p.id }}
+										aria-label={`Забронировать ${p.name}`}
+										data-testid={`property-link-${p.id}`}
+										className="group flex w-full items-start justify-between gap-4 rounded-lg border bg-background p-4 text-left no-underline transition hover:border-primary hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
 									>
 										<div className="min-w-0 flex-1">
 											<h3 className="font-medium tracking-tight">{p.name}</h3>
@@ -140,7 +143,7 @@ export function WidgetPage({ tenantSlug, onNotFound }: WidgetPageProps) {
 											<title></title>
 											<path d="M7.5 4l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
 										</svg>
-									</button>
+									</Link>
 								</li>
 							))}
 						</ul>

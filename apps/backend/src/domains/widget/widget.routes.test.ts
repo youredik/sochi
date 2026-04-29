@@ -26,6 +26,7 @@
 import { newId } from '@horeca/shared'
 import { Hono } from 'hono'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { dateFromIso, NULL_INT32 } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import { createWidgetFactory } from './widget.factory.ts'
 import { createWidgetRoutes } from './widget.routes.ts'
@@ -164,6 +165,165 @@ describe('widget.routes — HTTP', { tags: ['db'], timeout: 60_000 }, () => {
 		const B = await seedTenant(`i1b-${Date.now().toString(36)}`)
 		// Try to fetch tenant A's property через tenant B's slug
 		const res = await app.request(`/api/public/widget/${B.slug}/properties/${A.propertyId}`)
+		expect(res.status).toBe(404)
+	})
+
+	// ─── M9.widget.2 — availability endpoint ─────────────────────────
+	async function seedFullForAvailability(slug: string) {
+		const sql = getTestSql()
+		const tenantId = newId('organization')
+		const propertyId = newId('property')
+		const roomTypeId = newId('roomType')
+		const ratePlanId = newId('ratePlan')
+		const now = new Date()
+		await sql`UPSERT INTO organization (id, name, slug, createdAt) VALUES (${tenantId}, ${'T'}, ${slug}, ${now})`
+		await sql`
+			UPSERT INTO property (
+				\`tenantId\`, \`id\`, \`name\`, \`address\`, \`city\`, \`timezone\`,
+				\`tourismTaxRateBps\`, \`isActive\`, \`isPublic\`, \`createdAt\`, \`updatedAt\`
+			) VALUES (
+				${tenantId}, ${propertyId}, ${'P'}, ${'a'}, ${'Sochi'}, ${'Europe/Moscow'},
+				${200}, ${true}, ${true}, ${now}, ${now}
+			)
+		`
+		await sql`
+			UPSERT INTO roomType (
+				\`tenantId\`, \`id\`, \`propertyId\`, \`name\`, \`description\`,
+				\`maxOccupancy\`, \`baseBeds\`, \`extraBeds\`, \`areaSqm\`,
+				\`inventoryCount\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
+			) VALUES (
+				${tenantId}, ${roomTypeId}, ${propertyId}, ${'Deluxe'}, ${'desc'},
+				${2}, ${1}, ${0}, ${20},
+				${5}, ${true}, ${now}, ${now}
+			)
+		`
+		await sql`
+			UPSERT INTO ratePlan (
+				\`tenantId\`, \`id\`, \`propertyId\`, \`roomTypeId\`, \`name\`, \`code\`,
+				\`isDefault\`, \`isRefundable\`, \`cancellationHours\`, \`mealsIncluded\`,
+				\`minStay\`, \`maxStay\`, \`isActive\`, \`currency\`,
+				\`createdAt\`, \`updatedAt\`
+			) VALUES (
+				${tenantId}, ${ratePlanId}, ${propertyId}, ${roomTypeId},
+				${'BAR Flex'}, ${'BAR_FLEX'}, ${true}, ${true},
+				${24}, ${'breakfast'},
+				${1}, ${30}, ${true}, ${'RUB'},
+				${now}, ${now}
+			)
+		`
+		// Seed 2 nights
+		for (const date of ['2026-06-01', '2026-06-02']) {
+			await sql`
+				UPSERT INTO availability (
+					\`tenantId\`, \`propertyId\`, \`roomTypeId\`, \`date\`,
+					\`allotment\`, \`sold\`, \`minStay\`, \`maxStay\`,
+					\`closedToArrival\`, \`closedToDeparture\`, \`stopSell\`,
+					\`createdAt\`, \`updatedAt\`
+				) VALUES (
+					${tenantId}, ${propertyId}, ${roomTypeId}, ${dateFromIso(date)},
+					${5}, ${0}, ${NULL_INT32}, ${NULL_INT32},
+					${false}, ${false}, ${false},
+					${now}, ${now}
+				)
+			`
+			await sql`
+				UPSERT INTO rate (
+					\`tenantId\`, \`propertyId\`, \`roomTypeId\`, \`ratePlanId\`, \`date\`,
+					\`amountMicros\`, \`currency\`, \`createdAt\`, \`updatedAt\`
+				) VALUES (
+					${tenantId}, ${propertyId}, ${roomTypeId}, ${ratePlanId}, ${dateFromIso(date)},
+					${5_000_000_000n}, ${'RUB'}, ${now}, ${now}
+				)
+			`
+		}
+		return { slug, propertyId, roomTypeId, ratePlanId }
+	}
+
+	test('[A1] GET /availability happy → 200 + offerings with quote', async () => {
+		const { slug, propertyId } = await seedFullForAvailability(`a1-${Date.now().toString(36)}`)
+		const res = await app.request(
+			`/api/public/widget/${slug}/properties/${propertyId}/availability?checkIn=2026-06-01&checkOut=2026-06-03&adults=2&children=0`,
+		)
+		expect(res.status).toBe(200)
+		const body = (await res.json()) as {
+			data: {
+				nights: number
+				offerings: Array<{
+					sellable: boolean
+					rateOptions: Array<{ totalKopecks: number; subtotalKopecks: number }>
+				}>
+			}
+		}
+		expect(body.data.nights).toBe(2)
+		expect(body.data.offerings).toHaveLength(1)
+		expect(body.data.offerings[0]!.sellable).toBe(true)
+		expect(body.data.offerings[0]!.rateOptions[0]!.subtotalKopecks).toBe(1_000_000) // 10000 RUB
+		expect(body.data.offerings[0]!.rateOptions[0]!.totalKopecks).toBe(1_020_000) // +200 RUB tax
+	})
+
+	test('[A2] GET /availability missing checkOut → 400 zod validation', async () => {
+		const { slug, propertyId } = await seedFullForAvailability(`a2-${Date.now().toString(36)}`)
+		const res = await app.request(
+			`/api/public/widget/${slug}/properties/${propertyId}/availability?checkIn=2026-06-01&adults=2`,
+		)
+		expect(res.status).toBe(400)
+	})
+
+	test('[A3] GET /availability checkOut <= checkIn → 422 InvalidAvailabilityInputError', async () => {
+		const { slug, propertyId } = await seedFullForAvailability(`a3-${Date.now().toString(36)}`)
+		const res = await app.request(
+			`/api/public/widget/${slug}/properties/${propertyId}/availability?checkIn=2026-06-05&checkOut=2026-06-05&adults=2&children=0`,
+		)
+		expect(res.status).toBe(422)
+		const body = (await res.json()) as { error: { code: string } }
+		expect(body.error.code).toBe('INVALID_INPUT')
+	})
+
+	test('[A4] GET /availability unknown tenant → 404 NOT_FOUND', async () => {
+		const res = await app.request(
+			`/api/public/widget/never-${Date.now()}/properties/whatever/availability?checkIn=2026-06-01&checkOut=2026-06-02&adults=2&children=0`,
+		)
+		expect(res.status).toBe(404)
+	})
+
+	test('[A5] GET /availability — CSP + nosniff headers present', async () => {
+		const { slug, propertyId } = await seedFullForAvailability(`a5-${Date.now().toString(36)}`)
+		const res = await app.request(
+			`/api/public/widget/${slug}/properties/${propertyId}/availability?checkIn=2026-06-01&checkOut=2026-06-02&adults=2&children=0`,
+		)
+		expect(res.headers.get('content-security-policy')).toContain("default-src 'self'")
+		expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+	})
+
+	test('[A6] GET /availability adults out-of-range (11) → 400 zod', async () => {
+		const { slug, propertyId } = await seedFullForAvailability(`a6-${Date.now().toString(36)}`)
+		const res = await app.request(
+			`/api/public/widget/${slug}/properties/${propertyId}/availability?checkIn=2026-06-01&checkOut=2026-06-02&adults=11&children=0`,
+		)
+		expect(res.status).toBe(400)
+	})
+
+	test('[A7] GET /availability — kopecks JSON-safe (no bigint serialization issue)', async () => {
+		const { slug, propertyId } = await seedFullForAvailability(`a7-${Date.now().toString(36)}`)
+		const res = await app.request(
+			`/api/public/widget/${slug}/properties/${propertyId}/availability?checkIn=2026-06-01&checkOut=2026-06-02&adults=2&children=0`,
+		)
+		// If route returned bigint anywhere, hono would 500.
+		expect(res.status).toBe(200)
+		const text = await res.text()
+		// Sanity: NO 'n' suffix anywhere in serialized body (i.e., no leaked bigints)
+		expect(text).not.toMatch(/\d+n[",}\]]/)
+	})
+
+	test('[A8] cross-tenant: tenantA availability NOT visible через tenantB slug → 404', async () => {
+		const A = await seedFullForAvailability(`a8a-${Date.now().toString(36)}`)
+		const slugB = `a8b-${Date.now().toString(36)}`
+		const sql = getTestSql()
+		const tBId = newId('organization')
+		await sql`UPSERT INTO organization (id, name, slug, createdAt) VALUES (${tBId}, ${'B'}, ${slugB}, ${new Date()})`
+		const res = await app.request(
+			`/api/public/widget/${slugB}/properties/${A.propertyId}/availability?checkIn=2026-06-01&checkOut=2026-06-02&adults=2&children=0`,
+		)
 		expect(res.status).toBe(404)
 	})
 })

@@ -31,6 +31,32 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+
+// Mock TanStack Router Link so component tests don't require a RouterProvider
+// (M9.widget.2 — property cards link к sub-route via TanStack <Link>).
+vi.mock('@tanstack/react-router', () => ({
+	Link: ({
+		children,
+		to,
+		params,
+		className,
+		...props
+	}: {
+		children: React.ReactNode
+		to: string
+		params?: Record<string, string>
+		className?: string
+		[k: string]: unknown
+	}) => {
+		const href = `${to}${params ? `?${new URLSearchParams(params).toString()}` : ''}`
+		return (
+			<a href={href} className={className} {...props}>
+				{children}
+			</a>
+		)
+	},
+}))
+
 import * as widgetApi from '../lib/widget-api.ts'
 // ruPlural unit tests live в `../lib/ru-plural.test.ts` — separate
 // non-component module per Vite Fast Refresh canon (mixed exports
@@ -329,12 +355,13 @@ describe('<WidgetPage> — visual polish elements (post-user-pushback)', () => {
 		expect(screen.getByText(/экономия до 17% против OTA/)).toBeTruthy()
 	})
 
-	test('[V9] property card semantic <button> с aria-label «Открыть {name}»', async () => {
+	test('[V9] property card → <Link> (М9.widget.2 sub-route nav) с aria-label «Забронировать {name}»', async () => {
 		mockWith(1)
 		renderPage()
 		await screen.findByRole('heading', { level: 1 })
-		const button = screen.getByRole('button', { name: 'Открыть Property 1' })
-		expect(button).toBeTruthy()
-		expect(button.tagName).toBe('BUTTON')
+		const link = screen.getByRole('link', { name: 'Забронировать Property 1' })
+		expect(link).toBeTruthy()
+		expect(link.tagName).toBe('A')
+		expect(link.getAttribute('href')).toContain('/widget/$tenantSlug/$propertyId')
 	})
 })
