@@ -20,10 +20,46 @@
  *     [R5] organization without organizationProfile → mode=null
  */
 
+import { fc } from '@fast-check/vitest'
 import { newId } from '@horeca/shared'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { getTestSql, setupTestDb, teardownTestDb } from '../tests/db-setup.ts'
 import { normalizeSlug, resolveTenantBySlug } from './tenant-resolver.ts'
+
+describe('normalizeSlug — property-based (fast-check adversarial)', () => {
+	test('[FC1] returns null OR matches strict regex (never returns invalid string)', () => {
+		void fc.assert(
+			fc.property(fc.string(), (input) => {
+				const result = normalizeSlug(input)
+				if (result === null) return true
+				// Invariant: if non-null, MUST be 3-30 ASCII a-z0-9-, no leading/trailing dash
+				return /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(result)
+			}),
+			{ numRuns: 500 },
+		)
+	})
+
+	test('[FC2] idempotent: normalizeSlug(normalizeSlug(x)) === normalizeSlug(x)', () => {
+		void fc.assert(
+			fc.property(fc.stringMatching(/^[A-Za-z0-9-]{1,40}$/), (input) => {
+				const once = normalizeSlug(input)
+				if (once === null) return normalizeSlug(once ?? '') === null
+				return normalizeSlug(once) === once
+			}),
+			{ numRuns: 200 },
+		)
+	})
+
+	test('[FC3] never throws (any string input)', () => {
+		void fc.assert(
+			fc.property(fc.string(), (input) => {
+				expect(() => normalizeSlug(input)).not.toThrow()
+				return true
+			}),
+			{ numRuns: 200 },
+		)
+	})
+})
 
 describe('normalizeSlug — pure', () => {
 	test('[N1] valid lowercase slug → returns as-is', () => {
