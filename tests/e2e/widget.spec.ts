@@ -19,15 +19,22 @@ test.describe('widget public route — anonymous + axe', () => {
 		await expect(page.getByText(/Демо-режим/)).toBeVisible()
 	})
 
-	test('[W2] unknown tenant → not-found message (404 propagates)', async ({ page }) => {
+	test('[W2] unknown tenant → not-found message (notFoundComponent renders)', async ({ page }) => {
 		const res = await page.goto('/widget/never-exists-12345')
-		// notFound() throws router NotFoundError → component renders not-found
-		// branch (h1 "Не найдено"). Playwright .goto returns null on
-		// non-2xx in some configs — accept either path.
 		if (res !== null) {
+			// SPA returns 200 для initial document load; notFoundComponent rendered
+			// client-side after hydration (proper 404 status — carry-forward к
+			// M9.widget.6 SSR sub-phase).
 			expect([200, 404]).toContain(res.status())
 		}
-		await expect(page.getByText(/Не найдено|never-exists/)).toBeVisible({ timeout: 5_000 })
+		// Use getByRole для unambiguous match — Playwright strict mode требует
+		// один element. /Не найдено|never-exists/ via getByText матчит и h1
+		// и <code> → strict mode violation. Канон 2026 per Playwright docs.
+		await expect(page.getByRole('heading', { level: 1, name: 'Не найдено' })).toBeVisible({
+			timeout: 5_000,
+		})
+		// Verify slug also rendered (separate locator, no strict-mode conflict)
+		await expect(page.getByText('never-exists-12345')).toBeVisible()
 	})
 
 	test('[W3] axe-pass на /widget/demo-sirius (light theme, desktop)', async ({ page }) => {
