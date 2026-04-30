@@ -12,7 +12,7 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { chromium } from '@playwright/test'
 
-const BASE_URL = 'http://localhost:5173'
+const BASE_URL = 'http://localhost:5273'
 const WIDGET_URL = `${BASE_URL}/widget/demo-sirius`
 const todayPlus = (days: number) => {
 	const d = new Date()

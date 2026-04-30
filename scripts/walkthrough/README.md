@@ -40,7 +40,7 @@ continues so a partial tour is always recoverable.
 2. **ffmpeg concat** — chapter MP3s glued with 0.4s `anullsrc` silence
    between them → single audio track.
 
-3. **Playwright 1.59 screencast** — headless Chromium against `localhost:5173`:
+3. **Playwright 1.59 screencast** — headless Chromium against `localhost:5273`:
    - `page.screencast.start({ size: 1280×720, quality: 85 })`
    - Per chapter: `showChapter(title, description, 2500ms)` overlay, then
      `showActions({ position: 'top-right', fontSize: 22 })` highlights
@@ -55,7 +55,7 @@ continues so a partial tour is always recoverable.
 
 - **macOS** (for `say` Milena voice; SpeechKit lifts this when wired).
 - **`ffmpeg`** on PATH — `brew install ffmpeg`.
-- **Dev servers running** — `pnpm dev` (frontend `:5173`, backend `:3000`).
+- **Dev servers running** — `pnpm dev` (frontend `:5273`, backend `:3000`).
 - **No other E2E session running** — they share YDB and port-thrash the
   dev servers. Wait for `pnpm e2e` / `pnpm test` to finish first.
 - **Clean local YDB not strictly required** — script signs up a fresh

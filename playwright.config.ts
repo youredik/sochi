@@ -16,9 +16,9 @@ import { defineConfig, devices } from '@playwright/test'
  * with shared backend session is a rabbit hole).
  */
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173'
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5273'
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8787'
-const isRemote = BASE_URL !== 'http://localhost:5173'
+const isRemote = BASE_URL !== 'http://localhost:5273'
 
 export default defineConfig({
 	testDir: './tests/e2e',

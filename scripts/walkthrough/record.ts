@@ -35,7 +35,7 @@ const OUT = resolve(ROOT, '.artifacts', 'walkthrough')
 const AUDIO_DIR = resolve(OUT, 'audio')
 mkdirSync(AUDIO_DIR, { recursive: true })
 
-const BASE_URL = process.env.WALKTHROUGH_BASE_URL ?? 'http://localhost:5173'
+const BASE_URL = process.env.WALKTHROUGH_BASE_URL ?? 'http://localhost:5273'
 const VIEWPORT = { width: 1280, height: 720 } as const
 const INTER_CHAPTER_GAP_SEC = 0.4
 const TAIL_BUFFER_MS = 800

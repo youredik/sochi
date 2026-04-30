@@ -16,7 +16,7 @@
 import { mkdir } from 'node:fs/promises'
 import { chromium, type Browser, type Page } from '@playwright/test'
 
-const BASE = process.env.BASE_URL ?? 'http://localhost:5173'
+const BASE = process.env.BASE_URL ?? 'http://localhost:5273'
 const OUT_DIR = '.artifacts/m9_widget_3'
 
 function buildUrl(): string {

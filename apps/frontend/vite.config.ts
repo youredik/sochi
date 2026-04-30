@@ -78,7 +78,7 @@ export default defineConfig({
 		},
 	},
 	server: {
-		port: 5173,
+		port: 5273,
 		strictPort: true,
 		// Same-origin proxy for Hono backend — keeps Better Auth cookie SameSite=Lax
 		// viable in dev and allows `/api/otel/v1/*` OTLP traces without CORS.
@@ -91,7 +91,7 @@ export default defineConfig({
 		},
 	},
 	preview: {
-		port: 5173,
+		port: 5273,
 		strictPort: true,
 	},
 })

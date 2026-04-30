@@ -13,7 +13,7 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { chromium } from '@playwright/test'
 
-const BASE_URL = 'http://localhost:5173'
+const BASE_URL = 'http://localhost:5273'
 const OUT_DIR = '/tmp/widget-interactive'
 
 if (!existsSync(OUT_DIR)) mkdirSync(OUT_DIR, { recursive: true })

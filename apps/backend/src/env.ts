@@ -21,11 +21,11 @@ export const envSchema = z.object({
 	// MUST match cookie domain. Mismatch silently fails passkey enroll/signin.
 	//
 	// `PUBLIC_BASE_URL` — full origin URL с protocol + port (passkey
-	// `origin` parameter). Examples: `http://localhost:5173` (dev),
+	// `origin` parameter). Examples: `http://localhost:5273` (dev),
 	// `https://app.sochi-horeca.ru` (prod). WebAuthn cross-checks request
 	// origin header против этого value — must match exactly per protocol scheme.
 	HOST: z.string().default('localhost'),
-	PUBLIC_BASE_URL: z.string().url().default('http://localhost:5173'),
+	PUBLIC_BASE_URL: z.string().url().default('http://localhost:5273'),
 
 	// Sandbox / Production gate (M8.0 prep — see plans/local-complete-system-v2.md §6).
 	//

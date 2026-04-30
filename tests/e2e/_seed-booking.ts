@@ -17,7 +17,7 @@ export async function seedBookingFixture(
 ): Promise<{ bookingId: string; orgSlug: string; checkInIso: string }> {
 	const futureDays = opts.futureDays ?? 1
 	const docSuffix = opts.docSuffix ?? Date.now().toString().slice(-6)
-	const apiBase = (await page.evaluate(() => location.origin)).replace(':5173', ':3000') + '/api/v1'
+	const apiBase = (await page.evaluate(() => location.origin)).replace(':5273', ':3000') + '/api/v1'
 
 	// Pull active org slug + first property.
 	const meRes = await page.request.get(`${apiBase}/auth/me`)

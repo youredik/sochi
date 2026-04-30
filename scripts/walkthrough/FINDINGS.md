@@ -122,7 +122,7 @@ lines` → автоматически закрывать фолио. Либо я
 `pnpm dev` падает с `Port 5173 is already in use`.
 
 **Impact:** Локальная dev-эргономика. Каждые ~1-2 раза в день надо вручную
-`lsof -ti:5173 | xargs kill`.
+`lsof -ti:5273 | xargs kill`.
 
 **Suggested fix:** В корневом `pnpm dev` объединить процессы под общим супервизором
 (concurrently / npm-run-all2 с `--kill-others-on-fail`). Текущая команда
