@@ -12,7 +12,7 @@ import { hc } from 'hono/client'
  * `credentials: 'include'` sends the Better Auth session cookie on every call,
  * which lets authenticated domain routes (under /api/v1) work from the browser.
  */
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
 
 export const api = hc<AppType>(API_URL, {
 	fetch: (input: RequestInfo | URL, init?: RequestInit) =>

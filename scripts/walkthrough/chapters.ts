@@ -34,7 +34,7 @@ const email = `tour-${ts}@sochi.local`
 const password = 'walkthrough-demo-01'
 const orgName = `Гранд-Отель Сочи ${tsShort}`
 
-const API = 'http://localhost:3000/api/v1'
+const API = 'http://localhost:8787/api/v1'
 const BOOKING_DAY = 5
 
 function futureIso(daysFromToday: number): string {

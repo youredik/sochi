@@ -13,7 +13,7 @@ test('anonymous /login renders', async ({ page }) => {
 })
 
 test('backend /health is green', async ({ request }) => {
-	const apiBase = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:3000'
+	const apiBase = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8787'
 	const res = await request.get(`${apiBase}/health`)
 	expect(res.status()).toBe(200)
 	const body = await res.json()
@@ -21,7 +21,7 @@ test('backend /health is green', async ({ request }) => {
 })
 
 test('get-session endpoint returns null for anonymous', async ({ request }) => {
-	const apiBase = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:3000'
+	const apiBase = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8787'
 	const res = await request.get(`${apiBase}/api/auth/get-session`)
 	expect(res.status()).toBe(200)
 	const body = await res.text()

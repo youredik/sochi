@@ -15,7 +15,7 @@
 const defaults: Record<string, string> = {
 	YDB_CONNECTION_STRING: 'grpc://localhost:2236/local',
 	BETTER_AUTH_SECRET: 'test-secret-32-chars-minimum-padding-here',
-	BETTER_AUTH_URL: 'http://localhost:3001',
+	BETTER_AUTH_URL: 'http://localhost:8787',
 	BETTER_AUTH_TRUSTED_ORIGINS: 'http://localhost:5173',
 	S3_ENDPOINT: 'http://localhost:9100',
 	S3_REGION: 'ru-central1',

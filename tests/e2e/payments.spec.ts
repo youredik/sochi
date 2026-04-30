@@ -33,7 +33,7 @@ test.describe.configure({ timeout: 60_000 })
  *   - State seeded через `page.request.post` (auth cookies share с BrowserCtx)
  */
 
-const API_BASE = 'http://localhost:3000/api/v1'
+const API_BASE = 'http://localhost:8787/api/v1'
 
 function futureIso(daysFromToday: number): string {
 	const d = new Date()

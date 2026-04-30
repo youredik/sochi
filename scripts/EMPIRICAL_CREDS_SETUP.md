@@ -107,7 +107,7 @@ YOOKASSA_TEST_SECRET_KEY=...       # test secret key
 
 Webhook требует public HTTPS endpoint. Опции:
 - **ngrok**: `ngrok http 3000` → public URL
-- **cloudflared tunnel**: `cloudflared tunnel --url http://localhost:3000`
+- **cloudflared tunnel**: `cloudflared tunnel --url http://localhost:8787`
 - **Bore.pub**: `bore local 3000 --to bore.pub`
 
 После tunnel:

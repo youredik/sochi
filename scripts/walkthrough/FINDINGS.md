@@ -172,7 +172,7 @@ right-side controls на время видимости toast.
 ## 10. [P0?] [observability] Backend death silent — нет watchdog/heartbeat
 
 **Repro:** В этой сессии backend (apps/backend на :3000) умер тихо. Frontend
-держал 5173 живым. Пришлось вручную обнаружить (`curl http://localhost:3000/health`
+держал 5173 живым. Пришлось вручную обнаружить (`curl http://localhost:8787/health`
 == fail), перезапустить.
 
 **Impact:** Production: если backend крашится в Yandex Cloud, что делает frontend?

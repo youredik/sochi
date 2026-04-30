@@ -75,7 +75,7 @@ export function setupOtel(): void {
 			new FetchInstrumentation({
 				// Propagate W3C `traceparent` on every fetch to our own backend.
 				// Skip OTLP export calls to avoid tracing the tracer.
-				propagateTraceHeaderCorsUrls: [/localhost:3001/, /\.horeca\.ru$/],
+				propagateTraceHeaderCorsUrls: [/localhost:8787/, /\.horeca\.ru$/],
 				ignoreUrls: [/\/api\/otel\//],
 			}),
 		],

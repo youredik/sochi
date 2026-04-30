@@ -260,7 +260,7 @@ test.describe('booking-edit dialog', () => {
 	test.describe('cross-tenant: 404 on every PATCH transition (enum coverage)', () => {
 		test('PATCH /cancel on well-formed non-existent id → 404 NOT_FOUND', async ({ page }) => {
 			const res = await page.request.patch(
-				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}/cancel`,
+				`http://localhost:8787/api/v1/bookings/${BOGUS_ID}/cancel`,
 				{ data: { reason: 'probe' }, headers: { 'content-type': 'application/json' } },
 			)
 			expect(res.status()).toBe(404)
@@ -270,7 +270,7 @@ test.describe('booking-edit dialog', () => {
 
 		test('PATCH /check-in on well-formed non-existent id → 404 NOT_FOUND', async ({ page }) => {
 			const res = await page.request.patch(
-				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}/check-in`,
+				`http://localhost:8787/api/v1/bookings/${BOGUS_ID}/check-in`,
 				{ data: {}, headers: { 'content-type': 'application/json' } },
 			)
 			expect(res.status()).toBe(404)
@@ -281,7 +281,7 @@ test.describe('booking-edit dialog', () => {
 		test('PATCH /check-out on well-formed non-existent id → 404 NOT_FOUND', async ({ page }) => {
 			// check-out has no body — server accepts empty
 			const res = await page.request.patch(
-				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}/check-out`,
+				`http://localhost:8787/api/v1/bookings/${BOGUS_ID}/check-out`,
 				{ headers: { 'content-type': 'application/json' } },
 			)
 			expect(res.status()).toBe(404)
@@ -291,7 +291,7 @@ test.describe('booking-edit dialog', () => {
 
 		test('PATCH /no-show on well-formed non-existent id → 404 NOT_FOUND', async ({ page }) => {
 			const res = await page.request.patch(
-				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}/no-show`,
+				`http://localhost:8787/api/v1/bookings/${BOGUS_ID}/no-show`,
 				{ data: {}, headers: { 'content-type': 'application/json' } },
 			)
 			expect(res.status()).toBe(404)
@@ -304,7 +304,7 @@ test.describe('booking-edit dialog', () => {
 		}) => {
 			// Also probe the read path (edit dialog opens via this endpoint).
 			const res = await page.request.get(
-				`http://localhost:3000/api/v1/bookings/${BOGUS_ID}`,
+				`http://localhost:8787/api/v1/bookings/${BOGUS_ID}`,
 			)
 			expect(res.status()).toBe(404)
 			const body = (await res.json()) as { error?: { code?: string } }
