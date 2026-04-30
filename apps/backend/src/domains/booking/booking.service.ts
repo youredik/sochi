@@ -394,3 +394,5 @@ export function createBookingService(
 		},
 	}
 }
+
+export type BookingService = ReturnType<typeof createBookingService>

@@ -37,4 +37,7 @@ export const HTTP_STATUS_MAP: Record<string, ContentfulStatusCode> = {
 	REFUND_EXCEEDS_CAPTURE: 422,
 	REFUND_CAUSALITY_COLLISION: 409,
 	PROVIDER_REFUND_ID_TAKEN: 409,
+	// Widget booking-create (M9.widget.4)
+	STALE_AVAILABILITY: 409,
+	WIDGET_CONSENT_MISSING: 422,
 }

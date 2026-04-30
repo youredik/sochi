@@ -16,3 +16,5 @@ export function createGuestService(repo: GuestRepo) {
 		delete: (tenantId: string, id: string) => repo.delete(tenantId, id),
 	}
 }
+
+export type GuestService = ReturnType<typeof createGuestService>

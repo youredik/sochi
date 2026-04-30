@@ -47,6 +47,8 @@ import { createRoomTypeFactory } from './domains/roomType/roomType.factory.ts'
 import { createRoomTypeRoutes } from './domains/roomType/roomType.routes.ts'
 import { createTenantComplianceFactory } from './domains/tenant/compliance.factory.ts'
 import { createTenantComplianceRoutes } from './domains/tenant/compliance.routes.ts'
+import { createWidgetBookingCreateFactory } from './domains/widget/booking-create.factory.ts'
+import { createWidgetBookingCreateRoutes } from './domains/widget/booking-create.routes.ts'
 import { createWidgetFactory } from './domains/widget/widget.factory.ts'
 import { createWidgetRoutes } from './domains/widget/widget.routes.ts'
 import { env } from './env.ts'
@@ -103,6 +105,10 @@ const folioFactory = createFolioFactory(sql)
 // M9.widget.1 — public booking widget read surface (no auth, no tenant
 // middleware — slug-resolved tenant per request).
 const widgetFactory = createWidgetFactory(sql)
+// M9.widget.4 — public booking widget commit (Screen 3 Guest+Pay). Composes
+// widget/guest/booking/payment services. Stub-provider в demo, live ЮKassa
+// в C2 — ZERO domain code changes (factory binding).
+// Wiring deferred ниже после payment factory.
 // M8.A.5 — миграционный учёт МВД (функция 1.1).
 // Mock adapters wired по умолчанию (APP_MODE=mock|sandbox); swap на live
 // = factory binding в registry. Behaviour-faithful per research/epgu-rkl.md.
@@ -174,6 +180,15 @@ registerAdapter({
 const paymentFactory = createPaymentFactory(sql, paymentProvider, folioFactory.service)
 const refundFactory = createRefundFactory(sql, paymentFactory.repo, paymentProvider)
 const idempotency = idempotencyMiddleware(createIdempotencyRepo(sql))
+
+// M9.widget.4 — booking-create factory (composes widget/guest/booking/payment).
+const widgetBookingCreateFactory = createWidgetBookingCreateFactory({
+	sql,
+	widgetService: widgetFactory.service,
+	guestService: guestFactory.service,
+	bookingService: bookingFactory.service,
+	paymentService: paymentFactory.service,
+})
 
 // CDC consumers — exactly-once projection pipeline.
 //
@@ -479,6 +494,14 @@ const routes = app
 	// Mounted FIRST в chain so anonymous clients get clean 200/404 ответы
 	// без 401 от authMiddleware.
 	.route('/api/public/widget', createWidgetRoutes(widgetFactory.service))
+	// M9.widget.4 — public booking commit (POST /:slug/booking)
+	.route(
+		'/api/public/widget',
+		createWidgetBookingCreateRoutes({
+			service: widgetBookingCreateFactory.service,
+			idempotency,
+		}),
+	)
 	.route('/api/v1/properties', createPropertyRoutes(propertyFactory))
 	.route('/api/v1', createPropertyContentRoutes(propertyContentFactory, idempotency))
 	.route('/api/v1', createTenantComplianceRoutes(tenantComplianceFactory, idempotency))

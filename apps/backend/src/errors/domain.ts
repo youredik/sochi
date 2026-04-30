@@ -359,3 +359,48 @@ export class NotificationAlreadySentError extends ConflictError {
 		this.name = 'NotificationAlreadySentError'
 	}
 }
+
+/* --------------------------------------------- Widget booking-create (M9.widget.4) */
+
+/**
+ * Cached availability quote no longer matches current rate / inventory.
+ * Caller (widget) should refresh quote and re-submit. UX: soft modal с
+ * «к сожалению, цена изменилась» + suggest re-search.
+ *
+ * Per `plans/m9_widget_4_canonical.md` §3 step 1 — re-validate availability
+ * is mandatory before booking commit (industry pattern: race condition mitigation).
+ */
+export class StaleAvailabilityError extends ConflictError {
+	override readonly code = 'STALE_AVAILABILITY'
+	constructor(reason: string) {
+		super(`Availability mismatch: ${reason}`)
+		this.name = 'StaleAvailabilityError'
+	}
+}
+
+/**
+ * 152-ФЗ ст. 9 mandatory consent (`acceptedDpa: true`) missing on widget
+ * booking commit. UX: form-level validation should prevent submit — but
+ * service layer guards defensively (никогда trust upstream).
+ *
+ * NB: 38-ФЗ marketing consent is OPTIONAL — does NOT raise this error.
+ */
+export class WidgetConsentMissingError extends DomainError {
+	readonly code = 'WIDGET_CONSENT_MISSING'
+	constructor(consentType: string) {
+		super(`Required consent missing: ${consentType}`)
+		this.name = 'WidgetConsentMissingError'
+	}
+}
+
+/**
+ * Guest input validation at service-layer (defensive). Most should be
+ * caught by Zod at route layer; this guards орigin-internal calls.
+ */
+export class WidgetGuestInputError extends DomainError {
+	readonly code = 'VALIDATION_ERROR'
+	constructor(reason: string) {
+		super(`Widget guest input invalid: ${reason}`)
+		this.name = 'WidgetGuestInputError'
+	}
+}

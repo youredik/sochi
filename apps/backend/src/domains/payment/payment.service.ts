@@ -224,3 +224,5 @@ export function createPaymentService(
 		},
 	}
 }
+
+export type PaymentService = ReturnType<typeof createPaymentService>
