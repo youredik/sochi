@@ -249,3 +249,172 @@ test.describe('widget Screen 1 Search & Pick — happy + adversarial + axe matri
 		await expect(page.getByRole('heading', { level: 1 })).toContainText('Что-то пошло не так')
 	})
 })
+
+const EXTRAS_URL = `/widget/demo-sirius/demo-prop-sirius-main/extras`
+
+function extrasUrlWithDefaults(): string {
+	const params = new URLSearchParams({
+		checkIn: todayPlus(30),
+		checkOut: todayPlus(33),
+		adults: '2',
+		children: '0',
+		roomTypeId: 'demo-roomtype-deluxe',
+		ratePlanId: 'demo-rateplan-deluxe-bar-flex',
+	})
+	return `${EXTRAS_URL}?${params.toString()}`
+}
+
+test.describe('widget Screen 2 Extras / Addons — happy + adversarial + axe matrix', () => {
+	test('[X1] addons API endpoint returns 200 + JSON-safe (no bigint leak)', async ({ request }) => {
+		const url = '/api/public/widget/demo-sirius/properties/demo-prop-sirius-main/addons'
+		const res = await request.get(url)
+		expect(res.status()).toBe(200)
+		const text = await res.text()
+		// No bigint leak (n suffix) per Round 2 verified canon
+		expect(text).not.toMatch(/\d+n[",}\]]/)
+		const body = (await res.json()) as {
+			data: { addons: Array<{ priceKopecks: number; vatBps: number; pricingUnit: string }> }
+		}
+		// Demo seed has 5 Сочи addons (M9.widget.3)
+		expect(body.data.addons.length).toBeGreaterThanOrEqual(5)
+		const first = body.data.addons[0]
+		expect(typeof first?.priceKopecks).toBe('number')
+		expect(first?.vatBps).toBe(2200) // НДС 22% canon
+	})
+
+	test('[X2] navigate Screen 1 → Screen 2 via Continue CTA (URL changes to /extras)', async ({
+		page,
+	}) => {
+		const url = `${PROPERTY_URL}?checkIn=${todayPlus(30)}&checkOut=${todayPlus(33)}&adults=2&children=0`
+		await page.goto(url)
+		// Wait for default rate auto-selected (Screen 1 ready)
+		await page.getByTestId('summary-total-detail').first().waitFor()
+		// Click Continue (desktop sticky aside variant)
+		await page.getByTestId('summary-continue-detail').first().click()
+		// URL should now contain /extras
+		await page.waitForURL(/\/extras/)
+		// Screen 2 header rendered
+		await expect(page.getByRole('heading', { level: 1, name: /Дополнительные услуги/ })).toBeVisible(
+			{ timeout: 10_000 },
+		)
+	})
+
+	test('[X3] addons rendered + opt-in canon (all qty=0 default ЗоЗПП ст. 16 ч. 3.1)', async ({
+		page,
+	}) => {
+		await page.goto(extrasUrlWithDefaults())
+		// 5 Сочи addons rendered (BREAKFAST/PARKING/LATE_CHECKOUT/TRANSFER_AER/SPA_HOUR)
+		await expect(page.getByTestId('addon-card-BREAKFAST')).toBeVisible({ timeout: 10_000 })
+		await expect(page.getByTestId('addon-card-PARKING')).toBeVisible()
+		await expect(page.getByTestId('addon-card-LATE_CHECKOUT')).toBeVisible()
+		await expect(page.getByTestId('addon-card-TRANSFER_AER')).toBeVisible()
+		await expect(page.getByTestId('addon-card-SPA_HOUR')).toBeVisible()
+		// Opt-in: every card has data-selected="false" by default
+		const cards = page.locator('article[data-testid^="addon-card-"]')
+		const count = await cards.count()
+		for (let i = 0; i < count; i++) {
+			expect(await cards.nth(i).getAttribute('data-selected')).toBe('false')
+		}
+	})
+
+	test('[X4] click + on addon → quantity increments + total updates', async ({ page }) => {
+		await page.goto(extrasUrlWithDefaults())
+		await page.getByTestId('addon-card-BREAKFAST').waitFor()
+		const totalBefore = await page.getByTestId('summary-total-detail').first().textContent()
+		await page.getByTestId('addon-BREAKFAST-inc').click()
+		// Card now selected
+		await expect(page.getByTestId('addon-card-BREAKFAST')).toHaveAttribute('data-selected', 'true')
+		// Total updated (greater than before)
+		const totalAfter = await page.getByTestId('summary-total-detail').first().textContent()
+		expect(totalAfter).not.toBe(totalBefore)
+	})
+
+	test('[X5] Skip CTA always visible (Baymard 2026 + ЗоЗПП canon)', async ({ page }) => {
+		await page.goto(extrasUrlWithDefaults())
+		await expect(page.getByTestId('extras-skip')).toBeVisible({ timeout: 10_000 })
+		await expect(page.getByTestId('extras-skip')).toContainText('Продолжить без дополнений')
+	})
+
+	test('[X6] tax note rendered (тур.налог 2% applies к room only ст. 418.4 НК РФ)', async ({
+		page,
+	}) => {
+		await page.goto(extrasUrlWithDefaults())
+		const note = page.getByTestId('extras-tax-note')
+		await expect(note).toBeVisible({ timeout: 10_000 })
+		await expect(note).toContainText('Туристический налог 2.0%')
+		await expect(note).toContainText('не на дополнения')
+	})
+
+	test('[X7] cancellation disclosure rendered per addon (ПП РФ №1912)', async ({ page }) => {
+		await page.goto(extrasUrlWithDefaults())
+		const card = page.getByTestId('addon-card-BREAKFAST')
+		await card.waitFor()
+		await expect(card).toContainText('Бесплатная отмена до')
+	})
+
+	test('[X8] VAT 22% line per addon (ст. 10 ЗоЗПП — обязательная цена с НДС)', async ({
+		page,
+	}) => {
+		await page.goto(extrasUrlWithDefaults())
+		const card = page.getByTestId('addon-card-BREAKFAST')
+		await card.waitFor()
+		await expect(card).toContainText('в т.ч. НДС 22%')
+	})
+
+	test('[X9] axe-pass on Screen 2 (light + desktop)', async ({ page }) => {
+		await page.goto(extrasUrlWithDefaults())
+		await page.getByRole('heading', { level: 1 }).waitFor()
+		await page.getByTestId('addon-card-BREAKFAST').waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[X10] axe-pass on Screen 2 (dark + desktop)', async ({ page }) => {
+		await page.addInitScript(() => {
+			document.documentElement.classList.add('dark')
+			localStorage.setItem('horeca-theme', 'dark')
+		})
+		await page.goto(extrasUrlWithDefaults())
+		await page.getByRole('heading', { level: 1 }).waitFor()
+		await page.getByTestId('addon-card-BREAKFAST').waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[X11] axe-pass on Screen 2 (mobile 360×740)', async ({ page }) => {
+		await page.setViewportSize({ width: 360, height: 740 })
+		await page.goto(extrasUrlWithDefaults())
+		await page.getByRole('heading', { level: 1 }).waitFor()
+		await page.getByTestId('addon-card-BREAKFAST').waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[X12] axe-pass on Screen 2 (forced-colors)', async ({ page }) => {
+		await page.emulateMedia({ forcedColors: 'active' })
+		await page.goto(extrasUrlWithDefaults())
+		await page.getByRole('heading', { level: 1 }).waitFor()
+		await page.getByTestId('addon-card-BREAKFAST').waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[X13] cart serialized into URL search params (shareable)', async ({ page }) => {
+		await page.goto(extrasUrlWithDefaults())
+		await page.getByTestId('addon-card-BREAKFAST').waitFor()
+		await page.getByTestId('addon-BREAKFAST-inc').click()
+		await page.waitForURL(/addons=demo-addon-breakfast%3A1|addons=demo-addon-breakfast:1/, {
+			timeout: 5_000,
+		})
+		const url = page.url()
+		expect(url).toMatch(/addons=/)
+	})
+})

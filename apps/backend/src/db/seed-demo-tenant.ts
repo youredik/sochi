@@ -238,10 +238,112 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		}
 	}
 
+	console.log('  → M9.widget.3: 5 Сочи addons (extras / addons screen)')
+	// Per `plans/m9_widget_canonical.md` §3 + Round 2 verified compliance:
+	// - All addons isActive=true, isMandatory=false (opt-in, ЗоЗПП ст. 16 ч. 3.1).
+	// - vatBps=2200 (НДС 22% per 425-ФЗ от 28.11.2025) для a-la-carte addons.
+	//   Spa-без-медлицензии = 22% (демо тенант не имеет лицензии).
+	// - inventoryMode='NONE' для всех 5 (TIME_SLOT deferred).
+	// - Categories distributed для realistic Сочи mix:
+	//   FOOD_AND_BEVERAGES (breakfast), PARKING, LATE_CHECK_OUT, TRANSFER, WELLNESS (spa).
+	// - Childcare cot — namely free amenity «по запросу», НЕ paid addon (152-ФЗ:
+	//   избегаем сбор baby-DOB как special-category PII).
+	const DEMO_ADDONS: Array<{
+		id: string
+		code: string
+		category: string
+		nameRu: string
+		nameEn: string | null
+		descRu: string
+		pricingUnit: string
+		priceMicros: bigint
+		sortOrder: number
+	}> = [
+		{
+			id: 'demo-addon-breakfast',
+			code: 'BREAKFAST',
+			category: 'FOOD_AND_BEVERAGES',
+			nameRu: 'Завтрак-буфет',
+			nameEn: 'Breakfast buffet',
+			descRu: 'Шведский стол: блюда русской и европейской кухни, морепродукты Чёрного моря.',
+			pricingUnit: 'PER_NIGHT_PER_PERSON',
+			priceMicros: 1_500_000_000n, // 1500 ₽
+			sortOrder: 10,
+		},
+		{
+			id: 'demo-addon-parking',
+			code: 'PARKING',
+			category: 'PARKING',
+			nameRu: 'Охраняемая парковка',
+			nameEn: 'Secured parking',
+			descRu: 'Огороженная территория с круглосуточным видеонаблюдением, 1 место за номер.',
+			pricingUnit: 'PER_NIGHT',
+			priceMicros: 500_000_000n, // 500 ₽
+			sortOrder: 20,
+		},
+		{
+			id: 'demo-addon-late-checkout',
+			code: 'LATE_CHECKOUT',
+			category: 'LATE_CHECK_OUT',
+			nameRu: 'Поздний выезд (до 18:00)',
+			nameEn: 'Late check-out (until 18:00)',
+			descRu: 'Дополнительные 6 часов в номере без переезда. Подтверждается за 24 часа до отъезда.',
+			pricingUnit: 'PER_STAY',
+			priceMicros: 1_500_000_000n, // 1500 ₽
+			sortOrder: 30,
+		},
+		{
+			id: 'demo-addon-transfer',
+			code: 'TRANSFER_AER',
+			category: 'TRANSFER',
+			nameRu: 'Трансфер аэропорт Сочи (Адлер) ⇄ отель',
+			nameEn: 'Sochi airport (Adler) ⇄ hotel transfer',
+			descRu: 'Комфортный седан или минивэн (3-7 мест), встреча с табличкой, 30 мин в пути.',
+			pricingUnit: 'PER_STAY',
+			priceMicros: 2_500_000_000n, // 2500 ₽
+			sortOrder: 40,
+		},
+		{
+			id: 'demo-addon-spa',
+			code: 'SPA_HOUR',
+			category: 'WELLNESS',
+			nameRu: 'СПА-комплекс',
+			nameEn: 'Spa complex',
+			descRu: 'Бассейн, сауна, хаммам. Стоимость почасовая, без медицинских процедур (НДС 22%).',
+			pricingUnit: 'PER_HOUR',
+			priceMicros: 3_000_000_000n, // 3000 ₽
+			sortOrder: 50,
+		},
+	]
+	for (const a of DEMO_ADDONS) {
+		await sql`
+			UPSERT INTO propertyAddon (
+				\`tenantId\`, \`propertyId\`, \`addonId\`,
+				\`code\`, \`category\`,
+				\`nameRu\`, \`nameEn\`, \`descriptionRu\`, \`descriptionEn\`,
+				\`pricingUnit\`, \`priceMicros\`, \`currency\`, \`vatBps\`,
+				\`isActive\`, \`isMandatory\`,
+				\`inventoryMode\`,
+				\`seasonalTagsJson\`, \`sortOrder\`,
+				\`createdAt\`, \`createdBy\`, \`updatedAt\`, \`updatedBy\`
+			) VALUES (
+				${TENANT_ID}, ${DEMO_PROPERTY_ID}, ${a.id},
+				${a.code}, ${a.category},
+				${a.nameRu}, ${a.nameEn}, ${a.descRu}, ${null as string | null},
+				${a.pricingUnit}, ${a.priceMicros}, ${'RUB'}, ${2200},
+				${true}, ${false},
+				${'NONE'},
+				${'[]'}, ${a.sortOrder},
+				${nowTs}, ${'system'}, ${nowTs}, ${'system'}
+			)
+		`
+	}
+
 	console.log(`✅ Demo tenant ready: tenantId=${TENANT_ID} slug=${SLUG} mode=demo`)
 	console.log(
-		'   M9.widget.2 seed: 1 property + 2 roomTypes + 4 ratePlans + 120 avail rows + 240 rate rows.',
+		'   M9.widget.2 seed: 1 property + 2 roomTypes + 4 ratePlans + 120 avail + 240 rates.',
 	)
+	console.log('   M9.widget.3 seed: 5 Сочи addons (BREAKFAST/PARKING/LATE_CHECKOUT/TRANSFER/SPA).')
 	console.log('   Full polish (photos / reviews / JSON-LD) — M9.widget.8.')
 	return { tenantId: TENANT_ID }
 }

@@ -14,8 +14,17 @@
  * availability allotment/sold as Int32. Service layer composes results
  * с widget-pricing pure helpers.
  */
+import {
+	type AddonCategory,
+	type AddonInventoryMode,
+	type AddonPricingUnit,
+	addonSeasonalTagSchema,
+} from '@horeca/shared'
+import { z } from 'zod'
 import { sql } from '../../db/index.ts'
 import { dateFromIso } from '../../db/ydb-helpers.ts'
+
+const seasonalTagsArraySchema = z.array(addonSeasonalTagSchema)
 
 export interface PublicProperty {
 	readonly id: string
@@ -247,6 +256,34 @@ export function createWidgetRepo(sqlInstance = sql) {
 		 * (operator may have uploaded raw, not yet processed — hidden from widget
 		 * per 0030 schema canon). NO cross-tenant leak.
 		 */
+		/**
+		 * List public addons (extras) для property — server-side compliance filters:
+		 *
+		 *   - `isActive=true`: operator-controlled visibility
+		 *   - `isMandatory=false`: mandatory addons are folded into rate quote, не на extras screen
+		 *   - `inventoryMode != 'TIME_SLOT'`: TIME_SLOT (spa с time-slot picker) deferred
+		 *     per `packages/shared/src/addons.ts` (M9.widget.3 plan §3 Round 2 finding)
+		 *
+		 * NOTE: opt-in mandate (ЗоЗПП ст. 16 ч. 3.1, 69-ФЗ от 07.04.2025) enforced
+		 * at UI layer — server only filters which addons are *available* for selection.
+		 */
+		async listPublicAddons(tenantId: string, propertyId: string): Promise<PublicAddon[]> {
+			const [rows = []] = await sqlInstance<AddonDbRow[]>`
+				SELECT addonId, code, category, nameRu, nameEn, descriptionRu, descriptionEn,
+				       pricingUnit, priceMicros, currency, vatBps, inventoryMode, dailyCapacity,
+				       seasonalTagsJson, sortOrder
+				FROM propertyAddon
+				WHERE tenantId = ${tenantId} AND propertyId = ${propertyId}
+				  AND isActive = ${true}
+				  AND isMandatory = ${false}
+				  AND inventoryMode != ${'TIME_SLOT'}
+				ORDER BY sortOrder ASC, code ASC
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map(rowToPublicAddon)
+		},
+
 		async listPhotosForProperty(
 			tenantId: string,
 			propertyId: string,
@@ -329,6 +366,77 @@ export interface PublicPropertyPhoto {
 	readonly altEn: string | null
 	readonly captionRu: string | null
 	readonly captionEn: string | null
+}
+
+/**
+ * Public addon row returned by `listPublicAddons`. Wire-format conversion
+ * (priceMicros → priceKopecks) happens in the service layer; repo returns
+ * canonical bigint micros to keep parity with rate/availability pattern.
+ *
+ * Excludes operator-only fields (isActive/isMandatory/createdAt/updatedAt/*By/
+ * tenantId/propertyId) — caller pre-filters and tenant/property are
+ * path-derived, no need to leak.
+ */
+export interface PublicAddon {
+	readonly addonId: string
+	readonly code: string
+	readonly category: AddonCategory
+	readonly nameRu: string
+	readonly nameEn: string | null
+	readonly descriptionRu: string | null
+	readonly descriptionEn: string | null
+	readonly pricingUnit: AddonPricingUnit
+	readonly priceMicros: bigint
+	readonly currency: string
+	readonly vatBps: number
+	readonly inventoryMode: AddonInventoryMode
+	readonly dailyCapacity: number | null
+	readonly seasonalTags: readonly string[]
+	readonly sortOrder: number
+}
+
+type AddonDbRow = {
+	addonId: string
+	code: string
+	category: string
+	nameRu: string
+	nameEn: string | null
+	descriptionRu: string | null
+	descriptionEn: string | null
+	pricingUnit: string
+	priceMicros: bigint | number
+	currency: string
+	vatBps: number | bigint
+	inventoryMode: string
+	dailyCapacity: number | bigint | null
+	seasonalTagsJson: string
+	sortOrder: number | bigint
+}
+
+function rowToPublicAddon(r: AddonDbRow): PublicAddon {
+	let seasonalTags: ReturnType<typeof seasonalTagsArraySchema.parse>
+	try {
+		seasonalTags = seasonalTagsArraySchema.parse(JSON.parse(r.seasonalTagsJson))
+	} catch (err) {
+		throw new Error(`Corrupt seasonalTagsJson for addonId=${r.addonId}: ${(err as Error).message}`)
+	}
+	return {
+		addonId: r.addonId,
+		code: r.code,
+		category: r.category as AddonCategory,
+		nameRu: r.nameRu,
+		nameEn: r.nameEn,
+		descriptionRu: r.descriptionRu,
+		descriptionEn: r.descriptionEn,
+		pricingUnit: r.pricingUnit as AddonPricingUnit,
+		priceMicros: typeof r.priceMicros === 'bigint' ? r.priceMicros : BigInt(r.priceMicros),
+		currency: r.currency,
+		vatBps: Number(r.vatBps),
+		inventoryMode: r.inventoryMode as AddonInventoryMode,
+		dailyCapacity: r.dailyCapacity === null ? null : Number(r.dailyCapacity),
+		seasonalTags,
+		sortOrder: Number(r.sortOrder),
+	}
 }
 
 type RoomTypeFullRow = RoomTypeRow & {

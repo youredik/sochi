@@ -28,6 +28,21 @@ import { ruPlural } from '../lib/ru-plural.ts'
 import type { PublicRateOption, PublicRoomType } from '../lib/widget-api.ts'
 import { formatDateRange, formatMoscowDateTime, formatRub } from '../lib/widget-format.ts'
 
+/**
+ * Optional addon line-items summary — added на Screen 2 (Extras / Addons) flow.
+ * Per `plans/m9_widget_canonical.md` §3 + Round 2 RU compliance:
+ *   - Each line shows gross (с НДС) per ст. 10 ЗоЗПП
+ *   - Adjusted grand total = room.totalKopecks + addonsTotalGrossKopecks
+ *   - Туристический налог 2% Сочи applies к room only (ст. 418.4 НК РФ);
+ *     addons НЕ in tax base.
+ */
+export interface AddonLineItem {
+	readonly addonId: string
+	readonly nameRu: string
+	readonly quantity: number
+	readonly grossKopecks: number
+}
+
 export interface StickySummaryProps {
 	readonly checkIn: string
 	readonly checkOut: string
@@ -38,6 +53,10 @@ export interface StickySummaryProps {
 	readonly selectedRate: PublicRateOption | null
 	readonly tourismTaxRateBps: number | null
 	readonly onContinue: () => void
+	/** Optional — when present, добавляет «Дополнения» section + adjusted grand total. */
+	readonly addonLineItems?: readonly AddonLineItem[] | null
+	/** Continue CTA label override (default: «Продолжить»). Use «Перейти к оплате» on Extras screen. */
+	readonly continueLabel?: string
 }
 
 export function StickySummary({
@@ -50,6 +69,8 @@ export function StickySummary({
 	selectedRate,
 	tourismTaxRateBps,
 	onContinue,
+	addonLineItems,
+	continueLabel,
 }: StickySummaryProps) {
 	const isDesktop = useMediaQuery('(min-width: 768px)')
 	const [drawerOpen, setDrawerOpen] = useState(false)
@@ -58,6 +79,13 @@ export function StickySummary({
 	const guestsLabel = `${adults}${childrenCount > 0 ? ` + ${childrenCount}` : ''} ${ruPlural(totalGuests, 'гость', 'гостя', 'гостей')}`
 	const taxPct = tourismTaxRateBps !== null ? (tourismTaxRateBps / 100).toFixed(1) : null
 	const isReady = selectedRoomType !== null && selectedRate !== null
+	// Aggregate addon total (gross, с НДС) для adjusted grand total.
+	const addonsGrossTotalKopecks =
+		addonLineItems && addonLineItems.length > 0
+			? addonLineItems.reduce((sum, item) => sum + item.grossKopecks, 0)
+			: 0
+	const grandTotalKopecks = (selectedRate?.totalKopecks ?? 0) + addonsGrossTotalKopecks
+	const peekTotalKopecks = selectedRate ? grandTotalKopecks : null
 
 	const summaryBody = (
 		<SummaryBody
@@ -70,6 +98,9 @@ export function StickySummary({
 			taxPct={taxPct}
 			isReady={isReady}
 			onContinue={onContinue}
+			addonLineItems={addonLineItems ?? null}
+			grandTotalKopecks={grandTotalKopecks}
+			continueLabel={continueLabel ?? 'Продолжить'}
 		/>
 	)
 
@@ -109,7 +140,7 @@ export function StickySummary({
 									data-testid="summary-total"
 									className="text-base font-semibold text-primary tabular-nums"
 								>
-									{selectedRate ? formatRub(selectedRate.totalKopecks) : '—'}
+									{peekTotalKopecks !== null ? formatRub(peekTotalKopecks) : '—'}
 								</span>
 							</span>
 							<ChevronUp className="size-4 text-muted-foreground" aria-hidden />
@@ -121,10 +152,10 @@ export function StickySummary({
 						disabled={!isReady}
 						onClick={onContinue}
 						data-testid="summary-continue"
-						aria-label={isReady ? 'Перейти к выбору дополнений' : 'Выберите номер'}
+						aria-label={isReady ? (continueLabel ?? 'Продолжить') : 'Выберите номер'}
 						className="forced-colors:bg-[ButtonText] forced-colors:text-[ButtonFace] forced-colors:border-[ButtonText]"
 					>
-						Продолжить
+						{continueLabel ?? 'Продолжить'}
 						<ArrowRight className="ml-1 size-4" aria-hidden />
 					</Button>
 				</div>
@@ -149,6 +180,9 @@ interface SummaryBodyProps {
 	readonly taxPct: string | null
 	readonly isReady: boolean
 	readonly onContinue: () => void
+	readonly addonLineItems: readonly AddonLineItem[] | null
+	readonly grandTotalKopecks: number
+	readonly continueLabel: string
 }
 
 function SummaryBody({
@@ -161,7 +195,11 @@ function SummaryBody({
 	taxPct,
 	isReady,
 	onContinue,
+	addonLineItems,
+	grandTotalKopecks,
+	continueLabel,
 }: SummaryBodyProps) {
+	const hasAddons = (addonLineItems?.length ?? 0) > 0
 	return (
 		<>
 			<header>
@@ -206,10 +244,32 @@ function SummaryBody({
 								</dd>
 							</div>
 						) : null}
+						{hasAddons ? (
+							<>
+								<div className="border-t pt-2">
+									<p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+										Дополнения
+									</p>
+								</div>
+								{addonLineItems?.map((item) => (
+									<div
+										key={item.addonId}
+										className="flex justify-between"
+										data-testid={`summary-addon-${item.addonId}`}
+									>
+										<dt className="text-muted-foreground">
+											{item.nameRu}
+											{item.quantity > 1 ? ` × ${item.quantity}` : ''}
+										</dt>
+										<dd className="font-medium tabular-nums">{formatRub(item.grossKopecks)}</dd>
+									</div>
+								))}
+							</>
+						) : null}
 						<div className="flex justify-between border-t pt-2 text-base font-semibold">
 							<dt>Итого</dt>
 							<dd data-testid="summary-total-detail" className="text-primary tabular-nums">
-								{formatRub(selectedRate.totalKopecks)}
+								{formatRub(grandTotalKopecks)}
 							</dd>
 						</div>
 					</dl>
@@ -236,9 +296,9 @@ function SummaryBody({
 				disabled={!isReady}
 				onClick={onContinue}
 				data-testid="summary-continue-detail"
-				aria-label={isReady ? 'Перейти к выбору дополнений' : 'Выберите номер, чтобы продолжить'}
+				aria-label={isReady ? continueLabel : 'Выберите номер, чтобы продолжить'}
 			>
-				Продолжить
+				{continueLabel}
 				<ArrowRight className="ml-1 size-4" aria-hidden />
 			</Button>
 

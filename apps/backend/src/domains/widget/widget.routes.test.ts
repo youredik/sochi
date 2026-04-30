@@ -21,6 +21,13 @@
  *
  *   ─── Cross-tenant isolation ────────────────────────────────────
  *     [I1] tenantA's property NOT visible через tenantB's slug URL
+ *
+ *   ─── M9.widget.3 Extras / Addons endpoint ─────────────────────
+ *     [AD-R1] GET /addons known property → 200 + tenant + property + addons[]
+ *     [AD-R2] GET /addons unknown tenant → 404 NOT_FOUND
+ *     [AD-R3] GET /addons unknown property → 404 NOT_FOUND
+ *     [AD-R4] GET /addons cross-tenant → 404 (timing-safe)
+ *     [AD-R5] GET /addons priceKopecks JSON-safe (no bigint leak)
  */
 
 import { newId } from '@horeca/shared'
@@ -325,5 +332,107 @@ describe('widget.routes — HTTP', { tags: ['db'], timeout: 60_000 }, () => {
 			`/api/public/widget/${slugB}/properties/${A.propertyId}/availability?checkIn=2026-06-01&checkOut=2026-06-02&adults=2&children=0`,
 		)
 		expect(res.status).toBe(404)
+	})
+
+	async function seedAddon(opts: {
+		tenantId: string
+		propertyId: string
+		addonId: string
+		code: string
+		isActive?: boolean
+		isMandatory?: boolean
+		inventoryMode?: 'NONE' | 'DAILY_COUNTER' | 'TIME_SLOT'
+		dailyCapacity?: number | null
+	}) {
+		const sql = getTestSql()
+		const now = new Date()
+		const dailyCapacityParam =
+			opts.dailyCapacity === undefined || opts.dailyCapacity === null
+				? NULL_INT32
+				: opts.dailyCapacity
+		await sql`
+			UPSERT INTO propertyAddon (
+				\`tenantId\`, \`propertyId\`, \`addonId\`,
+				\`code\`, \`category\`,
+				\`nameRu\`, \`pricingUnit\`, \`priceMicros\`, \`currency\`, \`vatBps\`,
+				\`isActive\`, \`isMandatory\`,
+				\`inventoryMode\`, \`dailyCapacity\`,
+				\`seasonalTagsJson\`, \`sortOrder\`,
+				\`createdAt\`, \`createdBy\`, \`updatedAt\`, \`updatedBy\`
+			) VALUES (
+				${opts.tenantId}, ${opts.propertyId}, ${opts.addonId},
+				${opts.code}, ${'FOOD_AND_BEVERAGES'},
+				${'Завтрак'}, ${'PER_NIGHT_PER_PERSON'}, ${1_500_000_000n},
+				${'RUB'}, ${2200},
+				${opts.isActive ?? true}, ${opts.isMandatory ?? false},
+				${opts.inventoryMode ?? 'NONE'},
+				${dailyCapacityParam},
+				${'[]'}, ${0},
+				${now}, ${'test'}, ${now}, ${'test'}
+			)
+		`
+	}
+
+	test('[AD-R1] GET /addons known property → 200 + tenant + property + addons[]', async () => {
+		const { slug, tenantId, propertyId } = await seedTenant(`adr1-${Date.now().toString(36)}`)
+		const addonId = newId('addon')
+		await seedAddon({ tenantId, propertyId, addonId, code: 'ADR1' })
+		const res = await app.request(`/api/public/widget/${slug}/properties/${propertyId}/addons`)
+		expect(res.status).toBe(200)
+		const body = (await res.json()) as {
+			data: {
+				tenant: { slug: string; mode: string | null }
+				property: { id: string }
+				addons: { addonId: string; priceKopecks: number }[]
+			}
+		}
+		expect(body.data.tenant.slug).toBe(slug)
+		expect(body.data.property.id).toBe(propertyId)
+		expect(body.data.addons).toHaveLength(1)
+		expect(body.data.addons[0]?.addonId).toBe(addonId)
+		expect(body.data.addons[0]?.priceKopecks).toBe(150_000)
+	})
+
+	test('[AD-R2] GET /addons unknown tenant → 404 NOT_FOUND', async () => {
+		const res = await app.request(`/api/public/widget/no-such-${Date.now()}/properties/p1/addons`)
+		expect(res.status).toBe(404)
+		const body = (await res.json()) as { error: { code: string } }
+		expect(body.error.code).toBe('NOT_FOUND')
+	})
+
+	test('[AD-R3] GET /addons unknown property → 404 NOT_FOUND', async () => {
+		const { slug } = await seedTenant(`adr3-${Date.now().toString(36)}`)
+		const res = await app.request(
+			`/api/public/widget/${slug}/properties/${newId('property')}/addons`,
+		)
+		expect(res.status).toBe(404)
+	})
+
+	test('[AD-R4] GET /addons cross-tenant → 404 (timing-safe)', async () => {
+		const A = await seedTenant(`adr4a-${Date.now().toString(36)}`)
+		const addonId = newId('addon')
+		await seedAddon({
+			tenantId: A.tenantId,
+			propertyId: A.propertyId,
+			addonId,
+			code: 'ADR4',
+		})
+		const slugB = `adr4b-${Date.now().toString(36)}`
+		const sql = getTestSql()
+		const tBId = newId('organization')
+		await sql`UPSERT INTO organization (id, name, slug, createdAt) VALUES (${tBId}, ${'B'}, ${slugB}, ${new Date()})`
+		const res = await app.request(`/api/public/widget/${slugB}/properties/${A.propertyId}/addons`)
+		expect(res.status).toBe(404)
+	})
+
+	test('[AD-R5] GET /addons priceKopecks JSON-safe (no bigint leak)', async () => {
+		const { slug, tenantId, propertyId } = await seedTenant(`adr5-${Date.now().toString(36)}`)
+		const addonId = newId('addon')
+		await seedAddon({ tenantId, propertyId, addonId, code: 'ADR5' })
+		const res = await app.request(`/api/public/widget/${slug}/properties/${propertyId}/addons`)
+		expect(res.status).toBe(200)
+		const text = await res.text()
+		// Adversarial: NO 'n' suffix indicating bigint in JSON output
+		expect(text).not.toMatch(/\d+n[",}\]]/)
 	})
 })

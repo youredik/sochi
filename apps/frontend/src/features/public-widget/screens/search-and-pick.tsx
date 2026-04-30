@@ -233,6 +233,7 @@ export function SearchAndPick({
 						selectedRoomType={selectedRoomType}
 						selectedRate={selectedRate}
 						tourismTaxRateBps={property.tourismTaxRateBps}
+						continueLabel="Перейти к выбору дополнений"
 						onContinue={() => {
 							if (!selectedRoomType || !selectedRate) return
 							onContinue({

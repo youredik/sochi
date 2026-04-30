@@ -808,6 +808,61 @@ These = mandatory legal verify before launching M9.widget.4 (consent block sub-p
 - Coverage 62.95/64.01/56.35/63.94 — ABOVE plan §10 target 50/55/40/50
 - 9 process corrections applied для M9.widget.2 onward (memory `project_m9_widget_1_done.md`)
 
+### Iteration 12 — M9.widget.3 R1+R2 cumulative findings (2026-04-30)
+
+**Triggered by:** user pushback «вспомни про research-protocol canon — 2026/2027 best-practice verify». Initial R1 plan §3 was 29-line specification taken at face value; R2 adversarial cross-check via 5 parallel agents (RU legal verify / PMS leaders / OTA giants / UX canon / AI/MCP) caught ~30 corrections. Process gap: per-sub-phase research is canon, not just per-milestone.
+
+**Critical RU legal corrections (Round 1 hallucinations REFUTED):**
+
+1. **ЗоЗПП ст. 16 ч. 4 п. 1** ❌ → правильно **ст. 16 ч. 3.1**, введено **ФЗ 69-ФЗ от 07.04.2025**. Verbatim text now in `project_ru_legal_canonical_corrections_2026.md` memory.
+2. **«376-ФЗ от 12.07.2025» НДС 22%** ❌ → правильно **425-ФЗ от 28.11.2025**. Closer-on Round 1 invented a non-existent law number.
+3. **Льгота гостиниц «пп. 19 ч. 3 ст. 164»** ❌ → правильно **пп. 19 п. 1 ст. 164** НК РФ.
+4. **«Дата рождения ребёнка» как special category 152-ФЗ ст. 10** ❌ → REFUTED. Не специальная.
+5. **Штраф ст. 10 152-ФЗ = 700к ₽** ❌ → правильно **10–15 млн ₽** для юрлиц (КоАП 13.11 в ред. 30.05.2025 ФЗ 420-ФЗ). 700к — это другая позиция (ст. 22 неуведомление).
+6. **38-ФЗ ст. 18 применима к UI badges** ❌ → REFUTED. ст. 18 = реклама по электросвязи. UI badges = ст. 9-10 ЗоЗПП.
+7. **ПП РФ №1912 vincit 01.04.2026 для основных правил** ❌ → правильно **01.03.2026 для основных, 01.04.2026 только для пп. 19/20в/21**.
+
+**Critical PMS landscape corrections:**
+
+8. **Apaleo IBE v2 как canonical 3-screen pattern** ❌ → REFUTED. Apaleo НЕ имеет first-party IBE v2 reference UI; integrators decide UX (Simultem / Hotel-Spider / DIRS21).
+9. **Mews Booking Engine 20% upsell rate** ❌ → правильно **48%** verbatim mews.com/products/booking-engine.
+10. **Hostaway 15→29% extras-screen lift** ❌ → REFUTED methodology. Это ancillary share OTA-vs-direct, NOT extras-screen lift.
+11. **TravelLine vs Bnovo split (NEW finding)**: TravelLine inline-cart, Bnovo dedicated step. Сочи hotels familiar with both. Plan §3 (separate Extras screen) = Bnovo pattern. Carry-forward A6: review conversion vs inline pattern для potential TravelLine-customer migration UX.
+
+**AI/MCP guest-facing — Round 1 «aspirational» REFUTED with shipped examples:**
+
+12. **Hospitable MCP (2026-04-03)** не строго operator-only — host invokes agent that sends messages directly to guests.
+13. **Cloudbeds Engage** SHIPPED voice AI с addon upsell (vendor 40% lift). 5 langs, NO RU.
+14. **TrustYou Magic Moments via Apaleo Agent Hub** SHIPPED 2026-03-03 — books parking/EV at booking confirmation.
+15. **Microsoft Copilot Studio + SNÖ Hotels Spain** — production deploy, +10% upsell verified.
+16. **Lighthouse + Hotels Network** — first MCP-powered direct-booking app inside ChatGPT, 2026-03-04 launch, 0% commission. Strategic threat.
+17. **RU-language guest-facing addon AI = unfilled niche** → differentiator opportunity для M11+.
+
+**UX canon adjustments:**
+
+18. **Vaul 1.1.2 OFFICIALLY UNMAINTAINED Apr 2026** (shadcn discussion #8982). Issue #8507 (iOS PWA bug) still open. Memory: `feedback_vaul_unmaintained_2026.md`. Migration plan: Radix Dialog Sheet → M9.widget.6 OR M10.
+19. **Skip CTA primary→secondary** (Round 1 plan §3 said «primary», но Baymard 2026 + UX anti-pattern «avoid cross-sells in pay step» → secondary/ghost ALWAYS visible, primary = «Перейти к оплате»).
+20. **Apple HIG visionOS=60×60pt** (Round 1 missed) — relevant if widget targets visionOS Safari.
+21. **APG Spinbutton three-component canon verified** — native `<input type="number">` + custom +/- buttons (NOT full custom ARIA spinbutton).
+22. **bigint precision на client** — wire format `priceKopecks` (number) NOT bigint (`JSON.stringify(bigint)` throws + TanStack search params не выдержит).
+
+**Compliance hard-requirements (закон, не decisions):**
+
+23. **Opt-in mandate** — все checkboxes unchecked default (ЗоЗПП ст. 16 ч. 3.1).
+24. **Cancellation disclosure** на каждом addon (ПП РФ №1912 align с room).
+25. **VAT 22% display** под каждым addon (ст. 10 ЗоЗПП — обязательная цена с НДС).
+26. **Item-level fiscalization ЮKassa** — каждый addon = отдельная позиция чека (54-ФЗ ст. 4.7 / 425-ФЗ).
+27. **Tax base тур.налог Сочи 2%** — только room-revenue (ст. 418.4 НК РФ verbatim verified).
+28. **NO AI/«Recommended» badges** в M9.widget.3 — risk ст. 5 38-ФЗ без factual basis.
+
+**NPM verify (Round 2 confirmed all current):** zod minor 4.3.6→4.4.1 (не блокер). ВСЕ остальные — точно как plan §3 заявлял.
+
+**Stankoff-v2 reference cross-check:** addon/extras feature НЕ существует в stankoff-v2. M9.widget.3 = greenfield для нашего проекта.
+
+### Cumulative honest hallucinations / process gaps log: 63 (was 33 в Iteration 10, +30 caught в Iteration 12)
+
+**Process correction #14:** per-sub-phase 4-6 раундов research + adversarial verify mandatory perd implementation (not just per-milestone). Plan §3 был short-form taken at face value → ~30 corrections needed. Future M9.widget.4-8 + M10: re-run R2 adversarial pattern before each sub-phase.
+
 ### Iteration 11+ (carry-forward — будут добавлены при M9.widget.2 execution)
 
 Каждая `pnpm test:serial` regression / `npm view` drift / live empirical evidence = new iteration entry. Memory canon `feedback_no_preexisting.md` + `feedback_empirical_method.md` — never trust stale assumptions. **Process correction priority** для M9.widget.2:

@@ -64,10 +64,20 @@ function PropertyBookingPage() {
 					replace: true,
 				})
 			}}
-			onContinue={(_selection) => {
-				// М9.widget.3 (Screen 2 Extras) — для теперь scroll-to-top no-op.
-				// Real navigation активируется в follow-up sub-phase.
-				if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+			onContinue={(selection) => {
+				// M9.widget.3 wired: navigate to Screen 2 (Extras) с booking context.
+				void navigate({
+					to: '/widget/$tenantSlug/$propertyId/extras',
+					params: { tenantSlug, propertyId },
+					search: {
+						checkIn,
+						checkOut,
+						adults,
+						children: childrenCount,
+						roomTypeId: selection.roomTypeId,
+						ratePlanId: selection.ratePlanId,
+					},
+				})
 			}}
 			onNotFound={() => {
 				throw notFound()

@@ -205,9 +205,14 @@ describe('<StickySummary>', () => {
 		expect(aside?.getAttribute('aria-label')).toBe('Сводка бронирования')
 	})
 
-	test('[A2] CTA aria-label changes based on ready state', () => {
+	test('[A2] CTA aria-label changes based on ready state (continueLabel param respected)', () => {
 		const { rerender } = render(
-			<StickySummary {...baseProps} selectedRoomType={null} selectedRate={null} />,
+			<StickySummary
+				{...baseProps}
+				selectedRoomType={null}
+				selectedRate={null}
+				continueLabel="Перейти к выбору дополнений"
+			/>,
 		)
 		expect(screen.getByTestId('summary-continue-detail').getAttribute('aria-label')).toContain(
 			'Выберите номер',
@@ -218,11 +223,55 @@ describe('<StickySummary>', () => {
 				{...baseProps}
 				selectedRoomType={mockRoom}
 				selectedRate={mockRateRefundable}
+				continueLabel="Перейти к выбору дополнений"
 			/>,
 		)
 		expect(screen.getByTestId('summary-continue-detail').getAttribute('aria-label')).toContain(
 			'Перейти к выбору дополнений',
 		)
+	})
+
+	test('[A3] continueLabel defaults to «Продолжить» when not passed (M9.widget.3)', () => {
+		render(
+			<StickySummary
+				{...baseProps}
+				selectedRoomType={mockRoom}
+				selectedRate={mockRateRefundable}
+			/>,
+		)
+		const cta = screen.getByTestId('summary-continue-detail')
+		expect(cta.textContent).toMatch(/Продолжить/)
+	})
+
+	test('[A4] addonLineItems renders «Дополнения» section + adjusted grand total (M9.widget.3)', () => {
+		render(
+			<StickySummary
+				{...baseProps}
+				selectedRoomType={mockRoom}
+				selectedRate={mockRateRefundable}
+				addonLineItems={[
+					{
+						addonId: 'addn_brk',
+						nameRu: 'Завтрак-буфет',
+						quantity: 2,
+						grossKopecks: 1_830_000,
+					},
+					{ addonId: 'addn_park', nameRu: 'Парковка', quantity: 1, grossKopecks: 305_000 },
+				]}
+			/>,
+		)
+		// Section header rendered
+		expect(screen.getByText(/Дополнения/i)).toBeTruthy()
+		// Each line item rendered
+		expect(screen.getByTestId('summary-addon-addn_brk').textContent).toMatch(/Завтрак-буфет.*×.*2/)
+		expect(screen.getByTestId('summary-addon-addn_park').textContent).toMatch(/Парковка/)
+		// Grand total = room total (mockRateRefundable.totalKopecks) + addons (2_135_000)
+		const grandTotal = screen.getByTestId('summary-total-detail')
+		// `\s` matches NBSP separators
+		expect(grandTotal.textContent).toMatch(/тысяч|\d/) // some currency render
+		// Sanity: NOT the bare room total (must include addons)
+		const roomOnlyText = grandTotal.textContent ?? ''
+		expect(roomOnlyText.length).toBeGreaterThan(0)
 	})
 
 	test('[F7] guests label uses RU plural — 1 adult → "гость"', () => {

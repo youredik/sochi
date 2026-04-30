@@ -43,6 +43,7 @@ planfile
 
 # Build artifacts (videos, generated assets, reports — regenerable, not tracked)
 .artifacts/
+tmp/
 
 # Misc
 *.log

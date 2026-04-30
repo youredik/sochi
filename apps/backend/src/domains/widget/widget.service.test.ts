@@ -25,6 +25,14 @@
  *           field в response (internal flag должен скрываться)
  *     [AL2] returned tenant DTO has only {slug, name, mode} — NO `id`
  *           leak (tenantId — internal, не должен попасть к anonymous)
+ *
+ *   ─── M9.widget.3 Extras / Addons orchestration ────────────────
+ *     [AD1] listAddons — unknown slug → TenantNotFoundError
+ *     [AD2] listAddons — known tenant + non-existent property → PublicPropertyNotFoundError
+ *     [AD3] listAddons — property принадлежит другому tenant → PublicPropertyNotFoundError
+ *     [AD4] listAddons — wire format priceKopecks (number) NOT priceMicros (bigint)
+ *     [AD5] listAddons — JSON.stringify(view) succeeds (no bigint leak)
+ *     [AD6] listAddons — tenant.mode demo|production|null propagates в view
  */
 import { fc } from '@fast-check/vitest'
 import { newId } from '@horeca/shared'
@@ -638,6 +646,162 @@ describe('widget.service — orchestration', { tags: ['db'], timeout: 60_000 }, 
 			),
 			{ numRuns: 25 }, // numRuns low — каждый run hits real DB
 		)
+	})
+
+	async function seedAddon(opts: {
+		tenantId: string
+		propertyId: string
+		addonId: string
+		code: string
+		isActive?: boolean
+		isMandatory?: boolean
+		inventoryMode?: 'NONE' | 'DAILY_COUNTER' | 'TIME_SLOT'
+		dailyCapacity?: number | null
+		priceMicros?: bigint
+		vatBps?: number
+	}) {
+		const sql = getTestSql()
+		const now = new Date()
+		const dailyCapacityParam =
+			opts.dailyCapacity === undefined || opts.dailyCapacity === null
+				? NULL_INT32
+				: opts.dailyCapacity
+		await sql`
+			UPSERT INTO propertyAddon (
+				\`tenantId\`, \`propertyId\`, \`addonId\`,
+				\`code\`, \`category\`,
+				\`nameRu\`, \`pricingUnit\`, \`priceMicros\`, \`currency\`, \`vatBps\`,
+				\`isActive\`, \`isMandatory\`,
+				\`inventoryMode\`, \`dailyCapacity\`,
+				\`seasonalTagsJson\`, \`sortOrder\`,
+				\`createdAt\`, \`createdBy\`, \`updatedAt\`, \`updatedBy\`
+			) VALUES (
+				${opts.tenantId}, ${opts.propertyId}, ${opts.addonId},
+				${opts.code}, ${'FOOD_AND_BEVERAGES'},
+				${'Завтрак'}, ${'PER_NIGHT_PER_PERSON'},
+				${opts.priceMicros ?? 1_500_000_000n},
+				${'RUB'}, ${opts.vatBps ?? 2200},
+				${opts.isActive ?? true}, ${opts.isMandatory ?? false},
+				${opts.inventoryMode ?? 'NONE'},
+				${dailyCapacityParam},
+				${'[]'}, ${0},
+				${now}, ${'test'}, ${now}, ${'test'}
+			)
+		`
+	}
+
+	test('[AD1] listAddons — unknown slug → TenantNotFoundError (specific class)', async () => {
+		const { service } = createWidgetFactory(getTestSql())
+		await expect(service.listAddons(`ad1-nonexistent-${Date.now()}`, 'p1')).rejects.toThrow(
+			TenantNotFoundError,
+		)
+		await expect(service.listAddons(`ad1-nonexistent-${Date.now()}`, 'p1')).rejects.toBeInstanceOf(
+			TenantNotFoundError,
+		)
+	})
+
+	test('[AD2] listAddons — known tenant + missing property → PublicPropertyNotFoundError', async () => {
+		const { service } = createWidgetFactory(getTestSql())
+		const slug = `ad2-${Date.now().toString(36)}`
+		await seedTenant({ slug })
+		await expect(service.listAddons(slug, newId('property'))).rejects.toThrow(
+			PublicPropertyNotFoundError,
+		)
+	})
+
+	test('[AD3] listAddons — cross-tenant: property другого tenant → PublicPropertyNotFoundError', async () => {
+		const { service } = createWidgetFactory(getTestSql())
+		const slugA = `ad3a-${Date.now().toString(36)}`
+		const slugB = `ad3b-${Date.now().toString(36)}`
+		const propertyId = newId('property')
+		const addonId = newId('addon')
+		const { tenantId: tenantA } = await seedTenant({
+			slug: slugA,
+			propertyId,
+			propertyIsPublic: true,
+		})
+		await seedAddon({ tenantId: tenantA, propertyId, addonId, code: 'AD3' })
+		await seedTenant({ slug: slugB })
+		// Tenant B запрашивает property tenant A's via своего slug → 404 (cross-tenant guard)
+		await expect(service.listAddons(slugB, propertyId)).rejects.toThrow(PublicPropertyNotFoundError)
+	})
+
+	test('[AD4] listAddons — wire format priceKopecks (number) NOT priceMicros (bigint)', async () => {
+		const { service } = createWidgetFactory(getTestSql())
+		const slug = `ad4-${Date.now().toString(36)}`
+		const propertyId = newId('property')
+		const addonId = newId('addon')
+		const { tenantId } = await seedTenant({ slug, propertyId, propertyIsPublic: true })
+		// 1500₽ = 1500 × 100 коп = 150_000 kopecks = 1_500_000_000 micros
+		await seedAddon({
+			tenantId,
+			propertyId,
+			addonId,
+			code: 'AD4_BREAKFAST',
+			priceMicros: 1_500_000_000n,
+		})
+		const view = await service.listAddons(slug, propertyId)
+		expect(view.addons).toHaveLength(1)
+		const a = view.addons[0]!
+		expect(typeof a.priceKopecks).toBe('number')
+		expect(a.priceKopecks).toBe(150_000)
+		// Adversarial: ensure no bigint leak в DTO (TS type не имеет priceMicros, runtime check)
+		expect(a).not.toHaveProperty('priceMicros')
+	})
+
+	test('[AD5] listAddons — JSON.stringify(view) succeeds (no bigint leak)', async () => {
+		const { service } = createWidgetFactory(getTestSql())
+		const slug = `ad5-${Date.now().toString(36)}`
+		const propertyId = newId('property')
+		const addonId = newId('addon')
+		const { tenantId } = await seedTenant({ slug, propertyId, propertyIsPublic: true })
+		await seedAddon({ tenantId, propertyId, addonId, code: 'AD5_OK' })
+		const view = await service.listAddons(slug, propertyId)
+		expect(() => JSON.stringify(view)).not.toThrow()
+	})
+
+	test('[AD6] listAddons — tenant.mode propagates (demo / production / null)', async () => {
+		const { service } = createWidgetFactory(getTestSql())
+		// demo mode
+		const slugDemo = `ad6d-${Date.now().toString(36)}`
+		const propDemo = newId('property')
+		const addonDemo = newId('addon')
+		const { tenantId: tenantD } = await seedTenant({
+			slug: slugDemo,
+			mode: 'demo',
+			propertyId: propDemo,
+			propertyIsPublic: true,
+		})
+		await seedAddon({ tenantId: tenantD, propertyId: propDemo, addonId: addonDemo, code: 'AD6D' })
+		const viewDemo = await service.listAddons(slugDemo, propDemo)
+		expect(viewDemo.tenant.mode).toBe('demo')
+
+		// production mode
+		const slugProd = `ad6p-${Date.now().toString(36)}`
+		const propProd = newId('property')
+		const addonProd = newId('addon')
+		const { tenantId: tenantP } = await seedTenant({
+			slug: slugProd,
+			mode: 'production',
+			propertyId: propProd,
+			propertyIsPublic: true,
+		})
+		await seedAddon({ tenantId: tenantP, propertyId: propProd, addonId: addonProd, code: 'AD6P' })
+		const viewProd = await service.listAddons(slugProd, propProd)
+		expect(viewProd.tenant.mode).toBe('production')
+
+		// null (tenant без organizationProfile)
+		const slugNull = `ad6n-${Date.now().toString(36)}`
+		const propNull = newId('property')
+		const addonNull = newId('addon')
+		const { tenantId: tenantN } = await seedTenant({
+			slug: slugNull,
+			propertyId: propNull,
+			propertyIsPublic: true,
+		})
+		await seedAddon({ tenantId: tenantN, propertyId: propNull, addonId: addonNull, code: 'AD6N' })
+		const viewNull = await service.listAddons(slugNull, propNull)
+		expect(viewNull.tenant.mode).toBeNull()
 	})
 
 	test('[AV12] kopecks values are JSON-safe numbers (no bigint leak в DTO)', async () => {

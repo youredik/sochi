@@ -19,6 +19,7 @@ import { Route as AppOSelectRouteImport } from './routes/_app.o-select'
 import { Route as WidgetTenantSlugPropertyIdRouteImport } from './routes/widget.$tenantSlug_.$propertyId'
 import { Route as AppOOrgSlugRouteImport } from './routes/_app.o.$orgSlug'
 import { Route as AppOOrgSlugIndexRouteImport } from './routes/_app.o.$orgSlug.index'
+import { Route as WidgetTenantSlugPropertyIdExtrasRouteImport } from './routes/widget.$tenantSlug_.$propertyId_.extras'
 import { Route as AppOOrgSlugSetupRouteImport } from './routes/_app.o.$orgSlug.setup'
 import { Route as AppOOrgSlugReceivablesRouteImport } from './routes/_app.o.$orgSlug.receivables'
 import { Route as AppOOrgSlugGridRouteImport } from './routes/_app.o.$orgSlug.grid'
@@ -79,6 +80,12 @@ const AppOOrgSlugIndexRoute = AppOOrgSlugIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppOOrgSlugRoute,
 } as any)
+const WidgetTenantSlugPropertyIdExtrasRoute =
+  WidgetTenantSlugPropertyIdExtrasRouteImport.update({
+    id: '/widget/$tenantSlug_/$propertyId_/extras',
+    path: '/widget/$tenantSlug/$propertyId/extras',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AppOOrgSlugSetupRoute = AppOOrgSlugSetupRouteImport.update({
   id: '/setup',
   path: '/setup',
@@ -142,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
+  '/widget/$tenantSlug/$propertyId/extras': typeof WidgetTenantSlugPropertyIdExtrasRoute
   '/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
   '/o/$orgSlug/account/security': typeof AppOOrgSlugAccountSecurityRoute
   '/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
@@ -161,6 +169,7 @@ export interface FileRoutesByTo {
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
+  '/widget/$tenantSlug/$propertyId/extras': typeof WidgetTenantSlugPropertyIdExtrasRoute
   '/o/$orgSlug': typeof AppOOrgSlugIndexRoute
   '/o/$orgSlug/account/security': typeof AppOOrgSlugAccountSecurityRoute
   '/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
@@ -183,6 +192,7 @@ export interface FileRoutesById {
   '/_app/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/_app/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/_app/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
+  '/widget/$tenantSlug_/$propertyId_/extras': typeof WidgetTenantSlugPropertyIdExtrasRoute
   '/_app/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
   '/_app/o/$orgSlug/account/security': typeof AppOOrgSlugAccountSecurityRoute
   '/_app/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
@@ -205,6 +215,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
+    | '/widget/$tenantSlug/$propertyId/extras'
     | '/o/$orgSlug/'
     | '/o/$orgSlug/account/security'
     | '/o/$orgSlug/admin/migration-registrations'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
+    | '/widget/$tenantSlug/$propertyId/extras'
     | '/o/$orgSlug'
     | '/o/$orgSlug/account/security'
     | '/o/$orgSlug/admin/migration-registrations'
@@ -245,6 +257,7 @@ export interface FileRouteTypes {
     | '/_app/o/$orgSlug/grid'
     | '/_app/o/$orgSlug/receivables'
     | '/_app/o/$orgSlug/setup'
+    | '/widget/$tenantSlug_/$propertyId_/extras'
     | '/_app/o/$orgSlug/'
     | '/_app/o/$orgSlug/account/security'
     | '/_app/o/$orgSlug/admin/migration-registrations'
@@ -261,6 +274,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   WidgetTenantSlugRoute: typeof WidgetTenantSlugRoute
   WidgetTenantSlugPropertyIdRoute: typeof WidgetTenantSlugPropertyIdRoute
+  WidgetTenantSlugPropertyIdExtrasRoute: typeof WidgetTenantSlugPropertyIdExtrasRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -334,6 +348,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/o/$orgSlug/'
       preLoaderRoute: typeof AppOOrgSlugIndexRouteImport
       parentRoute: typeof AppOOrgSlugRoute
+    }
+    '/widget/$tenantSlug_/$propertyId_/extras': {
+      id: '/widget/$tenantSlug_/$propertyId_/extras'
+      path: '/widget/$tenantSlug/$propertyId/extras'
+      fullPath: '/widget/$tenantSlug/$propertyId/extras'
+      preLoaderRoute: typeof WidgetTenantSlugPropertyIdExtrasRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/o/$orgSlug/setup': {
       id: '/_app/o/$orgSlug/setup'
@@ -455,6 +476,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   WidgetTenantSlugRoute: WidgetTenantSlugRoute,
   WidgetTenantSlugPropertyIdRoute: WidgetTenantSlugPropertyIdRoute,
+  WidgetTenantSlugPropertyIdExtrasRoute: WidgetTenantSlugPropertyIdExtrasRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

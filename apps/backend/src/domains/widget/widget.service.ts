@@ -14,15 +14,22 @@
  *
  * Booking lock + commit — М9.widget.4 (separate routes file).
  */
+import type { AddonCategory, AddonInventoryMode, AddonPricingUnit } from '@horeca/shared'
 import { resolveTenantBySlug } from '../../lib/tenant-resolver.ts'
 import type {
+	PublicAddon,
 	PublicAvailabilityRow,
 	PublicProperty,
 	PublicPropertyPhoto,
 	PublicRoomType,
 	WidgetRepo,
 } from './widget.repo.ts'
-import { buildQuote, computeFreeCancelDeadline, enumerateNightDates } from './widget-pricing.ts'
+import {
+	buildQuote,
+	computeFreeCancelDeadline,
+	enumerateNightDates,
+	micrsToKopecks,
+} from './widget-pricing.ts'
 
 export interface PublicWidgetTenant {
 	readonly slug: string
@@ -40,6 +47,56 @@ export interface PublicWidgetPropertyDetail {
 	readonly property: PublicProperty
 	readonly roomTypes: PublicRoomType[]
 	readonly photos: PublicPropertyPhoto[]
+}
+
+/**
+ * Wire-format addon (priceMicros bigint → priceKopecks number, JSON-safe).
+ * Per `plans/m9_widget_canonical.md` §3 R2 finding: client receives kopecks
+ * to avoid bigint serialization (`JSON.stringify(bigint)` throws). Kopecks
+ * fit Number.MAX_SAFE_INTEGER (~9 квадриллионов копеек = ~90 трлн ₽).
+ */
+export interface PublicWidgetAddon {
+	readonly addonId: string
+	readonly code: string
+	readonly category: AddonCategory
+	readonly nameRu: string
+	readonly nameEn: string | null
+	readonly descriptionRu: string | null
+	readonly descriptionEn: string | null
+	readonly pricingUnit: AddonPricingUnit
+	readonly priceKopecks: number
+	readonly currency: string
+	readonly vatBps: number
+	readonly inventoryMode: AddonInventoryMode
+	readonly dailyCapacity: number | null
+	readonly seasonalTags: readonly string[]
+	readonly sortOrder: number
+}
+
+export interface PublicWidgetAddonsView {
+	readonly tenant: PublicWidgetTenant
+	readonly property: PublicProperty
+	readonly addons: readonly PublicWidgetAddon[]
+}
+
+function publicAddonToWire(a: PublicAddon): PublicWidgetAddon {
+	return {
+		addonId: a.addonId,
+		code: a.code,
+		category: a.category,
+		nameRu: a.nameRu,
+		nameEn: a.nameEn,
+		descriptionRu: a.descriptionRu,
+		descriptionEn: a.descriptionEn,
+		pricingUnit: a.pricingUnit,
+		priceKopecks: micrsToKopecks(a.priceMicros),
+		currency: a.currency,
+		vatBps: a.vatBps,
+		inventoryMode: a.inventoryMode,
+		dailyCapacity: a.dailyCapacity,
+		seasonalTags: a.seasonalTags,
+		sortOrder: a.sortOrder,
+	}
 }
 
 export class TenantNotFoundError extends Error {
@@ -100,6 +157,29 @@ export function createWidgetService(repo: WidgetRepo) {
 				property,
 				roomTypes,
 				photos,
+			}
+		},
+
+		/**
+		 * Screen 2 (Extras / Addons) — list addons available для property's public widget.
+		 *
+		 * Throws TenantNotFoundError / PublicPropertyNotFoundError (timing-safe 404)
+		 * для consistency с listProperties / getPropertyDetail.
+		 *
+		 * Server-side filters in repo: isActive=true, isMandatory=false,
+		 * inventoryMode != 'TIME_SLOT'. Client receives addons fully loaded;
+		 * conditional UI (e.g. infant-cot only if children > 0) — frontend concern.
+		 */
+		async listAddons(tenantSlug: string, propertyId: string): Promise<PublicWidgetAddonsView> {
+			const resolved = await resolveTenantBySlug(tenantSlug)
+			if (!resolved) throw new TenantNotFoundError(tenantSlug)
+			const property = await repo.getPublicProperty(resolved.tenantId, propertyId)
+			if (!property) throw new PublicPropertyNotFoundError(tenantSlug, propertyId)
+			const addons = await repo.listPublicAddons(resolved.tenantId, propertyId)
+			return {
+				tenant: { slug: resolved.slug, name: resolved.name, mode: resolved.mode },
+				property,
+				addons: addons.map(publicAddonToWire),
 			}
 		},
 

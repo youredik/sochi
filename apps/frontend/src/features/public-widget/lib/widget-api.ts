@@ -119,6 +119,64 @@ export interface AvailabilityQuery {
 	readonly children: number
 }
 
+/**
+ * Addon (Extras / Ancillaries) — wire format from
+ * `apps/backend/src/domains/widget/widget.service.ts:PublicWidgetAddon`.
+ *
+ * Server-side filters apply: `isActive=true`, `isMandatory=false`,
+ * `inventoryMode != TIME_SLOT`. UI MUST render опт-ин (unchecked default,
+ * ЗоЗПП ст. 16 ч. 3.1, 69-ФЗ от 07.04.2025).
+ *
+ * `priceKopecks` (number, JSON-safe) — backend конвертирует bigint micros.
+ */
+export type AddonCategory =
+	| 'FOOD_AND_BEVERAGES'
+	| 'TRANSFER'
+	| 'PARKING'
+	| 'WELLNESS'
+	| 'ACTIVITIES'
+	| 'EARLY_CHECK_IN'
+	| 'LATE_CHECK_OUT'
+	| 'CLEANING'
+	| 'EQUIPMENT'
+	| 'PET_FEE'
+	| 'CONNECTIVITY'
+	| 'OTHER'
+
+export type AddonPricingUnit =
+	| 'PER_STAY'
+	| 'PER_PERSON'
+	| 'PER_NIGHT'
+	| 'PER_NIGHT_PER_PERSON'
+	| 'PER_HOUR'
+	| 'PERCENT_OF_ROOM_RATE'
+
+export type AddonInventoryMode = 'NONE' | 'DAILY_COUNTER'
+
+export interface PublicWidgetAddon {
+	readonly addonId: string
+	readonly code: string
+	readonly category: AddonCategory
+	readonly nameRu: string
+	readonly nameEn: string | null
+	readonly descriptionRu: string | null
+	readonly descriptionEn: string | null
+	readonly pricingUnit: AddonPricingUnit
+	readonly priceKopecks: number
+	readonly currency: string
+	readonly vatBps: number
+	readonly inventoryMode: AddonInventoryMode
+	readonly dailyCapacity: number | null
+	readonly seasonalTags: readonly string[]
+	readonly sortOrder: number
+}
+
+export interface PublicWidgetAddonsView {
+	readonly tenant: PublicWidgetTenant
+	readonly property: PublicProperty
+	readonly addons: readonly PublicWidgetAddon[]
+}
+
 export class WidgetApiInputError extends Error {
 	readonly reason: string
 	constructor(reason: string) {
@@ -163,6 +221,19 @@ export async function getPublicPropertyDetail(
  * Returns null if 404 (tenant or property unknown).
  * Throws `WidgetApiInputError` if 422 (invalid date range / out-of-bounds guests).
  */
+/**
+ * Fetch addons — Screen 2 Extras orchestration.
+ * Returns null if 404 (tenant or property unknown).
+ */
+export async function fetchAddons(
+	tenantSlug: string,
+	propertyId: string,
+): Promise<PublicWidgetAddonsView | null> {
+	return fetchPublic<PublicWidgetAddonsView>(
+		`/${encodeURIComponent(tenantSlug)}/properties/${encodeURIComponent(propertyId)}/addons`,
+	)
+}
+
 export async function fetchAvailability(
 	q: AvailabilityQuery,
 ): Promise<PublicAvailabilityResponse | null> {

@@ -5,9 +5,11 @@
  * anonymous clients (booking widget on hotel website) могут читать
  * public surface. Tenant resolution = URL slug → `tenant-resolver.ts`.
  *
- * Per `plans/m9_widget_canonical.md` §M9.widget.1:
- *   GET  /api/public/widget/:tenantSlug/properties           — list public properties
- *   GET  /api/public/widget/:tenantSlug/properties/:propId   — property detail + room types
+ * Per `plans/m9_widget_canonical.md` §M9.widget.1-3:
+ *   GET  /api/public/widget/:tenantSlug/properties                          — list public properties
+ *   GET  /api/public/widget/:tenantSlug/properties/:propId                  — property detail + room types
+ *   GET  /api/public/widget/:tenantSlug/properties/:propId/availability     — Screen 1 search & pick
+ *   GET  /api/public/widget/:tenantSlug/properties/:propId/addons           — Screen 2 extras
  *
  * Mutating endpoints (POST booking, magic-link consumption) — М9.widget.4
  * + М9.widget.5, separate routes file.
@@ -109,6 +111,22 @@ export function createWidgetRoutes(service: WidgetService) {
 				throw err
 			}
 		})
+		.get(
+			'/:tenantSlug/properties/:propertyId/addons',
+			zValidator('param', propertyParam),
+			async (c) => {
+				const { tenantSlug, propertyId } = c.req.valid('param')
+				try {
+					const view = await service.listAddons(tenantSlug, propertyId)
+					return c.json({ data: view }, 200)
+				} catch (err) {
+					if (err instanceof TenantNotFoundError || err instanceof PublicPropertyNotFoundError) {
+						return c.json({ error: { code: 'NOT_FOUND', message: 'Resource not found' } }, 404)
+					}
+					throw err
+				}
+			},
+		)
 		.get(
 			'/:tenantSlug/properties/:propertyId/availability',
 			zValidator('param', propertyParam),
