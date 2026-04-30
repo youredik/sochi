@@ -204,7 +204,7 @@ export function GuestAndPay({
 						type="submit"
 						size="lg"
 						disabled={mutation.isPending}
-						className="w-full sm:w-auto"
+						className="w-full sm:w-auto forced-colors:bg-[ButtonText] forced-colors:text-[ButtonFace] forced-colors:border-[ButtonText]"
 						data-testid="commit-button"
 					>
 						{mutation.isPending ? (

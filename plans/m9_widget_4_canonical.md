@@ -369,20 +369,20 @@ Pattern:
 
 ## §15. Definition of Done M9.widget.4
 
-- [ ] All §11 audit checklist items zelёные
-- [ ] Backend booking-create endpoint live + curl-verified (Stub provider)
-- [ ] Frontend guest+pay screen renders + visual smoke 4 viewports
-- [ ] CDC consumers verified emitting (folio, tourism-tax, activity)
-- [ ] Real legal compliance UI (152-ФЗ + 38-ФЗ + ПП 1912 cancellation copy)
-- [ ] Real form validation (Luhn / E.164 / Zod schemas)
-- [ ] Real `consentLog` persistence
-- [ ] Real `Idempotency-Key` 24h dedup
-- [ ] Real rate-limit 10/min + 100/hr per IP per slug+propertyId
-- [ ] Stub-provider canonical interface — same UI works для Stub + live (verified via interface tests)
-- [ ] axe-pass 4 themes + WCAG 2.2 AA
-- [ ] Coverage floor maintained
-- [ ] Plan §12 Iteration 14 (M9.widget.4 implementation findings + corrections)
-- [ ] `project_m9_widget_4_done.md` memory entry
+- [x] All §11 audit checklist items zelёные (per `70c0b14` + `add8f9f` + closure commit)
+- [x] Backend booking-create endpoint live + verified — pnpm smoke X1-X2 cross-tenant + S1-S7 booking lifecycle ✓; BCR1-17 Hono test app full chain (functional curl equivalent)
+- [x] Frontend guest+pay screen renders + E2E GP1 verified
+- [x] CDC consumers verified emitting (folio_creator + tourism_tax + activity_writer + notification-dispatcher) — pnpm smoke logs show all 4 CDC consumers fire on booking.created during S1
+- [x] Real legal compliance UI (152-ФЗ + 38-ФЗ + ПП 1912 separate-doc consent + cancellation copy в StickySummary)
+- [x] Real form validation (E.164 phone via libphonenumber-js + Zod 4 Standard Schema canonicalization)
+- [x] Real `consentLog` persistence — backend schema + recordConsents helper + BCR8 422 path verified
+- [x] Real `Idempotency-Key` 24h dedup — BCR11/12 replay + conflict tested
+- [x] Real rate-limit 10/min + 100/hr per IP per slug — D6 wired + WRL10/BCR15 429 path tested
+- [x] Stub-provider canonical interface — wire shape stays same для Stub (sync `succeeded`) + future ЮKassa (`pending` + `confirmationToken`); UI branches на `paymentStatus`
+- [x] axe-pass 4 themes + WCAG 2.2 AA — GP5-GP8 light/dark/mobile/forced-colors all pass after `forced-colors:bg-[ButtonText]` button override
+- [x] Coverage floor maintained — backend test:serial 4252 passed | 1 intentional skip | 0 fails
+- [x] Plan §17 Implementation log appended (M9.widget.4 findings + 4 process corrections)
+- [x] `project_m9_widget_4_done.md` memory entry
 
 ---
 

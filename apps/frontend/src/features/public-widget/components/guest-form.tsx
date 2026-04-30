@@ -37,6 +37,37 @@ export interface GuestFormProps {
 	readonly children?: React.ReactNode
 }
 
+interface GuestFormDraft {
+	firstName: string
+	lastName: string
+	middleName: string
+	email: string
+	phone: string
+	citizenship: string
+	countryOfResidence: string
+	specialRequests: string
+}
+
+/**
+ * Canonicalize raw form draft → wire shape (trimmed/lowercased/E.164/null-on-empty).
+ * Returns `null` если phone не парсится валидным E.164. Single source of truth —
+ * used by both `validators.onSubmit` (Zod gate) и `onSubmit` (downstream).
+ */
+function canonicalizeDraft(draft: GuestFormDraft): WidgetGuestInput | null {
+	const phoneE164 = toE164(draft.phone)
+	if (!phoneE164) return null
+	return {
+		firstName: draft.firstName.trim(),
+		lastName: draft.lastName.trim(),
+		middleName: draft.middleName.trim() || null,
+		email: draft.email.trim().toLowerCase(),
+		phone: phoneE164,
+		citizenship: draft.citizenship.trim().toUpperCase(),
+		countryOfResidence: draft.countryOfResidence.trim() || null,
+		specialRequests: draft.specialRequests.trim() || null,
+	}
+}
+
 export function GuestForm({ initialValues, onSubmit, disabled = false, children }: GuestFormProps) {
 	const formId = useId()
 
@@ -50,26 +81,12 @@ export function GuestForm({ initialValues, onSubmit, disabled = false, children 
 			citizenship: initialValues?.citizenship ?? 'RU',
 			countryOfResidence: initialValues?.countryOfResidence ?? '',
 			specialRequests: initialValues?.specialRequests ?? '',
-		},
+		} satisfies GuestFormDraft,
 		validators: {
 			onSubmit: ({ value }) => {
-				const phoneE164 = toE164(value.phone)
-				if (!phoneE164) {
-					return {
-						fields: {
-							phone: 'Введите корректный номер телефона',
-						},
-					}
-				}
-				const candidate: WidgetGuestInput = {
-					firstName: value.firstName.trim(),
-					lastName: value.lastName.trim(),
-					middleName: value.middleName.trim() || null,
-					email: value.email.trim().toLowerCase(),
-					phone: phoneE164,
-					citizenship: value.citizenship.trim().toUpperCase(),
-					countryOfResidence: value.countryOfResidence.trim() || null,
-					specialRequests: value.specialRequests.trim() || null,
+				const candidate = canonicalizeDraft(value)
+				if (!candidate) {
+					return { fields: { phone: 'Введите корректный номер телефона' } }
 				}
 				const parsed = widgetGuestInputSchema.safeParse(candidate)
 				if (!parsed.success) {
@@ -84,18 +101,9 @@ export function GuestForm({ initialValues, onSubmit, disabled = false, children 
 			},
 		},
 		onSubmit: async ({ value }) => {
-			const phoneE164 = toE164(value.phone)
-			if (!phoneE164) return // already surfaced via validators
-			await onSubmit({
-				firstName: value.firstName.trim(),
-				lastName: value.lastName.trim(),
-				middleName: value.middleName.trim() || null,
-				email: value.email.trim().toLowerCase(),
-				phone: phoneE164,
-				citizenship: value.citizenship.trim().toUpperCase(),
-				countryOfResidence: value.countryOfResidence.trim() || null,
-				specialRequests: value.specialRequests.trim() || null,
-			})
+			const candidate = canonicalizeDraft(value)
+			if (!candidate) return // already surfaced via validators
+			await onSubmit(candidate)
 		},
 	})
 
