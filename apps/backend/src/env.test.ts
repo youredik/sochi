@@ -11,7 +11,7 @@ import { envSchema } from './env.ts'
 const REQUIRED_FIELDS = {
 	YDB_CONNECTION_STRING: 'grpc://localhost:2236/local',
 	BETTER_AUTH_SECRET: 'a'.repeat(32),
-	BETTER_AUTH_URL: 'http://localhost:3000',
+	BETTER_AUTH_URL: 'http://localhost:3001',
 	S3_ENDPOINT: 'http://localhost:9000',
 	S3_ACCESS_KEY_ID: 'minio',
 	S3_SECRET_ACCESS_KEY: 'minio123',

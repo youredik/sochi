@@ -47,7 +47,7 @@ export const tourismTaxOrgReportQueryOptions = (params: TourismTaxOrgReportParam
  * navigation, поэтому работает «as is»).
  */
 export function buildTourismTaxXlsxUrl(params: TourismTaxOrgReportParams): string {
-	const base = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+	const base = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 	const qs = new URLSearchParams({ from: params.from, to: params.to })
 	if (params.propertyId) qs.set('propertyId', params.propertyId)
 	return `${base}/api/admin/tax/tourism/export.xlsx?${qs.toString()}`

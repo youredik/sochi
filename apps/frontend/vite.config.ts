@@ -84,7 +84,8 @@ export default defineConfig({
 		// viable in dev and allows `/api/otel/v1/*` OTLP traces without CORS.
 		proxy: {
 			'/api': {
-				target: 'http://localhost:3000',
+				// Port 3001 — sochi unique (per `feedback_no_disrupt_other_dev.md`).
+				target: 'http://localhost:3001',
 				changeOrigin: false,
 			},
 		},

@@ -10,7 +10,7 @@ import { z } from 'zod'
  */
 export const envSchema = z.object({
 	NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-	PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+	PORT: z.coerce.number().int().min(1).max(65535).default(3001),
 	LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 
 	// PWA + WebAuthn host identity (M9.4 Risk #15 pre-condition).

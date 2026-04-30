@@ -76,7 +76,7 @@ function readImageDimensions(file: File): Promise<{ width: number; height: numbe
  */
 export function useUploadMedia(propertyId: string) {
 	const queryClient = useQueryClient()
-	const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+	const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
 	const runSplitFlow = async (
 		vars: UploadVars,

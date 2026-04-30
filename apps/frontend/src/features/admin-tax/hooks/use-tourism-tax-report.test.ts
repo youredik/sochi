@@ -10,7 +10,7 @@
  *     [E1] propertyId with TypedID format `prop_01k...` — properly encoded
  *
  *   Base URL fallback:
- *     [B1] VITE_API_URL unset → falls back to localhost:3000
+ *     [B1] VITE_API_URL unset → falls back to localhost:3001
  *
  *   Immutability:
  *     [I1] params object NOT mutated by call

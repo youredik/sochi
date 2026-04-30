@@ -17,7 +17,7 @@ import { defineConfig, devices } from '@playwright/test'
  */
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173'
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:3000'
+const API_URL = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:3001'
 const isRemote = BASE_URL !== 'http://localhost:5173'
 
 export default defineConfig({
