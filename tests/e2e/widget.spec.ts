@@ -418,3 +418,114 @@ test.describe('widget Screen 2 Extras / Addons — happy + adversarial + axe mat
 		expect(url).toMatch(/addons=/)
 	})
 })
+
+const GUEST_AND_PAY_URL = `/widget/demo-sirius/demo-prop-sirius-main/guest-and-pay`
+
+function guestAndPayUrl(): string {
+	const params = new URLSearchParams({
+		checkIn: todayPlus(30),
+		checkOut: todayPlus(33),
+		adults: '2',
+		children: '0',
+		roomTypeId: 'demo-roomtype-deluxe',
+		ratePlanId: 'demo-rateplan-deluxe-bar-flex',
+	})
+	return `${GUEST_AND_PAY_URL}?${params.toString()}`
+}
+
+test.describe('widget Screen 3 Guest+Pay — UX + a11y matrix', () => {
+	test('[GP1] route loads + form fields rendered', async ({ page }) => {
+		await page.goto(guestAndPayUrl())
+		await expect(page.getByTestId('guest-and-pay-screen')).toBeVisible({ timeout: 10_000 })
+		await expect(page.getByRole('heading', { level: 1, name: /Контактные данные/ })).toBeVisible()
+		await expect(page.getByTestId('guest-form')).toBeVisible()
+		await expect(page.getByTestId('payment-method-selector')).toBeVisible()
+		await expect(page.getByTestId('consent-block')).toBeVisible()
+	})
+
+	test('[GP2] phone input formatted as user types — +7 prefix', async ({ page }) => {
+		await page.goto(guestAndPayUrl())
+		await page.getByTestId('guest-form').waitFor()
+		const phone = page.getByLabel(/Телефон/)
+		await phone.fill('79651234567')
+		const value = await phone.inputValue()
+		expect(value).toMatch(/^\+7/)
+		expect(value).toContain('965')
+	})
+
+	test('[GP3] submit без DPA consent → consent error visible', async ({ page }) => {
+		await page.goto(guestAndPayUrl())
+		await page.getByTestId('guest-form').waitFor()
+		await page.getByLabel(/Фамилия/).fill('Иванов')
+		await page.getByLabel(/^Имя/).fill('Иван')
+		await page.getByLabel(/Email/).fill('test@example.com')
+		await page.getByLabel(/Телефон/).fill('79651234567')
+		// DPA NOT ticked
+		await page.getByTestId('commit-button').click()
+		// Error alert appears under DPA checkbox
+		await expect(page.getByRole('alert').filter({ hasText: /обязательно/i })).toBeVisible({
+			timeout: 5_000,
+		})
+	})
+
+	test('[GP4] consent «Прочитать полностью» opens standalone sheet с full text', async ({
+		page,
+	}) => {
+		await page.goto(guestAndPayUrl())
+		await page.getByTestId('consent-block').waitFor()
+		await page.getByTestId('consent-dpa-read').click()
+		await expect(page.getByTestId('consent-dpa-fulltext')).toBeVisible({ timeout: 5_000 })
+		// Full text должен contain ключевые legal anchors
+		const text = await page.getByTestId('consent-dpa-fulltext').textContent()
+		expect(text).toMatch(/152-ФЗ/)
+		expect(text).toMatch(/МВД/)
+	})
+
+	test('[GP5] axe-pass на screen 3 (light theme, desktop)', async ({ page }) => {
+		await page.goto(guestAndPayUrl())
+		await page.getByTestId('guest-and-pay-screen').waitFor({ timeout: 10_000 })
+		await page.getByTestId('guest-form').waitFor()
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[GP6] axe-pass на screen 3 (dark theme)', async ({ page }) => {
+		await page.addInitScript(() => {
+			document.documentElement.classList.add('dark')
+			localStorage.setItem('horeca-theme', 'dark')
+		})
+		await page.goto(guestAndPayUrl())
+		await page.getByTestId('guest-form').waitFor({ timeout: 10_000 })
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[GP7] axe-pass на screen 3 (mobile 360×740)', async ({ page }) => {
+		await page.setViewportSize({ width: 360, height: 740 })
+		await page.goto(guestAndPayUrl())
+		await page.getByTestId('guest-form').waitFor({ timeout: 10_000 })
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[GP8] axe-pass на screen 3 (forced-colors / contrast-more)', async ({ page }) => {
+		await page.emulateMedia({ forcedColors: 'active' })
+		await page.goto(guestAndPayUrl())
+		await page.getByTestId('guest-form').waitFor({ timeout: 10_000 })
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+			.analyze()
+		expect(results.violations).toEqual([])
+	})
+
+	test('[GP9] invalid search param → route errorComponent renders', async ({ page }) => {
+		await page.goto(`${GUEST_AND_PAY_URL}?adults=abc&checkIn=2026-06-01&checkOut=2026-06-03`)
+		await expect(page.getByTestId('guest-and-pay-route-error')).toBeVisible({ timeout: 5_000 })
+	})
+})

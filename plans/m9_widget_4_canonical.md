@@ -408,3 +408,52 @@ Per user canon «при минимальном сомнении — самый �
 **D1 confirmation (no amendment)**: phone input stays raw `libphonenumber-js@1.12.42` AsYouType('RU') as planned. Senior-judgement: для RU-fixed (no country variability) готовая wrapper-library = over-engineering.
 
 **No breaking changes** в нашем surface за последние 7 дней. Plan §4-§15 stays unchanged. Frontend implementation proceeds на этих pinned versions.
+
+---
+
+## §17. Implementation log
+
+### A2.1 (commit `fc419c2`, 2026-04-30 17:50) + A2.1.fix (commit `70c0b14`, 2026-04-30 20:36)
+
+**A2.1 initial:** widget service composes existing services + middleware chain wired. **65 strict tests** (25 unit + 6 integration + 34 routes integration).
+
+**A2.1.fix corrections** (caught senior post-completion audit):
+1. **D6 rate-limit gap** — `hono-rate-limiter@0.5.3` dep added; `widget-rate-limit.ts` middleware (10/min + 100/hr / IP+slug). Now wired в chain BEFORE tenant-resolver (cheapest reject первым).
+2. **Types drift risk** — `WidgetBookingCommitWireInput/Result/ErrorReason` extracted в `packages/shared/src/widget.ts`. Backend route `zValidator` + frontend client share single source of truth.
+3. **Service refactor** — domain service consumes shared types (drop local `WidgetGuestInput / WidgetConsentFlags / WidgetConsentSnapshot` duplicates).
+4. **+17 tests** — 14 unit (WRL1-14 IP fallback chain, key generation, 429 path, separate-bucket invariants) + 3 integration (BCR15-17 429-path through full middleware chain).
+5. **Honest correction** — `fc419c2` claimed «1 unrelated payment flake»; re-running test:serial confirmed 4252 passed + 1 intentional skip + 0 fails. No flake. Per `feedback_no_preexisting.md` this WAS a half-measure.
+
+**A2.1.fix gates:** sherif/biome/depcruise/knip/typecheck all green; full test:serial **4252/4253 pass, 0 regressions**.
+
+### A2.2 frontend (commit pending, 2026-04-30)
+
+**Pre-write recheck (§16):** все deps confirmed latest stable; `react-phone-number-input` rejected over-shoot; raw `libphonenumber-js@1.12.42` AsYouType('RU') canonical.
+
+**Production files (8):**
+- `lib/widget-booking-api.ts` — fetch helper, error taxonomy mapped к shared `WidgetBookingCommitErrorReason`
+- `lib/consent-texts.ts` — frozen v1.0 wordings (152-ФЗ + 38-ФЗ separate-doc canon)
+- `lib/phone-format.ts` — `formatRu` AsYouType + prefix normalization (digits-only `8…` или `7…` → `+7…`); `isValidRuPhone`; `toE164`
+- `hooks/use-create-booking.ts` — TanStack Query mutation (project canon: `useCreateRefund`-style)
+- `components/consent-block.tsx` — Radix Checkbox + ResponsiveSheet для standalone full-text reading
+- `components/guest-form.tsx` — TanStack Form 1.29.1 + Zod 4 Standard Schema direct + libphonenumber-js
+- `components/payment-method-selector.tsx` — Radix RadioGroup (card / sbp)
+- `screens/guest-and-pay.tsx` — orchestration с canonical Mock interface (works для Stub demo + future live ЮKassa)
+- `routes/widget.$tenantSlug_.$propertyId_.guest-and-pay.tsx` — TanStack flat sub-route с validateSearch
+
+**Test pyramid (54 unit + 9 E2E):**
+- `widget-booking-api.test.ts` — 13 tests (idempotency-key uniqueness, fetch error taxonomy)
+- `phone-format.test.ts` — 9 tests (formatRu / isValidRuPhone / toE164)
+- `consent-texts.test.ts` — 9 tests (legal citations, ФЗ separation, length bounds)
+- `consent-block.test.tsx` — 8 tests (opt-in default, aria-required, separate sheets)
+- `payment-method-selector.test.tsx` — 6 tests (radio options, value sync, disabled)
+- `guest-form.test.tsx` — 9 tests (validation, phone format, canonicalization, optional null)
+- `tests/e2e/widget.spec.ts` GP1-GP9 — 9 E2E (form render, phone formatting, DPA gate, standalone-sheet open, axe matrix 4 themes [light/dark/mobile/forced-colors], invalid search → errorComponent)
+
+**A2.2 process corrections (additional):**
+1. **DOM-direct asserts canon** — project НЕ wires `@testing-library/jest-dom`; tests use `data-state` for Radix checked / `getAttribute('aria-…')` / `el.textContent.toMatch()`. Не использую `toBeChecked` / `toBeInTheDocument` / `toHaveTextContent` без verifying setup.
+2. **`useId()` для всех id attrs** — biome `useUniqueElementIds` rule rejects static literal ids внутри components. Tests target `data-testid` (not `id`) so refactor `id="..."` → `id={useId()}` без test breakage.
+3. **`parsePhoneNumberWithError`** — `parsePhoneNumber` from libphonenumber-js deprecated в favour of `WithError` variant (biome `noDeprecatedImports` flagged).
+4. **Phone prefix normalization** — AsYouType('RU') не auto-prepend `+` для leading `7`. Senior UX: pre-process digits-only input через `+7` prefix.
+
+**A2.2 gates:** typecheck clean / biome 0 errors / depcruise 0 violations / **54/54 unit pass / 9/9 E2E (TBD pre-push)**.
