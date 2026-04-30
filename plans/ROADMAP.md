@@ -9,28 +9,27 @@
 
 ## Сейчас работаем над
 
-**M9.widget.4 — Screen 3 Guest+Pay** (Track A2). Pre-flight DONE — canonical sub-phase plan committed: `plans/m9_widget_4_canonical.md`. Memory pointer `project_m9_widget_4_canonical.md`.
+**Track A3 — M9.widget.5 Confirmation** (NEXT). Pre-flight pending — `plans/m9_widget_5_canonical.md` ещё НЕ написан. Первый шаг next-session = full pre-flight (R1+R2+R3+stankoff+npm verify) по pattern'у `m9_widget_4_canonical.md`.
 
-**Pre-flight summary** (R1+R2+R3+stankoff-v2+npm verify, 80+ findings):
-- **Reframed scope**: demo surface на Stub-провайдере, НЕ live ЮKassa (Track C2 deferred per north-star)
-- **Canonical guard**: behaviour-faithful Mock = полнофункциональный, не имитация (`feedback_behaviour_faithful_mock_canon.md`)
-- **Integration map**: widget = thin anonymous wrapper над existing services (booking/guest/payment/CDC consumers). NO domain rewrite.
-- **8 decisions**: libphonenumber-js / consent modal / Standard Schema direct (NO adapter) / hono-rate-limiter in-memory / Stub card-dependent + tenant outcomeMode / 24h Idempotency-Key TTL
-- **Library canon Apr 2026 verified**: TanStack Form 1.29.1 / Zod 4.4.1 / libphonenumber-js 1.12.42 / jose 6.2.3
-- **5 backend files + 1 migration + 6 frontend files** (full file list в plan canon)
-- **Process correction #15**: per-sub-phase canonical plan file mandatory (этот pattern)
+**M9.widget.4 (A2 Guest+Pay) DONE 2026-04-30** — `project_m9_widget_4_done.md`. Final origin/main HEAD: **`456a591`**. Sub-phase + post-push infrastructure epic landed (12 commits). Включая:
+- 65 unit + integration tests + 10 E2E + axe 4-theme matrix
+- Backend port 3000→8787, frontend 5173→5273 (coexist с stankoff-v2)
+- Pre-push gate 250s → ~5s (vitest fully delegated к async self-hosted runner)
+- 5 new memory canons (no_disrupt_other_dev / foreground_runs / pre_push_strategy / inter_project_port_allocation + cross-links)
 
-**A2 sub-phase split:**
-- A2.1 Backend (~3 days, ~40 strict + integration tests)
-- A2.2 Frontend (~2 days, ~30 strict + 10 E2E + axe matrix)
+**A3 scope** (per Track A row + `m9_widget_canonical.md` §M9.widget.5):
+- magic-link service (jose 6.2.3, HS256, 24h TTL)
+- email voucher template (Postbox/Mailpit factory)
+- .ics calendar invite (RFC 5545)
+- guest portal (passport completion для D9 placeholder из widget.4)
 
-**Anchor commits:**
+**Anchor commits (origin/main):**
 - `6ccae91` — M8.A done (миграционный учёт МВД closed)
 - `e5fb3d3` — M9 done (theming/adaptive/PWA/passkey/visual)
 - `fb0c0b1` — M9.widget.2 senior-pass v3 (Screen 1 Search & Pick closed)
-- `db94d7b` — M9.widget.3 Screen 2 Extras (initial commit)
-- `ff62cb2` — M9.widget.3 senior-pass closure
-- `<TBD>` — M9.widget.4 pre-flight canon (this commit)
+- `ff62cb2` — M9.widget.3 senior-pass closure (Screen 2 Extras)
+- **`456a591`** — M9.widget.4 closure (Screen 3 Guest+Pay + post-push infra epic)
+- `<TBD>` — M9.widget.5 pre-flight canon (next session first commit)
 
 ---
 
@@ -59,7 +58,7 @@
 | # | Фаза | Закрывает | Key deliverable | Strict tests | Plan canon |
 |---|---|---|---|---|---|
 | **A1** ✅ | M9.widget.3 — Extras / Addons | Боль 2.3 (continuing) | Screen 2 inline addon cards + Skip CTA + axe AA | **107 strict + 13 E2E** (target was ~25; expanded после Round 2 compliance findings) | `m9_widget_canonical.md` §3 |
-| **A2** | M9.widget.4 — Guest + Pay | Боль 2.3 (continuing) | TanStack Form + 152-ФЗ + 38-ФЗ consents + ЮKassa Widget v1 на Stub-provider + Yandex SmartCaptcha + migration 0045 (consentLog) | ~70 | §4 |
+| **A2** ✅ | M9.widget.4 — Guest + Pay | Боль 2.3 (continuing) | TanStack Form + 152-ФЗ + 38-ФЗ consents + Stub canonical interface + rate-limit + migration 0045 (consentLog) — closed `456a591` | **65 unit + integration + 10 E2E + 4-theme axe** | §4 + done memory |
 | **A3** | M9.widget.5 — Confirmation | Боль 2.3 (continuing) | magic-link service (jose 6.2.3, HS256) + email voucher (Postbox/Mailpit) + .ics + guest portal | ~45 | §5 |
 | **A4** | M9.widget.6 — Embed Web Component | Боль 2.3 (closure) | `apps/widget-embed` Vite build → Lit 3.3.2 + Declarative Shadow DOM SSR + iframe fallback ≤30 kB gzip | ~30 | §6 |
 | **A5** | M9.widget.7 — Perf + a11y gate | Quality canon | Lighthouse CI 0.15.1 pre-push + INP attribution + axe matrix expansion (4 themes × widget routes) | ~15 | §7 |
@@ -176,7 +175,12 @@ NOW ──► A1 (widget.3 Extras) ──► A2 (widget.4 Guest+Pay)
 ## Carry-forward TODO
 
 - **M10 plan canon** — создать `plans/m10_canonical.md` на баре `m9_widget_canonical.md` перед Track A7 (4-6 раундов research + npm verify + sub-phase decomposition)
-- **M9.widget §carry-forward** — 5 unverified items (ПП РФ №1912 + 152-ФЗ wording 2025-09-01 + Yandex SmartCaptcha v2 + РКН реестр операторов ПД + jose 6.x migration guide) — verify первым шагом A2 (M9.widget.4)
+- **M9.widget §carry-forward** (status 2026-04-30 после A2 closure):
+  - ✅ ПП РФ №1912 от 27.11.2025 — wording embedded в widget.4 sticky-summary cancellation copy + addon disclosure (verified)
+  - ✅ 152-ФЗ wording 2025-09-01 separate-doc — embedded в widget.4 consent-texts.ts v1.0 (verified, separate-doc canon enforced)
+  - 🟡 Yandex SmartCaptcha v2 — defer Track C2 confirmed (rate-limit primary в A2; captcha-after-breach pattern)
+  - 🟡 РКН реестр операторов ПД — tag для compliance phase (deploy-track B7 «152-ФЗ baseline для prospect'ов»)
+  - 🔴 **jose 6.x migration guide** — **verify первым шагом A3** (M9.widget.5 magic-link signing); plan canon `m9_widget_5_canonical.md` step 1 = npm-empirical-verify + R1 research
 - **Empirical curl batch Phase 2** — pending creds (Vision / ЮKassa / Postbox) — Track C parallel; turnkey scripts ready (`scripts/verify-vision-empirical.ts` + аналоги)
 - **M8.B** — special: only под конкретного первого production-tenant'a, multi-week МВД ОВМ onboarding + КриптоПро commercial license
 
