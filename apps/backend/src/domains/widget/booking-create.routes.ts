@@ -6,89 +6,41 @@
  * Route:
  *   POST /api/public/widget/:tenantSlug/booking — anonymous booking commit
  *
- * Middleware chain:
+ * Middleware chain (order matters):
  *   1. CORS — allow embedded widgets от любого origin (no credentials)
- *   2. Strict CSP headers
- *   3. widgetTenantResolverMiddleware — resolves slug → c.var.tenantId
- *      (sets c.var.tenant), 404 timing-safe on unknown
- *   4. idempotencyMiddleware — Idempotency-Key 24h dedup (uses c.var.tenantId
- *      from step 3, platform-first canon, no fork)
- *   5. Rate-limit (in-memory hono-rate-limiter): 10/min/IP + 100/hr/IP per slug
- *   6. zValidator — JSON body schema (Zod)
- *   7. Handler — orchestrate via WidgetBookingCreateService.commit()
+ *   2. Strict CSP + nosniff + Referrer headers
+ *   3. widgetBurstRateLimiter — 10 req/min/(IP+slug); burst-defence FIRST
+ *      (cheapest reject before any DB lookup)
+ *   4. widgetSteadyRateLimiter — 100 req/hr/(IP+slug); slow-and-low defence
+ *   5. widgetTenantResolverMiddleware — slug → c.var.tenantId (404 timing-safe)
+ *   6. idempotencyMiddleware — Idempotency-Key 24h dedup (uses c.var.tenantId)
+ *   7. zValidator — JSON body schema (shared `widgetBookingCommitWireInputSchema`)
+ *   8. Handler — orchestrate via WidgetBookingCreateService.commit()
  *
- * Per `plans/m9_widget_4_canonical.md` §3:
+ * Per `plans/m9_widget_4_canonical.md` §3 + §8 hard-requirements:
  *   - Real RU compliance даже на demo (152-ФЗ + 38-ФЗ + ПП РФ 1912 + ст. 10)
  *   - Real anti-abuse (rate-limit + Idempotency-Key)
  *   - Real audit-trail (consentLog persistence)
  *   - Behaviour-faithful Stub provider — same canonical interface as live ЮKassa
  */
 import { zValidator } from '@hono/zod-validator'
+import { widgetBookingCommitWireInputSchema } from '@horeca/shared'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { z } from 'zod'
 import type { AppEnv } from '../../factory.ts'
 import type { idempotencyMiddleware } from '../../middleware/idempotency.ts'
+import {
+	widgetBurstRateLimiter,
+	widgetSteadyRateLimiter,
+} from '../../middleware/widget-rate-limit.ts'
 import { widgetTenantResolverMiddleware } from '../../middleware/widget-tenant-resolver.ts'
 import type {
 	WidgetBookingCreateInput,
 	WidgetBookingCreateService,
 } from './booking-create.service.ts'
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-
-/** Body schema for POST /:tenantSlug/booking */
-const bookingPostBody = z.object({
-	propertyId: z.string().min(1).max(128),
-	checkIn: z.string().regex(ISO_DATE, 'checkIn must be YYYY-MM-DD'),
-	checkOut: z.string().regex(ISO_DATE, 'checkOut must be YYYY-MM-DD'),
-	adults: z.number().int().min(1).max(10),
-	children: z.number().int().min(0).max(6),
-	roomTypeId: z.string().min(1).max(128),
-	ratePlanId: z.string().min(1).max(128),
-	expectedTotalKopecks: z.number().int().min(0),
-	addons: z
-		.array(
-			z.object({
-				addonId: z.string().min(1).max(128),
-				quantity: z.number().int().min(1).max(50),
-			}),
-		)
-		.default([]),
-	guest: z.object({
-		firstName: z.string().min(1).max(100),
-		lastName: z.string().min(1).max(100),
-		middleName: z.string().max(100).nullable().optional(),
-		email: z.string().email().max(254),
-		phone: z.string().min(5).max(30),
-		citizenship: z
-			.string()
-			.length(2)
-			.regex(/^[A-Z]{2}$/, 'ISO-3166 alpha-2, uppercase'),
-		countryOfResidence: z.string().max(100).nullable().optional(),
-		specialRequests: z.string().max(2000).nullable().optional(),
-	}),
-	consents: z.object({
-		acceptedDpa: z.boolean(),
-		acceptedMarketing: z.boolean(),
-	}),
-	consentSnapshot: z.object({
-		dpaText: z.string().min(1).max(10_000),
-		marketingText: z.string().min(1).max(10_000),
-		version: z
-			.string()
-			.min(1)
-			.max(20)
-			.regex(/^v\d+\.\d+$/, 'Format: v<major>.<minor> (e.g. v1.0)'),
-	}),
-	// Restricted к canonical PaymentMethod enum (`packages/shared/src/payment.ts`).
-	// RU-specific methods (mir_pay/sber_pay/t_pay/yoo_money) — defer к Track C2
-	// when live ЮKassa empirically verifies + canonical schema extended.
-	paymentMethod: z.enum(['card', 'sbp']),
-})
-
 /**
- * Strict CSP for widget POST. Allows ЮKassa Widget v1 (track C2 swap),
+ * Strict CSP for widget POST. Allows ЮKassa Widget v1 (Track C2 swap),
  * SmartCaptcha (deferred), Yandex Metrika.
  */
 const WIDGET_CSP_VALUE = [
@@ -101,12 +53,23 @@ const WIDGET_CSP_VALUE = [
 	"frame-ancestors 'self'",
 ].join('; ')
 
-export function createWidgetBookingCreateRoutes(deps: {
-	service: WidgetBookingCreateService
-	idempotency: ReturnType<typeof idempotencyMiddleware>
-}) {
+export interface WidgetBookingCreateRoutesDeps {
+	readonly service: WidgetBookingCreateService
+	readonly idempotency: ReturnType<typeof idempotencyMiddleware>
+	/**
+	 * Override rate-limit middlewares — used by tests (which inject zero-limit
+	 * dummies to disable, or low-cap variants to verify 429 path). Production
+	 * defaults to canonical 10/min + 100/hr stack.
+	 */
+	readonly burstRateLimiter?: typeof widgetBurstRateLimiter
+	readonly steadyRateLimiter?: typeof widgetSteadyRateLimiter
+}
+
+export function createWidgetBookingCreateRoutes(deps: WidgetBookingCreateRoutesDeps) {
+	const burst = deps.burstRateLimiter ?? widgetBurstRateLimiter
+	const steady = deps.steadyRateLimiter ?? widgetSteadyRateLimiter
+
 	const app = new Hono<AppEnv>()
-		// CORS — widgets embedded на любом origin; POST allowed
 		.use(
 			'*',
 			cors({
@@ -122,7 +85,6 @@ export function createWidgetBookingCreateRoutes(deps: {
 				maxAge: 86400,
 			}),
 		)
-		// Strict CSP + nosniff + Referrer
 		.use('*', async (c, next) => {
 			await next()
 			c.header('Content-Security-Policy', WIDGET_CSP_VALUE)
@@ -131,16 +93,17 @@ export function createWidgetBookingCreateRoutes(deps: {
 		})
 		.post(
 			'/:tenantSlug/booking',
+			burst,
+			steady,
 			widgetTenantResolverMiddleware(),
 			deps.idempotency,
-			zValidator('json', bookingPostBody),
+			zValidator('json', widgetBookingCommitWireInputSchema),
 			async (c) => {
 				const slug = c.req.param('tenantSlug')
 				const body = c.req.valid('json')
 
 				// Extract IP + UA для consentLog audit-trail (152-ФЗ ст. 22.1).
-				// Hono CFs may set forwarded headers; behind YC ALB the
-				// X-Forwarded-For leftmost IP is the client.
+				// Behind YC ALB: leftmost X-Forwarded-For = client; fallback chain.
 				const forwardedFor = c.req.header('x-forwarded-for')
 				const ipAddress =
 					(forwardedFor ? forwardedFor.split(',')[0]?.trim() : null) ??

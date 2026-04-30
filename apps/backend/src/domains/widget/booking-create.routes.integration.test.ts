@@ -40,6 +40,7 @@ import { onError } from '../../errors/on-error.ts'
 import type { AppEnv } from '../../factory.ts'
 import { createIdempotencyRepo } from '../../middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from '../../middleware/idempotency.ts'
+import { noopRateLimiter } from '../../middleware/widget-rate-limit.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import { createAvailabilityFactory } from '../availability/availability.factory.ts'
 import { createBookingFactory } from '../booking/booking.factory.ts'
@@ -95,6 +96,10 @@ describe('widget booking-create routes — HTTP', { tags: ['db'], timeout: 90_00
 			createWidgetBookingCreateRoutes({
 				service: widgetBookingCreateFactory.service,
 				idempotency: idempotencyMiddleware(idempotencyRepo),
+				// Disable rate-limit для BCR1-14 (these test schema/validation/idempotency,
+				// not anti-abuse). Dedicated 429 tests live в booking-create.rate-limit.test.ts.
+				burstRateLimiter: noopRateLimiter,
+				steadyRateLimiter: noopRateLimiter,
 			}),
 		)
 		app.onError(onError)
@@ -436,5 +441,130 @@ describe('widget booking-create routes — HTTP', { tags: ['db'], timeout: 90_00
 		})
 		// Either 404 (property not found in tenant B scope) or 409 (stale)
 		expect([404, 409]).toContain(res.status)
+	})
+})
+
+/**
+ * Dedicated 429 path tests (BCR15-17) — full middleware chain с low-cap rate
+ * limiter. Splits из main describe, чтобы не requires real seed (limiter
+ * fires BEFORE tenant-resolver, no DB lookup needed).
+ */
+describe('widget booking-create routes — 429 anti-abuse', { timeout: 30_000 }, () => {
+	test('[BCR15] Burst limit exhausted → 429 + RateLimit headers', async () => {
+		const { makeTestRateLimiter, noopRateLimiter } = await import(
+			'../../middleware/widget-rate-limit.ts'
+		)
+		const lowCapBurst = makeTestRateLimiter({ limit: 2, windowMs: 60_000 })
+
+		// Build minimal route — service / idempotency не reachable до 429 fires.
+		const app = new Hono<AppEnv>().route(
+			'/api/public/widget',
+			createWidgetBookingCreateRoutes({
+				// biome-ignore lint/suspicious/noExplicitAny: service unreachable past 429 — minimal mock OK
+				service: { commit: () => Promise.resolve({}) } as any,
+				// biome-ignore lint/suspicious/noExplicitAny: idempotency unreachable past 429 — pass-through OK
+				idempotency: (async (_c: unknown, next: () => Promise<void>) => next()) as any,
+				burstRateLimiter: lowCapBurst,
+				steadyRateLimiter: noopRateLimiter,
+			}),
+		)
+		app.onError(onError)
+
+		const headers = { 'x-forwarded-for': '203.0.113.99', 'Content-Type': 'application/json' }
+		const r1 = await app.request('/api/public/widget/any-slug/booking', {
+			method: 'POST',
+			body: '{}',
+			headers,
+		})
+		const r2 = await app.request('/api/public/widget/any-slug/booking', {
+			method: 'POST',
+			body: '{}',
+			headers,
+		})
+		const r3 = await app.request('/api/public/widget/any-slug/booking', {
+			method: 'POST',
+			body: '{}',
+			headers,
+		})
+
+		// First two pass burst (then 400/422 from validator since body invalid; OK).
+		expect([200, 400, 404, 422]).toContain(r1.status)
+		expect([200, 400, 404, 422]).toContain(r2.status)
+		// Third = 429 — rate-limit BEFORE validator
+		expect(r3.status).toBe(429)
+
+		const body = (await r3.json()) as { error: { code: string; message: string } }
+		expect(body.error.code).toBe('RATE_LIMITED')
+		expect(body.error.message).toMatch(/Слишком много запросов/)
+
+		const rl = r3.headers.get('RateLimit')
+		expect(rl).toMatch(/limit=2/)
+		expect(rl).toMatch(/remaining=0/)
+	})
+
+	test('[BCR16] Different IPs do NOT share rate-limit bucket', async () => {
+		const { makeTestRateLimiter, noopRateLimiter } = await import(
+			'../../middleware/widget-rate-limit.ts'
+		)
+		const lowCapBurst = makeTestRateLimiter({ limit: 1, windowMs: 60_000 })
+		const app = new Hono<AppEnv>().route(
+			'/api/public/widget',
+			createWidgetBookingCreateRoutes({
+				// biome-ignore lint/suspicious/noExplicitAny: minimal stub
+				service: { commit: () => Promise.resolve({}) } as any,
+				// biome-ignore lint/suspicious/noExplicitAny: pass-through
+				idempotency: (async (_c: unknown, next: () => Promise<void>) => next()) as any,
+				burstRateLimiter: lowCapBurst,
+				steadyRateLimiter: noopRateLimiter,
+			}),
+		)
+		app.onError(onError)
+
+		const r1 = await app.request('/api/public/widget/any-slug/booking', {
+			method: 'POST',
+			body: '{}',
+			headers: { 'x-forwarded-for': '203.0.113.50', 'Content-Type': 'application/json' },
+		})
+		const r2 = await app.request('/api/public/widget/any-slug/booking', {
+			method: 'POST',
+			body: '{}',
+			headers: { 'x-forwarded-for': '203.0.113.51', 'Content-Type': 'application/json' },
+		})
+		// Both clients pass — separate buckets, independent counters
+		expect([200, 400, 404, 422]).toContain(r1.status)
+		expect([200, 400, 404, 422]).toContain(r2.status)
+	})
+
+	test('[BCR17] Different slugs (same IP) do NOT share rate-limit bucket', async () => {
+		const { makeTestRateLimiter, noopRateLimiter } = await import(
+			'../../middleware/widget-rate-limit.ts'
+		)
+		const lowCapBurst = makeTestRateLimiter({ limit: 1, windowMs: 60_000 })
+		const app = new Hono<AppEnv>().route(
+			'/api/public/widget',
+			createWidgetBookingCreateRoutes({
+				// biome-ignore lint/suspicious/noExplicitAny: minimal stub
+				service: { commit: () => Promise.resolve({}) } as any,
+				// biome-ignore lint/suspicious/noExplicitAny: pass-through
+				idempotency: (async (_c: unknown, next: () => Promise<void>) => next()) as any,
+				burstRateLimiter: lowCapBurst,
+				steadyRateLimiter: noopRateLimiter,
+			}),
+		)
+		app.onError(onError)
+
+		const headers = { 'x-forwarded-for': '203.0.113.60', 'Content-Type': 'application/json' }
+		const r1 = await app.request('/api/public/widget/slug-one/booking', {
+			method: 'POST',
+			body: '{}',
+			headers,
+		})
+		const r2 = await app.request('/api/public/widget/slug-two/booking', {
+			method: 'POST',
+			body: '{}',
+			headers,
+		})
+		expect([200, 400, 404, 422]).toContain(r1.status)
+		expect([200, 400, 404, 422]).toContain(r2.status)
 	})
 })

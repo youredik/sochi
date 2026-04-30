@@ -31,7 +31,16 @@
  *   code changes. This service composes services (not provider-specific).
  */
 
-import { newId, type PaymentMethod, type PaymentStatus } from '@horeca/shared'
+import {
+	newId,
+	type PaymentStatus,
+	type WidgetAddonSelection,
+	type WidgetBookingCommitResult,
+	type WidgetConsentFlags,
+	type WidgetConsentSnapshot,
+	type WidgetGuestInput,
+	type WidgetPaymentMethod,
+} from '@horeca/shared'
 import { sql as defaultSql, type sql as SQL } from '../../db/index.ts'
 import {
 	StaleAvailabilityError,
@@ -46,37 +55,20 @@ import type { WidgetService } from './widget.service.ts'
 
 type SqlInstance = typeof SQL
 
-/** Selected addon cart entry from Screen 2 (Extras). */
-export interface WidgetAddonSelection {
-	readonly addonId: string
-	readonly quantity: number
+/** Re-export wire types — service consumers import from one place. */
+export type {
+	WidgetAddonSelection,
+	WidgetConsentFlags,
+	WidgetConsentSnapshot,
+	WidgetGuestInput,
+	WidgetPaymentMethod,
 }
 
-/** Guest details collected on Screen 3 form. */
-export interface WidgetGuestInput {
-	readonly firstName: string
-	readonly lastName: string
-	readonly middleName?: string | null
-	readonly email: string
-	readonly phone: string
-	readonly citizenship: string
-	readonly countryOfResidence?: string | null
-	readonly specialRequests?: string | null
-}
-
-/** Consent flags from Screen 3 consent block. */
-export interface WidgetConsentFlags {
-	readonly acceptedDpa: boolean
-	readonly acceptedMarketing: boolean
-}
-
-/** Static consent text + version captured at booking commit time. */
-export interface WidgetConsentSnapshot {
-	readonly dpaText: string
-	readonly marketingText: string
-	readonly version: string
-}
-
+/**
+ * Service-internal input — extends shared wire input с server-side fields
+ * (tenantId resolved by middleware, IP/UA/idempotency from request headers).
+ * Wire schema lives в `@horeca/shared/widget.ts` — single source of truth.
+ */
 export interface WidgetBookingCreateInput {
 	readonly tenantId: string
 	readonly tenantSlug: string
@@ -92,20 +84,23 @@ export interface WidgetBookingCreateInput {
 	readonly guest: WidgetGuestInput
 	readonly consents: WidgetConsentFlags
 	readonly consentSnapshot: WidgetConsentSnapshot
-	readonly paymentMethod: PaymentMethod
+	readonly paymentMethod: WidgetPaymentMethod
 	readonly ipAddress: string
 	readonly userAgent: string | null
 	readonly idempotencyKey: string
 }
 
-export interface WidgetBookingCreateResult {
-	readonly bookingId: string
-	readonly guestId: string
-	readonly paymentId: string
+/**
+ * Service result — wider PaymentStatus enum than wire result (which restricts
+ * via Zod schema). Service returns full payment domain status; route serialises
+ * через shared `widgetBookingCommitResultSchema`.
+ *
+ * Re-exporting wire result type для consumers — same shape, only `paymentStatus`
+ * type widens here.
+ */
+export interface WidgetBookingCreateResult
+	extends Omit<WidgetBookingCommitResult, 'paymentStatus'> {
 	readonly paymentStatus: PaymentStatus
-	/** Provider-issued confirmation token (Stub: pseudo-token; Live: real ЮKassa token). */
-	readonly confirmationToken: string | null
-	readonly totalKopecks: number
 }
 
 export const WIDGET_ACTOR_USER_ID = 'system:public_widget'
