@@ -1,0 +1,81 @@
+name: Post-push full suite (async)
+
+# 2026 canon per `feedback_pre_push_changed_strategy.md`: solo-on-main
+# push fast (≤30s pre-push), validate async после push на self-hosted
+# runner на dev MacBook. Red notify → `git revert HEAD && git push`.
+#
+# Why self-hosted vs GitHub-hosted:
+# - free для private repos (no GH minutes)
+# - cache-warm (node_modules, YDB Docker, Playwright browsers уже installed)
+# - macOS-native osascript notifications для immediate feedback
+# - typically ~3-5x faster чем GitHub-hosted из-за cache locality
+#
+# Setup steps (manual, one-time):
+# 1. GitHub repo → Settings → Actions → Runners → New self-hosted runner
+# 2. Follow macOS instructions (~/actions-runner/), install как launchd
+#    service: `cd ~/actions-runner && ./svc.sh install && ./svc.sh start`
+# 3. Verify: `git push` некоторого commit → workflow appears в Actions tab
+#
+# Until self-hosted runner setup'нется — этот workflow пропускается тихо
+# (no runner registered → workflow stays queued → expires). Pre-push
+# vitest-changed остаётся primary safety net.
+
+on:
+  push:
+    branches: [main]
+
+# Cancel previous in-progress runs если new push приземлился
+concurrency:
+  group: post-push-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-suite:
+    runs-on: self-hosted
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify Docker stack running
+        run: |
+          docker compose ps --status running --quiet ydb minio mailpit | wc -l | grep -q 3 || {
+            echo "::error::Docker stack not running. Start с pnpm infra:up"
+            exit 1
+          }
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Full test suite (4252 cases)
+        run: pnpm test:full
+        env:
+          # Используем sochi unique ports per port allocation canon
+          PORT: 8787
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Smoke (in-process E2E)
+        run: pnpm smoke
+
+      - name: Playwright E2E + axe a11y matrix
+        run: pnpm e2e:smoke
+
+      - name: Coverage report (informational)
+        run: pnpm coverage
+        continue-on-error: true
+
+      - name: Notify on failure (macOS)
+        if: failure()
+        run: |
+          osascript -e 'display notification "main RED — review or revert" with title "Sochi CI" sound name "Sosumi"'
+          echo "::error::Quick recovery: git revert HEAD && git push"
+
+      - name: Notify on success (macOS)
+        if: success()
+        run: |
+          osascript -e 'display notification "main GREEN" with title "Sochi CI" sound name "Glass"'
