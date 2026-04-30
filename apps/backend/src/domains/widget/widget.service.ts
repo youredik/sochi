@@ -99,7 +99,18 @@ function publicAddonToWire(a: PublicAddon): PublicWidgetAddon {
 	}
 }
 
-export class TenantNotFoundError extends Error {
+import { DomainError } from '../../errors/domain.ts'
+
+/**
+ * Widget tenant slug не зарегистрирован в `organization` table. Both legacy
+ * (try-catch в widget.routes.ts) AND modern (onError → http-mapping `NOT_FOUND` → 404)
+ * pathways supported. Per `feedback_engineering_philosophy.md` (по пути
+ * совершенствуем) refactored from `Error` → `DomainError` 2026-04-30 для
+ * consistent error handling across widget routes (booking-create.routes.ts
+ * relies on auto-404 via onError + http-mapping).
+ */
+export class TenantNotFoundError extends DomainError {
+	readonly code = 'NOT_FOUND'
 	readonly slug: string
 	constructor(slug: string) {
 		super(`Public widget tenant not found: '${slug}'`)
@@ -108,7 +119,8 @@ export class TenantNotFoundError extends Error {
 	}
 }
 
-export class PublicPropertyNotFoundError extends Error {
+export class PublicPropertyNotFoundError extends DomainError {
+	readonly code = 'NOT_FOUND'
 	readonly tenantSlug: string
 	readonly propertyId: string
 	constructor(tenantSlug: string, propertyId: string) {

@@ -193,10 +193,13 @@ export function createWidgetBookingCreateService(deps: WidgetBookingCreateServic
 			// 4. Create guest с placeholder document fields (D9 path B).
 			// M8.A.6 magic-link guest portal completes documentType + documentNumber
 			// via existing guest patch flow before check-in.
-			const guestId = newId('guest')
-			const placeholderDocNumber = `pending_${guestId}`
+			//
+			// Pre-generate placeholder docNumber using ULID-style nonce (NOT
+			// guest.id, which is generated server-side во время repo.create).
+			// `pending_w_<26-char>` shape filterable as widget-origin via prefix.
+			const placeholderDocNumber = `pending_w_${newId('guest').replace(/^gst_/, '')}`
 
-			await deps.guestService.create(input.tenantId, {
+			const guest = await deps.guestService.create(input.tenantId, {
 				lastName: input.guest.lastName,
 				firstName: input.guest.firstName,
 				middleName: input.guest.middleName ?? null,
@@ -218,6 +221,8 @@ export function createWidgetBookingCreateService(deps: WidgetBookingCreateServic
 				arrivalDate: null,
 				stayUntil: null,
 			})
+			// Use REAL guest.id from server-generated row (NOT pre-generated nonce).
+			const guestId = guest.id
 
 			// 5. Record consents (152-ФЗ obligated, 38-ФЗ optional).
 			// Per `feedback_behaviour_faithful_mock_canon.md`: real persistence даже

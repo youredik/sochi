@@ -490,12 +490,12 @@ describe('widget booking-create service', () => {
 		expect((guestInput as { documentType: string }).documentType).toBe('pending')
 	})
 
-	test('[BC12] D9 placeholder — guest.create documentNumber starts with "pending_"', async () => {
+	test('[BC12] D9 placeholder — guest.create documentNumber starts with "pending_w_"', async () => {
 		const { deps, mocks } = buildDeps()
 		const service = createWidgetBookingCreateService(deps)
 		await service.commit(buildInput())
 		const [, guestInput] = mocks.guestCreate.mock.calls[0] ?? []
-		expect((guestInput as { documentNumber: string }).documentNumber).toMatch(/^pending_gst_/)
+		expect((guestInput as { documentNumber: string }).documentNumber).toMatch(/^pending_w_/)
 	})
 
 	test('[BC13] Empty firstName → WidgetGuestInputError', async () => {
@@ -583,7 +583,7 @@ describe('widget booking-create service', () => {
 			bookingInput as { guestSnapshot: { documentType: string; documentNumber: string } }
 		).guestSnapshot
 		expect(snapshot.documentType).toBe('pending')
-		expect(snapshot.documentNumber).toMatch(/^pending_gst_/)
+		expect(snapshot.documentNumber).toMatch(/^pending_w_/)
 	})
 
 	test('[BC24] payment amountMinor === expectedTotalKopecks (BigInt conversion)', async () => {
