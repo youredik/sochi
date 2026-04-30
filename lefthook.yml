@@ -2,7 +2,7 @@
 # automated gates — they MUST catch regressions before push.
 #
 # pre-commit: fast static checks (no DB), parallel where safe.
-# pre-push:   test suite (requires local YDB), runs once per push.
+# pre-push:   ≤30s гейт per 2026 senior research (`feedback_pre_push_changed_strategy.md`).
 
 pre-commit:
   parallel: true
@@ -26,32 +26,53 @@ pre-commit:
       glob: "*.{ts,tsx}"
       run: pnpm depcruise
 
-# pre-push gates all run in sequence. Any failure blocks the push — this is
-# our only safety net while GitHub CI is disabled.
-#   tests  — full vitest suite (unit + integration, 258+ against real YDB)
-#   build  — prod bundle (frontend vite + shared tsc), catches type-safe
-#            regressions that dev-mode tsx silently papers over
-#   smoke  — end-to-end HTTP scenario (auth → domain → booking lifecycle →
-#            CDC → activity → tourism tax report → cross-tenant adversarial →
-#            overbooking race), validates the wired production code path
+# pre-push: ≤30s gate (was ~250s sequential). Industry canon (pkgpulse 2026-03-09
+# + lefthook 2.1.6 docs 2026-04-16): pre-push должен быть FAST + cheap; full
+# тестовая авторитетность переезжает в CI или milestone-close manual run.
+# Прежний sequential `test:serial` ~226s стал бутылочным горлышком (recurring
+# 2026-04-30 incident: 4 неудачных push attempt'а на port-conflict → ~20 мин CTR).
+#
+# Strategy:
+# 1. parallel: true — все hooks run concurrently
+# 2. dev-doctor — port ownership pre-flight (cwd-aware, cross-project boundary
+#    с stankoff-v2 per `project_inter_project_port_allocation.md`)
+# 3. tests-changed — vitest --changed origin/main (only files affected by diff)
+# 4. e2e-smoke с glob — runs только когда frontend src changed
+# 5. build + smoke остаются (они уже быстрые ~7s)
+#
+# Escape hatches (manual run before milestone-close push):
+#   `pnpm test:full`  — full test:serial 4252 cases (~226s)
+#   `pnpm e2e`        — full Playwright suite (~45s)
+# Friday hygiene: run `pnpm test:full` weekly to catch drift `--changed`
+# пропустил (vitest monorepo edge cases — issues #8654, #1113).
 pre-push:
+  parallel: true
   jobs:
-    - name: tests
-      # `test:serial` (vitest run --no-file-parallelism) — backend integration
-      # tests share local YDB; parallel file workers occasionally exhaust the
-      # docker container's connection pool and flake the gate (different tests
-      # fail each run, all passing solo). Serial run = ~90s instead of ~25s but
-      # 100% deterministic. `pnpm test` (parallel) stays for fast dev iteration.
-      run: pnpm test:serial
+    - name: dev-doctor
+      # Port ownership + /health marker check (per `feedback_no_disrupt_other_dev.md`).
+      # ~2s. Fails fast если 8787/5273 hijacked другим проектом — спасает
+      # от 5-минутного e2e-smoke на чужом backend.
+      run: pnpm doctor
+
+    - name: tests-changed
+      # Vitest --changed origin/main — runs тесты только для files affected
+      # by diff. Empirical: typical change set 50-200 tests → ~15-40s
+      # (vs 226s full). Risk: monorepo edge case (vitest #8654, #1113)
+      # — milestone-close руками `pnpm test:full`.
+      run: pnpm vitest run --changed origin/main --no-file-parallelism
+
     - name: build
       run: pnpm build
+
     - name: smoke
       run: pnpm smoke
+
     - name: e2e-smoke
-      # Playwright full suite (all .spec.ts files via chromium project).
-      # Covers: auth adversarial, wizard flow, reservation grid (keyboard +
-      # read), booking create + edit state-machine, cross-tenant probes,
-      # and @axe-core/playwright WCAG 2.2 AA gate (grid-a11y.spec.ts —
-      # ANY axe violation blocks the push, empirical compliance proof).
-      # Full run ~45s with reused dev servers.
+      # Glob filter: e2e только если frontend src / public-widget / e2e specs
+      # changed. Если backend-only diff — e2e skip'ается (~14s saved).
+      glob:
+        - "apps/frontend/src/**/*.{ts,tsx,css}"
+        - "apps/frontend/index.html"
+        - "tests/e2e/**/*.{ts,spec.ts}"
+        - "playwright.config.ts"
       run: pnpm e2e:smoke
