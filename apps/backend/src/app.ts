@@ -522,10 +522,22 @@ const routes = app
 	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
 	.route('/api/admin', createAdminNotificationsRoutes(notificationFactory.service))
 	.get('/health', (c) =>
+		// `service: 'sochi-horeca'` = canonical marker per
+		// `feedback_no_disrupt_other_dev.md` + symmetric boundary с stankoff-v2
+		// (`project_inter_project_port_allocation.md`). Test harnesses + cross-
+		// project tooling verify this marker before reusing port — protects от
+		// accidentally hitting другой dev server на shared host.
+		//
+		// `commit` поле (опциональное, env-driven) — позволяет cross-project
+		// agents distinguish running revision без git. Source: `GIT_COMMIT_SHA`
+		// env var (set by deploy pipeline / CI; locally undefined = dev build).
 		c.json(
 			{
 				status: 'ok' as const,
-				service: 'horeca-backend',
+				service: 'sochi-horeca' as const,
+				project: 'horeca-backend',
+				version: '0.0.1',
+				commit: process.env.GIT_COMMIT_SHA ?? 'dev',
 				time: new Date().toISOString(),
 			},
 			200,
