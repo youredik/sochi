@@ -64,7 +64,7 @@
 | File | Purpose |
 |---|---|
 | `db/migrations/0046_magic_link_token.sql` | NEW table — per-tenant magic-link tokens с `consumed_at` для атомарной single-use enforcement |
-| `lib/magic-link/secret.ts` | per-tenant HS256 secret resolver (Phase 1: column в `tenant.magicLinkSecret`; Phase 2: Lockbox carry-forward) |
+| `lib/magic-link/secret.ts` | per-tenant HS256 secret resolver (Phase 1: column в `organizationProfile.magicLinkSecret` с lazy back-fill для existing tenants; Phase 2: Lockbox carry-forward) |
 | `lib/magic-link/jwt.ts` | jose 6.2.3 thin wrapper — `signMagicLinkJwt()` + `verifyMagicLinkJwt()` с `crypto.timingSafeEqual` for HMAC inside jose |
 | `domains/widget/magic-link.service.ts` | `issue(claims, scope, ttl)` / `verify(jwt)` (read-only, returns claims) / `consume(jti)` (atomic UPDATE WHERE consumed_at IS NULL → 410 Gone if zero rows) |
 | `domains/widget/booking-find.routes.ts` | POST `/api/public/widget/{slug}/booking/find` (timing-safe — always 200 OK + Promise.allSettled padding) — issues magic-link + dispatches email |
@@ -99,12 +99,12 @@
 | **D1** | Magic-link single-use enforcement | **Two-step GET-render → POST-consume** для mutate (cancel) + `allowedAttempts: 5` для view-only voucher download | etodd.io 2026-03-22 + R3 verified: industry canon non-uniform (Stytch=device intel, Clerk=same-device, BetterAuth=`allowedAttempts`). У нас нет device-intel infra → two-step + multi-attempt safest. POST never prefetched by Apple MPP / Slack unfurl / Outlook SafeLinks. |
 | **D2** | JWT TTL | **mutate (cancel)=15min** + **view (voucher)=24h** + cookie session = 7 days | Industry consensus 2026-04: 10-15min mutate; 24h view = trade-off (longer = email scanner replay window, но guest UX > security за view-only data). NEVER 7d JWT. |
 | **D3** | Cookie scheme | **`__Host-guest_session`** — Path=/, Secure, HttpOnly, **SameSite=Lax on first set → Strict-on-next-request** rotation | R3 verified: Strict drops cookie на cross-site magic-link click (email→browser nav). Lax-then-Strict pattern: set Lax in /consume response, on next authenticated request rotate к Strict. `__Host-` prefix forbids `Domain=` → per-host isolation, defends subdomain XSS bypass. |
-| **D4** | Hono version pin | **`hono >=4.12.16` exact** | R3 verified: 5 cookie/jsx/bodyLimit GHSAs April 2026 (GHSA-9vqf 2026-04-30 + GHSA-69xw 2026-04-30 + GHSA-458j 2026-04-15 + GHSA-r5rp 2026-04-07 + GHSA-26pp 2026-04-07). Currently installed 4.12.15 → bump same commit. |
+| **D4** | Hono version pin | **`hono ^4.12.16` (caret accepted)** | R3 verified: 5 cookie/jsx/bodyLimit GHSAs April 2026 (GHSA-9vqf 2026-04-30 + GHSA-69xw 2026-04-30 + GHSA-458j 2026-04-15 + GHSA-r5rp 2026-04-07 + GHSA-26pp 2026-04-07). Caret `^4.12.16` is functionally equivalent для security purposes (≥4.12.16 < 5.0.0 — все patches present). Originally drafted as EXACT pin — caret accepted post-install для consistency с rest of project. Currently installed 4.12.15 → bump same commit (4.12.16). |
 | **D5** | Token in URL | `?token=<jwt>` на GET render → 302 → POST consume → Set-Cookie + 302 → `/booking/guest-portal/{id}` | OWASP risk mitigated by: (a) `Cache-Control: no-store` на render endpoint, (b) `Referrer-Policy: no-referrer` на consume redirect, (c) NGINX/YC ALB log scrubber strips `?token=*` (mark in `nginx.conf` carry-forward; M9.widget.5 ship clean code path) |
 | **D6** | Timing-safe find-by-ref-email | `Promise.allSettled([dbQuery, sleep(800)]) + Math.max(0, 800-elapsed) padding` + always 200 OK + same body shape | Cloudflare Workers canon + Laravel timeboxing pattern. YDB query latency varies (cold tablet 200ms / warm 5ms) — fixed setTimeout не constant-time. |
 | **D7** | Rate-limit key | `(emailNormalized, bookingRef)` tuple — 5 req/15min — extends existing `widget-rate-limit.ts` | Mobile NAT (МТС/Билайн) = 1000+ subscribers за 1 IP → IP-only blocking false-positives legitimate guests. Tuple key requires attacker to know valid (email, ref) combo. |
 | **D8** | .ics library | **`ical-generator@10.2.0`** + `@touch4it/ical-timezones` для VTIMEZONE | ics@3.12.0 NO native VTIMEZONE → Outlook strict-mode break. ical-generator native Europe/Moscow + Luxon-friendly + 2026-04-17 release active. |
-| **D9** | Email template engine | **`react-email@^6.0.5`** unified package | Latest 2026-04-28 (5 patches in 13 days = active). Tailwind v4 + dark-mode + React 19.2. Deprecates `@react-email/components` v0.x. Plain-text fallback obligatory. |
+| **D9** | Email template engine | **`react-email@^6.0.5`** unified package + `@react-email/render@2.0.8` `toPlainText()` separate utility | Latest 2026-04-28 (5 patches in 13 days = active). Tailwind v4 + dark-mode + React 19.2. Deprecates `@react-email/components` v0.x. **Critical R3 correction (2026-04-30)**: `render(component, { plainText: true })` is **DEPRECATED** since `@react-email/render@1.2.0` (Aug 2025); canonical 2026 = separate `toPlainText(component)` utility. |
 | **D10** | PDF voucher rendering | **Defer M11+** | `@react-pdf/renderer` persistent memory leak issues #2217 #3051 unresolved 2026-04-30. M9.widget.5 ships voucher as HTML email body + .ics attachment ONLY. Guest portal «Download voucher» button → М11 async-worker pattern. |
 | **D11** | RU compliance — voucher email content | **Strict transactional** — NO cross-sell, NO marketing footer, NO tracking pixel, NO unsubscribe link | 38-ФЗ ст. 18 (ред. 2025-10-27): cross-sell («Часто берут также») = реклама → требует prior consent. Pure transactional carve-out: bookingRef + dates + guest + sum + magic-link button + property contacts + legal footer (ИНН/ОГРН тенанта). |
 | **D12** | ПП РФ 1912 cancel boundary | `now < endOfDay(checkInDate, 'Europe/Moscow')` → 100% refund; else (no-show / day-of cancel) → max 1-night charge | Verbatim п. 16: «до дня заезда» = до 23:59 предыдущих суток (calendar boundary). NOT 18:00 hotel-policy time, NOT check-in 14:00 time. |
@@ -119,7 +119,8 @@
 | `jose` | **6.2.3** | 2026-04-27 | ✅ pin | HS256 + crypto.timingSafeEqual internal |
 | `hono` | **>=4.12.16 EXACT** | 2026-04-30 | ⚠️ BUMP from 4.12.15 | 5 GHSAs Apr 2026 inc. cookie + bodyLimit + jsx |
 | `ical-generator` | **10.2.0** | 2026-04-17 | ✅ adopt | native VTIMEZONE Europe/Moscow + Luxon-friendly |
-| `@touch4it/ical-timezones` | latest | TBD verify in §16 | ✅ adopt (companion для ical-generator VTIMEZONE) | |
+| ~~`@touch4it/ical-timezones`~~ | 1.9.0 | 2025-10-22 (npm); code frozen 2023-01 | ❌ REJECT — STALE 2.5 years (R3 verified 2026-04-30) | tzdb code stale; no fresher commits since 2023 |
+| `timezones-ical-library` | **2.2.0** | 2026-04-29 | ✅ adopt — companion для ical-generator VTIMEZONE | active maintainer (add2cal — Add to Calendar Button ecosystem); PR #94 merged 2026-04-29 |
 | `node-ical` | **0.26.0** | 2026-04-03 | ✅ devDep | round-trip parser CI tests |
 | `react-email` | **^6.0.5** | 2026-04-28 | ✅ adopt (unified package, deprecates `@react-email/components` v0.x) | |
 | `@aws-sdk/client-sesv2` | **3.1040.0** | 2026-04-30 | ✅ bump from 3.1039.0 (already in project) | SES v2 native Attachments API (gained 2025-04-04) |
@@ -152,43 +153,44 @@ REJECTED:
 
 ---
 
-## §7. Migration 0046 schema
+## §7. Migration 0045 schema
+
+**Correction 2026-04-30 (post-canon empirical recon):** plan canon initially numbered 0046, но latest existing migration = 0044 (M9.widget.4 reused existing `consentLog` from `0001_init.sql:431`, no new migration committed). Actual migration = **0045**.
+
+**Correction 2026-04-30:** plan initially referenced `tenant.magicLinkSecret` — actual schema: Better Auth `organization` table (id/name/slug/logo/metadata/createdAt) + HoReCa-specific `organizationProfile` (1:1 с organization.id, holds inn/taxForm/plan/dpaVersion/etc). Per-tenant config column → `ALTER TABLE organizationProfile`.
 
 ```sql
--- 0046_magic_link_token.sql — M9.widget.5 — single-use magic-link tokens
--- Stateful single-use enforcement (atomic UPDATE WHERE consumed_at IS NULL).
--- Per-tenant — tenant.magicLinkSecret signs JWT, table records consumption.
+-- 0045_magic_link_token.sql — M9.widget.5 — single-use magic-link tokens
+-- Stateful single-use enforcement (atomic UPDATE WHERE consumedAt IS NULL).
+-- Per-tenant — organizationProfile.magicLinkSecret signs JWT, table records consumption.
 
-CREATE TABLE magicLinkToken (
-    tenantId Utf8 NOT NULL,
-    jti Utf8 NOT NULL,                         -- UUID v7 (sortable for index pruning)
-    bookingId Utf8 NOT NULL,                   -- subject of token
-    scope Utf8 NOT NULL,                       -- 'view' | 'mutate'
-    issuedAt Timestamp NOT NULL,
-    expiresAt Timestamp NOT NULL,
-    consumedAt Timestamp,                      -- NULL = active; non-NULL = consumed
-    consumedFromIp Utf8,                       -- audit
-    consumedFromUa Utf8,                       -- audit
-    issuedFromIp Utf8,                         -- audit (for «consumption from different IP» admin alert)
-    attemptsRemaining Int32 NOT NULL,          -- D1 view tokens=5; mutate tokens=1
+CREATE TABLE IF NOT EXISTS magicLinkToken (
+    tenantId            Utf8 NOT NULL,
+    jti                 Utf8 NOT NULL,            -- UUID v7 (sortable for index pruning)
+    bookingId           Utf8 NOT NULL,            -- subject of token
+    scope               Utf8 NOT NULL,            -- 'view' | 'mutate'
+    issuedAt            Timestamp NOT NULL,
+    expiresAt           Timestamp NOT NULL,
+    consumedAt          Timestamp,                -- NULL = active; non-NULL = consumed
+    consumedFromIp      Utf8,                     -- audit (152-ФЗ ст. 22.1)
+    consumedFromUa      Utf8,                     -- audit
+    issuedFromIp        Utf8,                     -- audit (для «consume from different IP» admin alert)
+    attemptsRemaining   Int32 NOT NULL,           -- D1: view=5, mutate=1
     PRIMARY KEY (tenantId, jti),
-    INDEX idx_booking GLOBAL ON (tenantId, bookingId),
-    INDEX idx_expires GLOBAL ON (tenantId, expiresAt)  -- для cleanup cron
+    INDEX idxMagicLinkBooking GLOBAL SYNC ON (tenantId, bookingId),
+    INDEX idxMagicLinkExpires GLOBAL SYNC ON (tenantId, expiresAt)
 );
 
--- Retention: TTL 30 days post-expiry (defensible audit window per `feedback_pre_done_audit.md` 152-ФЗ ст. 22.1).
--- Cleanup cron: M11 — delete WHERE expiresAt < CurrentUtcTimestamp() - Interval("PT30D")
+-- Retention: 30 days post-expiry (audit window). Cleanup cron M11+.
+-- Per-tenant magic-link signing secret. 32-byte random, base64-encoded.
+-- Phase 1: column-stored on organizationProfile (Phase 2 Track B5: Lockbox).
+ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 ```
 
-Add column to existing `tenant` table:
-
-```sql
--- 0046_tenant_magic_link_secret.sql — M9.widget.5 — per-tenant magic-link signing secret
-ALTER TABLE tenant ADD COLUMN magicLinkSecret Utf8;
--- Phase 1: column-stored (32-byte cryptographically random, base64-encoded).
--- Phase 2 (Track B5/Lockbox): reference to Lockbox secret ID, resolved at request time.
--- afterCreateOrganization hook generates random secret on tenant create.
-```
+**Bootstrap для existing tenants** (`organizationProfile.magicLinkSecret = NULL` after migration apply):
+- `lib/magic-link/secret.ts` resolver pattern: `if (profile.magicLinkSecret == null) { generate + UPDATE; return generated; }` — lazy back-fill on first read
+- `afterCreateOrganization` hook (existing pattern в `auth.ts`) extends to populate column on new tenant create
+- Idempotent: concurrent first-read race resolved через `UPDATE WHERE magicLinkSecret IS NULL` semantic (loser overwrite OK — value entropy identical)
 
 ---
 
@@ -300,7 +302,7 @@ E2E (~12) — Playwright + axe-pass 4 themes:
 ## §10. Sub-phase split (golden middle)
 
 ### A3.1 Backend magic-link + .ics (~2 days, ~30 strict + 5 integration)
-1. Migration 0046 (magicLinkToken + tenant.magicLinkSecret) + sql:up smoke
+1. Migration 0045 (magicLinkToken + organizationProfile.magicLinkSecret) + sql:up smoke
 2. `lib/magic-link/secret.ts` + tests
 3. `lib/magic-link/jwt.ts` + tests
 4. `domains/widget/magic-link.service.ts` + tests (atomic consume race + cross-tenant)
@@ -470,6 +472,32 @@ Per user canon «при минимальном сомнении — самый �
 - **Hono advisories verified verbatim** (GHSA-9vqf-7f2p-gf9v + GHSA-69xw-7hcm-h432 — 2026-04-30; GHSA-458j — 2026-04-15; GHSA-r5rp + GHSA-26pp — 2026-04-07). All в 4.12.16 patched.
 - **TanStack Router `_authenticated`** layout-route + `beforeLoad` — current canon 1.169.0.
 - **react-email 6.0.5** safe pin (5 patches in 13 days, all bug-fix tier).
+
+### Iteration 4a — R3 strict freshness round 2 (2026-04-30, after user pushback «без полумер»)
+
+**Triggered**: user pushback «ты уверен что действуешь без полумер?» — original R3 = 1 agent, не canonical 5. Ran 4 additional R3 agents в parallel.
+
+**Critical corrections к baseline plan (post-canon, pre-implementation)**:
+
+1. **`@touch4it/ical-timezones` STALE 2.5 years** (last code commit 2023-01-09; npm 1.9.0 metadata-only republish 2025-10-22). REPLACE с **`timezones-ical-library@2.2.0`** (published 2026-04-29, PR #94 by add2cal team — Add to Calendar Button ecosystem). API: `cal.timezone({ name: 'Europe/Moscow', generator: tz => tzlib_get_ical_block(tz)[0] })`.
+
+2. **`@react-email/render` `{plainText: true}` DEPRECATED since 1.2.0 (Aug 2025)**. Canonical 2026 API = `toPlainText(component)` separate utility. `await render(<Component/>)` returns HTML; `await toPlainText(<Component/>)` returns plain text. Both required для transactional dual-render.
+
+3. **Yandex Postbox endpoint = `postbox.cloud.yandex.net`** (NOT `postbox.yandexcloud.net` per research-cache). Region `ru-central1`. Source: `yandex.cloud/en/docs/postbox/operations/send-email` (revised 2026-02-11, no fresher).
+
+4. **Yandex Postbox docs revision 2026-04-28** (check-domain page) — DKIM Simple = 2 CNAME / Advanced = 1 TXT. NO formal sandbox-vs-prod tier (200/24h soft default, raise via support ticket).
+
+5. **AWS SDK `@aws-sdk/client-sesv2@3.1040.0` (2026-04-30)** — no SESv2-specific changes; `Content.Simple.Attachments` shape stable.
+
+6. **Hono `csrf()` middleware (4.12.16 verbatim from src/middleware/csrf/index.ts)** — gates ONLY form-encoded bodies (`application/x-www-form-urlencoded|multipart/form-data|text/plain`). `application/json` requests **BYPASS csrf()** entirely. **Implication**: для JSON-only widget mutation routes — rely on SameSite=Lax cookie + CORS preflight (browsers reject simple cross-origin JSON).
+
+7. **Hono `setSignedCookie({ prefix: 'host' })` auto-enforces** `path:'/'`, `secure:true`, `domain:undefined` (compile-time `CookieConstraint` type + runtime `generateCookie` line 87-92 in src/utils/cookie.ts patched 2026-04-07 from CVE fork). `getSignedCookie` returns `false` on tampered HMAC, `undefined` on missing, `string` on valid (constant-time via `crypto.subtle.verify`).
+
+8. **TanStack Router `_authenticated` layout-route + `beforeLoad` redirect** verbatim from release 1.169.0 (2026-04-30). Same router instance для public + private split.
+
+9. **Zod 4.4.1 Standard Schema direct `validateSearch`** (no `@tanstack/zod-adapter`) — TanStack Router docs commit `13d314ec` 2026-03-20.
+
+10. **Confirmation page IA canon (R1.5)**: focus h1 + booking-ref large+tabular-nums + Radix Alert role=status email-sent banner + `<dl>` для details (NO `<p>` siblings — M9.widget.2 #12 carry-forward) + Add-to-Calendar disclosure dropdown (Google → Apple → Outlook → .ics → Yahoo; **Yandex Calendar fall-through к .ics download — no public deeplink URL exists 2026-04-30**). RU pluralization three-form ruPlural() для "взрослых". Tone «Вы / Ваш» formal canonical.
 
 ### Iteration 4 — stankoff-v2 cross-check
 - Better Auth `magicLink()` plugin NOT applicable (BA ties magic-link к user account creation; widget guests ≠ user records). Custom flow.

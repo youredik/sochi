@@ -44,6 +44,8 @@ export const ID_PREFIXES = {
 	passportOcrAudit: 'ocra',
 	// M9.5 Phase D — Better Auth passkey plugin (WebAuthn).
 	passkey: 'pk',
+	// M9.widget.5 — magic-link guest portal tokens (single-use via stateful consumedAt).
+	magicLinkToken: 'mlt',
 } as const
 
 export type EntityKind = keyof typeof ID_PREFIXES

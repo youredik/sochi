@@ -44,6 +44,7 @@ export function ChessboardDatePicker({ value, onChange }: Props) {
 				<Calendar
 					mode="single"
 					selected={selected}
+					{...(selected !== undefined && { defaultMonth: selected })}
 					onSelect={(d) => {
 						if (!d) return
 						onChange(toIsoLocal(d))

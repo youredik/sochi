@@ -31,7 +31,7 @@
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"date-fns": "^4.1.0",
-		"hono": "^4.12.15",
+		"hono": "^4.12.16",
 		"libphonenumber-js": "1.12.42",
 		"lucide-react": "^1.11.0",
 		"motion": "^12.38.0",
