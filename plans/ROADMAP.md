@@ -9,7 +9,7 @@
 
 ## Сейчас работаем над
 
-**Track A3 — M9.widget.5 Confirmation** (NEXT). Pre-flight pending — `plans/m9_widget_5_canonical.md` ещё НЕ написан. Первый шаг next-session = full pre-flight (R1+R2+R3+stankoff+npm verify) по pattern'у `m9_widget_4_canonical.md`.
+**Track A3 — M9.widget.5 Confirmation** (IN PROGRESS — pre-flight DONE 2026-04-30). Plan canon: [`plans/m9_widget_5_canonical.md`](m9_widget_5_canonical.md). Memory: `project_m9_widget_5_canonical.md`. R1 (4 agents broad ≥2026-04-30) + R2 adversarial (2 agents — security + RU compliance) + R3 strict freshness (≥2026-04-15) + stankoff cross-check + npm empirical 2026-04-30. **13 decisions + 10 R2 adversarial corrections**: Apple MPP / Slack unfurl prefetch DoS via two-step GET→POST + `allowedAttempts=5` view; `__Host-guest_session` Lax→Strict rotation; Hono `>=4.12.16` EXACT (5 GHSAs Apr 2026); Promise.allSettled + Math.max padding timing-safe; rate-limit tuple `(email, ref)`; ПП-1912 endOfDay(checkInDate, 'Europe/Moscow') boundary; strict transactional email NO cross-sell; PDF voucher defer M11. Sub-phase split: A3.1 backend magic-link+.ics → A3.2 email template+voucher → A3.3 guest portal+cancel → A3.4 frontend (~50 strict + 12 E2E).
 
 **M9.widget.4 (A2 Guest+Pay) DONE 2026-04-30** — `project_m9_widget_4_done.md`. Final origin/main HEAD: **`456a591`**. Sub-phase + post-push infrastructure epic landed (12 commits). Включая:
 - 65 unit + integration tests + 10 E2E + axe 4-theme matrix
@@ -29,7 +29,7 @@
 - `fb0c0b1` — M9.widget.2 senior-pass v3 (Screen 1 Search & Pick closed)
 - `ff62cb2` — M9.widget.3 senior-pass closure (Screen 2 Extras)
 - **`456a591`** — M9.widget.4 closure (Screen 3 Guest+Pay + post-push infra epic)
-- `<TBD>` — M9.widget.5 pre-flight canon (next session first commit)
+- `<TBD>` — M9.widget.5 pre-flight canon (current session first commit, pending)
 
 ---
 
