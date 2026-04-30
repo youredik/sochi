@@ -27,7 +27,7 @@
  */
 
 import { sql } from './index.ts'
-import { dateFromIso, NULL_INT32, toTs } from './ydb-helpers.ts'
+import { dateFromIso, NULL_INT32, NULL_TEXT, toTs } from './ydb-helpers.ts'
 
 const TENANT_ID = 'demo-sochi-sirius'
 const SLUG = 'demo-sirius'
@@ -329,7 +329,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			) VALUES (
 				${TENANT_ID}, ${DEMO_PROPERTY_ID}, ${a.id},
 				${a.code}, ${a.category},
-				${a.nameRu}, ${a.nameEn}, ${a.descRu}, ${null as string | null},
+				${a.nameRu}, ${a.nameEn}, ${a.descRu}, ${NULL_TEXT},
 				${a.pricingUnit}, ${a.priceMicros}, ${'RUB'}, ${2200},
 				${true}, ${false},
 				${'NONE'},

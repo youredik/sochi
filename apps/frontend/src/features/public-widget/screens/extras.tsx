@@ -69,6 +69,14 @@ export function Extras({
 
 	const query = useAddons(tenantSlug, propertyId)
 
+	// `addonsById` memoized — computed BEFORE early returns to preserve hook
+	// order (React rules-of-hooks: «Rendered more hooks than during the previous
+	// render» bug otherwise — caught by E2E senior-pass).
+	const addonsById = useMemo(() => {
+		const list = query.data?.addons ?? []
+		return new Map(list.map((a) => [a.addonId, a]))
+	}, [query.data?.addons])
+
 	// Network / server error fallback (non-404). Check FIRST — иначе query.error
 	// + query.data===undefined уйдёт в loading skeleton навсегда.
 	if (query.error) {
@@ -144,7 +152,8 @@ export function Extras({
 	const hasAddons = addons.length > 0
 
 	// Build line items для sticky-summary только из selected (qty > 0) addons.
-	const addonsById = new Map(addons.map((a) => [a.addonId, a]))
+	// `addonsById` memoized выше (stable — обязательно before early returns
+	// per React rules-of-hooks; senior-pass catch).
 	const lineItems: AddonLineItem[] = []
 	for (const entry of cart) {
 		if (entry.quantity <= 0) continue

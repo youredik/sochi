@@ -23,7 +23,7 @@ A1 done summary (commit pending push):
 - `6ccae91` — M8.A done (миграционный учёт МВД closed)
 - `e5fb3d3` — M9 done (theming/adaptive/PWA/passkey/visual)
 - `fb0c0b1` — M9.widget.2 senior-pass v3 (Screen 1 Search & Pick closed)
-- `<TBD>` — M9.widget.3 Screen 2 Extras (single bundled commit pending push)
+- `db94d7b` — M9.widget.3 Screen 2 Extras (committed, pending push per `feedback_batched_push.md`)
 
 ---
 
