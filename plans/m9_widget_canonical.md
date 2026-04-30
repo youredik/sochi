@@ -863,6 +863,80 @@ These = mandatory legal verify before launching M9.widget.4 (consent block sub-p
 
 **Process correction #14:** per-sub-phase 4-6 раундов research + adversarial verify mandatory perd implementation (not just per-milestone). Plan §3 был short-form taken at face value → ~30 corrections needed. Future M9.widget.4-8 + M10: re-run R2 adversarial pattern before each sub-phase.
 
+### Iteration 13 — M9.widget.4 pre-flight (2026-04-30)
+
+**Triggered by:** beginning M9.widget.4 (Screen 3 Guest+Pay) work. Per process correction #14 — per-sub-phase 4-6 раундов research mandatory before implementation. Output: comprehensive sub-phase canonical plan file `plans/m9_widget_4_canonical.md` (see process correction #15 below).
+
+**Research:** R1 (5 parallel agents) + R2 adversarial (2 agents) + R3 strict-Apr-2026+ (5 agents) + stankoff-v2 cross-check + npm empirical verify. **80+ findings, 50+ corrections к plan §M9.widget.4.**
+
+**Critical reframe (BLOCKING):**
+
+User caught two systemic confusions:
+1. **«Забыл изначальные цели»** — я приготовился к LIVE ЮKassa integration (CDN script, webhook IPs, PCI attestation), хотя M9.widget.4 = Track A2 = demo surface на Stub-провайдере. Track C2 (live integration) = parallel-trackable, не блокер.
+2. **«Мы буквально ничего не должны имитировать»** — я предложил `payment-stub-widget.tsx` как «UI mimicking ЮKassa hosted page card form». Это violation north-star canon: **Mock = полнофункциональный поставщик с canonical interface, НЕ имитация. Same UI работает с обоими (Stub demo + live production). Live-flip = factory binding swap, ZERO domain code changes.**
+
+**New canon (memory):** `feedback_behaviour_faithful_mock_canon.md` — guard rail против recurring confusion. Я уже third recurrence за день — pattern.
+
+**RU legal R3 verbatim (strict Apr 2026+ industry, primary law citations independent of date):**
+
+- ЗоЗПП ст. 16 ч. 3.1 (введ. ФЗ 69-ФЗ от 07.04.2025) opt-in mandate
+- 156-ФЗ от 24.06.2025 separate-document consent (effective 2025-09-01)
+- ПП РФ 1912 от 27.11.2025 effective 01.03.2026 — refund 100% pre-checkin, max 1-night charge no-show, **«невозвратный тариф» eliminated**
+- 425-ФЗ от 28.11.2025 НДС 22% effective 01.01.2026 — vat_code 11/12
+- ст. 418.4 НК РФ туристический налог Сочи база только room
+- 54-ФЗ ст. 4.7 item-level fiscalization (mandatory all sellers с 01.01.2026)
+- 38-ФЗ ст. 5 «недостоверная информация» риск без factual basis (NO «AI/Recommended» badges)
+- 152-ФЗ ст. 22.1 DPO recordkeeping → `consentLog` audit trail mandatory
+
+**Library canon Apr 2026 (npm empirical verified 2026-04-30):**
+
+ACCEPT: `@tanstack/react-form@1.29.1` (2026-04-21) / `zod@4.4.1` (2026-04-29) / `libphonenumber-js@1.12.42` (2026-04-23) / `@aws-sdk/client-sesv2@3.1039.0` (2026-04-29) / `jose@6.2.3` (2026-04-27) / `hono-rate-limiter@0.5.3` (2025-12-29 watch dep)
+
+REJECT: `react-imask@7.6.1` (STALE 23mo + Vite issue #1130 OPEN production-only) / `@react-input/mask@2.0.4` (stale 17mo) / `@tanstack/zod-form-adapter@0.42.1` (ABANDONED — Standard Schema replaces)
+
+**Stankoff-v2 borrow plan (cross-check done):**
+
+- `services/captcha.ts` + `auth/components/captcha-field.tsx` — BORROW AS-IS (production-tested fail-closed) — **defer к Track C2**
+- `middleware/integration-idempotency.ts` — BORROW WITH MODS (drop HMAC, swap PK→`(idempotencyKey, propertyId)`, **24h TTL**)
+- `db/migrations/028-integration-dedupe.sql` — BORROW AS-IS (YDB Utf8 PKs + `WITH (TTL = Interval("PT24H"))`)
+- `features/chat/components/create-channel-dialog.tsx` (TanStack Form) — BORROW WITH MODS (Zod 4 Standard Schema direct, NOT zodValidator adapter)
+- Phone mask / 152-ФЗ consent UI / payment provider — NOT FOUND, greenfield
+
+**Existing project services (NO modifications — widget = thin anonymous wrapper):**
+
+`tenant-resolver.ts` / `widget.service.getAvailability()` / `guest.service.create()` / `booking.service.create()` / `payment.service.createIntent()` / `stub-provider.ts` / payment-factory + CDC consumers (folio_creator / tourism_tax / migration_registration_enqueuer / activity_writer / notification-dispatcher) — all auto-trigger.
+
+**Что widget пишется (gap-list):**
+
+Backend: 0045_consent_log.sql + lib/consent-record.ts + middleware/widget-idempotency.ts + domains/widget/booking-create.{routes,service}.ts + tests
+Frontend: screens/guest-and-pay.tsx + components/{guest-form,consent-block,payment-canonical-widget}.tsx + lib/payment-flow.ts + sub-route + tests
+
+**Sub-phase split:** A2.1 backend (~3 days, ~40 strict + integration) + A2.2 frontend (~2 days, ~30 strict + 10 E2E + axe matrix)
+
+### Process correction #15 — per-sub-phase canonical plan file MANDATORY
+
+**Triggered by:** R1+R2+R3 findings dissolved в conversation memory; user caught me forgetting research conclusions twice. Per-milestone canon (`m9_widget_canonical.md`) + Iteration N self-audit logs не enough для big sub-phases.
+
+**Canon:** Each big sub-phase (M9.widget.4+, M10, M11+) gets own `plans/m9_widget_<N>_canonical.md` file in repo с:
+- Reframed scope (north-star alignment)
+- Research findings (R1+R2+R3+stankoff+npm verify)
+- Decisions table с rationale
+- Library canon (verified versions)
+- Stankoff borrow plan
+- Integration map (что widget hooks вместо переписать)
+- Pre-done audit checklist
+- Risks / honest gaps
+
+Memory pointer (`project_m9_widget_<N>_canonical.md`) indexed via MEMORY.md → loaded каждую сессию.
+
+**Без шага 2 research findings растворяются.**
+
+### Cumulative honest hallucinations / process gaps log: 80+ (was 63 в Iteration 12, +20 caught в Iteration 13 incl. behaviour-faithful Mock recurring confusion)
+
+### Iteration 14+ (carry-forward — будут добавлены при M9.widget.4 implementation)
+
+Каждая `pnpm test:serial` regression / `npm view` drift / live empirical evidence = new iteration entry.
+
 ### Iteration 11+ (carry-forward — будут добавлены при M9.widget.2 execution)
 
 Каждая `pnpm test:serial` regression / `npm view` drift / live empirical evidence = new iteration entry. Memory canon `feedback_no_preexisting.md` + `feedback_empirical_method.md` — never trust stale assumptions. **Process correction priority** для M9.widget.2:

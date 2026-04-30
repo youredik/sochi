@@ -9,21 +9,28 @@
 
 ## Сейчас работаем над
 
-**M9.widget.4 — Screen 3 Guest + Pay** (Track A2). M9.widget.3 closed; ready to schedule.
+**M9.widget.4 — Screen 3 Guest+Pay** (Track A2). Pre-flight DONE — canonical sub-phase plan committed: `plans/m9_widget_4_canonical.md`. Memory pointer `project_m9_widget_4_canonical.md`.
 
-A1 done summary (commit pending push):
-- Backend `listPublicAddons` + `PublicWidgetAddon` wire (priceKopecks number, NOT bigint)
-- 5 Сочи addons in demo seed (Breakfast/Parking/Late-checkout/Transfer/Spa)
-- Frontend `addon-pricing.ts` lib (59 strict tests) + `addon-card.tsx` (19) + `extras.tsx` screen (16) + sticky-summary update (+2 new tests)
-- TanStack Router sub-route `/widget/$tenantSlug_/$propertyId_/extras`
-- 13 E2E + axe matrix (light/dark/mobile/forced-colors)
-- 30 corrections в plan §12 Iteration 12 (Round 2 adversarial caught)
+**Pre-flight summary** (R1+R2+R3+stankoff-v2+npm verify, 80+ findings):
+- **Reframed scope**: demo surface на Stub-провайдере, НЕ live ЮKassa (Track C2 deferred per north-star)
+- **Canonical guard**: behaviour-faithful Mock = полнофункциональный, не имитация (`feedback_behaviour_faithful_mock_canon.md`)
+- **Integration map**: widget = thin anonymous wrapper над existing services (booking/guest/payment/CDC consumers). NO domain rewrite.
+- **8 decisions**: libphonenumber-js / consent modal / Standard Schema direct (NO adapter) / hono-rate-limiter in-memory / Stub card-dependent + tenant outcomeMode / 24h Idempotency-Key TTL
+- **Library canon Apr 2026 verified**: TanStack Form 1.29.1 / Zod 4.4.1 / libphonenumber-js 1.12.42 / jose 6.2.3
+- **5 backend files + 1 migration + 6 frontend files** (full file list в plan canon)
+- **Process correction #15**: per-sub-phase canonical plan file mandatory (этот pattern)
+
+**A2 sub-phase split:**
+- A2.1 Backend (~3 days, ~40 strict + integration tests)
+- A2.2 Frontend (~2 days, ~30 strict + 10 E2E + axe matrix)
 
 **Anchor commits:**
 - `6ccae91` — M8.A done (миграционный учёт МВД closed)
 - `e5fb3d3` — M9 done (theming/adaptive/PWA/passkey/visual)
 - `fb0c0b1` — M9.widget.2 senior-pass v3 (Screen 1 Search & Pick closed)
-- `db94d7b` — M9.widget.3 Screen 2 Extras (committed, pending push per `feedback_batched_push.md`)
+- `db94d7b` — M9.widget.3 Screen 2 Extras (initial commit)
+- `ff62cb2` — M9.widget.3 senior-pass closure
+- `<TBD>` — M9.widget.4 pre-flight canon (this commit)
 
 ---
 
