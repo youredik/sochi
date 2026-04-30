@@ -383,3 +383,28 @@ Pattern:
 - [ ] Coverage floor maintained
 - [ ] Plan §12 Iteration 14 (M9.widget.4 implementation findings + corrections)
 - [ ] `project_m9_widget_4_done.md` memory entry
+
+---
+
+## §16. Pre-A2.2 freshness recheck (2026-04-30)
+
+Per user canon «при минимальном сомнении — самый современный веб ресерч»: после A2.1 closure (commit `fc419c2`) и до A2.2 frontend code — empirical npm-registry recheck всего frontend stack.
+
+**Findings (all verified `npm view <pkg> version` 2026-04-30):**
+
+| Package | Plan §5 | Actual latest | Action |
+|---|---|---|---|
+| `@tanstack/react-form` | 1.29.1 | 1.29.1 (2026-04-21) | ✅ keep |
+| `zod` | 4.4.1 | 4.4.1 (2026-04-29) | ✅ keep — note: **4.4.0 hot-fixed same day**, pin `^4.4.1` not `^4.4.0`. Watch `z.undefined()` strictness (use `.optional()` для optional ключей) |
+| `libphonenumber-js` | 1.12.42 | 1.12.42 (2026-04-23) | ✅ keep |
+| `vaul` | 1.1.2 | 1.1.2 (2024-12-14) | ⚠️ 16mo no release (per `feedback_vaul_unmaintained_2026.md`); **carry-forward к M10 → Radix Dialog Sheet**; A2 stays на 1.1.2 (works, peer React 19 declared) |
+| `@tanstack/react-router` | latest | 1.168.26 (2026-04-29) | ✅ |
+| `@tanstack/react-query` | latest | 5.100.6 (2026-04-28) | ✅ |
+| `react` | 19.x | 19.2.5 (2026-04-15) | ✅ |
+| `react-phone-number-input` | candidate | 3.4.16 (2026-02-23) | ❌ **REJECTED** — over-shoots для RU-fixed widget. Country selector + flag не нужны (Сочи = RU-only). Raw `libphonenumber-js` AsYouType('RU') + `<input type="tel">` достаточно. Adopting library = +bundle для UI mы не выводим. |
+
+**ЮKassa Checkout Widget v1**: embed URL `https://yookassa.ru/checkout-widget/v1/checkout-widget.js` стабилен; СБП в каталоге методов; SAQ-A scope подтверждён. No 2026 breaking changes.
+
+**D1 confirmation (no amendment)**: phone input stays raw `libphonenumber-js@1.12.42` AsYouType('RU') as planned. Senior-judgement: для RU-fixed (no country variability) готовая wrapper-library = over-engineering.
+
+**No breaking changes** в нашем surface за последние 7 дней. Plan §4-§15 stays unchanged. Frontend implementation proceeds на этих pinned versions.
