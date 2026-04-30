@@ -38,27 +38,32 @@ pre-commit:
       glob: "*.{ts,tsx}"
       run: pnpm depcruise
 
-# Pre-push: minimal blocking gate (≤30s hard cap).
+# Pre-push: minimal blocking gate (≤5s hard cap).
 # Skip via `LEFTHOOK=0 git push` (built-in env override; не --no-verify).
+#
+# Recurring incident 2026-04-30: попробовал `vitest --changed origin/main`
+# — оказалось, что при large divergence (16+ локальных commits) `--changed`
+# matches почти весь suite (4317 tests / 4252 total) → 319s wall-clock.
+# Vitest issue #8654 + #1113 описывают этот edge case. **DROP vitest из
+# pre-push entirely** — ВСЕ tests переезжают в async self-hosted runner.
+# Pre-commit уже catches typecheck/lint/depcruise/knip/sherif на каждом
+# commit — pre-push гейт = только port ownership pre-flight.
 pre-push:
   parallel: true
   jobs:
     - name: dev-doctor
       # Port ownership + /health marker check
       # (`feedback_no_disrupt_other_dev.md`). ~2s. Catches stankoff hijack
-      # ДО async CI запуска.
+      # ДО async CI запуска. **Единственный** pre-push gate — всё остальное
+      # уже в pre-commit (быстро, на каждый commit).
       run: pnpm doctor
-
-    - name: vitest-changed
-      # Vitest `--changed origin/main` — runs тесты только для files
-      # affected by diff. Empirical 50-200 tests / 4252 → ~10-20s.
-      # Risk: monorepo edge case (vitest #8654, #1113) — async CI на
-      # self-hosted runner покрывает full suite после push.
-      # Friday hygiene: weekly `pnpm test:full` manual.
-      run: pnpm vitest run --changed origin/main --no-file-parallelism
 
 # Async CI strategy:
 # `.github/workflows/post-push.yml` runs full test:serial + Playwright +
 # coverage на self-hosted runner (dev MacBook). On red — macOS notification
 # через osascript step. Recovery: `git revert HEAD && git push` (safe для
-# solo-main, no rebase). Setup: см. `docs/SELF_HOSTED_RUNNER.md`.
+# solo-main, no rebase). Setup-инструкции в самом workflow header.
+#
+# До setup self-hosted runner — async workflow тихо queues. Pre-commit
+# (typecheck+lint+depcruise+knip+sherif) остаётся primary safety net.
+# Manual milestone-close: `pnpm test:full` + `pnpm e2e` руками перед push.
