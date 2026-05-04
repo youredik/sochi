@@ -9,6 +9,7 @@ import { i18n, setupI18n } from './features/i18n/setup.ts'
 import { setupOtel } from './features/observability/setup-otel.ts'
 import { ErrorBoundary } from './lib/error-boundary.tsx'
 import { logger } from './lib/logger.ts'
+import { startRum } from './lib/rum/index.ts'
 import { ThemeProvider } from './lib/theme-provider.tsx'
 import { reportWebVitals } from './lib/web-vitals.ts'
 import { routeTree } from './routeTree.gen.ts'
@@ -24,6 +25,11 @@ setupI18n()
 // M9.6 — wire web-vitals 5 (CLS/INP/LCP/FCP/TTFB) к OTel tracer. Spans no-op
 // до Monium activation, but data collection production-grade с первой строчки.
 reportWebVitals()
+// M9.widget.7 / A5.2 — separate RUM pipeline: web-vitals 5 attribution build
+// → 152-ФЗ anonymize (selector / UA / URL scrub) → batched POST `/api/rum/v1/web-vitals`.
+// Backend bridges to Yandex Cloud Monitoring (D7). Idempotent — React StrictMode
+// double-render safe via `started` singleton.
+startRum()
 
 const queryClient = new QueryClient({
 	defaultOptions: {

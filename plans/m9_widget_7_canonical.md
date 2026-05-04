@@ -261,8 +261,57 @@ A5.1 — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
 - [ ] A5.3 axe matrix — DEFER к sub-phase
 - [ ] A5.4 Speculation Rules + Sec-Purpose — DEFER к sub-phase
 
-### A5.2 (commit pending)
-TBD — RUM pipeline findings.
+### A5.2 — RUM pipeline (anonymize 152-ФЗ + web-vitals attribution + YC Monitoring exporter) — 2026-05-04
+
+**Files added:**
+- `packages/shared/src/rum.ts` — single source of truth: zod `RumMetricSchema` + `RumBatchSchema` + `truncateIp()` (152-ФЗ edge anonymization). Subpath export `./rum`.
+- `apps/frontend/src/lib/rum/anonymize.ts` — `scrubSelector()` (manual brace-scanner, NO regex; bracket-injection-safe), `bucketUserAgent()`, `scrubUrl()`. Hard-cap 2048 chars (DOS defense).
+- `apps/frontend/src/lib/rum/anonymize.test.ts` — **29 ANON tests** (passport / Cyrillic ID / IPv6 + IPv4-mapped / UA buckets × all browsers+OSes / value+href+src / roundtrip + fuzz / hard-cap).
+- `apps/frontend/src/lib/rum/index.ts` — `startRum()` web-vitals 5 attribution → anonymize → batched POST. R2 §7 phantom-session filter (`document.prerendering`); pagehide+visibilitychange `sendBeacon` flush; React StrictMode-safe singleton.
+- `apps/backend/src/domains/observability/rum.repo.ts` — `RumBuffer` 5000-cap drop-oldest FIFO (D9). `droppedCount` observable.
+- `apps/backend/src/domains/observability/rum.routes.ts` — `POST /api/rum/v1/web-vitals`. zValidator(`RumBatchSchema.strict()`) + extractClientIp + truncateIp. CORS `*`. Per-IP rate-limit 60 req/min.
+- `apps/backend/src/domains/observability/yc-monitoring-exporter.ts` — `createYcMonitoringExporter()` wrapping our own `composePolicies(circuitBreaker(5/60s), retry(3/200-5000ms, 4xx-no-retry), timeout(10s))` (NO Cockatiel — stale 21mo). Slices ≤ 10k metrics/req per YC docs 2026-03-24.
+- `apps/backend/src/domains/observability/rum.routes.test.ts` — **6 RUM tests** (batch ingest / shape sweep 6 negative cases / X-Forwarded-For truncate / "anonymous" → "unknown" / cross-tenant 2 slugs / slug regex enforcement).
+- `apps/backend/src/domains/observability/yc-monitoring-exporter.test.ts` — **11 YCM tests** (DGAUGE shape / INP 4-payload split-axis / cardinality-bomb labels defense / 12k → 2 slices / URL+auth header / 429 circuit open / 4xx no-retry / HttpError truncate / drop-oldest 3-cap / RangeError on cap≤0 / empty drain).
+- `apps/backend/src/app.ts` mounts `/api/rum` route + `RumBuffer({capacity: 5000})` singleton.
+- `apps/backend/src/middleware/widget-rate-limit.ts` exports `extractClientIp` (was internal).
+- `apps/frontend/src/main.tsx` calls `startRum()` after `setupOtel + setupI18n + reportWebVitals`.
+
+**Verification (no полумер):**
+- typecheck PASS — 4 projects (backend / frontend / widget-embed / shared).
+- biome PASS — 0 errors. 2 unsafe-fixes applied (computed-key → literal canon).
+- sherif / depcruise / knip — PASS (no unused exports after `__testHooks` removed).
+- backend `pnpm test:serial` — **4652 passed | 1 skipped | 0 failed** (full regression).
+- frontend `pnpm test` — **1325 passed**.
+- `pnpm build` — PASS (no chunk-budget regression).
+
+**Tests added: 46 total** (target ~20). Adversarial coverage applied UPFRONT per плана §0 row «Bug-hunt strict tests canon».
+
+**152-ФЗ canon verified empirically:**
+- `[name="passport_serial"]` → `[name=*]` (ANON1)
+- `[aria-label="Удалить заказ № 12345"]` → `[aria-label=*]` (ANON2 Cyrillic)
+- `#user-12345` → `#*` (ANON3)
+- `203.0.113.42` → `203.0.113.0` (ANON4)
+- `2001:db8:1::cafe` → `2001:db8:1::` (/48 prefix, ANON4.b)
+- `::ffff:203.0.113.42` → `203.0.113.0` (IPv4-mapped IPv6 unwrap, ANON4.c)
+- `data-order-id="..."` wildcard scrub (ANON2.c)
+- YC Monitoring labels: NEVER include selector / id / ip / truncated_ip (cardinality bomb defense, YCM1.c).
+
+A5.2 — pre-done audit:
+- [X] D6 web-vitals 5.x attribution build via `web-vitals/attribution` subpath verified empirically (extracted exact INP/LCP/CLS attribution field names from `node_modules/.../dist/modules/types/`).
+- [X] D7 frontend → POST `/api/rum/v1/web-vitals` → backend bridge → YC Monitoring HTTP API (proprietary, NOT OTLP).
+- [X] D8 `anonymize.ts` strips ALL attribute-values + IDs + UA bucketing + URL query/hash + IP truncate (152-ФЗ верифицировано через 29 ANON adversarial).
+- [X] D9 batch + drop-oldest reservoir + circuit breaker tested (YC 10k/req limit slice into 2 batches verified for 12k buffer).
+- [X] D9 4xx NOT retried per shouldRetry policy (YCM3.b).
+- [X] Cross-tenant × every RUM method (RUM4 — 2 slugs in 1 buffer + drain order verified).
+- [X] Strict zod `.strict()` rejects extra fields (RUM2 sweep 6 negative cases).
+- [X] React StrictMode singleton — `started` flag prevents double-register.
+- [X] R2 §7 phantom-session filter (`document.prerendering`) skip applied.
+- [X] pagehide + visibilitychange `sendBeacon` flush wired (best-effort delivery on tab close).
+- [X] 9-gate green.
+- [X] Memory pointer + ROADMAP updated в same commit.
+- [ ] A5.3 axe matrix — DEFER к next sub-phase commit
+- [ ] A5.4 Speculation Rules + Sec-Purpose — DEFER к sub-phase
 
 ### A5.3 (commit pending)
 TBD — axe matrix findings.

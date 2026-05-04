@@ -43,6 +43,10 @@
 		"./widget-protocol": {
 			"types": "./src/widget-protocol.ts",
 			"default": "./src/widget-protocol.ts"
+		},
+		"./rum": {
+			"types": "./src/rum.ts",
+			"default": "./src/rum.ts"
 		}
 	},
 	"publishConfig": {
@@ -86,6 +90,10 @@
 			"./widget-protocol": {
 				"types": "./dist/widget-protocol.d.ts",
 				"default": "./dist/widget-protocol.js"
+			},
+			"./rum": {
+				"types": "./dist/rum.d.ts",
+				"default": "./dist/rum.js"
 			}
 		}
 	},

@@ -24,7 +24,7 @@ import { rateLimiter } from 'hono-rate-limiter'
 import type { AppEnv } from '../factory.ts'
 
 /** Extract client IP с canonical fallback chain. */
-function extractClientIp(c: Context<AppEnv>): string {
+export function extractClientIp(c: Context<AppEnv>): string {
 	const forwardedFor = c.req.header('x-forwarded-for')
 	if (forwardedFor) {
 		const first = forwardedFor.split(',')[0]?.trim()

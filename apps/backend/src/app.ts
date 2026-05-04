@@ -30,6 +30,8 @@ import { createGuestFactory } from './domains/guest/guest.factory.ts'
 import { createGuestRoutes } from './domains/guest/guest.routes.ts'
 import { createMeRoutes } from './domains/me/me.routes.ts'
 import { createNotificationFactory } from './domains/notification/notification.factory.ts'
+import { RumBuffer } from './domains/observability/rum.repo.ts'
+import { createRumRoutes } from './domains/observability/rum.routes.ts'
 import { createPaymentFactory } from './domains/payment/payment.factory.ts'
 import { createPaymentRoutes } from './domains/payment/payment.routes.ts'
 import { createStubPaymentProvider } from './domains/payment/provider/stub-provider.ts'
@@ -218,6 +220,12 @@ const embedFactory = createEmbedFactory({
 	currentSecretBase64: env.COMMIT_TOKEN_HMAC_CURRENT,
 	previousSecretBase64: env.COMMIT_TOKEN_HMAC_PREVIOUS,
 })
+
+// M9.widget.7 / A5.2 — RUM (Real User Monitoring) edge buffer.
+// Capacity 5000 (D9). Drained by YC Monitoring exporter (wired в M11+ alongside
+// Lockbox IAM credentials); current build no-ops the exporter — buffer is
+// observable via /api/rum/v1/web-vitals POST volume.
+const rumBuffer = new RumBuffer({ capacity: 5000 })
 
 // CDC consumers — exactly-once projection pipeline.
 //
@@ -519,6 +527,9 @@ const otelIngest = createOtelIngest()
 
 const routes = app
 	.route('/api/otel', otelIngest)
+	// M9.widget.7 / A5.2 — RUM ingest. Public, anonymous, CORS *. Mounted
+	// BEFORE auth middleware so embedded widgets can POST without credentials.
+	.route('/api/rum', createRumRoutes({ buffer: rumBuffer }))
 	// PUBLIC widget read surface — NO auth middleware, slug-resolved tenant.
 	// Mounted FIRST в chain so anonymous clients get clean 200/404 ответы
 	// без 401 от authMiddleware.
