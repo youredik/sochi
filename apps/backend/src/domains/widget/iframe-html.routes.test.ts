@@ -408,17 +408,17 @@ describe('iframe-html.routes', { tags: ['db'], timeout: 60_000 }, () => {
 			const parsed = JSON.parse(inner) as Record<string, unknown>
 			expect(parsed['@type']).toBe('Hotel')
 			expect(parsed['@context']).toBe('https://schema.org')
-			const addr = parsed['address'] as Record<string, unknown>
-			expect(addr['addressCountry']).toBe('RU')
-			expect(addr['postalCode']).toBe('354340')
+			const addr = parsed.address as Record<string, unknown>
+			expect(addr.addressCountry).toBe('RU')
+			expect(addr.postalCode).toBe('354340')
 			// addressLocality mirrors `property.city` from DB — test fixture seeds
 			// English 'Sochi'; real demo seed uses Cyrillic 'Сириус'.
-			expect(addr['addressLocality']).toBe('Sochi')
-			expect(parsed['starRating']).toEqual({ '@type': 'Rating', ratingValue: '4' })
-			expect(parsed['aggregateRating']).toBeUndefined() // D5 omitted
-			expect(parsed['image']).toBeDefined()
-			expect((parsed['image'] as Array<string>).length).toBeGreaterThanOrEqual(3) // Google Hotel rich-results spec
-			const containsPlace = parsed['containsPlace'] as Array<Record<string, unknown>>
+			expect(addr.addressLocality).toBe('Sochi')
+			expect(parsed.starRating).toEqual({ '@type': 'Rating', ratingValue: '4' })
+			expect(parsed.aggregateRating).toBeUndefined() // D5 omitted
+			expect(parsed.image).toBeDefined()
+			expect((parsed.image as Array<string>).length).toBeGreaterThanOrEqual(3) // Google Hotel rich-results spec
+			const containsPlace = parsed.containsPlace as Array<Record<string, unknown>>
 			expect(containsPlace).toHaveLength(1)
 			expect(containsPlace[0]?.['@type']).toBe('HotelRoom')
 

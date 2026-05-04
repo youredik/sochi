@@ -14,6 +14,7 @@
 		"apps/backend": {
 			"includeEntryExports": true,
 			"project": ["src/**/*.ts"],
+			"entry": ["src/lib/channel-manager/index.ts"],
 			"ignore": ["src/tests/**"]
 		},
 		"apps/frontend": {
