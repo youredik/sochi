@@ -21,6 +21,8 @@
 - ✅ A3.2.c — dispatcher lazy-render booking_confirmed (full var resolver + .ics generation) commit `baa8d3e`
 - ✅ A3.3 — guest portal view + cancel routes (cookie-auth + ПП-1912 boundary canon Europe/Moscow) + 8 strict tests GP-CB1..8
 - 🟡 A3.4 minimum-viable — magic-link landing route + guest portal route + booking-portal-api.ts (carry-forward: confirmation screen + find-by-ref-email + 12 E2E)
+
+**Track A4 — M9.widget.6 Embed Web Component** (pre-flight DONE 2026-05-01). Plan canon: [`plans/m9_widget_6_canonical.md`](m9_widget_6_canonical.md). Memory: `project_m9_widget_6_canonical.md`. R1×5 broad + R2 adversarial + npm verify 2026-05-01. **12 decisions + 9 R2 security corrections**: Lit 3.3.2 + Vite 8.0.10 IIFE native (NO vite-plugin-singlefile) + Integrity-Policy HTTP + iframe distinct eTLD+1 + CHIPS Partitioned cookies + MessageChannel handshake + per-tenant CSP frame-ancestors + bundle ≤30 kB gzip CI gate + customElements defensive guard. Sub-phase split: A4.1 scaffold → A4.2 Lit component → A4.3 backend embed.routes + migration 0047 → A4.4 iframe fallback + postMessage (~30 strict + 1 migration).
 - 🔴 A3.3 — guest portal + cancel routes (cookie-auth + ПП-1912 boundary)
 - 🔴 A3.4 — frontend (5 routes + screens + 12 E2E)
 
