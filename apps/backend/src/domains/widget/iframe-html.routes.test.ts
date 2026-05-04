@@ -265,4 +265,34 @@ describe('iframe-html.routes', { tags: ['db'], timeout: 60_000 }, () => {
 		const surroundingBytes = body.slice(slugAttrIndex - 40, slugAttrIndex + 100)
 		expect(surroundingBytes).not.toMatch(/<\s*script[^>]*>(?!\s*$)/)
 	})
+
+	it('[IF11] <noscript> fallback block present с booking link (D13 / A5.3)', async () => {
+		// JS-disabled clients (RU gov strict-CSP, accessibility tools) need a
+		// usable surface — booking link to the public widget page. Phone column
+		// not yet on schema (carry-forward к M11 admin UI).
+		const { app } = bootRoutes()
+		const slug = randomSlug('if11')
+		const tenantId = newId('organization')
+		const propertyId = newId('property')
+		await seedPublicProperty({
+			tenantId,
+			propertyId,
+			publicEmbedDomains: ['https://hotel.ru'],
+			slug,
+		})
+		const res = await app.request(`/v1/iframe/${slug}/${propertyId}.html`)
+		const body = await res.text()
+		// noscript exists + carries booking link. test-id для Playwright matching.
+		expect(body).toContain('<noscript>')
+		expect(body).toContain('</noscript>')
+		expect(body).toContain('data-testid="iframe-noscript"')
+		// Booking link interpolates the slug — XSS-escaped via escapeHtml.
+		expect(body).toContain(`https://${slug}.sochi.app/widget/${slug}`)
+		// Order matters: noscript MUST appear AFTER the custom element host
+		// so that JS-enabled clients hit the Lit surface first.
+		const hostIdx = body.indexOf('<sochi-booking-widget-v1')
+		const noscriptIdx = body.indexOf('<noscript>')
+		expect(hostIdx).toBeGreaterThan(0)
+		expect(noscriptIdx).toBeGreaterThan(hostIdx)
+	})
 })

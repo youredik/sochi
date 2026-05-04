@@ -129,7 +129,9 @@ function renderIframeHtml(input: {
 html, body { margin: 0; padding: 0; min-height: 100dvh; background: #fff; color: #0a0a0a; font: 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .sochi-iframe-shell { display: block; min-height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 .sochi-iframe-fallback { padding: 1.5rem; text-align: center; }
-.sochi-iframe-fallback a { color: #2563eb; text-decoration: underline; }
+.sochi-iframe-fallback a { color: #1d4ed8; text-decoration: underline; }
+.sochi-iframe-fallback h2 { margin: 0 0 .75rem; font-size: 1.125rem; }
+.sochi-iframe-fallback p { margin: .5rem 0; }
 </style>
 </head>
 <body>
@@ -142,10 +144,17 @@ html, body { margin: 0; padding: 0; min-height: 100dvh; background: #fff; color:
     data-nonce="${safeNonce}">
     <p class="sochi-iframe-fallback">
       Не удалось загрузить виджет.
-      <a href="https://${safeSlug}.sochi.app/book" target="_top" rel="noopener">Забронировать на сайте отеля</a>
+      <a href="https://${safeSlug}.sochi.app/widget/${safeSlug}" target="_top" rel="noopener">Забронировать на сайте отеля</a>
     </p>
   </sochi-booking-widget-v1>
 </main>
+<noscript>
+  <div class="sochi-iframe-fallback" role="region" aria-label="Бронирование без JavaScript" data-testid="iframe-noscript">
+    <h2>Бронирование без JavaScript</h2>
+    <p>Эта страница работает быстрее с включённым JavaScript. Если включить нельзя — откройте полную страницу бронирования.</p>
+    <p><a href="https://${safeSlug}.sochi.app/widget/${safeSlug}" target="_top" rel="noopener">Открыть страницу бронирования</a></p>
+  </div>
+</noscript>
 <script defer src="${safeBundleUrl}" integrity="sha384-${safeSriDigest}" crossorigin="anonymous"></script>
 </body>
 </html>

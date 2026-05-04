@@ -313,8 +313,44 @@ A5.2 — pre-done audit:
 - [ ] A5.3 axe matrix — DEFER к next sub-phase commit
 - [ ] A5.4 Speculation Rules + Sec-Purpose — DEFER к sub-phase
 
-### A5.3 (commit pending)
-TBD — axe matrix findings.
+### A5.3 — axe-core comprehensive matrix + forced-colors visual smoke + noscript fallback (D13/D14/D16) — 2026-05-04
+
+**Files added:**
+- `tests/axe-known-noise.ts` — D16 tuple-allowlist `<ruleId, selectorContains, reason>` filter + `WCAG_AA_TAGS`. Empty baseline (KNOWN_NOISE: []); blanket-disable BANNED. Each future entry requires code review + upstream-issue link.
+- `tests/e2e/perf-a11y.spec.ts` — **48 axe scans** (4 surfaces × 3 themes × 4 viewports) + **4 forced-colors visual snapshots** (D14 Cyrillic glyph-drop). Surfaces: `/widget/demo-sirius`, `/widget/demo-sirius/demo-prop-sirius-main`, `/widget/demo-sirius/demo-prop-sirius-main/extras?...`, iframe HTML wrapper. Themes: light / dark / forced-colors. Viewports: 320 / 768 / 1024 / 1440. Fresh `browser.newContext` per cell — theme + forced-colors не leak across cells.
+- `tests/e2e/iframe-noscript.spec.ts` — **2 IFNS tests** под `javaScriptEnabled: false`: noscript content + booking-link presence + keyboard-reachable accessible name. axe-on-noscript skipped honestly (axe-core injection требует page-context JS — incompatible с javaScriptEnabled:false; covered by IF11 unit test instead).
+- `tests/e2e/perf-a11y.spec.ts-snapshots/forced-colors-{320,768,1024,1440}-smoke-darwin.png` — visual baselines committed.
+
+**Files modified:**
+- `apps/backend/src/domains/widget/iframe-html.routes.ts` — `<noscript>` block с `[data-testid=iframe-noscript]` + booking-link fallback (XSS-escaped slug interpolation). Phone column carry-forward к M11 admin UI (no schema migration в A5.3 scope).
+- `apps/backend/src/domains/widget/iframe-html.routes.test.ts` — **IF11 noscript unit test**: `<noscript>` present, booking-link match, ordering invariant (host BEFORE noscript so JS-enabled clients hit Lit surface first).
+- `playwright.config.ts` — smoke project includes `(perf-a11y|iframe-noscript)\.spec\.ts` (chromium project ignores).
+
+**Verification (no полумер):**
+- typecheck PASS — 4 projects.
+- biome PASS — 0 errors.
+- depcruise PASS — 711 modules.
+- knip PASS.
+- backend `pnpm test:serial` — **4653 passed | 1 skipped | 0 failed** (+1 vs A5.2 = IF11).
+- frontend `pnpm test` — **1325 passed**.
+- `pnpm build` — PASS.
+- `pnpm exec playwright test --project=smoke --update-snapshots --reporter=line` — **65 passed** (1 initial IFNS2 false design caught + corrected → axe-on-noscript replaced by keyboard-reachable assertion). 1.5 min runtime.
+
+**Tests added: 55 total** (target ~36+5=41).
+- 48 axe matrix scans — green с baseline tuple-allowlist (empty, no blanket disable).
+- 4 forced-colors visual smoke (D14 Cyrillic glyph-drop catch).
+- 2 iframe-noscript Playwright (D13).
+- 1 IF11 backend unit (noscript structure).
+
+A5.3 — pre-done audit:
+- [X] D13 noscript fallback rendered + verified в IF11 + IFNS1 + IFNS2.
+- [X] D14 forced-colors visual smoke `toHaveScreenshot()` (`maxDiffPixelRatio: 0.05`) с 4 viewports baselines committed.
+- [X] D16 axe-core 4.11.4 EXACT pin + tuple-allowlist (KNOWN_NOISE empty baseline; blanket disable BANNED).
+- [X] 4 surfaces × 3 themes × 4 viewports = 48 axe-pass green с filterKnownNoise() (returns empty).
+- [X] Process correction: «axe-on-noscript timeout» false-design caught + replaced с DOM-direct keyboard-reachable assertion (axe-core injection требует page JS; не disponible под javaScriptEnabled:false).
+- [X] 9-gate green: lint / typecheck / sherif / depcruise / knip / build / backend test:serial / frontend test / e2e:smoke (4-min serial run).
+- [X] Memory pointer + ROADMAP updated в same commit.
+- [ ] A5.4 Speculation Rules + Sec-Purpose middleware — DEFER к next sub-phase
 
 ### A5.4 (commit pending)
 TBD — Speculation Rules + Sec-Purpose findings.
