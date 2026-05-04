@@ -388,3 +388,123 @@ describe('renderTemplate — booking_magic_link strict transactional canon (M9.w
 		expect(out.html).toContain('&lt;script&gt;1&lt;/script&gt;')
 	})
 })
+
+/* ============================================================ booking_confirmed enhanced (M9.widget.5 / A3.2) */
+
+describe('renderTemplate — booking_confirmed enhanced voucher fields (M9.widget.5)', () => {
+	const baseConfirmed = allVars.booking_confirmed
+	const enhanced = {
+		...baseConfirmed,
+		nights: 3,
+		guestsCount: 2,
+		propertyAddress: 'ул. Парусная, 1, Сириус, Сочи, Россия',
+		propertyPhone: '+7 (862) 200-00-00',
+		propertyEmail: 'reception@sirius.sochi.app',
+		magicLinkUrl: 'http://localhost:5273/booking/jwt/abc.def.ghi',
+	}
+
+	test('[BC-V1] all enhanced fields rendered when supplied', () => {
+		const out = renderTemplate('booking_confirmed', enhanced)
+		expect(out.html).toContain('3 ночи')
+		expect(out.html).toContain('2 гостя')
+		expect(out.html).toContain('Парусная')
+		expect(out.html).toContain('+7 (862) 200-00-00')
+		expect(out.html).toContain('reception@sirius.sochi.app')
+		expect(out.html).toContain('booking/jwt/abc.def.ghi')
+	})
+
+	test('[BC-V2] minimal mode when enhanced fields omitted (backwards-compat)', () => {
+		const minimal = { ...baseConfirmed }
+		const out = renderTemplate('booking_confirmed', minimal)
+		// Required fields still rendered
+		expect(out.html).toContain(minimal.bookingNumber)
+		expect(out.html).toContain(minimal.checkInDate)
+		expect(out.html).toContain(minimal.totalFormatted)
+		// Enhanced sections absent
+		expect(out.html).not.toContain('ночь')
+		expect(out.html).not.toContain('Контакты гостиницы')
+		expect(out.html).not.toContain('Управление бронированием')
+	})
+
+	test('[BC-V3] CTA button only when magicLinkUrl supplied', () => {
+		// Omit magicLinkUrl via destructuring per exactOptionalPropertyTypes canon
+		// (avoid passing `undefined` literal — strict TS forbids).
+		const { magicLinkUrl: _omitted, ...withoutCta } = enhanced
+		const outWith = renderTemplate('booking_confirmed', enhanced)
+		const outWithout = renderTemplate('booking_confirmed', withoutCta)
+		expect(outWith.html).toContain('Управление бронированием')
+		expect(outWith.html).toContain('24 час')
+		expect(outWith.html).toMatch(/не передавайте/i)
+		expect(outWithout.html).not.toContain('Управление бронированием')
+		expect(outWithout.html).not.toContain('24 час')
+	})
+
+	test('[BC-V4] RU pluralization CLDR three-form для nights', () => {
+		const cases: Array<[number, string]> = [
+			[1, 'ночь'],
+			[2, 'ночи'],
+			[3, 'ночи'],
+			[5, 'ночей'],
+			[11, 'ночей'],
+			[21, 'ночь'],
+		]
+		for (const [n, form] of cases) {
+			const out = renderTemplate('booking_confirmed', { ...enhanced, nights: n })
+			expect(out.html, `nights=${n}`).toContain(`${n} ${form}`)
+			expect(out.text, `nights=${n} text`).toContain(`${n} ${form}`)
+		}
+	})
+
+	test('[BC-V5] RU pluralization CLDR three-form для guests', () => {
+		const cases: Array<[number, string]> = [
+			[1, 'гость'],
+			[2, 'гостя'],
+			[5, 'гостей'],
+			[11, 'гостей'],
+			[21, 'гость'],
+		]
+		for (const [n, form] of cases) {
+			const out = renderTemplate('booking_confirmed', { ...enhanced, guestsCount: n })
+			expect(out.html, `guests=${n}`).toContain(`${n} ${form}`)
+		}
+	})
+
+	test('[BC-V6] magicLinkUrl rendered в both button + plain-text fallback', () => {
+		const out = renderTemplate('booking_confirmed', enhanced)
+		const matches = out.html.match(/booking\/jwt\/abc\.def\.ghi/g)
+		expect(matches?.length ?? 0).toBeGreaterThanOrEqual(2) // button + fallback
+		expect(out.text).toContain('booking/jwt/abc.def.ghi')
+	})
+
+	test('[BC-V7] tabular-nums monospace booking reference в HTML', () => {
+		const out = renderTemplate('booking_confirmed', enhanced)
+		// Booking ref styled с monospace font + letter-spacing для consistency
+		expect(out.html).toMatch(/font-family:ui-monospace[^"]*"[^>]*>B-001/)
+	})
+
+	test('[BC-V8] propertyAddress XSS escape (HTML)', () => {
+		const out = renderTemplate('booking_confirmed', {
+			...enhanced,
+			propertyAddress: '<script>alert(1)</script>',
+		})
+		expect(out.html).not.toContain('<script>alert(1)</script>')
+		expect(out.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+	})
+
+	test('[BC-V9] magicLinkUrl XSS escape (HTML)', () => {
+		const out = renderTemplate('booking_confirmed', {
+			...enhanced,
+			magicLinkUrl: 'https://x.com/?a="><script>1</script>',
+		})
+		expect(out.html).not.toContain('<script>1</script>')
+		expect(out.html).toContain('&quot;&gt;&lt;script&gt;1&lt;/script&gt;')
+	})
+
+	test('[BC-V10] Privacy reminder обязательно когда magicLinkUrl supplied (152-ФЗ)', () => {
+		const out = renderTemplate('booking_confirmed', enhanced)
+		expect(out.html).toContain('24 час')
+		expect(out.html).toMatch(/не передавайте/i)
+		expect(out.text).toContain('24 час')
+		expect(out.text).toMatch(/не передавайте/i)
+	})
+})

@@ -524,17 +524,107 @@ Per user canon «при минимальном сомнении — самый �
 
 Каждая `pnpm test:serial` regression / `npm view` drift / live empirical evidence = new iteration entry в этом разделе.
 
-### A3.1 (commit pending)
-TBD — backend magic-link + .ics implementation findings.
+### A3.1.a (commit `3db4725`, 2026-04-30)
+
+Backend magic-link service core + ics-generator + 91 strict tests.
+
+**Files committed:**
+- `db/migrations/0045_magic_link_token.sql` — magicLinkToken table + organizationProfile.magicLinkSecret column
+- `lib/magic-link/{secret,jwt}.ts` + tests — per-tenant HS256 secret resolver (lazy back-fill, race-safe) + jose 6.2.3 wrapper (signMagicLinkJwt + verifyMagicLinkJwt + extractTenantIdFromJwtUnsafe)
+- `domains/widget/magic-link.{repo,service}.ts` + tests — atomic single-use enforcement через sql.begin serializable tx + MagicLinkVerifyError taxonomy
+- `lib/ics-generator.ts` + tests — ical-generator 10.2.0 + timezones-ical-library 2.2.0 (Europe/Moscow VTIMEZONE, no DST since 2014)
+
+**Findings + bug-hunt:**
+1. **Race condition в repo.consume()** caught empirically [MLR17]: SELECT-then-UPDATE как 2 separate snapshots → 3 concurrent mutate consume calls all succeeded (strict single-use violated). Fix: wrap в `sql.begin({ idempotent: true }, async (tx) => ...)` per payment.repo M6.1 canon. Re-run: exactly 1 succeeds ✓.
+2. **chessboard-date-picker date-rollover** caught empirically: `selected` prop НЕ влияет на rdp v9 displayed month (defaults to today). Test passing на 2026-04-30 broke after roll к 2026-05-01. Fix: add `defaultMonth={selected}` (conditional spread per exactOptionalPropertyTypes canon).
+
+**Plan canon corrections (post-canon, pre-implementation):**
+- §7 migration number 0046 → 0045 (latest existing was 0044)
+- §6/§D3 tenant.magicLinkSecret → organizationProfile.magicLinkSecret
+- §5 @touch4it/ical-timezones REJECT (stale 2.5y) → timezones-ical-library 2.2.0
+- §D9 react-email render({plainText:true}) DEPRECATED → toPlainText() utility
+
+### A3.1.b (commit `7ff69c5`, 2026-05-01)
+
+Magic-link consume routes (two-step) + guest-session middleware + factory wire. 36 strict tests.
+
+**Files committed:**
+- `domains/widget/magic-link.factory.ts` — composes secret resolver + repo
+- `domains/widget/magic-link-consume.routes.ts` + tests — GET render (no consume) + POST consume (atomic + Set-Cookie __Host-guest_session)
+- `middleware/guest-session.ts` + tests — reads cookie, splits payload+HMAC, resolves per-tenant secret, validates HMAC, sets c.var.guestSession
+- `lib/magic-link/jwt.ts` — added extractTenantIdFromJwtUnsafe() helper для chicken-egg per-tenant secret resolution
+- `magic-link.repo.ts` — hardened consume() с YDB TLI race-loser fallback (catch isYdbRaceError → re-read canonical state)
+- `app.ts` — wire createMagicLinkFactory + createMagicLinkConsumeRoutes
+
+**Findings + bug-hunt:**
+1. **Cookie middleware Phase 1 bug** [GS1/GS2]: Hono `getCookie` returns whole signed value `<urldecoded(json)>.<base64url_hmac>` — JSON.parse failed на этой строке → 401 GUEST_SESSION_INVALID для всех valid cookies. Fix: split на last '.' first, parse JSON from before-dot part. Empirically verified.
+2. **YDB TLI race-loser fallback**: under heavy contention, sql.begin retry budget exhausts → throws YDB code 400140 «Transaction not found». Fix: catch isYdbRaceError() (codes 400140 / 400110 / 400120) → re-read canonical state in fresh tx → graceful race-loser semantic.
+3. **depcruise architecture violation**: guest-session.test.ts initial draft imported magic-link domain → `no-middleware-to-domains` violated. Fix: rewrite test to forge cookies через Hono setSignedCookie directly (no domain dependency).
+
+### A3.1.c (commit `a5fa3cf`, 2026-05-01)
+
+Booking-find route (timing-safe + tuple rate-limit) + magic-link email template. 19 strict tests.
+
+**Files committed:**
+- `domains/widget/booking-find.repo.ts` — DB layer per `no-routes-to-db` architecture canon (lookupBookingByReferenceAndEmail + insertMagicLinkOutbox)
+- `domains/widget/booking-find.routes.ts` + tests — POST timing-safe (Promise.allSettled + Math.max padding 800ms canon Cloudflare Workers + Laravel timeboxing) + tuple-key rate-limit (email, ref) 5/15min in-memory TupleKeyStore
+- `workers/lib/notification-templates.ts` — added BookingMagicLinkVars + renderBookingMagicLink (delegates к existing chrome для consistent 152-ФЗ disclosure footer)
+- `packages/shared/src/notification.ts` — added 'booking_magic_link' к NotificationKind enum + deriveRecipientKindFromNotificationKind case
+- `workers/handlers/notification.ts` — added 'booking_magic_link' case к exhaustive switch
+- `app.ts` — wire createBookingFindRepo + createBookingFindRoutes
+
+**Findings + bug-hunt:**
+1. **TS exhaustiveness**: adding booking_magic_link к NotificationKind enum without TemplateVars + render case → typecheck failed in 3 places. Fix: complete canonical extension across all 3 exhaustive surfaces (template render, derive recipient, outbox-fields builder).
+2. **Initial dup**: создал lib/email/magic-link-template.ts dublicating notification-templates.ts canon. Senior consolidate: deleted dup, moved render к notification-templates.ts (single source of truth).
+3. **depcruise no-routes-to-db violation**: initial booking-find.routes.ts imported sql/ydb-helpers directly. Fix: extract booking-find.repo.ts (canonical pattern), routes consume через DI.
+
+**Empirical curl smoke verified end-to-end** (2026-05-01):
+- $ curl -X POST -d '{"reference":"book_NOT_EXIST","email":"x@y.z"}' http://localhost:8787/api/public/widget/demo-sirius/booking/find
+- → 200 OK + {"ok":true,"message":"Если бронирование найдено..."}
+- → response time 829ms (≥800ms FIXED_RESPONSE_MS canon ✓)
+
+**Process correction logged**: I keep forgetting plan §17 + ROADMAP «Сейчас работаем над» updates per `feedback_session_startup_for_widget_subphases.md` Step 3 closure canon. Updating retroactively after user pushback. Future sub-phases: §17 + ROADMAP as part of EVERY commit closure routine.
 
 ### A3.2 (commit pending)
-TBD — email template + voucher integration findings.
+
+Booking confirmation voucher template — enhanced literal-template canon (NOT react-email — backend canon conflict). 10 new strict tests (BC-V1..10) + 87 existing pass.
+
+**CRITICAL plan §D9 correction (post-implementation discovery):**
+
+Plan §D9 originally specified `react-email 6.0.5` as canonical email engine. Empirical implementation hit hard project canon: **`biome.json` lint rule `noRestrictedImports`** explicitly blocks `react` + `react-dom` imports в backend with message «Backend не зависит от React.» — permanent project canon (confirmed in biome config 2026-04-30).
+
+Senior reverse: react-email path REJECTED. Existing `notification-templates.ts` literal-template canon retained — extended `renderBookingConfirmed` с full voucher fields. Single source of truth, no React in backend, matches existing pattern для все 11 notification kinds.
+
+**Files committed:**
+- `workers/lib/notification-templates.ts` — extended `BookingConfirmedVars` с optional fields (nights, guestsCount, propertyAddress, propertyPhone, propertyEmail, magicLinkUrl) + extended `renderBookingConfirmed` с conditional rendering (CTA section only когда magicLinkUrl supplied; contact section only когда phone OR email supplied; backwards-compat — minimal mode renders tested)
+- Added `ruPluralRaw(n, one, few, many)` helper (CLDR three-form canon, pure-string version specific к notification-templates internal use)
+- Tabular-nums monospace styling для booking reference в HTML body
+- Privacy reminder («24 часа» + «не передавайте») + 152-ФЗ disclosure footer preserved
+- `workers/lib/notification-templates.test.ts` — 10 new tests BC-V1..10:
+   * All enhanced fields rendered when supplied / minimal mode backwards-compat
+   * CTA button conditional on magicLinkUrl presence
+   * RU pluralization three-form coverage (nights × 6 cases + guests × 5 cases)
+   * magicLinkUrl rendered в button + plain-text fallback (≥2 occurrences)
+   * Tabular-nums monospace booking reference styling
+   * propertyAddress + magicLinkUrl XSS escape (HTML)
+   * Privacy reminder «24 часа» + «не передавайте» обязательно когда magicLinkUrl supplied (152-ФЗ)
+
+**Real bug-hunt + findings:**
+1. **react-email backend canon conflict**: Plan §D9 specified react-email 6.0.5 engine. Implementation hit `biome.json noRestrictedImports` blocking `react` + `react-dom`. Multiple workarounds attempted (createElement без JSX, biome rule check) — все led к non-canonical paths. Senior reverse: drop react-email, enhance existing literal-template canon. Plan §D9 correction documented honestly.
+2. **JSX vs erasableSyntaxOnly**: backend tsconfig `erasableSyntaxOnly: true` blocks JSX (encountered when react-email path attempted). createElement без JSX works syntactically but doesn't help since project canon forbids React entirely.
+3. **toPlainText API**: would have needed `toPlainText(html: string)` sync (NOT React element). Verified empirically через @react-email/render 2.0.8 .d.mts — relevant если react-email retried в future.
+
+**Carry-forwards к A3.2.b** (separate commit):
+- Schema: add `attachmentsJson Utf8` column к notificationOutbox (or encode attachments в payloadJson) → migration 0046
+- email-adapter.ts (postbox + mailpit + stub) — extend `send()` interface to accept `attachments[]`
+- dispatcher: pre-render bodyText at write-time через `renderTemplate('booking_confirmed', vars)` с full enhanced fields + .ics attachment generation
+- Empirical curl: book → CDC fires → email arrives с .ics в Mailpit
 
 ### A3.3 (commit pending)
-TBD — guest portal + cancel findings.
+TBD — guest portal + cancel routes (cookie-auth + ПП-1912 boundary) findings.
 
 ### A3.4 (commit pending)
-TBD — frontend findings.
+TBD — frontend (5 routes + screens + 12 E2E) findings.
 
 ---
 

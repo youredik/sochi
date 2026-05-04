@@ -93,9 +93,19 @@ export interface ReceiptFailedVars extends BaseVars {
 
 export interface BookingConfirmedVars extends BaseVars {
 	bookingNumber: string
-	checkInDate: string // RU-formatted: "25 апреля 2026"
+	checkInDate: string // RU-formatted: "25 апреля 2026" or "15 июня 2026, 14:00"
 	checkOutDate: string
 	totalFormatted: string
+	// M9.widget.5 / A3.2 — full voucher fields (per plan §D11 strict transactional canon).
+	// All optional для backwards-compat с existing booking_confirmed CDC writers
+	// — when missing, template renders минимальную version. Public-widget bookings
+	// (booking-find / guest-portal flows) supply full fields для richer voucher.
+	nights?: number
+	guestsCount?: number
+	propertyAddress?: string
+	propertyPhone?: string
+	propertyEmail?: string
+	magicLinkUrl?: string // guest-portal magic-link для управления бронированием
 }
 
 export interface CheckinReminderVars extends BaseVars {
@@ -296,22 +306,94 @@ function renderReceiptFailed(v: ReceiptFailedVars): RenderedEmail {
 	}
 }
 
+/**
+ * RU CLDR three-form pluralization (one/few/many).
+ * - 1, 21, 31, ... (mod10=1, NOT mod100=11) → one form
+ * - 2-4, 22-24, ... (mod10 in 2..4, NOT mod100 in 12..14) → few form
+ * - else → many form
+ */
+function ruPluralRaw(n: number, one: string, few: string, many: string): string {
+	const mod10 = n % 10
+	const mod100 = n % 100
+	if (mod10 === 1 && mod100 !== 11) return one
+	if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
+	return many
+}
+
 function renderBookingConfirmed(v: BookingConfirmedVars): RenderedEmail {
 	const subject = `Бронирование № ${v.bookingNumber} подтверждено`
+
+	// Optional voucher details (M9.widget.5 / A3.2 enhancement).
+	const nightsLine =
+		v.nights !== undefined
+			? `<p style="margin:0 0 8px">Длительность: <strong>${v.nights} ${ruPluralRaw(v.nights, 'ночь', 'ночи', 'ночей')}</strong></p>`
+			: ''
+	const guestsLine =
+		v.guestsCount !== undefined
+			? `<p style="margin:0 0 8px">Гости: <strong>${v.guestsCount} ${ruPluralRaw(v.guestsCount, 'гость', 'гостя', 'гостей')}</strong></p>`
+			: ''
+	const addressLine = v.propertyAddress
+		? `<p style="margin:0 0 8px">Адрес: ${escapeHtml(v.propertyAddress)}</p>`
+		: ''
+	const ctaSection = v.magicLinkUrl
+		? `<p style="margin:24px 0 16px"><a href="${escapeHtml(v.magicLinkUrl)}" style="display:inline-block;padding:12px 24px;background:#0066cc;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:500">Управление бронированием</a></p>
+<p style="margin:0 0 8px;font-size:13px;color:#666">Если кнопка не работает, скопируйте ссылку:<br><a href="${escapeHtml(v.magicLinkUrl)}" style="color:#0066cc;word-break:break-all">${escapeHtml(v.magicLinkUrl)}</a></p>
+<p style="margin:0 0 12px;font-size:13px;color:#666">Ссылка действительна 24 часа. Не передавайте её другим лицам — по ней доступны данные брони и платежа.</p>`
+		: ''
+	const contactSection =
+		v.propertyPhone || v.propertyEmail
+			? `<p style="margin:16px 0 8px;font-size:14px;font-weight:600">Контакты гостиницы</p>${
+					v.propertyPhone
+						? `<p style="margin:0 0 4px;font-size:14px">Телефон: ${escapeHtml(v.propertyPhone)}</p>`
+						: ''
+				}${
+					v.propertyEmail
+						? `<p style="margin:0 0 4px;font-size:14px">Email: <a href="mailto:${escapeHtml(v.propertyEmail)}" style="color:#0066cc">${escapeHtml(v.propertyEmail)}</a></p>`
+						: ''
+				}`
+			: ''
+
 	const body = `<tr><td>
 <h1 style="margin:0 0 16px;font-size:22px;font-weight:600">Бронирование подтверждено</h1>
 <p style="margin:0 0 12px">Здравствуйте, ${escapeHtml(v.guestName)}!</p>
 <p style="margin:0 0 12px">Спасибо за выбор гостиницы <strong>${escapeHtml(v.propertyName)}</strong>.</p>
-<p style="margin:0 0 8px">Номер бронирования: <strong>${escapeHtml(v.bookingNumber)}</strong></p>
+<p style="margin:0 0 8px">Номер бронирования: <strong style="font-family:ui-monospace,SF Mono,Menlo,monospace;letter-spacing:0.02em">${escapeHtml(v.bookingNumber)}</strong></p>
 <p style="margin:0 0 8px">Заезд: <strong>${escapeHtml(v.checkInDate)}</strong></p>
 <p style="margin:0 0 8px">Выезд: <strong>${escapeHtml(v.checkOutDate)}</strong></p>
+${nightsLine}
+${guestsLine}
+${addressLine}
 <p style="margin:0 0 12px">Сумма: <strong>${escapeHtml(v.totalFormatted)}</strong></p>
-<p style="margin:0 0 12px">Ждём вас!</p>
+${ctaSection}
+${contactSection}
+<p style="margin:16px 0 0">Ждём вас!</p>
 </td></tr>`
+
+	const nightsTextLine =
+		v.nights !== undefined
+			? `\nДлительность: ${v.nights} ${ruPluralRaw(v.nights, 'ночь', 'ночи', 'ночей')}`
+			: ''
+	const guestsTextLine =
+		v.guestsCount !== undefined
+			? `\nГости: ${v.guestsCount} ${ruPluralRaw(v.guestsCount, 'гость', 'гостя', 'гостей')}`
+			: ''
+	const addressTextLine = v.propertyAddress ? `\nАдрес: ${v.propertyAddress}` : ''
+	const ctaTextLine = v.magicLinkUrl
+		? `\n\nУправление бронированием: ${v.magicLinkUrl}\nСсылка действительна 24 часа. Не передавайте её другим лицам.`
+		: ''
+	const contactsText =
+		v.propertyPhone || v.propertyEmail
+			? `\n\nКонтакты гостиницы:${
+					v.propertyPhone ? `\nТелефон: ${v.propertyPhone}` : ''
+				}${v.propertyEmail ? `\nEmail: ${v.propertyEmail}` : ''}`
+			: ''
+
+	const text = `Здравствуйте, ${v.guestName}!\n\nСпасибо за выбор гостиницы ${v.propertyName}.\nНомер бронирования: ${v.bookingNumber}\nЗаезд: ${v.checkInDate}\nВыезд: ${v.checkOutDate}${nightsTextLine}${guestsTextLine}${addressTextLine}\nСумма: ${v.totalFormatted}${ctaTextLine}${contactsText}\n\nЖдём вас!${textFooter(v)}`
+
 	return {
 		subject,
 		html: htmlChrome(body, v),
-		text: `Здравствуйте, ${v.guestName}!\n\nСпасибо за выбор гостиницы ${v.propertyName}.\nНомер бронирования: ${v.bookingNumber}\nЗаезд: ${v.checkInDate}\nВыезд: ${v.checkOutDate}\nСумма: ${v.totalFormatted}\n\nЖдём вас!${textFooter(v)}`,
+		text,
 	}
 }
 

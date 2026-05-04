@@ -9,7 +9,18 @@
 
 ## Сейчас работаем над
 
-**Track A3 — M9.widget.5 Confirmation** (IN PROGRESS — pre-flight DONE 2026-04-30). Plan canon: [`plans/m9_widget_5_canonical.md`](m9_widget_5_canonical.md). Memory: `project_m9_widget_5_canonical.md`. R1 (4 agents broad ≥2026-04-30) + R2 adversarial (2 agents — security + RU compliance) + R3 strict freshness (≥2026-04-15) + stankoff cross-check + npm empirical 2026-04-30. **13 decisions + 10 R2 adversarial corrections**: Apple MPP / Slack unfurl prefetch DoS via two-step GET→POST + `allowedAttempts=5` view; `__Host-guest_session` Lax→Strict rotation; Hono `>=4.12.16` EXACT (5 GHSAs Apr 2026); Promise.allSettled + Math.max padding timing-safe; rate-limit tuple `(email, ref)`; ПП-1912 endOfDay(checkInDate, 'Europe/Moscow') boundary; strict transactional email NO cross-sell; PDF voucher defer M11. Sub-phase split: A3.1 backend magic-link+.ics → A3.2 email template+voucher → A3.3 guest portal+cancel → A3.4 frontend (~50 strict + 12 E2E).
+**Track A3 — M9.widget.5 Confirmation** (BACKEND ⅔ DONE — pre-flight + A3.1.a + A3.1.b + A3.1.c committed 2026-04-30 → 2026-05-01). Plan canon: [`plans/m9_widget_5_canonical.md`](m9_widget_5_canonical.md). Memory: `project_m9_widget_5_canonical.md`. R1 (4 agents broad ≥2026-04-30) + R2 adversarial (2 agents — security + RU compliance) + R3 strict freshness (≥2026-04-15) + stankoff cross-check + npm empirical 2026-04-30. **13 decisions + 10 R2 adversarial corrections**: Apple MPP / Slack unfurl prefetch DoS via two-step GET→POST + `allowedAttempts=5` view; `__Host-guest_session` Lax→Strict rotation; Hono `>=4.12.16` EXACT (5 GHSAs Apr 2026); Promise.allSettled + Math.max padding timing-safe; rate-limit tuple `(email, ref)`; ПП-1912 endOfDay(checkInDate, 'Europe/Moscow') boundary; strict transactional email NO cross-sell; PDF voucher defer M11.
+
+**Sub-phase progress (4 unpushed commits локально):**
+- ✅ A3.1.a `3db4725` — magic-link service core + .ics generator + 91 strict tests
+- ✅ A3.1.b `7ff69c5` — consume routes (two-step) + guest-session middleware + factory wire + 36 strict tests
+- ✅ A3.1.c `a5fa3cf` — booking-find route (timing-safe + tuple rate-limit) + email template + 19 strict tests + empirical curl 829ms ≥ 800ms canon ✓
+- ✅ A3.2 — enhanced renderBookingConfirmed (literal-template canon — react-email REJECTED due to backend `biome noRestrictedImports react/react-dom` permanent canon) + 10 new strict tests BC-V1..10 + RU pluralization three-form + voucher + privacy reminder + magicLinkUrl XSS escape
+- 🔴 A3.2.b — dispatcher pre-render at write-time + .ics attachment integration + empirical curl Mailpit voucher
+- 🔴 A3.3 — guest portal + cancel routes (cookie-auth + ПП-1912 boundary)
+- 🔴 A3.4 — frontend (5 routes + screens + 12 E2E)
+
+**Cumulative tests landed**: 156 strict (74 + 36 + 19 + 27 template/notification expansions) + empirical curl smoke ✓
 
 **M9.widget.4 (A2 Guest+Pay) DONE 2026-04-30** — `project_m9_widget_4_done.md`. Final origin/main HEAD: **`456a591`**. Sub-phase + post-push infrastructure epic landed (12 commits). Включая:
 - 65 unit + integration tests + 10 E2E + axe 4-theme matrix
