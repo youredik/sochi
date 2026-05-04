@@ -133,6 +133,17 @@ const THREE_D_PK_DOMAINS: ReadonlySet<ActivityObjectType> = new Set([
 ])
 
 /**
+ * Domains whose PK does NOT start with `tenantId` — identity must be read
+ * from `newImage`/`oldImage` instead of `key[]` (per YDB CDC canon, image
+ * contains all NON-PK columns).
+ *
+ * `channelInbox` PK = `(source, eventId)` per CloudEvents 1.0.2 canonical
+ * idempotency tuple (D11). tenantId is denormalized as a non-PK column.
+ * Composite recordId = `${source}:${eventId}` for activity audit.
+ */
+const IDENTITY_FROM_IMAGE: ReadonlySet<ActivityObjectType> = new Set(['channelInbox'])
+
+/**
  * Per-objectType override для FSM-status field name. Default = `'status'`.
  * Domains where the FSM column is named differently must opt in here so
  * `statusChange` activities fire correctly (vs being mis-classified as
@@ -148,6 +159,17 @@ function extractIdentity(
 	event: CdcEvent,
 	objectType: ActivityObjectType,
 ): { tenantId: string; recordId: string } | null {
+	if (IDENTITY_FROM_IMAGE.has(objectType)) {
+		// channelInbox PK = (source, eventId); tenantId is a non-PK column.
+		// Read identity from newImage/oldImage. Composite recordId = source:eventId.
+		const image = event.newImage ?? event.oldImage ?? {}
+		const tenantId = String(image.tenantId ?? '')
+		const key = event.key ?? []
+		const source = key[0] === undefined ? '' : String(key[0])
+		const eventId = key[1] === undefined ? '' : String(key[1])
+		if (!tenantId || !source || !eventId) return null
+		return { tenantId, recordId: `${source}:${eventId}` }
+	}
 	const key = event.key ?? []
 	const tenantId = key[0] === undefined ? '' : String(key[0])
 	let recordId = ''

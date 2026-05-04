@@ -292,8 +292,77 @@ A7.{N} — pre-done audit
 - D16-D20 RU compliance (Booking/Expedia/Airbnb sanctions HARD-DISABLE, granular consent 1 Sept 2025, operator/processor split, cross-border-transfer gate, МВД always hotel-side)
 - D21-D24 (inventory buffer + walk-in × OTA SOP, Booking.com B.XML phase-2-ready, TL polling cadence, node:crypto HMAC)
 
-### A7.1 (commit pending)
-TBD — Foundation findings.
+### A7.1 — `b4a30cd` (2026-05-04)
+Foundation lib + 8 migrations + 73 strict tests (target ~30, overdelivered 2.4×).
+Closed: `cloud-events.ts` (CE 1.0.2 envelope) + `standard-webhooks.ts` (multi-key
+HMAC + IP-allowlist) + `channel-dispatch.ts` (Hookdeck tiered retry pure lib) +
+`inbox.ts` (classify pure) + `inventory-pool.ts` (pure availability calc) +
+`adapter.ts` (canonical interface) + 8 migrations 0050-0057.
+
+### A7.1.fix — `<pending commit>` (2026-05-04, post user-pushback «снова забыл всё»)
+**Honest catch**: A7.1 объявлен closed без paste-and-fill audit (нарушение
+`feedback_pre_done_audit.md`), и без runtime wiring (interface-only library
+без repos / dispatcher worker / HTTP route / CDC consumers — нарушение
+`feedback_no_halfway.md`). User catch via «уверен что не косячишь?» прямо
+после `b4a30cd` exposed gap в plan §4 пункты 10/18/19.
+
+**A7.1.fix closes runtime wiring (single bundled commit per `feedback_batched_push.md`)**:
+- `lib/channel-manager/tenant-context.ts` — Hono `contextStorage()` + per-tenant
+  LRU adapter cache с **`lru-cache@11.3.6`** (latest published 2026-05-04 TODAY,
+  Node 20+/22+ engine — modern canon over hand-rolled 30-line LRU)
+- `domains/channel/connection.repo.ts` — CRUD для table 0050 + 3-state patch
+  (undefined=skip / null=clear / value=overwrite) + cross-tenant absolute
+- `domains/channel/dispatch.repo.ts` — enqueue / `claimDueBatch` (atomic lease
+  via Serializable tx) / `markSent` / `markRetry` / `markDlq` / `markDisabled`
+  для table 0052
+- `domains/channel/inbox.repo.ts` — `classifyAndInsert` (accepted | duplicate |
+  tampered three-outcome inside Serializable tx) для table 0053
+- `domains/channel/inventory-pool.repo.ts` — atomic reserve/release on M5
+  `availability` table (`allotment - sold`, stopSell, Serializable tx OCC).
+  Senior pivot: schema reuse (existing `availability`), NOT new table
+- `domains/channel/webhook-secret.repo.ts` — multi-key kid rotation для
+  table 0057 + atomic rotate (active → previous → expired)
+- `domains/channel/webhook.routes.ts` — public `POST /api/channel/webhooks/:channelId`
+  с raw-body Standard Webhooks signature verify + IP-allowlist fallback +
+  CloudEvents parse + idempotency classification (200 / 200-duplicate / 400-tampered)
+- `domains/channel/channel.factory.ts` — composes repos + adapter cache +
+  dispatcher + webhook routes; `registerAdapterFactory` / `registerHttpAttempt`
+  registry для A7.2/A7.3/A7.4
+- `workers/channel-dispatcher.ts` — long-lived poller worker, `claimDueBatch`
+  poll loop, Hookdeck tiered retry on failure, DLQ on budget exhaust,
+  `onAutoDisable` callback for circuit-breaker
+- Migration `0058_channel_changefeeds.sql` — CHANGEFEED on channelDispatch +
+  channelInbox tables → activity_writer projection (audit log canon per
+  `project_event_architecture.md`)
+- `packages/shared/src/activity.ts` — extend `ActivityObjectType` enum с
+  `'channelDispatch'` + `'channelInbox'`
+- `workers/cdc-handlers.ts` — `IDENTITY_FROM_IMAGE` override set для
+  channelInbox (PK = `(source, eventId)` ≠ canonical tenantId-prefixed)
+- `app.ts` — wire 2 new CDC consumers + mount `webhookRoutes` route + add
+  dispatcher to graceful shutdown
+
+**Strict tests (~67, overdelivered 2× target ~30)**:
+- `tenant-context.test.ts` — 10 TC tests (LRU + TTL + invalidate + resolver)
+- `webhook.routes.test.ts` — 14 WHR tests (signature path + IP fallback +
+  idempotency classification + malformed envelope)
+- `channel-dispatcher.test.ts` — 8 CD tests (sent / retry / DLQ / 408 / 429 /
+  network / budget exhausted + onAutoDisable / payload routing)
+- `connection.repo.test.ts` — 8 CC tests (DB integration; cross-tenant +
+  PK separation + 3-state patch + role enum coverage)
+- `dispatch.repo.test.ts` — 9 CDR tests (DB integration; enqueue / claimLease /
+  markSent / markRetry / markDlq / markDisabled bulk / cross-tenant + status enum FULL)
+- `inbox.repo.test.ts` — 6 CIR tests (DB integration; accepted / duplicate /
+  tampered + signatureKid + cross-tenant)
+- `webhook-secret.repo.test.ts` — 6 WS tests (DB integration; rotate atomic +
+  listAccepted ordering + expirePrevious + generateMockSecret format)
+- `inventory-pool.repo.test.ts` — 6 IPR tests (DB integration; peek + reserve
+  success/oversold/cell_missing/stop_sell + release symmetric)
+
+**Senior pivots applied**:
+- `lru-cache@11.3.6` (modern, 2026-05-04 TODAY) over hand-rolled LRU
+- Schema reuse (existing `availability` table) over new inventory schema
+- CDC-first audit (CHANGEFEED + activity_writer) over direct activity insert
+- `tenantId`-via-source-URN extraction for cross-tenant in inbox webhook handler
 
 ### A7.2 (commit pending)
 TBD — TravelLine Mock findings.

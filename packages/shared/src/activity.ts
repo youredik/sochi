@@ -38,6 +38,14 @@ const activityObjectTypeValues = [
 	// M8.A.5.cdc.B — миграционный учёт МВД (Боль 1.1). FSM transitions
 	// 0 → 17 → 3/4/10 проектируются в activity для audit + operator UI.
 	'migrationRegistration',
+	// M10 / A7.1.fix — channel manager outbound retry log (channelDispatch table 0052).
+	// CDC fan-out PMS event → N channelDispatch rows → activity_writer projects
+	// each status transition (pending → sent | dlq | disabled) for admin overlay.
+	'channelDispatch',
+	// M10 / A7.1.fix — channel manager inbound webhook log (channelInbox table 0053).
+	// Each idempotent receive surfaces as `created` activity; `tampered` replays
+	// surface as `statusChange` to status='failed' for operator alerting.
+	'channelInbox',
 ] as const
 export const activityObjectTypeSchema = z.enum(activityObjectTypeValues)
 export type ActivityObjectType = z.infer<typeof activityObjectTypeSchema>

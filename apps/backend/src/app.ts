@@ -17,6 +17,7 @@ import { createBookingFactory } from './domains/booking/booking.factory.ts'
 import { createBookingRoutes } from './domains/booking/booking.routes.ts'
 import { createGuestPortalRepo } from './domains/booking/guest-portal.repo.ts'
 import { createGuestPortalRoutes } from './domains/booking/guest-portal.routes.ts'
+import { createChannelFactory } from './domains/channel/channel.factory.ts'
 import { createMockArchiveBuilder } from './domains/epgu/archive/mock-archive.ts'
 import { createMigrationRegistrationFactory } from './domains/epgu/registration/registration.factory.ts'
 import { createMigrationRegistrationRoutes } from './domains/epgu/registration/registration.routes.ts'
@@ -227,6 +228,17 @@ const embedFactory = createEmbedFactory({
 // observable via /api/rum/v1/web-vitals POST volume.
 const rumBuffer = new RumBuffer({ capacity: 5000 })
 
+// M10 / A7.1.fix — channel manager runtime: 5 repos + per-tenant LRU adapter
+// cache (lru-cache@11.3.6) + dispatcher worker (Hookdeck tiered retry) + inbound
+// webhook routes (Standard Webhooks signature + IP-allowlist fallback). Adapter
+// implementations land in A7.2 (TravelLine) / A7.3 (Yandex.Travel) / A7.4
+// (Ostrovok ETG) — they call channelFactory.registerAdapterFactory() +
+// .registerHttpAttempt() at module-eval. Dispatcher is OFF in tests (NODE_ENV=test
+// integration calls dispatcher.processRow directly with inline mocks).
+const channelFactory = createChannelFactory(sql, {
+	enableDispatcher: process.env.NODE_ENV !== 'test',
+})
+
 // CDC consumers — exactly-once projection pipeline.
 //
 // Each consumer runs `createTopicTxReader` inside `startCdcConsumer`'s
@@ -287,6 +299,26 @@ const migrationRegistrationActivityConsumer = startCdcConsumer(driver, sql, {
 	consumer: 'activity_writer',
 	projection: createActivityCdcHandler(activityFactory.repo, 'migrationRegistration'),
 	label: 'activity:migrationRegistration',
+})
+
+// M10 / A7.1.fix — channel manager outbound retry log.
+// Each pending → sent | dlq | disabled transition projects к activity для
+// admin overlay timeline (A7.5).
+const channelDispatchActivityConsumer = startCdcConsumer(driver, sql, {
+	topic: 'channelDispatch/channelDispatch_events',
+	consumer: 'activity_writer',
+	projection: createActivityCdcHandler(activityFactory.repo, 'channelDispatch'),
+	label: 'activity:channelDispatch',
+})
+
+// M10 / A7.1.fix — channel manager inbound webhook log.
+// Each idempotent receive (accepted/duplicate/tampered) projects к activity
+// для forensic + operator alerting on tamper events.
+const channelInboxActivityConsumer = startCdcConsumer(driver, sql, {
+	topic: 'channelInbox/channelInbox_events',
+	consumer: 'activity_writer',
+	projection: createActivityCdcHandler(activityFactory.repo, 'channelInbox'),
+	label: 'activity:channelInbox',
 })
 
 // folio_balance_writer fan-out: 3 topics × same factory with per-source key
@@ -447,6 +479,8 @@ const allCdcConsumers = [
 	folioCreatorConsumer,
 	migrationRegistrationEnqueuerConsumer,
 	migrationRegistrationActivityConsumer,
+	channelDispatchActivityConsumer,
+	channelInboxActivityConsumer,
 	tourismTaxConsumer,
 	cancelFeeConsumer,
 ] as const
@@ -467,6 +501,7 @@ export async function stopApp(): Promise<void> {
 	if (demoRefreshCron) await demoRefreshCron.stop()
 	if (notificationDispatcher) await notificationDispatcher.stop()
 	if (notificationCron) await notificationCron.stop()
+	await channelFactory.stopDispatcher()
 }
 process.once('SIGTERM', () => {
 	void stopApp()
@@ -573,6 +608,12 @@ const routes = app
 	// Per-tenant CSP frame-ancestors from publicEmbedDomains (D11) +
 	// COOP same-origin-allow-popups (D34) + Permissions-Policy minimal-trust.
 	.route('/api/embed', createIframeHtmlRoutes({ service: embedFactory.service }))
+	// M10 / A7.1.fix — public inbound channel webhooks. NO auth — sender is
+	// the channel itself (TL/YT/ETG). Raw body bytes verified via Standard
+	// Webhooks signature (multi-key kid rotation) OR IP-allowlist fallback
+	// (ЮKassa-style channels). Idempotent receive via channelInbox UNIQUE
+	// (source, eventId).
+	.route('/api/channel/webhooks', channelFactory.webhookRoutes)
 	// M9.widget.6 / А4.3.b — embed widget bundle delivery + clientCommitToken
 	// + admin kill-switch. 4 routes per plan §A4.3:
 	//   GET  /api/embed/v1/:tenantSlug/:propertyId/:hash.js     facade
