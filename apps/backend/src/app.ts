@@ -18,6 +18,7 @@ import { createBookingRoutes } from './domains/booking/booking.routes.ts'
 import { createGuestPortalRepo } from './domains/booking/guest-portal.repo.ts'
 import { createGuestPortalRoutes } from './domains/booking/guest-portal.routes.ts'
 import { createChannelFactory } from './domains/channel/channel.factory.ts'
+import { registerOstrovokEtgWithChannelFactory } from './domains/channel/ostrovok-etg/ostrovok-etg.factory.ts'
 import { registerTravellineWithChannelFactory } from './domains/channel/travelline/travelline.factory.ts'
 import { registerYandexTravelWithChannelFactory } from './domains/channel/yandex-travel/yandex-travel.factory.ts'
 import { createMockArchiveBuilder } from './domains/epgu/archive/mock-archive.ts'
@@ -268,6 +269,22 @@ registerAdapter({
 		'YT API). HMAC-SHA256 signature + 300s replay window + IP-allowlist gate (D25.c). ' +
 		'152-ФЗ residency (RU photo hosts only) + 3-checkbox granular consent + RUB-only currency. ' +
 		'Replace with Bnovo HTTP client adapter in M10.live (CM partner onboarding).',
+})
+
+// M10 / A7.4 — Ostrovok ETG Mock (5-stage SM + 4-brand fan-out).
+// Live-flip = swap factory body к raw HTTP client с Basic Auth via YC Lockbox
+// creds (ETG SDK does NOT exist on npm — confirmed empirical 2026-05-04, D7).
+registerOstrovokEtgWithChannelFactory(channelFactory)
+registerAdapter({
+	name: 'channel.ostrovok-etg.mock',
+	category: 'channel',
+	mode: 'mock',
+	description:
+		'Behaviour-faithful Ostrovok ETG Mock (D7-D10: HTTP Basic Auth id:uuid / 5-stage SM ' +
+		'search→prebook→book→start→check / partner_order_id UUID v4 rotation on double_booking_form ' +
+		'(cap 3 retries) / webhook terminal-only opt-in / stuck-in-book 90s non-3DS, 600s 3DS / ' +
+		'4-brand fan-out RateHawk|ZenHotels|B2B.Ostrovok|Ostrovok / 3 commercial models / ' +
+		'rg_ext photos / sandbox demo-hotel hid=8473727). Replace with raw HTTP client in M10.live.',
 })
 
 // CDC consumers — exactly-once projection pipeline.
