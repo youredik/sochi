@@ -39,6 +39,10 @@
 		"./availability": {
 			"types": "./src/availability.ts",
 			"default": "./src/availability.ts"
+		},
+		"./widget-protocol": {
+			"types": "./src/widget-protocol.ts",
+			"default": "./src/widget-protocol.ts"
 		}
 	},
 	"publishConfig": {
@@ -78,6 +82,10 @@
 			"./availability": {
 				"types": "./dist/availability.d.ts",
 				"default": "./dist/availability.js"
+			},
+			"./widget-protocol": {
+				"types": "./dist/widget-protocol.d.ts",
+				"default": "./dist/widget-protocol.js"
 			}
 		}
 	},

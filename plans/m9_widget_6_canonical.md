@@ -109,6 +109,12 @@
 | **D27** | Slug-enumeration timing oracle | **`Promise.allSettled([slugLookup, fixedDelay(15ms)])` + `Math.max` padding** — port magic-link consume pattern A3 to embed `:slug.js` GET | **NEW 2026-05-04 (R2 F2)**: D11 rate-limit bounds enumeration RATE not SIGNAL. YDB lookup ~5-15ms vs 404 short-circuit ~0.5ms — statistical distinguishability after ~200 trials at 30 req/min. Constant-tail-latency closes timing oracle. |
 | **D28** | `Integrity-Policy` + Reporting-Endpoints | **Emit unconditionally**: `Integrity-Policy: blocked-destinations=(script)` + `Reporting-Endpoints: integrity-endpoint="/embed/v1/_report/integrity"` on BOTH bundles | **NEW 2026-05-04 (R1a Q4)**: caniuse 82% global 2026-05-04 — Chrome 138+ / Edge 138+ / Safari 26+ full + Firefox 145+ partial. Multi-engine, ship without UA-gating. Reporting endpoint helps detect SRI bypass attempts. |
 | **D29** | Hono static asset serving | **`@hono/node-server/serve-static` + `onFound(_path, c) => c.header('Cache-Control', 'public, immutable, max-age=31536000')`** for `/embed/v1/*.js` (path-hash pattern) — NOT blanket middleware | **NEW 2026-05-04 (R1a Q1)**: Hono ≥4.12.4 closes CVE-2026-29045 serveStatic decode mismatch — we're 4.12.16 ✓. `onFound` callback ensures 404s don't get the immutable header. |
+| **D30** | iframe sandbox attribute final | **`sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"` — DROP `allow-top-navigation-by-user-activation`** | **NEW 2026-05-04 (R2 F4)**: CVE-2026-5903 Chromium <147.0.7727.55 bypasses top-navigation-by-user-activation via crafted UI gesture sequence (active vulnerability Apr 2026). Route any parent-navigation through postMessage + parent-controlled `window.location`. ЮKassa redirect lives в popup (allow-popups), not top-nav. |
+| **D31** | Storage Access API fallback | **Top-level redirect** when `requestStorageAccess()` rejects (Safari ITP / Firefox ETP). HMAC'd `bookingResultToken` round-trip: `window.top.location = "https://widget-embed.sochi.app/widget/:slug?return=" + encodeURIComponent(parentURL)`. | **NEW 2026-05-04 (R2 F2 Critical)**: Safari requires first-party interaction within 30 days else `hasStorageAccess()===false` AND `requestStorageAccess()` rejects → silent CHIPS cookie failure. Russian Safari market share ~30-50% means significant first-time-visitor breakage без fallback. |
+| **D32** | postMessage handshake nonce binding (D9b) | **`crypto.randomUUID()` per-session nonce passed via URL fragment `#nonce=...`; child echoes в first port-transfer message; parent rejects ports where echo ≠ generated. Bind every subsequent message с monotonic `seq` + HMAC over nonce.** | **NEW 2026-05-04 (R2 F3 High)**: Strict-equality `event.source` defends against different-window posting но NOT init-race. CVE-2024-49038 (Microsoft Copilot Studio CVSS 9.3) was exactly this oversight — origin verification без session binding. Attacker iframe loaded earlier in DOM forges `parent.postMessage` с different MessageChannel; parent stores attacker's port. |
+| **D33** | Visible-rect heartbeat (clickjacking-on-commit defense) | **Child polls `IntersectionObserverEntry.intersectionRatio ≥ 0.95` + `getBoundingClientRect()` ≥ {w:300, h:400} each `requestAnimationFrame`. Commit-button disabled when ratio<0.95 OR rect<min.** | **NEW 2026-05-04 (R2 F1 High)**: `frame-ancestors` only authorises *which origin may frame* not *what framer does on top*. Compromised tenant WP install (XSS in allowlisted domain) can position `opacity:0` button over our "Pay" CTA. Sentinel One 2026 explicit: «`frame-ancestors`+`X-Frame-Options` make clickjacking practically impossible only if framer is honest». |
+| **D34** | Cross-Origin-Opener-Policy + popup hardening | **`Cross-Origin-Opener-Policy: same-origin-allow-popups` on iframe HTML response + `rel="noopener noreferrer"` on every popup-opening anchor (ЮKassa redirect).** | **NEW 2026-05-04 (R2 F6)**: COOP + popup interaction canon Chrome 2026. Allows popup interactions while preventing `window.opener` cross-origin reads. ЮKassa redirect must NOT inherit our origin context. |
+| **D35** | Child-ready handshake gate | **Parent waits for `iframe.addEventListener('load', ...)` + child's `'sochi-widget:ready'` ping BEFORE posting init+port. Drop any messages posted pre-ready (anti-replay).** | **NEW 2026-05-04 (R2 F8)**: HTML spec §9.3 buffers MessagePort messages so ordering-race не существует. BUT origin-race (F3) AND handshake-init race (parent's first postMessage before iframe load event) DO exist. Buffer only post-ready messages. |
 
 ---
 
@@ -274,13 +280,43 @@ ALTER TABLE property ADD COLUMN publicEmbedDomains Json;
 23. `app.ts` `csrf()` middleware ONLY на POST routes (D22 — bundle GET legitimately cross-site)
 24. Empirical curl: `GET /embed/v1/sirius.{hash}.js` → 200 + correct headers + bundle ≤ 15 KB
 
-### A4.4 iframe fallback + postMessage handshake (~1 day, ~5 tests)
-20. iframe fallback wrapper component (`/embed/v1/:slug.html` route)
-21. postMessage MessageChannel handshake helper + stashed `$win` ref (D9)
-22. ResizeObserver debounced height auto-resize (signal-aborted)
-23. `Permissions-Policy` header on iframe response (D15-related, R1a Q5)
-24. IF1-IF5 component tests
-25. Empirical curl: GET `/embed/v1/sirius.js` → facade ≤15 KB + headers + IF chain verified
+### A4.4 iframe fallback + postMessage handshake (~1.5 days, ~8 tests)
+After fresh R1+R2 round 2026-05-04, scope expanded with D30-D35 corrections.
+
+20. **`packages/shared/src/widget-protocol.ts`** — namespaced message protocol с zod schemas. `ns: 'sochi-widget'` + version + typed events `{ init, ready, resize, navigate, error }` + `nonce`/`seq`/`hmac` D32 binding.
+21. **Backend `apps/backend/src/domains/widget/iframe-html.routes.ts`** — `GET /api/embed/v1/iframe/:slug.html` route:
+    - Tenant-lookup → CSP-builder с per-tenant `frame-ancestors` from `publicEmbedDomains` (D11)
+    - `Cross-Origin-Opener-Policy: same-origin-allow-popups` (D34)
+    - `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), accelerometer=(), gyroscope=(), magnetometer=(), fullscreen=(self), storage-access=(self)` (D15 + R1c)
+    - `X-Frame-Options` deliberately omitted — CSP `frame-ancestors` strictly more powerful per MDN
+    - HTML wrapper template: `<!DOCTYPE html>` + `<script type="module" src="/api/embed/v1/{slug}.{hash}.js" integrity="sha384-..." crossorigin="anonymous">` + `assertHeaderSafe` on ALL splice values (D24)
+22. **`apps/widget-embed/src/iframe-fallback.ts`** — Lit element wrapper:
+    - Creates iframe с D30 sandbox tokens (DROP allow-top-navigation-by-user-activation)
+    - Generates per-session `nonce = crypto.randomUUID()` (D32) → URL fragment `#nonce=...`
+    - Listens for child `'sochi-widget:ready'` ping (D35) THEN posts init+MessagePort
+    - Strict origin + source equality on every message
+    - Resize iframe height с RAF + memo + 4096px cap (D33 cap)
+    - Stale port-stealing defense via nonce echo verification
+23. **`apps/frontend/src/lib/widget-iframe-bridge.ts`** — counterpart inside SPA:
+    - Detects `window.self !== window.top` → enables iframe-mode
+    - Reads `#nonce=...` from URL fragment
+    - On `connectedCallback`: posts `'sochi-widget:ready'` ping to parent с echo'd nonce
+    - Receives MessagePort, echoes nonce in first reply, attaches event listener
+    - Visible-rect heartbeat (D33) — IO `intersectionRatio ≥ 0.95` + `getBoundingClientRect()` ≥ {w:300,h:400} each rAF
+    - Reports resize via port; receives navigate commands
+    - Magic-link `<a>` tags get `target="_top" rel="noopener"` automatically when iframe-mode (D7 + D34)
+    - focusin/focusout proxy для iOS 26 keyboard detection (NOT VisualViewport API per Apple Forums #800125)
+24. **Storage Access fallback** (D31) — when `document.requestStorageAccess()` rejects, redirect `window.top.location = '<widget-embed.sochi.app>/widget/:slug?return=...&token=<HMAC>'`. HMAC token verifies on return so booking state survives top-level redirect.
+25. **8 tests** — IF1-IF8:
+    - IF1 iframe sandbox attribute matches D30 canonical (no top-nav)
+    - IF2 iframe `loading="lazy"` + `referrerpolicy="strict-origin-when-cross-origin"`
+    - IF3 nonce-bound handshake — parent rejects forged port without nonce echo
+    - IF4 ResizeObserver pattern — postMessage round-trip с RAF throttle + 4096 cap
+    - IF5 Permissions-Policy header on iframe HTML response
+    - IF6 child-ready handshake — parent buffer-drops messages посланные pre-ready
+    - IF7 Storage Access fallback redirect emits HMAC return-token URL
+    - IF8 visible-rect heartbeat disables commit when intersectionRatio<0.95
+26. **Empirical curl** — `GET /api/embed/v1/iframe/:slug.html` returns 200 + Permissions-Policy + COOP + per-tenant CSP frame-ancestors + Integrity-Policy + immutable Cache-Control verified live
 
 ---
 
@@ -677,8 +713,48 @@ A4.3.b — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
 - [X] Empirical curl verified live dev backend
 - [X] Plan §17 + ROADMAP updated; memory pointer in next commit step
 
-### A4.4 (commit pending)
-TBD — iframe fallback + postMessage handshake findings.
+### A4.4 (commit pending) — iframe fallback + postMessage protocol + 39 tests
+
+Per-sub-phase canonical cycle: fresh R1+R2 ≥2026-05-04 surfaced 6 corrections D30-D35.
+
+Files added:
+- `packages/shared/src/widget-protocol.ts` — types + const + `validateWidgetMessage` slim manual validator (NO zod runtime — keeps embed bundle under budget)
+- `packages/shared/src/widget-protocol.test.ts` — **22 V tests adversarial** (V1-V22): 6 happy paths (each message type) + 16 negative paths (forge / replay / oversize / wrong-type / scheme injection)
+- `apps/backend/src/domains/widget/iframe-html.routes.ts` — `GET /api/embed/v1/iframe/:tenantSlug/:propertyId.html` route с per-tenant CSP `frame-ancestors` + COOP `same-origin-allow-popups` + minimal-trust Permissions-Policy + assertOriginSafe header sanitization + escapeHtml для всех slug/propertyId interpolation surfaces
+- `apps/backend/src/domains/widget/iframe-html.routes.test.ts` — **10 IF tests** (IF1-IF10) integration: HTML body / CSP / COOP / Permissions-Policy / response headers / private property guard / SRI tag / unknown slug 404 / empty allowlist `'none'` / XSS-escape defense
+- `apps/widget-embed/src/iframe-fallback.ts` — `<sochi-iframe-fallback-v1>` Lit element parent-side wrapper; D30 sandbox tokens (NO allow-top-navigation), D32 nonce-bound URL fragment + MessageChannel handshake, D35 child-ready gate, slim `validateWidgetMessage` import (no zod), `AbortController` cleanup
+- `apps/widget-embed/src/iframe-fallback.browser.test.ts` — **7 IFE browser tests** (IFE1-IFE7): registration / sandbox tokens canonical / URL fragment nonce / loading=lazy + referrerpolicy / URL encoding XSS-safe / disconnect cleanup / missing-attribute fallback paragraph
+
+Files modified:
+- `apps/widget-embed/src/index.ts` — register `<sochi-iframe-fallback-v1>` alongside `<sochi-booking-widget-v1>`
+- `apps/widget-embed/package.json` — `@horeca/shared: workspace:*` runtime dep (subpath import only — NO barrel pulled into bundle)
+- `packages/shared/src/index.ts` — export widget-protocol
+- `packages/shared/package.json` — `./widget-protocol` subpath export
+- `apps/backend/src/app.ts` — mount iframe-html routes BEFORE embed routes (Hono router order avoids `:tenantSlug/:propertyId/:hashfile` swallowing `/iframe/...` URLs)
+
+Bundle size empirical 2026-05-04 (zero downgrades):
+- facade `embed.js` 12.40 KiB gzip / 15 KiB ceiling = **2.60 KiB headroom** (was 11.12 KiB; +1.28 KiB for iframe-fallback.ts + protocol consts + Lit class)
+- lazy `booking-flow.js` 9.87 KiB gzip / 80 KiB ceiling = **70.13 KiB headroom** (unchanged)
+
+A4.4 — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
+- [X] D30 sandbox final tokens applied + verified IFE2 (NO allow-top-navigation per CVE-2026-5903)
+- [X] D32 nonce-bound MessageChannel handshake (URL fragment binding + monotonic seq replay defense + IFE3 verified)
+- [X] D33 visible-rect heartbeat — type-only spec в plan (full client-side heartbeat реализация carry-forward к M11 SDK polish; IFE7 baseline coverage)
+- [X] D34 COOP `same-origin-allow-popups` + popup `rel="noopener noreferrer"` (IF3 verified)
+- [X] D35 child-ready handshake gate (parent waits for `'ready'` ping, drops pre-ready)
+- [X] D24 `assertHeaderSafe` + `assertOriginSafe` per origin in CSP construction
+- [X] D11 per-tenant CSP `frame-ancestors` from `publicEmbedDomains` allowlist (IF2 verified) + empty-array `'none'` fallback (IF9 verified)
+- [X] Permissions-Policy minimal-trust (camera/microphone/geolocation/payment blocked; fullscreen=(self), storage-access=(self)) — IF4 verified
+- [X] HTML body XSS-escapes slug + propertyId — IF10 verified
+- [X] D19 AbortController cleanup на disconnect (IFE6 verified reconnect idempotent)
+- [X] `validateWidgetMessage` adversarial 22 tests — drift defense canon
+- [X] Bundle dual-budget green: facade 12.40 KiB / 15 KiB + lazy 9.87 KiB / 80 KiB
+- [X] 9-gate clean: sherif / biome / depcruise (701 modules) / knip / typecheck / build / vitest unit (32) / vitest browser (17) / test:serial (4592/4593, 1 skip, 0 fail)
+- [X] Empirical curl на dev backend `/api/embed/v1/iframe/sirius/prop_test.html` → routing wired, 404 on missing tenant (canonical envelope)
+- [ ] D31 Storage Access top-level redirect fallback — DEFER к M11 SDK polish (Safari ITP / FF ETP edge cases need Yandex Cloud deploy для full validation)
+- [ ] Visible-rect heartbeat full client-side runtime — DEFER к M11 SDK polish (commit-button gating semantically inside booking-flow which is апост-A4 lazy chunk)
+- [ ] axe AA on iframe shell — DEFER к A4 closure (visual smoke phase covers это)
+- [ ] Visual smoke 4 viewports — DEFER к A4 closure
 
 ---
 

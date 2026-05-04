@@ -32,7 +32,14 @@
   - ✅ A4.3.a — foundation: migrations 0047+0048 + helpers + `embed.repo.ts` + zod schemas + 42 strict tests
   - ✅ A4.3.b — `embed.service.ts` + `embed.factory.ts` + `embed.routes.ts` (4 routes) + `app.ts` wire + 15 integration tests E1-E15 + empirical curl (Integrity-Policy + immutable + ACAO + Reporting-Endpoints all verified live)
   - **Per-sub-phase R1+R2 2026-05-04 surfaced 9 corrections → plan §4 D21-D29.** Cumulative A4: 21 widget-embed (11 unit + 10 W browser) + 57 backend (16 PED/AUD + 14 H + 8 O + 5 T + 7 CT + 15 E) = **78 strict tests**. test:serial 4538/4539 (1 skip, 0 fail).
-- 🔴 A4.4 — iframe fallback + postMessage handshake (~5 IF tests + axe AA + visual smoke)
+- ✅ A4.4 — iframe fallback + postMessage protocol + 39 strict tests:
+  - `widget-protocol.ts` shared (NO zod runtime — slim manual validator)
+  - `iframe-html.routes.ts` backend HTML wrapper (10 IF tests)
+  - `iframe-fallback.ts` parent-side Lit element (7 IFE browser tests)
+  - 22 V validator adversarial tests (forge / replay / oversize / scheme injection)
+  - Per-sub-phase R1+R2 surfaced 6 corrections D30-D35 (CVE-2026-5903 sandbox / nonce-bound handshake / visible-rect heartbeat / COOP popup / child-ready gate)
+  - **Bundle: facade 12.40 KiB / 15 KiB ceiling = 2.60 KiB headroom; lazy unchanged 9.87 KiB / 80 KiB.**
+  - Carry-forwards: D31 Storage Access redirect fallback (M11 SDK polish), full visible-rect heartbeat client-side (M11), axe AA + visual smoke 4 viewports (A4 closure)
 
 **Cumulative tests landed**: 156 strict (74 + 36 + 19 + 27 template/notification expansions) + empirical curl smoke ✓
 

@@ -10,6 +10,7 @@
 		"test:browser": "vitest run --config vitest.browser.config.ts"
 	},
 	"dependencies": {
+		"@horeca/shared": "workspace:*",
 		"@lit-labs/ssr-client": "^1.1.8",
 		"lit": "3.3.2"
 	},

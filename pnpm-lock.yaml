@@ -340,6 +340,9 @@ importers:
 
   apps/widget-embed:
     dependencies:
+      '@horeca/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@lit-labs/ssr-client':
         specifier: ^1.1.8
         version: 1.1.8

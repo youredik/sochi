@@ -55,6 +55,7 @@ import { createBookingFindRepo } from './domains/widget/booking-find.repo.ts'
 import { createBookingFindRoutes } from './domains/widget/booking-find.routes.ts'
 import { createEmbedFactory } from './domains/widget/embed.factory.ts'
 import { createEmbedRoutes } from './domains/widget/embed.routes.ts'
+import { createIframeHtmlRoutes } from './domains/widget/iframe-html.routes.ts'
 import { createMagicLinkFactory } from './domains/widget/magic-link.factory.ts'
 import { createMagicLinkConsumeRoutes } from './domains/widget/magic-link-consume.routes.ts'
 import { createWidgetFactory } from './domains/widget/widget.factory.ts'
@@ -554,13 +555,19 @@ const routes = app
 			repo: createBookingFindRepo(sql),
 		}),
 	)
+	// M9.widget.6 / А4.4 — iframe fallback HTML wrapper. MOUNTED FIRST так
+	// чтобы более-общий `:tenantSlug/:propertyId/:hashfile` pattern в
+	// `embed.routes` не съел `/iframe/<slug>/<prop>.html` URL'ы.
+	//   GET /api/embed/v1/iframe/:tenantSlug/:propertyId.html
+	// Per-tenant CSP frame-ancestors from publicEmbedDomains (D11) +
+	// COOP same-origin-allow-popups (D34) + Permissions-Policy minimal-trust.
+	.route('/api/embed', createIframeHtmlRoutes({ service: embedFactory.service }))
 	// M9.widget.6 / А4.3.b — embed widget bundle delivery + clientCommitToken
 	// + admin kill-switch. 4 routes per plan §A4.3:
 	//   GET  /api/embed/v1/:tenantSlug/:propertyId/:hash.js     facade
 	//   GET  /api/embed/v1/_chunk/booking-flow/:hash.js         lazy chunk
 	//   POST /api/embed/v1/:tenantSlug/:propertyId/commit-token HMAC sign
 	//   POST /api/embed/v1/_kill                                admin revoke
-	// Hono `csrf()` middleware lives ONLY on POST commit-token (D22).
 	// Path-segment `:hash` validates against bundle SHA-384 (D23).
 	.route('/api/embed', createEmbedRoutes({ service: embedFactory.service }))
 	// M9.widget.5 / A3.3 — guest portal: GET view + POST cancel routes.

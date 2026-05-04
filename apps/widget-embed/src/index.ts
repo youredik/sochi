@@ -34,15 +34,21 @@ const trustedTypesOk = registerLitTrustedTypesPolicy()
 //    is constructed so the global hydrate handlers are registered.
 import '@lit-labs/ssr-client/lit-element-hydrate-support.js'
 
+// 6. iframe fallback parent-side wrapper (M9.widget.6 / А4.4). Same idempotent
+//    guard pattern. Tenants who paste this Lit element get auto-managed
+//    iframe + nonce-bound postMessage handshake. Tenants on strict CSP can
+//    paste raw `<iframe>` directly без this element.
+import { IFRAME_FALLBACK_TAG, SochiIframeFallback } from './iframe-fallback.ts'
 // 5. Element registration. `@customElement(WIDGET_TAG)` inside `widget.ts`
 //    runs `customElements.define`; the guard below makes double-evaluation
 //    idempotent (no DOMException on repeat-load).
 import { SochiBookingWidget, WIDGET_TAG } from './widget.ts'
 
 if (!$customElements.get(WIDGET_TAG)) {
-	// Decorator path is preferred, but if for any reason `@customElement`
-	// hasn't run (re-entrant import quirk), fall back to manual define.
 	$customElements.define(WIDGET_TAG, SochiBookingWidget)
 }
+if (!$customElements.get(IFRAME_FALLBACK_TAG)) {
+	$customElements.define(IFRAME_FALLBACK_TAG, SochiIframeFallback)
+}
 
-export { SochiBookingWidget, trustedTypesOk, WIDGET_TAG }
+export { IFRAME_FALLBACK_TAG, SochiBookingWidget, SochiIframeFallback, trustedTypesOk, WIDGET_TAG }
