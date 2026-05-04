@@ -646,12 +646,30 @@ Migration 0046 + email-adapter attachments support across all 3 adapters + dispa
 **Real bug-hunt:**
 1. **TS Constructor parameter typing**: initial `Parameters<typeof PostboxAdapter>['1']` — wrong indexing для constructor. Fix: `ConstructorParameters<typeof PostboxAdapter>[1]` (canonical TS for class constructor params).
 
-### A3.2.c (commit pending — separate scope)
+### A3.2.c (commit pending — dispatcher lazy-render booking_confirmed + .ics)
 
-Lazy-render dispatcher для booking_confirmed kind (var resolver + .ics generation + write-time pre-render). Carry-forward:
-- notification.ts CDC handler resolves full vars (booking + guest + property + org rows) → renderTemplate → encode attachments[] → UPSERT outbox с rich subject + html + text + attachmentsJson
-- OR dispatcher lazy-renders at send-time (read row → resolve vars → render → attach)
-- Empirical curl: book → CDC fires booking_confirmed → email arrives с .ics в Mailpit
+Dispatcher lazy-render for booking_confirmed kind. Resolves full vars (booking +
+guest + property + org + profile) at send-time, renders rich HTML voucher через
+renderTemplate, generates .ics calendar invite, attaches к send.
+
+**Files committed:**
+- `workers/notification-dispatcher.ts`:
+   * Imported `generateBookingIcs` + `renderTemplate` + `BookingConfirmedVars`
+   * Added `renderBookingConfirmedLazy(sql, tenantId, bookingId, recipientEmail, log)`
+     helper — multi-query var resolver (booking + guest + property + org + profile)
+     + .ics generation. Returns null on missing rows OR errors → caller falls
+     back к existing escape-wrap rendering (defensive, no crash).
+   * Added `formatRuDate(date)` — RU month-name canonical formatter
+   * `dispatchOne` extended: when `kind === 'booking_confirmed' && sourceObjectType === 'booking'`,
+     calls lazy-render → if success, uses rich subject + html + text + .ics.
+   * Existing escape-wrap fallback preserved для other kinds + lazy failures.
+
+**Empirical verification carry-forward к A3 closure:**
+- Full-booking integration test (seed organization + property + roomType +
+  ratePlan + availability + rates → POST widget/booking → CDC fires →
+  dispatcher polls → email arrives Mailpit с .ics) — requires substantial
+  seed orchestration (matches booking-create.routes.integration.test.ts pattern).
+  14/14 dispatcher tests preserved (lazy path + existing escape-wrap fallback).
 
 ### A3.3 (commit pending)
 TBD — guest portal + cancel routes (cookie-auth + ПП-1912 boundary) findings.

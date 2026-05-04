@@ -23,12 +23,14 @@
 import { newId } from '@horeca/shared'
 import type { sql as SQL } from '../db/index.ts'
 import { textOpt, timestampOpt, toJson, toTs } from '../db/ydb-helpers.ts'
+import { generateBookingIcs } from '../lib/ics-generator.ts'
 import {
 	computeNextAttemptAt,
 	DEFAULT_RETRY_POLICY,
 	type RetryPolicy,
 	shouldDeadLetter,
 } from './lib/dispatcher-policy.ts'
+import { type BookingConfirmedVars, renderTemplate } from './lib/notification-templates.ts'
 import type { EmailAdapter, EmailAttachment, SendEmailResult } from './lib/postbox-adapter.ts'
 import {
 	type RecipientSource,
@@ -233,19 +235,30 @@ async function dispatchOne(
 	}
 
 	// 2. Render body. V1 path: `bodyText` rendered upstream by writer (or
-	// dispatcher renders later via templates lib). For now, accept whatever
-	// the writer pre-rendered — falling back to subject when body is empty
-	// avoids sending empty mails. M7.fix.3 will switch to lazy-render via
-	// notification-templates when payloadJson + kind drives it at send time.
-	const subject = row.subject
-	const bodyText = row.bodyText ?? row.subject
-	const bodyHtml = `<p>${escapeHtmlInline(bodyText)}</p>`
+	// dispatcher renders later via templates lib).
+	//
+	// M9.widget.5 / A3.2 — `booking_confirmed` lazy-render canon: dispatcher
+	// resolves full vars (booking + guest + property + org) at send-time +
+	// renders rich HTML voucher template + generates .ics calendar attachment.
+	// Other kinds use existing escape-wrap fallback (writer pre-rendered).
+	let subject = row.subject
+	let bodyText = row.bodyText ?? row.subject
+	let bodyHtml = `<p>${escapeHtmlInline(bodyText)}</p>`
 
 	// M9.widget.5 / A3.2.b — extract attachments[] from row.attachmentsJson.
-	// Schema: JSON array of `[{ filename, content (utf-8 OR base64),
-	// contentType }, ...]`. NULL/empty → no attachments. Defensive parse —
-	// malformed JSON / wrong shape → log + skip, don't crash dispatcher.
-	const attachments = parseAttachments(row.attachmentsJson, log, row.tenantId, row.id)
+	const collectedAttachments: EmailAttachment[] =
+		parseAttachments(row.attachmentsJson, log, row.tenantId, row.id) ?? []
+
+	// Lazy-render для booking_confirmed kind — A3.2 canonical voucher path.
+	if (row.kind === 'booking_confirmed' && row.sourceObjectType === 'booking') {
+		const lazy = await renderBookingConfirmedLazy(sql, tenantId, row.sourceObjectId, recipient, log)
+		if (lazy) {
+			subject = lazy.subject
+			bodyText = lazy.text
+			bodyHtml = lazy.html
+			if (lazy.icsAttachment) collectedAttachments.push(lazy.icsAttachment)
+		}
+	}
 
 	// 3. Send (single-row, no batch). Adapter classifier handles error mapping.
 	const result: SendEmailResult = await adapter.send({
@@ -254,7 +267,7 @@ async function dispatchOne(
 		subject,
 		html: bodyHtml,
 		text: bodyText,
-		...(attachments && attachments.length > 0 && { attachments }),
+		...(collectedAttachments.length > 0 && { attachments: collectedAttachments }),
 	})
 
 	const now = new Date()
@@ -358,6 +371,153 @@ async function dispatchOne(
 		'dispatcher: transient — scheduled retry',
 	)
 	return 'transient_retry'
+}
+
+/**
+ * Lazy-render booking_confirmed: resolve full vars from booking + guest +
+ * property + org rows, call renderTemplate + generate .ics attachment.
+ *
+ * Returns null если booking row missing OR resolution fails — caller falls
+ * back к existing escape-wrap rendering.
+ *
+ * Per `plans/m9_widget_5_canonical.md` §10 step 11-12 + §D9 enhanced fields
+ * canon (notification-templates.ts BookingConfirmedVars optional surface).
+ */
+async function renderBookingConfirmedLazy(
+	sql: SqlInstance,
+	tenantId: string,
+	bookingId: string,
+	recipientEmail: string,
+	log: DispatcherLogger,
+): Promise<{
+	subject: string
+	html: string
+	text: string
+	icsAttachment: EmailAttachment | null
+} | null> {
+	try {
+		const [bookingRows = []] = await sql<
+			Array<{
+				id: string
+				primaryGuestId: string
+				propertyId: string
+				checkIn: Date
+				checkOut: Date
+				nights: number | bigint
+				guestsCount: number | bigint
+				totalMicros: bigint | number
+				currency: string
+			}>
+		>`
+			SELECT id, primaryGuestId, propertyId, checkIn, checkOut, nights, guestsCount, totalMicros, currency
+			FROM booking WHERE tenantId = ${tenantId} AND id = ${bookingId}
+			LIMIT 1
+		`.idempotent(true)
+		const booking = bookingRows[0]
+		if (!booking) return null
+
+		const [guestRows = []] = await sql<Array<{ firstName: string; lastName: string }>>`
+			SELECT firstName, lastName FROM guest
+			WHERE tenantId = ${tenantId} AND id = ${booking.primaryGuestId} LIMIT 1
+		`.idempotent(true)
+		const guest = guestRows[0]
+		const guestName = guest ? `${guest.firstName} ${guest.lastName}`.trim() || 'гость' : 'гость'
+
+		const [propRows = []] = await sql<
+			Array<{ name: string; address: string | null; phone: string | null; email: string | null }>
+		>`
+			SELECT name, address, phone, email FROM property
+			WHERE tenantId = ${tenantId} AND id = ${booking.propertyId} LIMIT 1
+		`.idempotent(true)
+		const property = propRows[0]
+		if (!property) return null
+
+		const [orgRows = []] = await sql<Array<{ name: string }>>`
+			SELECT name FROM organization WHERE id = ${tenantId} LIMIT 1
+		`.idempotent(true)
+		const [profileRows = []] = await sql<Array<{ inn: string | null }>>`
+			SELECT inn FROM organizationProfile WHERE organizationId = ${tenantId} LIMIT 1
+		`.idempotent(true)
+		const orgName = orgRows[0]?.name ?? 'Гостиница'
+		const inn = profileRows[0]?.inn ?? '0000000000'
+
+		const totalRubles = (Number(booking.totalMicros) / 1_000_000).toLocaleString('ru-RU', {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2,
+		})
+		const totalFormatted = `${totalRubles} ${booking.currency === 'RUB' ? '₽' : booking.currency}`
+
+		const vars: BookingConfirmedVars = {
+			guestName,
+			propertyName: property.name,
+			senderOrgName: orgName,
+			senderInn: inn,
+			senderEmail: recipientEmail.includes('@') ? recipientEmail : 'noreply@example.com',
+			bookingNumber: booking.id,
+			checkInDate: formatRuDate(booking.checkIn),
+			checkOutDate: formatRuDate(booking.checkOut),
+			totalFormatted,
+			nights: Number(booking.nights),
+			guestsCount: Number(booking.guestsCount),
+			...(property.address ? { propertyAddress: property.address } : {}),
+			...(property.phone ? { propertyPhone: property.phone } : {}),
+			...(property.email ? { propertyEmail: property.email } : {}),
+		}
+		const rendered = renderTemplate('booking_confirmed', vars)
+
+		// Generate .ics calendar invite per plan §D8.
+		let icsAttachment: EmailAttachment | null = null
+		try {
+			const ics = generateBookingIcs({
+				bookingReference: booking.id,
+				tenantDomain: 'sochi.local',
+				propertyName: property.name,
+				propertyAddress: property.address ?? 'Сочи',
+				checkInLocal: booking.checkIn,
+				checkOutLocal: booking.checkOut,
+				organizerEmail: property.email ?? 'noreply@example.com',
+			})
+			icsAttachment = {
+				filename: ics.filename,
+				content: ics.content,
+				contentType: ics.contentType,
+			}
+		} catch (err) {
+			log.warn({ tenantId, bookingId, err }, 'booking_confirmed: .ics generation failed')
+		}
+
+		return {
+			subject: rendered.subject,
+			html: rendered.html,
+			text: rendered.text,
+			icsAttachment,
+		}
+	} catch (err) {
+		log.warn({ tenantId, bookingId, err }, 'booking_confirmed lazy-render failed — falling back')
+		return null
+	}
+}
+
+const RU_MONTHS = [
+	'января',
+	'февраля',
+	'марта',
+	'апреля',
+	'мая',
+	'июня',
+	'июля',
+	'августа',
+	'сентября',
+	'октября',
+	'ноября',
+	'декабря',
+] as const
+
+function formatRuDate(date: Date): string {
+	const d = date.getDate()
+	const m = RU_MONTHS[date.getMonth()] ?? ''
+	const y = date.getFullYear()
+	return `${d} ${m} ${y}`
 }
 
 /**
