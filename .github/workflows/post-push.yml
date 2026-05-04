@@ -69,6 +69,22 @@ jobs:
         run: pnpm coverage
         continue-on-error: true
 
+      # M9.widget.7 / А5.1 — bundle size budget gate (warn-only post-push per
+      # D15; hard-fail moves к Track B deploy gate). size-limit@12 reads
+      # `.size-limit.json` for SPA + widget budgets (D10).
+      - name: Size budget (warn-only)
+        run: pnpm size:check
+        continue-on-error: true
+
+      # M9.widget.7 / А5.1 — Lighthouse CI lab metrics (LCP / TBT / CLS / SI /
+      # FCP). Per D15 warn-only — hard-fail moves к deploy gate. INP NOT
+      # measured here (lab-only); field-only via web-vitals 5 RUM (А5.2).
+      # `numberOfRuns: 5` + `tolerance: 100ms` (D5) — defends LCP variance
+      # ±5-15% per run.
+      - name: Lighthouse CI (warn-only)
+        run: pnpm lhci:collect
+        continue-on-error: true
+
       - name: Notify on failure (macOS)
         if: failure()
         run: |

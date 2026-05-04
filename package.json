@@ -38,20 +38,26 @@
 		"e2e:smoke": "playwright test --workers=1 --reporter=line",
 		"e2e:install": "playwright install chromium",
 		"walkthrough": "node --env-file-if-exists=.env scripts/walkthrough/record.ts",
-		"tts:test": "node --env-file-if-exists=.env scripts/walkthrough/test-tts.ts"
+		"tts:test": "node --env-file-if-exists=.env scripts/walkthrough/test-tts.ts",
+		"size:check": "size-limit",
+		"lhci:collect": "lhci autorun"
 	},
 	"devDependencies": {
-		"@axe-core/playwright": "^4.11.2",
+		"@axe-core/playwright": "4.11.3",
 		"@biomejs/biome": "^2.4.13",
+		"@lhci/cli": "0.15.1",
 		"@playwright/test": "^1.59.1",
+		"@size-limit/preset-app": "^12.1.0",
 		"@stryker-mutator/core": "^9.6.1",
 		"@stryker-mutator/vitest-runner": "^9.6.1",
 		"@types/node": "^25.6.0",
 		"@vitest/coverage-v8": "^4.1.5",
+		"axe-core": "4.11.4",
 		"dependency-cruiser": "^17.3.10",
 		"knip": "^6.8.0",
 		"lefthook": "^2.1.6",
 		"sherif": "^1.11.1",
+		"size-limit": "^12.1.0",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.5"
 	},

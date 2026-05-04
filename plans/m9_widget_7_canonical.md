@@ -222,8 +222,44 @@ A5.{N} — pre-done audit
 
 ## §17. Implementation log (carry-forward, populated per sub-phase commit)
 
-### A5.1 (commit pending)
-TBD — Lighthouse + size-limit + post-push CI findings.
+### A5.1 (commit pending) — Lighthouse CI + size-limit + post-push CI extension + 14 strict tests
+
+Files added:
+- `lighthouserc.cjs` (CommonJS canon per D2) — D1-D5 assertions live (LCP / TBT / CLS / SI / FCP) + D3 LCP gaming defense (`lcp-lazy-loaded` / `largest-contentful-paint-element` / `prioritize-lcp-image` all `error`) + D4 TBT `aggregationMethod: 'pessimistic'` + D5 `numberOfRuns: 5`
+- `budgets.json` — per-route resource budgets (`/widget/*` SPA + `/api/embed/v1/iframe/*` tighter)
+- `.size-limit.json` — D10 SPA budgets (180 KB index + 60 KB lazy chunks × 3 widget routes + 70 KB booking-and-pay) + existing widget facade 15 KB + lazy 80 KB preserved
+- `apps/backend/src/lib/ci-config-shape.test.ts` — **14 strict tests** (LHC1-6 + BG1-4 + SZ1-4) verifying assertion presence, severity levels, aggregationMethod, numberOfRuns, budget cross-surface tightness, third-party ban, gzip-only measurement
+
+Files modified:
+- `package.json` — devDeps: `@lhci/cli@0.15.1`, `@size-limit/preset-app@^12.1.0`, `axe-core@4.11.4` exact, `size-limit@^12.1.0`; `@axe-core/playwright` upgraded `^4.11.2` → `4.11.3` exact (D16 EXACT pin canon); scripts: `size:check` + `lhci:collect`
+- `.github/workflows/post-push.yml` — extended с `Size budget (warn-only)` + `Lighthouse CI (warn-only)` jobs (D15 — warn-only post-push canon Stripe / Vercel / Cloudflare)
+- `knip.json` — `axe-core` added к `ignoreDependencies` (transitive via @axe-core/playwright bridge; not directly imported)
+
+Empirical verification 2026-05-04:
+- `pnpm size:check` → ALL 6 budgets PASS:
+    - SPA index: 177.88 KB / 180 KB (12 KB headroom)
+    - SPA widget route: 2.72 KB / 60 KB
+    - SPA widget property route: 6.54 KB / 60 KB
+    - SPA widget extras route: 5.95 KB / 60 KB
+    - SPA booking-and-pay route: 45.97 KB / 70 KB
+    - Widget facade: 12.7 KB / 15 KB
+    - Widget lazy chunk: 10.11 KB / 80 KB
+- `pnpm exec vitest run apps/backend/src/lib/ci-config-shape.test.ts` → **14/14 PASS**
+
+A5.1 — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
+- [X] D1-D5 Lighthouse assertions live + verified via 6 LHC tests
+- [X] D3 LCP gaming defense (lcp-lazy-loaded + largest-contentful-paint-element + prioritize-lcp-image all `error`)
+- [X] D4 TBT `aggregationMethod: 'pessimistic'` worst-run canon
+- [X] D5 `numberOfRuns: 5` LHCI median-of-5 canon (R2 §6)
+- [X] D10 SPA + widget bundle budgets enforced via size-limit@12 + 4 SZ tests
+- [X] D15 warn-only post-push canon (continue-on-error: true для both new jobs)
+- [X] D16 axe-core 4.11.4 + @axe-core/playwright 4.11.3 EXACT pin (no caret)
+- [X] budgets.json shape valid + 4 BG tests
+- [X] 9-gate green: sherif (auto-fix sort) / biome / depcruise (702 modules) / knip (axe-core ignored — transitive via @axe-core/playwright bridge) / typecheck / build / size:check / vitest unit (14 tests)
+- [X] Empirical: size:check + vitest run locally PASS
+- [ ] A5.2 RUM pipeline — DEFER к next sub-phase commit
+- [ ] A5.3 axe matrix — DEFER к sub-phase
+- [ ] A5.4 Speculation Rules + Sec-Purpose — DEFER к sub-phase
 
 ### A5.2 (commit pending)
 TBD — RUM pipeline findings.

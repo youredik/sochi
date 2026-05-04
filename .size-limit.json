@@ -1,0 +1,58 @@
+[
+	{
+		"name": "SPA index (initial chunk)",
+		"path": "apps/frontend/dist/assets/index-*.js",
+		"limit": "180 KB",
+		"gzip": true,
+		"brotli": false,
+		"running": false
+	},
+	{
+		"name": "SPA widget route (lazy chunk)",
+		"path": "apps/frontend/dist/assets/widget._tenantSlug-*.js",
+		"limit": "60 KB",
+		"gzip": true,
+		"brotli": false,
+		"running": false
+	},
+	{
+		"name": "SPA widget property route (lazy chunk)",
+		"path": "apps/frontend/dist/assets/widget._tenantSlug_._propertyId-*.js",
+		"limit": "60 KB",
+		"gzip": true,
+		"brotli": false,
+		"running": false
+	},
+	{
+		"name": "SPA widget extras route (lazy chunk)",
+		"path": "apps/frontend/dist/assets/widget._tenantSlug_._propertyId_.extras-*.js",
+		"limit": "60 KB",
+		"gzip": true,
+		"brotli": false,
+		"running": false
+	},
+	{
+		"name": "SPA booking-and-pay route (lazy chunk)",
+		"path": "apps/frontend/dist/assets/widget._tenantSlug_._propertyId_.guest-and-pay-*.js",
+		"limit": "70 KB",
+		"gzip": true,
+		"brotli": false,
+		"running": false
+	},
+	{
+		"name": "Widget facade (embed.js)",
+		"path": "apps/widget-embed/dist/embed.js",
+		"limit": "15 KB",
+		"gzip": true,
+		"brotli": false,
+		"running": false
+	},
+	{
+		"name": "Widget lazy chunk (booking-flow.js)",
+		"path": "apps/widget-embed/dist/booking-flow.js",
+		"limit": "80 KB",
+		"gzip": true,
+		"brotli": false,
+		"running": false
+	}
+]

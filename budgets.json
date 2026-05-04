@@ -1,0 +1,50 @@
+[
+	{
+		"path": "/widget/*",
+		"resourceSizes": [
+			{ "resourceType": "script", "budget": 200 },
+			{ "resourceType": "stylesheet", "budget": 30 },
+			{ "resourceType": "image", "budget": 200 },
+			{ "resourceType": "font", "budget": 50 },
+			{ "resourceType": "document", "budget": 25 },
+			{ "resourceType": "third-party", "budget": 0 },
+			{ "resourceType": "total", "budget": 500 }
+		],
+		"resourceCounts": [
+			{ "resourceType": "script", "budget": 10 },
+			{ "resourceType": "stylesheet", "budget": 4 },
+			{ "resourceType": "third-party", "budget": 0 }
+		],
+		"timings": [
+			{ "metric": "largest-contentful-paint", "budget": 2500 },
+			{ "metric": "cumulative-layout-shift", "budget": 100 },
+			{ "metric": "total-blocking-time", "budget": 200 },
+			{ "metric": "interactive", "budget": 3500 },
+			{ "metric": "first-contentful-paint", "budget": 1800 },
+			{ "metric": "speed-index", "budget": 3400 }
+		]
+	},
+	{
+		"path": "/api/embed/v1/iframe/*",
+		"resourceSizes": [
+			{ "resourceType": "script", "budget": 30 },
+			{ "resourceType": "stylesheet", "budget": 5 },
+			{ "resourceType": "document", "budget": 5 },
+			{ "resourceType": "third-party", "budget": 0 },
+			{ "resourceType": "total", "budget": 50 }
+		],
+		"resourceCounts": [
+			{ "resourceType": "script", "budget": 2 },
+			{ "resourceType": "stylesheet", "budget": 0 },
+			{ "resourceType": "third-party", "budget": 0 }
+		],
+		"timings": [
+			{ "metric": "largest-contentful-paint", "budget": 1500 },
+			{ "metric": "cumulative-layout-shift", "budget": 50 },
+			{ "metric": "total-blocking-time", "budget": 100 },
+			{ "metric": "interactive", "budget": 2000 },
+			{ "metric": "first-contentful-paint", "budget": 1000 },
+			{ "metric": "speed-index", "budget": 2000 }
+		]
+	}
+]

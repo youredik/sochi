@@ -6,7 +6,8 @@
 		"@lingui/cli",
 		"@fontsource-variable/geist",
 		"tw-animate-css",
-		"shadcn"
+		"shadcn",
+		"axe-core"
 	],
 	"ignoreExportsUsedInFile": true,
 	"workspaces": {
