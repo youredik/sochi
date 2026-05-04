@@ -80,20 +80,20 @@ Per session retrospective:
 
 ---
 
-## §3. Library canon (May 4 2026 npm-verify required at A5.1 kickoff)
+## §3. Library canon (May 4 2026 npm-verify done — drift caught + applied)
 
-**HONESTY flag:** R1 returned 403 from npm registry — empirical verify обязательно at sub-phase start.
+Empirical npm-verify 2026-05-04 closed R1 honest gap #3 (registry was blocked at R1 fetch). Caught 2 plan-vs-reality drift points; applied below.
 
-| Library | Pinned version | Source |
+| Library | Pinned version | Source / status |
 |---|---|---|
-| `@lhci/cli` | `0.15.1` (Jun 2025) | Lighthouse 12.6.1 wrapper |
-| `lighthouse` | `12.6.1` (transitive) | bundled with @lhci/cli |
-| `web-vitals` | `5.2.0` (existing apps/frontend) | attribution build subpath |
-| `axe-core` | **`4.11.4` exact** | (pin no caret) |
-| `@axe-core/playwright` | **`4.11.1` exact** | (pin no caret) |
-| `size-limit` | `11.x.x` | + `@size-limit/preset-app` |
+| `@lhci/cli` | **`0.15.1`** (Jun 2025) | Bundles `lighthouse@12.6.1` transitive |
+| `lighthouse` | `12.6.1` (transitive) | DO NOT pin standalone `lighthouse@13.2.0` — @lhci/cli is bundled с 12.6.1; using 13 standalone breaks LHCI integration |
+| `web-vitals` | `5.2.0` (existing apps/frontend) | Attribution build subpath `web-vitals/attribution` |
+| `axe-core` | **`4.11.4` exact** | Pin no caret per D16 |
+| `@axe-core/playwright` | **`4.11.3` exact** | Drift caught: was `4.11.1` в R1; latest patch `4.11.3` 2026-05-04 |
+| `size-limit` | **`12.1.0`** | Drift caught: was `11.x` в R1; SemVer-major up — verify breaking changes at A5.1 kickoff |
+| `@size-limit/preset-app` | `12.1.0` | Match `size-limit` major |
 | `@playwright/test` | `1.59.x` (existing) | unchanged |
-| `vite-plugin-bundlesize` | `0.x` (drwpow) | OPTIONAL build-time alternative — evaluate vs size-limit |
 
 ---
 
