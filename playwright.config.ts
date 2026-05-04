@@ -45,12 +45,12 @@ export default defineConfig({
 			},
 			dependencies: ['setup'],
 			testMatch: /.*\.spec\.ts/,
-			testIgnore: /(smoke|embed|perf-a11y|iframe-noscript)\.spec\.ts/,
+			testIgnore: /(smoke|embed|perf-a11y|iframe-noscript|demo-tour)\.spec\.ts/,
 		},
 		{
 			name: 'smoke',
 			use: { ...devices['Desktop Chrome'] },
-			testMatch: /(smoke|embed|perf-a11y|iframe-noscript)\.spec\.ts/,
+			testMatch: /(smoke|embed|perf-a11y|iframe-noscript|demo-tour)\.spec\.ts/,
 		},
 	],
 	webServer: isRemote
