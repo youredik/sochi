@@ -139,6 +139,20 @@ export interface BookingModifiedVars extends BaseVars {
 	magicUrl: string
 }
 
+/**
+ * M9.widget.5 / A3.1.c — guest-portal magic-link delivery.
+ *
+ * Per `plans/m9_widget_5_canonical.md` §D11 (strict transactional canon):
+ *   - 38-ФЗ ст. 18 carve-out: NO cross-sell, NO marketing, NO unsubscribe
+ *   - 152-ФЗ ст. 22.1 disclosure footer (operator + ИНН)
+ *   - Tone «Вы / Ваш» formal
+ *   - 24h ссылка validity disclosure + «не передавайте» privacy reminder
+ */
+export interface BookingMagicLinkVars extends BaseVars {
+	bookingReference: string
+	magicLinkUrl: string
+}
+
 export type TemplateVars = {
 	payment_succeeded: PaymentSucceededVars
 	payment_failed: PaymentFailedVars
@@ -150,6 +164,7 @@ export type TemplateVars = {
 	pre_arrival: PreArrivalVars
 	booking_cancelled: BookingCancelledVars
 	booking_modified: BookingModifiedVars
+	booking_magic_link: BookingMagicLinkVars
 }
 
 /* ----------------------------------------------------------------- shared chrome */
@@ -204,6 +219,8 @@ export function renderTemplate<K extends NotificationKind>(
 			return renderBookingCancelled(vars as BookingCancelledVars)
 		case 'booking_modified':
 			return renderBookingModified(vars as BookingModifiedVars)
+		case 'booking_magic_link':
+			return renderBookingMagicLink(vars as BookingMagicLinkVars)
 		default: {
 			// Exhaustive guard — TS errors if a new kind is added without a case.
 			const _exhaustive: never = kind
@@ -381,6 +398,31 @@ ${feeLine}
 		html: htmlChrome(body, v),
 		text: `Здравствуйте, ${v.guestName}!\n\nПодтверждаем отмену бронирования № ${v.bookingNumber} в ${v.propertyName}.\nЗаезд был запланирован на: ${v.checkInDate} (${v.nights} ${nightsLabel})\nСумма брони: ${v.totalFormatted}${feeText}\nВозврат: ${v.refundAmountFormatted} — поступит в течение ${v.refundEtaDays} рабочих ${etaLabel}.\n\nБудем рады видеть вас снова.${textFooter(v)}`,
 	}
+}
+
+function renderBookingMagicLink(v: BookingMagicLinkVars): RenderedEmail {
+	const subject = `Управление бронированием №${v.bookingReference}`
+	const body = `<tr><td>
+<h1 style="margin:0 0 16px;font-size:20px;font-weight:600">Управление бронированием №${escapeHtml(v.bookingReference)}</h1>
+<p style="margin:0 0 16px;line-height:1.5">Здравствуйте! По вашему запросу мы отправляем ссылку для управления бронированием в <strong>${escapeHtml(v.propertyName)}</strong>.</p>
+<p style="margin:0 0 24px;line-height:1.5">
+<a href="${escapeHtml(v.magicLinkUrl)}" style="display:inline-block;padding:12px 24px;background:#0066cc;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:500">Открыть бронирование</a>
+</p>
+<p style="margin:0 0 16px;line-height:1.5;font-size:13px;color:#666">Если кнопка не работает, скопируйте ссылку:<br><a href="${escapeHtml(v.magicLinkUrl)}" style="color:#0066cc;word-break:break-all">${escapeHtml(v.magicLinkUrl)}</a></p>
+<p style="margin:0 0 8px;line-height:1.5;font-size:13px;color:#666">Ссылка действительна 24 часа. Не передавайте её другим лицам — по ней доступны данные брони и платежа.</p>
+<p style="margin:0;line-height:1.5;font-size:13px;color:#666">Если вы не запрашивали эту ссылку — просто проигнорируйте письмо.</p>
+</td></tr>`
+	const text = `Здравствуйте!
+
+По вашему запросу мы отправляем ссылку для управления бронированием №${v.bookingReference} в ${v.propertyName}.
+
+Перейдите по ссылке для просмотра деталей и управления:
+${v.magicLinkUrl}
+
+Ссылка действительна 24 часа. Не передавайте её другим лицам — по ней доступны данные брони и платежа.
+
+Если вы не запрашивали эту ссылку — просто проигнорируйте письмо. Бронирование не изменится.${textFooter(v)}`
+	return { subject, html: htmlChrome(body, v), text }
 }
 
 function renderBookingModified(v: BookingModifiedVars): RenderedEmail {

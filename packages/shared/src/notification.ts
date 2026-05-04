@@ -26,6 +26,8 @@ const notificationKindValues = [
 	'pre_arrival',
 	'booking_cancelled',
 	'booking_modified',
+	// M9.widget.5 / A3.1.c — magic-link delivery for guest-portal access (find-by-ref-email flow).
+	'booking_magic_link',
 ] as const
 export const notificationKindSchema = z.enum(notificationKindValues)
 export type NotificationKind = z.infer<typeof notificationKindSchema>
@@ -134,6 +136,7 @@ export function deriveRecipientKindFromNotificationKind(
 		case 'pre_arrival':
 		case 'booking_cancelled':
 		case 'booking_modified':
+		case 'booking_magic_link':
 			return 'guest'
 	}
 }

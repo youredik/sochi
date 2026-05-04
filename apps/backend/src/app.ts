@@ -49,6 +49,8 @@ import { createTenantComplianceFactory } from './domains/tenant/compliance.facto
 import { createTenantComplianceRoutes } from './domains/tenant/compliance.routes.ts'
 import { createWidgetBookingCreateFactory } from './domains/widget/booking-create.factory.ts'
 import { createWidgetBookingCreateRoutes } from './domains/widget/booking-create.routes.ts'
+import { createBookingFindRepo } from './domains/widget/booking-find.repo.ts'
+import { createBookingFindRoutes } from './domains/widget/booking-find.routes.ts'
 import { createMagicLinkFactory } from './domains/widget/magic-link.factory.ts'
 import { createMagicLinkConsumeRoutes } from './domains/widget/magic-link-consume.routes.ts'
 import { createWidgetFactory } from './domains/widget/widget.factory.ts'
@@ -522,6 +524,18 @@ const routes = app
 		createMagicLinkConsumeRoutes({
 			magicLinkService: magicLinkFactory.service,
 			resolveCookieSecret: (tenantId) => magicLinkSecretResolver.resolve(tenantId),
+		}),
+	)
+	// M9.widget.5 / A3.1.c — booking-find (POST «найти бронь по ref+email»):
+	// timing-safe Promise.allSettled padding 800ms + tuple-key (email, ref)
+	// rate-limit 5/15min + always 200 OK unified body. On match: issues
+	// view-scope JWT + writes notificationOutbox row (existing dispatcher
+	// CDC consumer sends email).
+	.route(
+		'/api/public/widget',
+		createBookingFindRoutes({
+			magicLinkService: magicLinkFactory.service,
+			repo: createBookingFindRepo(sql),
 		}),
 	)
 	.route('/api/v1/properties', createPropertyRoutes(propertyFactory))

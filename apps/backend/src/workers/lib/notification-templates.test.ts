@@ -70,6 +70,7 @@ const allKinds: NotificationKind[] = [
 	'pre_arrival',
 	'booking_cancelled',
 	'booking_modified',
+	'booking_magic_link',
 ]
 
 const allVars: TemplateVars = {
@@ -142,13 +143,18 @@ const allVars: TemplateVars = {
 		refundFormatted: null,
 		magicUrl: 'https://booking.example.com/m/abc123',
 	},
+	booking_magic_link: {
+		...xssVars,
+		bookingReference: 'BK-2026-A1B2C3',
+		magicLinkUrl: 'https://booking.example.com/booking/jwt/abc.def.ghi',
+	},
 }
 
 // Templates differ in which user-input field is rendered. `receipt_failed` is
 // ops-facing and intentionally does NOT render guestName (only failureReason
 // from the OFD response). Pick the field actually rendered per kind so the
 // XSS sweep is meaningful for every template.
-const xssAttackInField: Record<NotificationKind, 'guestName' | 'failureReason'> = {
+const xssAttackInField: Record<NotificationKind, 'guestName' | 'failureReason' | 'propertyName'> = {
 	payment_succeeded: 'guestName',
 	payment_failed: 'guestName',
 	receipt_confirmed: 'guestName',
@@ -159,6 +165,7 @@ const xssAttackInField: Record<NotificationKind, 'guestName' | 'failureReason'> 
 	pre_arrival: 'guestName',
 	booking_cancelled: 'guestName',
 	booking_modified: 'guestName',
+	booking_magic_link: 'propertyName',
 }
 
 describe('renderTemplate — XSS hardening (every kind)', () => {
@@ -310,5 +317,74 @@ describe('renderTemplate — structural sanity', () => {
 			const out = renderTemplate(kind, allVars[kind])
 			expect(out.subject.length).toBeGreaterThan(0)
 		}
+	})
+})
+
+/* ============================================================ booking_magic_link content */
+
+describe('renderTemplate — booking_magic_link strict transactional canon (M9.widget.5)', () => {
+	const vars = allVars.booking_magic_link
+
+	test('[BML1] subject = «Управление бронированием №<ref>»', () => {
+		const out = renderTemplate('booking_magic_link', vars)
+		expect(out.subject).toContain('Управление бронированием')
+		expect(out.subject).toContain(vars.bookingReference)
+	})
+
+	test('[BML2] body has button + plain-text fallback URL (both same)', () => {
+		const out = renderTemplate('booking_magic_link', vars)
+		const hrefMatches = [
+			...out.html.matchAll(/href="https:\/\/booking\.example\.com\/booking\/jwt\/abc\.def\.ghi"/g),
+		]
+		expect(hrefMatches.length).toBeGreaterThanOrEqual(2)
+		expect(out.text).toContain(vars.magicLinkUrl)
+	})
+
+	test('[BML3] body has 24h validity + privacy reminder', () => {
+		const out = renderTemplate('booking_magic_link', vars)
+		expect(out.text).toContain('24 час')
+		expect(out.text).toMatch(/не передавайте/i)
+		expect(out.html).toContain('24 час')
+		expect(out.html).toMatch(/не передавайте/i)
+	})
+
+	test('[BML4] NO unsubscribe link (38-ФЗ ст. 18 transactional carve-out)', () => {
+		const out = renderTemplate('booking_magic_link', vars)
+		expect(out.text).not.toMatch(/отписат/i)
+		expect(out.html).not.toMatch(/отписат/i)
+	})
+
+	test('[BML5] NO marketing copy', () => {
+		const out = renderTemplate('booking_magic_link', vars)
+		const phrases = [/скидк/i, /акци/i, /купите/i, /часто берут/i]
+		for (const p of phrases) {
+			expect(out.text).not.toMatch(p)
+			expect(out.html).not.toMatch(p)
+		}
+	})
+
+	test('[BML6] 152-ФЗ disclosure footer present (chrome)', () => {
+		const out = renderTemplate('booking_magic_link', vars)
+		expect(out.html).toContain('ИНН ' + vars.senderInn)
+		expect(out.html).toMatch(/оператор[а-я]* персональных данных/i)
+		expect(out.text).toContain('ИНН ' + vars.senderInn)
+	})
+
+	test('[BML7] propertyName escaped in HTML (XSS hardening)', () => {
+		const out = renderTemplate('booking_magic_link', {
+			...vars,
+			propertyName: '<script>alert(1)</script>',
+		})
+		expect(out.html).not.toContain('<script>alert(1)</script>')
+		expect(out.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+	})
+
+	test('[BML8] magicLinkUrl escaped in HTML (XSS hardening)', () => {
+		const out = renderTemplate('booking_magic_link', {
+			...vars,
+			magicLinkUrl: 'https://example.com/?x="><script>1</script>',
+		})
+		expect(out.html).not.toContain('<script>1</script>')
+		expect(out.html).toContain('&lt;script&gt;1&lt;/script&gt;')
 	})
 })

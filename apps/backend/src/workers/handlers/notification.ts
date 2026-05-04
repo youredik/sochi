@@ -136,6 +136,16 @@ function buildOutboxFields(kind: NotificationKind): {
 				recipient: 'guest@placeholder.local',
 				channel: 'email',
 			}
+		// M9.widget.5 / A3.1.c — booking_magic_link is request-driven (NOT CDC):
+		// booking-find.routes.ts writes outbox row directly с pre-rendered
+		// subject/bodyText. This handler is CDC-only — defensive return for
+		// exhaustive switch.
+		case 'booking_magic_link':
+			return {
+				subject: 'Управление бронированием',
+				recipient: 'guest@placeholder.local',
+				channel: 'email',
+			}
 	}
 }
 
