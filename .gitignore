@@ -45,6 +45,10 @@ planfile
 .artifacts/
 tmp/
 
+# Lighthouse CI local cache — runs collected by `pnpm lhci:collect` (M9.widget.7 / A5.1).
+# Reports rotate per-run + uploaded ad-hoc; not source-of-truth state.
+.lighthouseci/
+
 # Misc
 *.log
 .DS_Store
