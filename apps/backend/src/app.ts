@@ -15,6 +15,8 @@ import { createAvailabilityFactory } from './domains/availability/availability.f
 import { createAvailabilityRoutes } from './domains/availability/availability.routes.ts'
 import { createBookingFactory } from './domains/booking/booking.factory.ts'
 import { createBookingRoutes } from './domains/booking/booking.routes.ts'
+import { createGuestPortalRepo } from './domains/booking/guest-portal.repo.ts'
+import { createGuestPortalRoutes } from './domains/booking/guest-portal.routes.ts'
 import { createMockArchiveBuilder } from './domains/epgu/archive/mock-archive.ts'
 import { createMigrationRegistrationFactory } from './domains/epgu/registration/registration.factory.ts'
 import { createMigrationRegistrationRoutes } from './domains/epgu/registration/registration.routes.ts'
@@ -536,6 +538,18 @@ const routes = app
 		createBookingFindRoutes({
 			magicLinkService: magicLinkFactory.service,
 			repo: createBookingFindRepo(sql),
+		}),
+	)
+	// M9.widget.5 / A3.3 — guest portal: GET view + POST cancel routes.
+	// Cookie-auth via __Host-guest_session (set by /consume route at A3.1.b).
+	// Cancel route enforces ПП РФ № 1912 п. 16 boundary canon (pre_checkin →
+	// 100% refund; day_of_or_later → max 1-night charge).
+	.route(
+		'/api/public',
+		createGuestPortalRoutes({
+			repo: createGuestPortalRepo(sql),
+			bookingService: bookingFactory.service,
+			resolveCookieSecret: (tenantId) => magicLinkSecretResolver.resolve(tenantId),
 		}),
 	)
 	.route('/api/v1/properties', createPropertyRoutes(propertyFactory))

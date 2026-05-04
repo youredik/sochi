@@ -672,7 +672,20 @@ renderTemplate, generates .ics calendar invite, attaches к send.
   14/14 dispatcher tests preserved (lazy path + existing escape-wrap fallback).
 
 ### A3.3 (commit pending)
-TBD — guest portal + cancel routes (cookie-auth + ПП-1912 boundary) findings.
+
+Guest portal routes — view + cancel с cookie-auth + ПП РФ № 1912 п. 16 boundary
+canon. 8 strict tests (GP-CB1..8) для timezone-correct boundary computation.
+
+**Files committed:**
+- `domains/booking/guest-portal.repo.ts` — read-only repo `viewBooking(tenantId, bookingId)` resolves booking + property + total formatted
+- `domains/booking/guest-portal.routes.ts`:
+   * GET `/api/public/booking/guest-portal/:bookingId` — view booking + cancel policy disclosure
+   * POST `/api/public/booking/guest-portal/:bookingId/cancel` — cancel с ПП-1912 boundary
+   * `computeCancelBoundary(checkIn, now)` — pure function (Europe/Moscow, no DST since 2014). `pre_checkin` (now < endOfDay(checkIn) Moscow) → 100% refund; `day_of_or_later` → max 1-night charge
+   * Scope check: GET accepts both 'view'+'mutate'; POST cancel REQUIRES 'mutate'
+   * BookingId mismatch (cookie vs URL param) → 403
+- `domains/booking/guest-portal.test.ts` — 8 strict (GP-CB1..8): pre_checkin × 4 cases (day before / 00:00 / 14:00 / 23:59) + day_of_or_later × 2 + edge cases (checkIn 23:00 UTC = next-day Moscow / 00:00 UTC = 03:00 Moscow same day)
+- `app.ts` wire `createGuestPortalRoutes` под `/api/public`
 
 ### A3.4 (commit pending)
 TBD — frontend (5 routes + screens + 12 E2E) findings.

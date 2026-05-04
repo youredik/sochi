@@ -18,7 +18,8 @@
 - ✅ A3.2 — enhanced renderBookingConfirmed (literal-template canon — react-email REJECTED due to backend `biome noRestrictedImports react/react-dom` permanent canon) + 10 new strict tests BC-V1..10 + RU pluralization three-form + voucher + privacy reminder + magicLinkUrl XSS escape
 - ✅ D3 fix `edc4511` — Lax→Strict cookie rotation в guest-session middleware (canon downgrade caught + fixed)
 - ✅ A3.2.b foundation — migration 0046 attachmentsJson + email-adapter.ts attachments support all 3 adapters + dispatcher reads attachmentsJson + 3 strict tests (commit `2ea9e7b`)
-- 🟡 A3.2.c (in progress) — dispatcher lazy-render для booking_confirmed kind (full var resolver + .ics generation) — code shipped, empirical curl deferred к full-booking integration test (substantial seed orchestration)
+- ✅ A3.2.c — dispatcher lazy-render booking_confirmed (full var resolver + .ics generation) commit `baa8d3e`
+- ✅ A3.3 — guest portal view + cancel routes (cookie-auth + ПП-1912 boundary canon Europe/Moscow) + 8 strict tests GP-CB1..8
 - 🔴 A3.3 — guest portal + cancel routes (cookie-auth + ПП-1912 boundary)
 - 🔴 A3.4 — frontend (5 routes + screens + 12 E2E)
 
