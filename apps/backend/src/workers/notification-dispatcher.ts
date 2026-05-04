@@ -29,7 +29,7 @@ import {
 	type RetryPolicy,
 	shouldDeadLetter,
 } from './lib/dispatcher-policy.ts'
-import type { EmailAdapter, SendEmailResult } from './lib/postbox-adapter.ts'
+import type { EmailAdapter, EmailAttachment, SendEmailResult } from './lib/postbox-adapter.ts'
 import {
 	type RecipientSource,
 	type ResolveResult,
@@ -69,6 +69,8 @@ interface PendingRow {
 	subject: string
 	bodyText: string | null
 	payloadJson: unknown
+	/** M9.widget.5 / A3.2.b — JSON array of EmailAttachment[] (.ics + future PDF). */
+	attachmentsJson: unknown
 	retryCount: number | bigint
 	sourceObjectType: string
 	sourceObjectId: string
@@ -122,7 +124,7 @@ export function startNotificationDispatcher(
 
 		const [rows = []] = await sql<PendingRow[]>`
 			SELECT tenantId, id, kind, channel, recipient, subject, bodyText,
-			       payloadJson, retryCount, sourceObjectType, sourceObjectId,
+			       payloadJson, attachmentsJson, retryCount, sourceObjectType, sourceObjectId,
 			       sourceEventDedupKey, createdAt, createdBy
 			FROM notificationOutbox
 			WHERE status = 'pending'
@@ -239,6 +241,12 @@ async function dispatchOne(
 	const bodyText = row.bodyText ?? row.subject
 	const bodyHtml = `<p>${escapeHtmlInline(bodyText)}</p>`
 
+	// M9.widget.5 / A3.2.b — extract attachments[] from row.attachmentsJson.
+	// Schema: JSON array of `[{ filename, content (utf-8 OR base64),
+	// contentType }, ...]`. NULL/empty → no attachments. Defensive parse —
+	// malformed JSON / wrong shape → log + skip, don't crash dispatcher.
+	const attachments = parseAttachments(row.attachmentsJson, log, row.tenantId, row.id)
+
 	// 3. Send (single-row, no batch). Adapter classifier handles error mapping.
 	const result: SendEmailResult = await adapter.send({
 		from: fromAddress,
@@ -246,6 +254,7 @@ async function dispatchOne(
 		subject,
 		html: bodyHtml,
 		text: bodyText,
+		...(attachments && attachments.length > 0 && { attachments }),
 	})
 
 	const now = new Date()
@@ -349,6 +358,48 @@ async function dispatchOne(
 		'dispatcher: transient — scheduled retry',
 	)
 	return 'transient_retry'
+}
+
+/**
+ * Parse outbox row attachmentsJson → typed EmailAttachment[].
+ * Defensive — malformed JSON OR wrong shape returns null (logs + skip).
+ * NULL/undefined column → null (no attachments). Empty array → null.
+ */
+function parseAttachments(
+	raw: unknown,
+	log: DispatcherLogger,
+	tenantId: string,
+	id: string,
+): EmailAttachment[] | null {
+	if (raw === null || raw === undefined) return null
+	const parsed = typeof raw === 'string' ? safeJsonParse(raw) : raw
+	if (!Array.isArray(parsed) || parsed.length === 0) return null
+	const out: EmailAttachment[] = []
+	for (const item of parsed) {
+		if (
+			!item ||
+			typeof item !== 'object' ||
+			typeof (item as { filename?: unknown }).filename !== 'string' ||
+			typeof (item as { content?: unknown }).content !== 'string' ||
+			typeof (item as { contentType?: unknown }).contentType !== 'string'
+		) {
+			log.warn(
+				{ tenantId, id },
+				'dispatcher: malformed attachment row entry — skipping all attachments',
+			)
+			return null
+		}
+		out.push(item as EmailAttachment)
+	}
+	return out
+}
+
+function safeJsonParse(s: string): unknown {
+	try {
+		return JSON.parse(s)
+	} catch {
+		return null
+	}
 }
 
 async function upsertOutbox(

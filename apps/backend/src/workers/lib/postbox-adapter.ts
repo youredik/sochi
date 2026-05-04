@@ -24,12 +24,31 @@
  * and blows reputation when Mail.ru bounces stick.
  */
 
+/**
+ * Email attachment payload (M9.widget.5 / A3.2.b).
+ *
+ * Used для .ics calendar invite + future PDF voucher attachments. Adapters
+ * encode through their canonical send paths:
+ *   - PostboxAdapter (SES v2): Content.Simple.Attachments[] с base64 RawContent
+ *   - MailpitAdapter (SMTP): MIME multipart/mixed boundary
+ *   - StubAdapter: stored verbatim для test assertions
+ */
+export interface EmailAttachment {
+	/** Filename presented к recipient (e.g. `booking-BK-2026-A1B2C3.ics`). */
+	filename: string
+	/** Raw content (UTF-8 string для text/calendar; base64 для binary). */
+	content: string
+	/** MIME type (e.g. `text/calendar; method=PUBLISH; charset=utf-8`). */
+	contentType: string
+}
+
 export interface SendEmailInput {
 	from: string
 	to: string
 	subject: string
 	html: string
 	text: string
+	attachments?: ReadonlyArray<EmailAttachment>
 }
 
 export type SendEmailResult =
@@ -101,6 +120,14 @@ interface SesClientLike {
 	send(command: unknown): Promise<{ MessageId?: string; $metadata?: { httpStatusCode?: number } }>
 }
 
+interface SesAttachment {
+	FileName: string
+	RawContent: Uint8Array
+	ContentType: string
+	ContentDisposition: 'ATTACHMENT'
+	ContentTransferEncoding: 'BASE64'
+}
+
 interface SendEmailCommandConstructor {
 	new (input: {
 		FromEmailAddress: string
@@ -109,6 +136,7 @@ interface SendEmailCommandConstructor {
 			Simple: {
 				Subject: { Data: string }
 				Body: { Html: { Data: string }; Text: { Data: string } }
+				Attachments?: SesAttachment[]
 			}
 		}
 	}): unknown
@@ -134,15 +162,31 @@ export class PostboxAdapter implements EmailAdapter {
 
 	async send(input: SendEmailInput): Promise<SendEmailResult> {
 		try {
+			// SES v2 attachments shape: Content.Simple.Attachments[] с base64
+			// RawContent. Per AWS docs (verified 2026-04 — `aws-sdk-js-v3
+			// @aws-sdk/client-sesv2`).
+			const sesAttachments: SesAttachment[] | undefined = input.attachments?.map((a) => ({
+				FileName: a.filename,
+				RawContent: Buffer.from(a.content, 'utf8'),
+				ContentType: a.contentType,
+				ContentDisposition: 'ATTACHMENT' as const,
+				ContentTransferEncoding: 'BASE64' as const,
+			}))
+			const simple: {
+				Subject: { Data: string }
+				Body: { Html: { Data: string }; Text: { Data: string } }
+				Attachments?: SesAttachment[]
+			} = {
+				Subject: { Data: input.subject },
+				Body: { Html: { Data: input.html }, Text: { Data: input.text } },
+			}
+			if (sesAttachments && sesAttachments.length > 0) {
+				simple.Attachments = sesAttachments
+			}
 			const command = new this.SendEmailCommand({
 				FromEmailAddress: input.from,
 				Destination: { ToAddresses: [input.to] },
-				Content: {
-					Simple: {
-						Subject: { Data: input.subject },
-						Body: { Html: { Data: input.html }, Text: { Data: input.text } },
-					},
-				},
+				Content: { Simple: simple },
 			})
 			const response = await this.client.send(command)
 			if (response.MessageId) return { kind: 'sent', messageId: response.MessageId }
@@ -206,20 +250,15 @@ export class MailpitAdapter implements EmailAdapter {
 	async send(input: SendEmailInput): Promise<SendEmailResult> {
 		const date = new Date().toUTCString()
 		const messageId = `<${Date.now()}.${crypto.randomUUID()}@sochi.local>`
-		const boundary = `boundary_${Date.now().toString(36)}`
+		const altBoundary = `alt_${Date.now().toString(36)}`
+		const mixedBoundary = `mix_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
-		// Multipart/alternative: text + html. Mailpit renders both branches —
-		// matches the dual-MIME shape we ship to Postbox in production.
-		const message = [
-			`From: ${input.from}`,
-			`To: ${input.to}`,
-			`Subject: =?UTF-8?B?${Buffer.from(input.subject).toString('base64')}?=`,
-			`Date: ${date}`,
-			`Message-ID: ${messageId}`,
-			'MIME-Version: 1.0',
-			`Content-Type: multipart/alternative; boundary="${boundary}"`,
+		const hasAttachments = input.attachments && input.attachments.length > 0
+
+		const altPart = [
+			`Content-Type: multipart/alternative; boundary="${altBoundary}"`,
 			'',
-			`--${boundary}`,
+			`--${altBoundary}`,
 			'Content-Type: text/plain; charset=UTF-8',
 			'Content-Transfer-Encoding: base64',
 			'',
@@ -228,7 +267,7 @@ export class MailpitAdapter implements EmailAdapter {
 				.match(/.{1,76}/g)
 				?.join('\r\n') ?? '',
 			'',
-			`--${boundary}`,
+			`--${altBoundary}`,
 			'Content-Type: text/html; charset=UTF-8',
 			'Content-Transfer-Encoding: base64',
 			'',
@@ -237,8 +276,42 @@ export class MailpitAdapter implements EmailAdapter {
 				.match(/.{1,76}/g)
 				?.join('\r\n') ?? '',
 			'',
-			`--${boundary}--`,
+			`--${altBoundary}--`,
 		].join('\r\n')
+
+		// MIME multipart/mixed когда есть attachments — text/html alternative
+		// remains nested inside multipart/alternative subtree per RFC 2046.
+		const headers = [
+			`From: ${input.from}`,
+			`To: ${input.to}`,
+			`Subject: =?UTF-8?B?${Buffer.from(input.subject).toString('base64')}?=`,
+			`Date: ${date}`,
+			`Message-ID: ${messageId}`,
+			'MIME-Version: 1.0',
+		]
+
+		const message = hasAttachments
+			? [
+					...headers,
+					`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
+					'',
+					`--${mixedBoundary}`,
+					altPart,
+					...(input.attachments ?? []).flatMap((a) => [
+						`--${mixedBoundary}`,
+						`Content-Type: ${a.contentType}`,
+						`Content-Disposition: attachment; filename="${a.filename}"`,
+						'Content-Transfer-Encoding: base64',
+						'',
+						Buffer.from(a.content, 'utf8')
+							.toString('base64')
+							.match(/.{1,76}/g)
+							?.join('\r\n') ?? '',
+						'',
+					]),
+					`--${mixedBoundary}--`,
+				].join('\r\n')
+			: [...headers, altPart].join('\r\n')
 
 		return new Promise<SendEmailResult>((resolve) => {
 			const socket = net.createConnection(this.port, this.host)

@@ -620,6 +620,39 @@ Senior reverse: react-email path REJECTED. Existing `notification-templates.ts` 
 - dispatcher: pre-render bodyText at write-time через `renderTemplate('booking_confirmed', vars)` с full enhanced fields + .ics attachment generation
 - Empirical curl: book → CDC fires → email arrives с .ics в Mailpit
 
+### A3.2.b foundation (commit pending — D3 fix `edc4511` + this commit)
+
+Migration 0046 + email-adapter attachments support across all 3 adapters + dispatcher reads attachmentsJson. 3 new adapter tests (ATT-S1, ATT-P1, ATT-P2). 14/14 dispatcher tests pass (no regression).
+
+**Files committed:**
+- `db/migrations/0046_notification_outbox_attachments.sql` — `attachmentsJson Json` column added к notificationOutbox (nullable, existing rows skip)
+- `workers/lib/postbox-adapter.ts`:
+   * `EmailAttachment` interface exported (`{ filename, content, contentType }`)
+   * `SendEmailInput.attachments?: ReadonlyArray<EmailAttachment>` added
+   * PostboxAdapter — SES v2 `Content.Simple.Attachments[]` shape (verified AWS SDK 2026-04 API)
+   * MailpitAdapter — MIME `multipart/mixed` boundary с `multipart/alternative` nested (RFC 2046 canonical)
+   * StubAdapter — records attachments в `sent[]` для test assertions
+- `workers/notification-dispatcher.ts`:
+   * `attachmentsJson` column added к PendingRow + SELECT
+   * `parseAttachments(raw, log, ...)` defensive parser — malformed JSON / wrong shape → null + warn (no crash)
+   * `EmailAttachment` import from postbox-adapter
+   * Conditional spread `...(attachments && attachments.length > 0 && { attachments })` per exactOptionalPropertyTypes canon
+
+**Tests (3 new):**
+- [ATT-S1] StubAdapter records attachments в sent[]
+- [ATT-P1] PostboxAdapter passes attachments → SES Content.Simple.Attachments[]
+- [ATT-P2] PostboxAdapter без attachments → Content.Simple.Attachments undefined
+
+**Real bug-hunt:**
+1. **TS Constructor parameter typing**: initial `Parameters<typeof PostboxAdapter>['1']` — wrong indexing для constructor. Fix: `ConstructorParameters<typeof PostboxAdapter>[1]` (canonical TS for class constructor params).
+
+### A3.2.c (commit pending — separate scope)
+
+Lazy-render dispatcher для booking_confirmed kind (var resolver + .ics generation + write-time pre-render). Carry-forward:
+- notification.ts CDC handler resolves full vars (booking + guest + property + org rows) → renderTemplate → encode attachments[] → UPSERT outbox с rich subject + html + text + attachmentsJson
+- OR dispatcher lazy-renders at send-time (read row → resolve vars → render → attach)
+- Empirical curl: book → CDC fires booking_confirmed → email arrives с .ics в Mailpit
+
 ### A3.3 (commit pending)
 TBD — guest portal + cancel routes (cookie-auth + ПП-1912 boundary) findings.
 

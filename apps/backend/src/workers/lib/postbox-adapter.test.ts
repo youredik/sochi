@@ -383,3 +383,96 @@ describe.skipIf(process.env.MAILPIT_INTEGRATION !== '1')(
 		})
 	},
 )
+
+/* ============================================================ M9.widget.5 / A3.2.b — attachments support */
+
+describe('SendEmailInput с attachments — adapter integration', () => {
+	test('[ATT-S1] StubAdapter records attachments в sent[]', async () => {
+		const adapter = new StubAdapter()
+		const result = await adapter.send({
+			from: 'noreply@x.com',
+			to: 'guest@y.com',
+			subject: 'Test',
+			html: '<p>Test</p>',
+			text: 'Test',
+			attachments: [
+				{
+					filename: 'booking-XYZ.ics',
+					content: 'BEGIN:VCALENDAR\r\nEND:VCALENDAR',
+					contentType: 'text/calendar; method=PUBLISH; charset=utf-8',
+				},
+			],
+		})
+		expect(result.kind).toBe('sent')
+		expect(adapter.sent).toHaveLength(1)
+		expect(adapter.sent[0]?.attachments).toBeDefined()
+		expect(adapter.sent[0]?.attachments?.[0]?.filename).toBe('booking-XYZ.ics')
+		expect(adapter.sent[0]?.attachments?.[0]?.contentType).toContain('text/calendar')
+	})
+
+	test('[ATT-P1] PostboxAdapter passes attachments в SES SendEmailCommand.Content.Simple.Attachments', async () => {
+		let capturedInput: unknown = null
+		class FakeSendCommand {
+			constructor(input: unknown) {
+				capturedInput = input
+			}
+		}
+		const fakeClient = {
+			send: async () => ({ MessageId: 'msg-test-001', $metadata: { httpStatusCode: 200 } }),
+		}
+		const adapter = new PostboxAdapter(
+			fakeClient,
+			FakeSendCommand as unknown as ConstructorParameters<typeof PostboxAdapter>[1],
+		)
+		const icsContent = 'BEGIN:VCALENDAR\r\nEND:VCALENDAR'
+		await adapter.send({
+			from: 'noreply@x.com',
+			to: 'guest@y.com',
+			subject: 'Подтверждение',
+			html: '<p>Test</p>',
+			text: 'Test',
+			attachments: [
+				{
+					filename: 'booking-ABC.ics',
+					content: icsContent,
+					contentType: 'text/calendar; method=PUBLISH; charset=utf-8',
+				},
+			],
+		})
+		expect(capturedInput).not.toBeNull()
+		const input = capturedInput as {
+			Content: { Simple: { Attachments?: Array<{ FileName: string; ContentType: string }> } }
+		}
+		expect(input.Content.Simple.Attachments).toHaveLength(1)
+		expect(input.Content.Simple.Attachments?.[0]?.FileName).toBe('booking-ABC.ics')
+		expect(input.Content.Simple.Attachments?.[0]?.ContentType).toContain('text/calendar')
+	})
+
+	test('[ATT-P2] PostboxAdapter без attachments — Content.Simple.Attachments undefined', async () => {
+		let capturedInput: unknown = null
+		class FakeSendCommand {
+			constructor(input: unknown) {
+				capturedInput = input
+			}
+		}
+		const fakeClient = {
+			send: async () => ({ MessageId: 'msg-test-002', $metadata: { httpStatusCode: 200 } }),
+		}
+		const adapter = new PostboxAdapter(
+			fakeClient,
+			FakeSendCommand as unknown as ConstructorParameters<typeof PostboxAdapter>[1],
+		)
+		await adapter.send({
+			from: 'noreply@x.com',
+			to: 'guest@y.com',
+			subject: 'Test',
+			html: '<p>Test</p>',
+			text: 'Test',
+			// no attachments
+		})
+		const input = capturedInput as {
+			Content: { Simple: { Attachments?: unknown } }
+		}
+		expect(input.Content.Simple.Attachments).toBeUndefined()
+	})
+})
