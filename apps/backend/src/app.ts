@@ -19,6 +19,7 @@ import { createGuestPortalRepo } from './domains/booking/guest-portal.repo.ts'
 import { createGuestPortalRoutes } from './domains/booking/guest-portal.routes.ts'
 import { createChannelFactory } from './domains/channel/channel.factory.ts'
 import { registerTravellineWithChannelFactory } from './domains/channel/travelline/travelline.factory.ts'
+import { registerYandexTravelWithChannelFactory } from './domains/channel/yandex-travel/yandex-travel.factory.ts'
 import { createMockArchiveBuilder } from './domains/epgu/archive/mock-archive.ts'
 import { createMigrationRegistrationFactory } from './domains/epgu/registration/registration.factory.ts'
 import { createMigrationRegistrationRoutes } from './domains/epgu/registration/registration.routes.ts'
@@ -252,6 +253,21 @@ registerAdapter({
 		'OAuth Client-Credentials JWT 15min / 3rps-15rpm-300rph per-IP rate-limit / verify→create ' +
 		'two-step + 24h CreateBookingToken + Checksum / tlRoomTypeId-tlRatePlanId mapping). ' +
 		'Replace with live HTTP client adapter in M10.live (партнёр TL onboarding).',
+})
+
+// M10 / A7.3 — Yandex.Travel Mock (Bnovo CM passthrough emulation).
+// Live-flip = onboard via partnered CM (Bnovo) — direct YT API self-build is
+// breach of YT partner agreement (D6).
+registerYandexTravelWithChannelFactory(channelFactory)
+registerAdapter({
+	name: 'channel.yandex-travel.mock',
+	category: 'channel',
+	mode: 'mock',
+	description:
+		'Behaviour-faithful Yandex.Travel Mock impersonating Bnovo CM passthrough (D6: NO direct ' +
+		'YT API). HMAC-SHA256 signature + 300s replay window + IP-allowlist gate (D25.c). ' +
+		'152-ФЗ residency (RU photo hosts only) + 3-checkbox granular consent + RUB-only currency. ' +
+		'Replace with Bnovo HTTP client adapter in M10.live (CM partner onboarding).',
 })
 
 // CDC consumers — exactly-once projection pipeline.
