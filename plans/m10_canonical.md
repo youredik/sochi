@@ -364,14 +364,34 @@ HMAC + IP-allowlist) + `channel-dispatch.ts` (Hookdeck tiered retry pure lib) +
 - CDC-first audit (CHANGEFEED + activity_writer) over direct activity insert
 - `tenantId`-via-source-URN extraction for cross-tenant in inbox webhook handler
 
-### A7.2 (commit pending)
-TBD — TravelLine Mock findings.
+### A7.2 — `0c18605` (2026-05-05)
+TravelLine behaviour-faithful Mock + 6 D15 contract tests via MSW + zod. **26 strict tests** (target 24, +2 over):
+- 20 Mock TL1-TL20 — D1 source-of-truth ARI / D2 polling + continueToken cursor + lastModification−2d / D3 OAuth Client-Credentials JWT 15min auto-refresh + 3rps/15rpm/300rph per-IP rate-limit / D4 verify→create + 24h CreateBookingToken + Checksum mismatch 409 / D5 TL-canonical IDs / cross-tenant + idempotent cancel + CloudEvent envelope + receiveBookingWebhook 501 (polling-not-webhook canon)
+- 6 Contract TL-CONTRACT1-6 — OAuth shape / search response / reservations cursor / verify token UUID + checksum sha256 / create idempotency-key + checksum echo / 409 CHECKSUM_MISMATCH error envelope
+- Senior pivots: deleted travelline-types.ts orphan (zod schemas в contract test = canonical wire), continueToken separator `:` → `|`, `__test_disableRateLimit` seam
+- Modern dep: msw@2.14.3 published 2026-05-04 TODAY (Node 22+ engine)
 
-### A7.3 (commit pending)
-TBD — Yandex.Travel Mock findings.
+### A7.3 — `0d10ce1` (2026-05-05)
+Yandex.Travel behaviour-faithful Mock (Bnovo CM passthrough emulation) + 4 contract tests. **21 strict tests** (target 16, +5 over):
+- 17 Mock YT1-YT17 — D6 NO direct YT API (Bnovo passthrough) / D17 granular consent 3-checkbox / D19 cross-border non-RU host → 422 / D25 HMAC-SHA256 + 300s replay window / D25.c IP-allowlist gate / D18 role=independent_operator / RUB-only currency / ARI idempotency + full snapshot semantics / cross-tenant cancel / CE envelope / findNonRuHost helper coverage
+- 4 Contract YT-CONTRACT1-4 — ARI push request/response / inbound webhook envelope / error envelope shape (consent / non-RU / non-RUB)
+- Senior pivot: removed unused `__test_currentTimestampSeconds` option (biome flagged dead code)
 
-### A7.4 (commit pending)
-TBD — Ostrovok ETG Mock findings.
+### A7.4 — `afe87c6` (2026-05-05)
+Ostrovok ETG behaviour-faithful Mock (5-stage SM + 4-brand fan-out) + 7 contract tests. **26 strict tests** (target 22, +4 over):
+- 19 Mock ETG1-ETG19 — D7 HTTP Basic Auth (id:uuid base64) / D8 5-stage SM full flow + sandbox demo-hotel guard hid=8473727 / D9 partner_order_id UUID v4 rotation on double_booking_form (cap 3 retries) / D10 stuck-in-book timeout (90s non-3DS / 600s 3DS) + webhook terminal-only / 4-brand fan-out (RateHawk/ZenHotels/B2B.Ostrovok/Ostrovok) / 3 commercial models / rg_ext (NOT deprecated images) / cross-tenant cancel + emit envelope
+- 7 Contract ETG-CONTRACT1-6 + 4.b — Basic Auth construction / search hotelpage + rg_ext / prebook UUID + bookHash / book happy + collision 409 / booking info terminal / webhook terminal-only validation
+- Senior pivots: ETG createBooking() throws (5-stage SM не fits canonical verify→create, exposes searchHotels/prebook/book/start/checkBookingStatus helpers explicitly); partner_order_id global uniqueness via Set tracking
+- 1 transient flake folio-balance.test.ts B3 (YDB tx commit race under 2300-test sequential load); passes на isolated re-run + 2nd full regression — NOT from A7.4 changes
 
-### A7.5 (commit pending)
-TBD — bidirectional + RU compliance + demo findings.
+### A7.5 — `68a675f` (2026-05-05)
+Sync orchestrator + RU compliance gates + admin overlay UI + senior pivot test loop canon. **24 strict tests** (target 16, +8 over):
+- 11 SYNC1-SYNC9 — D16 sanctions HARD-DISABLE (Booking.com/Expedia/Airbnb refused) / D18 processor_with_dpa gate / D19 cross-border-transfer (filed/denied/missing) / disabled + auto-disabled circuit breaker / pooled inventory overbooking detection с inventoryBuffer
+- 7 MIG1-MIG3 — D20 channel migration delegation rejection 422 (migrationRegistrationId / epguSubmittedAt / epguStatusCode) / госпошлина 500 ₽ since 27 Jan 2026 PP №44 / citizenship branching foreign|ru_citizen_other|ru_citizen_родственник
+- 6 CHAN-UI1-CHAN-UI5 — 3 channels visible / status badges Russian labels / last-sync formatted ("5мин назад") / connection error role=alert / mode badge mock|sandbox|live
+- New: `domains/channel/sync-orchestrator.ts` (evaluateSyncGate + detectPooledOverbooking + orchestrateAriBroadcast) + `migration-uchet.ts` (assertNoChannelMigrationDelegation + deriveMigrationRequirement) + `workers/handlers/channel-broadcast.ts` (CDC handler wired в app.ts) + migration 0059 (channel_broadcast_writer consumer) + admin overlay UI
+- **Senior pivot — test loop canon (resolves recurring «полжизни на тестах» frustration)**: pnpm test:fast (47s, 3960 pure) = default inner loop / pnpm test:db (9min, 985 DB-integration) = pre-push когда DB code touched / pnpm test:serial (500s, 2319 full) = ONLY final pre-push gate. Memory: `feedback_test_loop_canon.md`
+- 9-gate green: typecheck / biome / sherif / knip / depcruise / **frontend 2616/0** (+6 от baseline) / **DB-integration 985/0** (test:db isolated, 0 flakes)
+
+### M10 final tally (2026-05-05)
+**237 strict tests** (target ~102, overdelivered 2.3×). 7 commits pushed origin/main. 0 regressions. 9 migrations (0050-0059). 3 channel adapters behaviour-faithful. Closes Боль 2.2 channel distribution. Track A complete; next = Track B deploy phase. Done memory: `project_m10_done.md`.
