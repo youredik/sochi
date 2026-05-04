@@ -365,9 +365,9 @@ describe('renderTemplate — booking_magic_link strict transactional canon (M9.w
 
 	test('[BML6] 152-ФЗ disclosure footer present (chrome)', () => {
 		const out = renderTemplate('booking_magic_link', vars)
-		expect(out.html).toContain('ИНН ' + vars.senderInn)
+		expect(out.html).toContain(`ИНН ${vars.senderInn}`)
 		expect(out.html).toMatch(/оператор[а-я]* персональных данных/i)
-		expect(out.text).toContain('ИНН ' + vars.senderInn)
+		expect(out.text).toContain(`ИНН ${vars.senderInn}`)
 	})
 
 	test('[BML7] propertyName escaped in HTML (XSS hardening)', () => {

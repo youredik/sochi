@@ -93,6 +93,16 @@ async function seedBooking(opts: SeedBookingOpts): Promise<{ bookingId: string }
 	return { bookingId }
 }
 
+/**
+ * Helper: load outbox rows for a booking, scoped to the cron actor only.
+ *
+ * Why filter by `createdBy`: when a `pnpm dev` backend is running locally, its
+ * `notification_writer` CDC consumer also reacts to seedBooking inserts and
+ * writes a `booking_confirmed` row. That contamination would make these tests
+ * environmentally fragile. The cron actor `system:notification_cron` is the
+ * sole writer this suite exercises, so filtering by it isolates this test's
+ * subject under any live-consumer pressure.
+ */
 async function listOutboxByBooking(tenantId: string, bookingId: string) {
 	const sql = getTestSql()
 	const [rows = []] = await sql<
@@ -103,6 +113,7 @@ async function listOutboxByBooking(tenantId: string, bookingId: string) {
 		WHERE tenantId = ${tenantId}
 		  AND sourceObjectType = 'booking'
 		  AND sourceObjectId = ${bookingId}
+		  AND createdBy = 'system:notification_cron'
 	`
 		.isolation('snapshotReadOnly')
 		.idempotent(true)

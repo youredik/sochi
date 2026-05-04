@@ -54,11 +54,6 @@ const bookingFindRequestSchema = z.object({
 	email: z.string().min(3).max(254).trim().toLowerCase(),
 })
 
-interface BookingFindRequest {
-	readonly reference: string
-	readonly email: string
-}
-
 const UNIFIED_RESPONSE_BODY = {
 	ok: true as const,
 	message: 'Если бронирование найдено, ссылка для управления отправлена на указанный email.',

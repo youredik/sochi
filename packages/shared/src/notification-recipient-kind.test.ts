@@ -1,6 +1,8 @@
 /**
- * Strict tests for the new M8.A.0.6 surface:
- *   - `NotificationKind` enum extended with 3 new kinds (10 total)
+ * Strict tests for the M8.A.0.6 + M9.widget.5 notification surface:
+ *   - `NotificationKind` enum: 4 payment + 3 internal + 3 public-widget guest
+ *     journey + 1 magic-link = 11 total. М9.widget.5/A3.1.c added
+ *     `booking_magic_link` for find-by-ref-email magic-link delivery.
  *   - `NotificationRecipientKind` enum with 4 values
  *   - `Notification.recipientKind` field is required+nullable on the
  *     domain type (forward-compat with M7 rows that have NULL)
@@ -30,14 +32,15 @@ describe('NotificationKind enum (regression — fail loud)', () => {
 		'pre_arrival',
 		'booking_cancelled',
 		'booking_modified',
+		'booking_magic_link',
 	]
 
 	it.each(allValues)('accepts canonical kind %s', (k) => {
 		expect(notificationKindSchema.parse(k)).toBe(k)
 	})
 
-	it('exposes exactly 10 kinds (7 internal + 3 public-widget)', () => {
-		expect(notificationKindSchema.options).toHaveLength(10)
+	it('exposes exactly 11 kinds (4 payment + 3 internal + 3 public-widget + 1 magic-link)', () => {
+		expect(notificationKindSchema.options).toHaveLength(11)
 	})
 
 	it('rejects unknown kind', () => {
@@ -87,7 +90,7 @@ describe('deriveRecipientKindFromNotificationKind — full enum coverage', () =>
 		expect(deriveRecipientKindFromNotificationKind(k)).toBe('system')
 	})
 
-	// Guest-facing → 'guest' (8 of 10 kinds)
+	// Guest-facing → 'guest' (9 of 11 kinds)
 	it.each([
 		'payment_succeeded',
 		'receipt_confirmed',
@@ -97,11 +100,12 @@ describe('deriveRecipientKindFromNotificationKind — full enum coverage', () =>
 		'pre_arrival',
 		'booking_cancelled',
 		'booking_modified',
+		'booking_magic_link',
 	] as const)('%s → guest', (k) => {
 		expect(deriveRecipientKindFromNotificationKind(k)).toBe('guest')
 	})
 
-	it('switch is exhaustive over all 10 kinds (no fallthrough/throws)', () => {
+	it('switch is exhaustive over all 11 kinds (no fallthrough/throws)', () => {
 		const all: NotificationKind[] = [
 			'payment_succeeded',
 			'payment_failed',
@@ -113,6 +117,7 @@ describe('deriveRecipientKindFromNotificationKind — full enum coverage', () =>
 			'pre_arrival',
 			'booking_cancelled',
 			'booking_modified',
+			'booking_magic_link',
 		]
 		for (const k of all) {
 			const out = deriveRecipientKindFromNotificationKind(k)

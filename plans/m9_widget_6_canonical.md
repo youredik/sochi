@@ -356,8 +356,45 @@ Per user canon — empirical npm-registry recheck перед А4.1 implementatio
 
 ## §17. Implementation log (carry-forward)
 
-### A4.1 (commit pending)
-TBD — embed package scaffold + bundle CI gate findings.
+### A4.1 (commit pending — bundle 6.23 kB gzip / 30 kB ceiling = 23.94 KiB headroom)
+
+Scaffold landed:
+- `apps/widget-embed/` workspace package wired (`pnpm-workspace.yaml` already had `apps/*`)
+- `package.json` — `lit@3.3.2` runtime + `vite@^8.0.10` / `terser@^5.46.2` / `rollup-plugin-visualizer@^7.0.1` / `gzip-size-cli@^5.1.0` / `vitest@^4.1.5` dev
+- `tsconfig.json` extends base, `target: ES2022`, `lib: [ES2022, DOM, DOM.Iterable]`, no decorators (canonical Lit 3 `static properties` + `declare` pattern)
+- `vite.config.ts` — IIFE library mode, Terser minify (`compress.passes: 2`, `ecma: 2020`), `output.extend: true`, sourcemap on, visualizer writes `dist/stats.html`
+- `src/index.ts` — defensive `customElements.get(tag) || define(tag, class)` guard per D4
+- `src/widget.ts` — `<sochi-booking-widget-v1>` shell, `:host { all: initial }` per D5
+- `scripts/check-size.mjs` — gzip CI gate (Node `zlib.gzipSync`, no extra dep)
+- `vitest.config.ts` — node env, hookTimeout 90 s for build hook
+- `src/build.test.ts` — BLD1-BLD5 (5 tests, all green)
+
+Findings / corrections:
+1. **Vite 8 + IIFE auto-disables code-splitting** — `inlineDynamicImports: true` is implicitly applied, the explicit option produces a `WARN` and was removed.
+2. **Terser `ecma: 2022` not yet supported** in `terser@5.46.2` types (`ECMA` enum stops at 2020). Set to `2020` — output target is still ES2022 via Vite `build.target`.
+3. **Lit 3 `override` keyword required** for `static properties` + `static styles` because TS `noImplicitOverride: true` is on.
+4. **`@lit-labs/ssr` is server-side only** — moved out of `apps/widget-embed/dependencies`; will land in `apps/backend/package.json` during A4.3.
+5. **Bundle size empirical**: `embed.js` 15.43 KiB raw / **6.06 KiB gzip** (24 KiB headroom under 30 KiB ceiling). Mews 11 kB precedent confirmed achievable.
+6. **Pre-existing biome lint cleanup** (per `feedback_no_preexisting.md`): fixed `useTemplate` (notification-templates.test.ts), removed unused `BookingFindRequest` interface (booking-find.routes.ts), and `useOptionalChain` (magic-link/jwt.ts).
+
+9-gate state:
+- ✅ sherif (clean after `pnpm sherif --fix` ordered devDeps alphabetically)
+- ✅ biome lint
+- ✅ depcruise (675 modules)
+- ✅ knip (after dropping `@lit-labs/ssr` from widget-embed deps)
+- ✅ typecheck (root script extended `apps/widget-embed/tsconfig.json`)
+- ✅ build (all packages including widget-embed; shared rebuilt → dist/.test.js stays in sync)
+- ✅ vitest BLD1-BLD5 (5 / 5)
+- ✅ test:serial — 204 files / **4475 passed | 1 skipped** (after 8 strict-test fixes — see below)
+- ✅ empirical: `node scripts/check-size.mjs` reports `6,209 bytes (6.06 KiB) — OK — 24,511 bytes (23.94 KiB) headroom`
+
+**Bug hunt round (8 reds → 0):**
+1. **NotificationKind enum count** — `packages/shared/src/notification-recipient-kind.test.ts` regression test asserted `length === 10`; A3.1.c added `booking_magic_link` (11th kind). Updated allValues + count + exhaustive switch coverage. `pnpm --filter @horeca/shared build` resolved twin failure in `dist/`.
+2. **`notification-cron.test.ts` × 4 (T1, T6, ID1, CT1)** — environmental contamination от моего же `pnpm dev` backend (PID 43362, `cwd /Users/ed/dev/sochi/apps/backend`): its `notification_writer` CDC consumer reacts to test seedBooking inserts and writes `booking_confirmed`. `listOutboxByBooking` теперь фильтрует `createdBy = 'system:notification_cron'` — изолирует subject под any live-consumer pressure (canonical strict-test pattern).
+3. **`night-audit.test.ts` × 1 (G2)** — same dev-backend `folio_creator_writer` CDC consumer auto-creates folios on seedBooking. Filter folio probe by `createdBy = 'system:night_audit'` — test asserts night-audit didn't create one, regardless of CDC behavior.
+4. **`backfill-folios.test.ts` × 1 (B1+B5+B6+B7)** — when CDC pre-creates folio, backfill takes relink path (not fresh-create). Updated assertion `foliosCreated + bookingsRelinked >= 1` — accepts either convergence path.
+
+**Reasoning**: test contamination from a dev backend is a recurring risk in shared-YDB local setups. Filtering test queries by canonical actor IDs (`system:notification_cron`, `system:night_audit`) is per `feedback_strict_tests.md` — the test verifies what the code-under-test wrote, not what other writers happened to do. No production code changed for these — the cron/audit/backfill logic was correct.
 
 ### A4.2 (commit pending)
 TBD — Lit Web Component implementation findings.

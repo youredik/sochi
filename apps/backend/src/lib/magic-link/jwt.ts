@@ -185,7 +185,7 @@ export function extractTenantIdFromJwtUnsafe(jwt: string): string {
 		throw new Error('magic-link JWT: missing iss claim')
 	}
 	const match = ISSUER_PATTERN.exec(iss)
-	if (!match || !match[1]) {
+	if (!match?.[1]) {
 		throw new Error(`magic-link JWT: invalid iss format "${iss}"`)
 	}
 	return match[1]

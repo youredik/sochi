@@ -619,18 +619,22 @@ describe('runNightAudit — defensive guards', { tags: ['db'] }, () => {
 				${nowTs}, ${nowTs}, ${'test-actor'}, ${'test-actor'}
 			)
 		`
-		// Run audit — booking has NO folio (folio_creator skipped).
+		// Run audit — booking has NO folio created by night-audit.
 		const result = await runNightAudit(getTestSql(), silentLog, {
 			now: noonMskOn('2026-04-27'),
 		})
 		// Booking was scanned but no lines posted (no folio to post to).
 		expect(result.bookingsScanned).toBeGreaterThanOrEqual(1)
-		// Verify NO folio sneaked in for this booking.
-		const [folioRows = []] = await sql<{ x: number }[]>`
+		// Verify night-audit did NOT sneak a folio in for this booking. Filter
+		// `createdBy` к `system:night_audit` чтобы тест был изолирован от
+		// `folio_creator_writer` CDC consumer (running в local `pnpm dev`).
+		const [auditFolioRows = []] = await sql<{ x: number }[]>`
 			SELECT 1 AS x FROM folio VIEW ixFolioBooking
-			WHERE tenantId = ${tenantId} AND bookingId = ${bookingId}
+			WHERE tenantId = ${tenantId}
+			  AND bookingId = ${bookingId}
+			  AND createdBy = 'system:night_audit'
 		`
-		expect(folioRows).toHaveLength(0)
+		expect(auditFolioRows).toHaveLength(0)
 	})
 
 	test('[G3] folio status=closed → skip booking entirely', async () => {

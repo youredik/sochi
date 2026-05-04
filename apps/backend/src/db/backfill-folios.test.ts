@@ -237,12 +237,16 @@ describe('backfill-folios', { tags: ['db'], timeout: 60_000 }, () => {
 			currency: 'RUB',
 			folioId: null,
 		})
-		// Pre-condition
+		// Pre-condition: booking is unlinked. The folio table may or may not
+		// already have a row for this booking — in local `pnpm dev` the
+		// `folio_creator_writer` CDC consumer reacts to the seed insert and
+		// inserts a guest folio. Backfill is convergent in either case:
+		// creates fresh (no CDC) OR relinks (CDC already ran).
 		expect(await readBookingFolioId(b)).toBeNull()
-		expect(await readFoliosForBooking({ tenantId, bookingId: b.id })).toHaveLength(0)
 
 		const stats = await runBackfill(CONN_STR, { tenantIds: [tenantId] })
-		expect(stats.foliosCreated).toBeGreaterThanOrEqual(1)
+		// [B1] backfill must take action — either fresh-create или relink.
+		expect(stats.foliosCreated + stats.bookingsRelinked).toBeGreaterThanOrEqual(1)
 
 		// Post-condition
 		const linkedFolioId = await readBookingFolioId(b)
