@@ -185,3 +185,40 @@ describe('guestSessionMiddleware', () => {
 		expect(body.error.code).toBe('GUEST_SESSION_INVALID')
 	})
 })
+
+describe('guestSessionMiddleware — D3 Lax→Strict rotation', () => {
+	test('[GS9] re-emits Set-Cookie с SameSite=Strict on authenticated request', async () => {
+		const app = buildApp({ [TENANT_A]: SECRET_A })
+		const cookie = await obtainCookie(app, TENANT_A, 'A')
+		const res = await app.request('/private/whoami', { headers: { Cookie: cookie } })
+		expect(res.status).toBe(200)
+		const setCookieAfter = res.headers.get('set-cookie') ?? ''
+		// Middleware re-emits с Strict (rotation per plan §D3 — initial Lax
+		// from /consume rotates → Strict on first authenticated read).
+		expect(setCookieAfter).toContain('__Host-guest_session=')
+		expect(setCookieAfter).toMatch(/SameSite=Strict/i)
+		expect(setCookieAfter).toMatch(/HttpOnly/i)
+		expect(setCookieAfter).toMatch(/Secure/)
+		expect(setCookieAfter).toMatch(/Path=\//)
+	})
+
+	test('[GS10] rotated cookie verifiable on subsequent request (HMAC roundtrip preserved)', async () => {
+		const app = buildApp({ [TENANT_A]: SECRET_A })
+		const cookie = await obtainCookie(app, TENANT_A, 'A')
+
+		// Phase 1: first authenticated request — receives Set-Cookie с Strict
+		const res1 = await app.request('/private/whoami', { headers: { Cookie: cookie } })
+		expect(res1.status).toBe(200)
+		const setCookie1 = res1.headers.get('set-cookie') ?? ''
+		const match = /__Host-guest_session=([^;]+)/.exec(setCookie1)
+		expect(match).not.toBeNull()
+		const rotatedCookie = `__Host-guest_session=${match?.[1]}`
+
+		// Phase 2: send rotated cookie back — middleware verifies HMAC OK,
+		// session resolved correctly (rotation didn't break signature).
+		const res2 = await app.request('/private/whoami', { headers: { Cookie: rotatedCookie } })
+		expect(res2.status).toBe(200)
+		const body = (await res2.json()) as { session: GuestSession }
+		expect(body.session.tenantId).toBe(TENANT_A)
+	})
+})

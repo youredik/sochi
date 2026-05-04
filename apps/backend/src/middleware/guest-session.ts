@@ -24,7 +24,7 @@
  * extract tenantId, resolve secret, then verify signature against payload.
  */
 
-import { getCookie, getSignedCookie } from 'hono/cookie'
+import { getCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { factory } from '../factory.ts'
 
 export const GUEST_SESSION_COOKIE_NAME = 'guest_session' as const
@@ -75,9 +75,17 @@ function parseCookiePayload(raw: string): GuestSession | null {
 
 interface GuestSessionMiddlewareDeps {
 	readonly resolveCookieSecret: (tenantId: string) => Promise<string>
+	/**
+	 * Cookie max-age (seconds) — used for SameSite=Strict rotation re-set.
+	 * Default: 7 days. Override для tests.
+	 */
+	readonly sessionCookieMaxAge?: number
 }
 
+const DEFAULT_SESSION_MAX_AGE = 7 * 24 * 60 * 60
+
 export function guestSessionMiddleware(deps: GuestSessionMiddlewareDeps) {
+	const sessionMaxAge = deps.sessionCookieMaxAge ?? DEFAULT_SESSION_MAX_AGE
 	return factory.createMiddleware(async (c, next) => {
 		// Phase 1: read raw cookie. Hono `getCookie` returns the URL-decoded
 		// whole signed value: `<json>.<base64url_hmac>` (length 44 ending '=').
@@ -132,6 +140,21 @@ export function guestSessionMiddleware(deps: GuestSessionMiddlewareDeps) {
 		}
 
 		c.set('guestSession', session)
+
+		// D3 — Lax→Strict rotation per plan §D3:
+		// magic-link consume sets cookie с SameSite=Lax (allows cross-site nav
+		// from email click). On every authenticated request, re-set cookie с
+		// SameSite=Strict для CSRF defense (forbids cross-site sends entirely).
+		// Browser saves the new cookie attributes, replacing Lax. Future
+		// requests carry Strict cookie — full CSRF protection.
+		await setSignedCookie(c, GUEST_SESSION_COOKIE_NAME, verifiedRaw, secret, {
+			prefix: 'host',
+			httpOnly: true,
+			secure: true,
+			sameSite: 'Strict',
+			maxAge: sessionMaxAge,
+		})
+
 		return next()
 	})
 }
