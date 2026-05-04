@@ -53,6 +53,8 @@ import { createWidgetBookingCreateFactory } from './domains/widget/booking-creat
 import { createWidgetBookingCreateRoutes } from './domains/widget/booking-create.routes.ts'
 import { createBookingFindRepo } from './domains/widget/booking-find.repo.ts'
 import { createBookingFindRoutes } from './domains/widget/booking-find.routes.ts'
+import { createEmbedFactory } from './domains/widget/embed.factory.ts'
+import { createEmbedRoutes } from './domains/widget/embed.routes.ts'
 import { createMagicLinkFactory } from './domains/widget/magic-link.factory.ts'
 import { createMagicLinkConsumeRoutes } from './domains/widget/magic-link-consume.routes.ts'
 import { createWidgetFactory } from './domains/widget/widget.factory.ts'
@@ -203,6 +205,18 @@ const widgetBookingCreateFactory = createWidgetBookingCreateFactory({
 // Phase 2 Track B5/Lockbox: dedicated cookie-signing secret.
 const magicLinkFactory = createMagicLinkFactory(sql)
 const magicLinkSecretResolver = createMagicLinkSecretResolver(sql)
+
+// M9.widget.6 / А4.3 — embed widget factory: per-tenant `publicEmbedDomains`
+// allowlist + `widgetReleaseAudit` append-only log + bundles loaded from
+// `apps/widget-embed/dist/` at startup + `clientCommitToken` HMAC sliding-
+// window rotation (D25). Production deploys must override the dev-stub
+// secrets via `COMMIT_TOKEN_HMAC_CURRENT` + `COMMIT_TOKEN_HMAC_PREVIOUS`
+// seeded from Yandex Lockbox.
+const embedFactory = createEmbedFactory({
+	sql,
+	currentSecretBase64: env.COMMIT_TOKEN_HMAC_CURRENT,
+	previousSecretBase64: env.COMMIT_TOKEN_HMAC_PREVIOUS,
+})
 
 // CDC consumers — exactly-once projection pipeline.
 //
@@ -540,6 +554,15 @@ const routes = app
 			repo: createBookingFindRepo(sql),
 		}),
 	)
+	// M9.widget.6 / А4.3.b — embed widget bundle delivery + clientCommitToken
+	// + admin kill-switch. 4 routes per plan §A4.3:
+	//   GET  /api/embed/v1/:tenantSlug/:propertyId/:hash.js     facade
+	//   GET  /api/embed/v1/_chunk/booking-flow/:hash.js         lazy chunk
+	//   POST /api/embed/v1/:tenantSlug/:propertyId/commit-token HMAC sign
+	//   POST /api/embed/v1/_kill                                admin revoke
+	// Hono `csrf()` middleware lives ONLY on POST commit-token (D22).
+	// Path-segment `:hash` validates against bundle SHA-384 (D23).
+	.route('/api/embed', createEmbedRoutes({ service: embedFactory.service }))
 	// M9.widget.5 / A3.3 — guest portal: GET view + POST cancel routes.
 	// Cookie-auth via __Host-guest_session (set by /consume route at A3.1.b).
 	// Cancel route enforces ПП РФ № 1912 п. 16 boundary canon (pre_checkin →

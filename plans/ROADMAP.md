@@ -28,9 +28,10 @@
 - ✅ A4.1 — `apps/widget-embed/` scaffold + Vite IIFE + Terser + bundle CI gate + 5 BLD tests (commit `d74ce5c`)
 - ✅ A4.1.fix — 15 R1+R2 corrections fresh-research 2026-05-04: D13-D20 added (commit `2b1c64f`). Bundle 9.39 KiB gzip / 15 KiB facade.
 - ✅ A4.2 — Lit Web Component facade + lazy `booking-flow.js` chunk + IntersectionObserver+requestIdleCallback prefetch + ElementInternals ARIA + IO v2 visibility gate + AbortController canon + container queries + `@starting-style` + CustomEvent emission + 11 unit/build tests + 10 W browser tests via Vitest Browser Mode + Playwright real Chromium. **Facade 11.12 KiB / 15 KiB = 3.88 KiB headroom; lazy 9.87 KiB / 80 KiB = 70.13 KiB headroom.**
-- 🟡 A4.3 — backend embed routes (decomposed):
-  - 🟡 A4.3.a — foundation: migrations 0047+0048 + helpers (`header-safety`, `timing`, `commit-token`) + `embed.repo.ts` + zod schemas + 42 strict tests (8H + 8O + 5T + 7CT + 16 PED/AUD). Per-sub-phase R1+R2 2026-05-04 surfaced 9 new corrections → plan §4 D21-D29 added.
-  - 🔴 A4.3.b — `embed.routes.ts` (4 routes: facade GET / lazy GET / commit-token POST / kill-switch POST) + factory + app.ts wire-up + E1-E15 integration tests + empirical curl
+- ✅ A4.3 — backend embed routes (both sub-commits landed):
+  - ✅ A4.3.a — foundation: migrations 0047+0048 + helpers + `embed.repo.ts` + zod schemas + 42 strict tests
+  - ✅ A4.3.b — `embed.service.ts` + `embed.factory.ts` + `embed.routes.ts` (4 routes) + `app.ts` wire + 15 integration tests E1-E15 + empirical curl (Integrity-Policy + immutable + ACAO + Reporting-Endpoints all verified live)
+  - **Per-sub-phase R1+R2 2026-05-04 surfaced 9 corrections → plan §4 D21-D29.** Cumulative A4: 21 widget-embed (11 unit + 10 W browser) + 57 backend (16 PED/AUD + 14 H + 8 O + 5 T + 7 CT + 15 E) = **78 strict tests**. test:serial 4538/4539 (1 skip, 0 fail).
 - 🔴 A4.4 — iframe fallback + postMessage handshake (~5 IF tests + axe AA + visual smoke)
 
 **Cumulative tests landed**: 156 strict (74 + 36 + 19 + 27 template/notification expansions) + empirical curl smoke ✓

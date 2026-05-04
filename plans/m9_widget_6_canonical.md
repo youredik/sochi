@@ -607,8 +607,75 @@ A4.3.a — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
 - [ ] E1-E15 integration tests — DEFER к A4.3.b
 - [ ] Empirical curl `GET /embed/v1/sirius.{hash}.js` — DEFER к A4.3.b
 
-### A4.3.b (commit pending after .a)
-TBD — embed routes + factory + integration tests + empirical curl + wire-up.
+### A4.3.b (commit pending) — Routes + factory + wire-up + 15 integration tests + empirical curl
+
+Built on A4.3.a foundation. 4 HTTP routes + factory + service + app.ts mount + 15 strict integration tests + empirical curl pass.
+
+Files added:
+- `apps/backend/src/domains/widget/embed.service.ts` — bundle loader (sync `readFileSync` at construction; SHA-384 hex + base64 capture; `bundlesOverride` для tests); `matchBundleByHash` (constant-time hex compare); `signCommitToken` / `verifyCommitToken` wrappers; `getReleaseStatus` (latest-action-wins from audit log); `recordReleaseEvent` (revoked requires non-null reason guard)
+- `apps/backend/src/domains/widget/embed.factory.ts` — DI: repo + secrets (utf8 ≥32-byte assertion) + bundlesDir resolution; tests pass `bundlesOverride` so они не depend on real `apps/widget-embed/dist/` artifact
+- `apps/backend/src/domains/widget/embed.routes.ts` — 4 routes per plan §A4.3:
+    - `GET /v1/_chunk/booking-flow/<hash>.js` (FIRST — Hono router order: more specific pattern wins)
+    - `GET /v1/:tenantSlug/:propertyId/<hash>.js` (facade)
+    - `POST /v1/:tenantSlug/:propertyId/commit-token` (manual Origin allowlist — `csrf()` middleware bypasses application/json so explicit check canonical)
+    - `POST /v1/_kill` (admin auth + tenant-org-id match guard + audit row append)
+- `apps/backend/src/domains/widget/embed.routes.test.ts` — 15 integration tests E1-E15 (vi.mock `auth.ts` для admin-auth tests; bundle override; randomSlug helper matching `tenant-resolver` SLUG_PATTERN)
+- `apps/backend/src/env.ts` — `COMMIT_TOKEN_HMAC_CURRENT` + `COMMIT_TOKEN_HMAC_PREVIOUS` env vars (D25 sliding-window rotation; production seeds from Yandex Lockbox)
+- `apps/backend/src/app.ts` — wires `createEmbedFactory` + mounts `/api/embed` route
+
+Hono routing nuance learned: native `:param.ext` literal-suffix capture eats the dot on Node adapter (`:hash.js` regex form `:hash{[a-f0-9]{96}}.js` did not match either). Resolved via `:hashfile` capture + `extractHash` regex strip — single segment captures `<hash>.js`, regex strips `.js` to yield 96-char hex hash. Route order matters: lazy chunk pattern declared FIRST so general facade pattern doesn't match `/v1/_chunk/...` URLs.
+
+Hono CSRF middleware bypasses `application/json` requests (canonical defense relies on browser preflight). Replaced csrf middleware с manual Origin allowlist check inside POST commit-token handler — explicit + 100% reliable.
+
+Integration tests strict adversarial coverage:
+- E1 200 + immutable headers + bundle bytes verbatim
+- E2 unknown slug → 404 with **wall-clock ≥13ms** (constant-tail-latency D27 verified empirically)
+- E3 publicEmbedDomains=null → 404 (private property defended)
+- E4 hash mismatch → 410 Gone (forces tenant rebuild on rotation)
+- E5 allowed Origin echoed → `Access-Control-Allow-Origin` + `Vary: Origin`
+- E6 lazy chunk match → 200 + `ACAO: *`
+- E7 origin in allowlist → 200 + JWT
+- E8 origin NOT in allowlist → 403 (forbidden)
+- E9 round-trip JWT с 850ms wait → claims verify (nbf gap honored, kid='current')
+- E10 no session → 401
+- E11 wrong-tenant session → 403
+- E12 valid session + body → 200 + audit row appended (verified via `repo.listAudit`)
+- E13 zod regex rejects http:// at write time
+- E14 zod rejects CRLF embedded в origin (header-injection guard)
+- E15 revoked hash → subsequent facade GET returns 410 (D26 kill-switch end-to-end)
+
+Empirical curl 2026-05-04 (dev backend `pnpm dev` on :8787, hot-reloaded on file save):
+```
+$ curl -sI "http://localhost:8787/api/embed/v1/_chunk/booking-flow/<sha384hex>.js"
+HTTP/1.1 200 OK
+cache-control: public, max-age=31536000, immutable
+integrity-policy: blocked-destinations=(script)
+reporting-endpoints: integrity-endpoint="/api/embed/v1/_report/integrity"
+cross-origin-resource-policy: cross-origin
+content-type: application/javascript; charset=utf-8
+access-control-allow-origin: *
+vary: Origin
+x-content-type-options: nosniff
+```
+ALL canonical headers per D28 + D29 verified live.
+
+A4.3.b — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
+- [X] D21 dynamic CORS reflection from `publicEmbedDomains` allowlist on facade GET (E5 verified)
+- [X] D22 `Sec-Fetch-Site` декоративный — telemetry only via `Vary` merge; primary trust = CORS + admin-auth
+- [X] D23 path-segment hash via `:hashfile` + `extractHash` (E4 verified hash mismatch → 410)
+- [X] D24 `assertHeaderSafe()` + `assertOriginSafe()` BEFORE every `c.header()` splice
+- [X] D25 HMAC `kid` rotation (`current`/`previous` from env; nbf=iat+0.8s; E9 verified round-trip)
+- [X] D26 append-only `widgetReleaseAudit` row on kill-switch (E12 + E15 verified)
+- [X] D27 `constantTailLatency(15ms)` floor on slug GET (E2 verified ≥13ms wall-clock)
+- [X] D28 `Integrity-Policy` + `Reporting-Endpoints` headers (E1 + empirical curl verified)
+- [X] D29 immutable `Cache-Control: public, max-age=31536000, immutable` (E1 + curl verified)
+- [X] Cross-tenant isolation: tenant resolver only resolves OWN slugs; allowlist filtered by tenantId; admin-auth checks `session.activeOrganizationId === body.tenantId` (E11 verified)
+- [X] Manual Origin allowlist enforced на commit-token POST (E8 verified 403)
+- [X] Append-only audit log idempotent across requests (insert id-keyed; future kill-switch retries hit row-already-exists not duplicate)
+- [X] 15 integration tests E1-E15 pass real Hono в-process via `app.request()`
+- [X] 9-gate green: sherif / biome / depcruise (695 modules) / knip / typecheck (4 packages) / build / vitest unit (57/57) / vitest test:serial (4538/4539, 1 skip)
+- [X] Empirical curl verified live dev backend
+- [X] Plan §17 + ROADMAP updated; memory pointer in next commit step
 
 ### A4.4 (commit pending)
 TBD — iframe fallback + postMessage handshake findings.

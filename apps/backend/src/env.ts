@@ -85,6 +85,22 @@ export const envSchema = z.object({
 	SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1125),
 	EMAIL_FROM_ADDRESS: z.email(),
 	EMAIL_FROM_NAME: z.string().default('HoReCa'),
+
+	// M9.widget.6 / А4.3 — `clientCommitToken` HMAC sliding-window rotation
+	// (D25). Both base64url-encoded ≥32-byte secrets. Production seeded из
+	// Yandex Lockbox at boot; dev defaults are dev-only stubs (rejected при
+	// APP_MODE=production via guard в embed.factory).
+	//
+	// Rotation flow (R2 F4 canon):
+	//   1. Generate new secret → set `_PREVIOUS = $CURRENT_VALUE`,
+	//      `_CURRENT = $NEW_VALUE`. Deploy.
+	//   2. Wait `ttlSeconds` (300s default) for in-flight tokens to expire.
+	//   3. Optional: clear `_PREVIOUS` to revoke any leaked tokens immediately.
+	COMMIT_TOKEN_HMAC_CURRENT: z
+		.string()
+		.min(32, 'COMMIT_TOKEN_HMAC_CURRENT must be at least 32 chars')
+		.default('dev-current-stub-secret-MUST-rotate-32+chars'),
+	COMMIT_TOKEN_HMAC_PREVIOUS: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)
