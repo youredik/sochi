@@ -351,6 +351,29 @@ A5.3 — pre-done audit:
 - [X] 9-gate green: lint / typecheck / sherif / depcruise / knip / build / backend test:serial / frontend test / e2e:smoke (4-min serial run).
 - [X] Memory pointer + ROADMAP updated в same commit.
 - [X] A5.4 Speculation Rules + Sec-Purpose middleware — CLOSED 2026-05-04
+- [X] A5 closure polish — RUM bundle code-split (D10 SPA-index budget defense) — 2026-05-04
+
+### A5 polish — RUM bundle code-split (D10 SPA-index budget defense) — 2026-05-04
+
+**Senior catch (pre-push)**: empirical `pnpm size:check` revealed SPA index regression:
+- Before: 182.4 KB gzipped (180 KB budget → +2.4 KB FAIL)
+- Cause: `startRum()` import in `main.tsx` pulled `web-vitals/attribution` (~3 KB) + `anonymize.ts` (~1.5 KB) + shared/rum schema (~1 KB) into the critical-path bundle.
+
+**Fix:** dynamic `import('./lib/rum/index.ts').then((m) => m.startRum())` в `main.tsx`. Vite splits RUM into a separate chunk:
+- After: SPA index **177.94 KB gzipped** (180 KB budget → 2.06 KB headroom PASS)
+- New `rum-*.js` chunk: 17.81 KB raw / **6.27 KB gzipped** — fetched async after first paint.
+
+**Why senior canon, not budget-bump:**
+- web-vitals callbacks are PerformanceObserver-driven async — нет смысла блокировать LCP-критический путь синхронным impport'ом.
+- Budget-bumps are slippery slope: every sub-phase nudges +2-4 KB и через 2 года initial bundle вырастает в 1.5×.
+- Code-split канон 2026 для optional observability surfaces (analytics, RUM, error boundaries — all eligible).
+
+A5 closure polish — pre-done audit:
+- [X] D10 SPA-index ≤180 KB gzip (177.94 KB measured) — verified empirically.
+- [X] All other budgets unchanged (widget routes ≤60 KB / booking-pay ≤70 KB / facade ≤15 KB / lazy ≤80 KB — all PASS).
+- [X] Frontend pnpm test: 1328 passed (no regression на dynamic import).
+- [X] Typecheck / lint / knip — all PASS.
+- [X] R2 §11 informal corollary: RUM emit timing identical (web-vitals callbacks fire on PerformanceObserver async; dynamic import latency не affects measurement window).
 
 ### A5.4 — Speculation Rules + Sec-Purpose middleware + RUM phantom-session filter (D11/D12) — 2026-05-04
 

@@ -9,7 +9,6 @@ import { i18n, setupI18n } from './features/i18n/setup.ts'
 import { setupOtel } from './features/observability/setup-otel.ts'
 import { ErrorBoundary } from './lib/error-boundary.tsx'
 import { logger } from './lib/logger.ts'
-import { startRum } from './lib/rum/index.ts'
 import { ThemeProvider } from './lib/theme-provider.tsx'
 import { reportWebVitals } from './lib/web-vitals.ts'
 import { routeTree } from './routeTree.gen.ts'
@@ -28,8 +27,14 @@ reportWebVitals()
 // M9.widget.7 / A5.2 — separate RUM pipeline: web-vitals 5 attribution build
 // → 152-ФЗ anonymize (selector / UA / URL scrub) → batched POST `/api/rum/v1/web-vitals`.
 // Backend bridges to Yandex Cloud Monitoring (D7). Idempotent — React StrictMode
-// double-render safe via `started` singleton.
-startRum()
+// double-register-safe via `started` singleton.
+//
+// **Code-split for SPA-index budget**: RUM lib (web-vitals/attribution + anonymize +
+// shared/rum schema) is ~3 KB gzipped — keeping it out of the initial chunk pulls
+// us back under the 180 KB SPA-index budget (M9.widget.7 / A5.1). web-vitals
+// callbacks are async by design (PerformanceObserver-driven) — нет смысла
+// блокировать LCP-критический путь impportom.
+void import('./lib/rum/index.ts').then((m) => m.startRum())
 
 const queryClient = new QueryClient({
 	defaultOptions: {
