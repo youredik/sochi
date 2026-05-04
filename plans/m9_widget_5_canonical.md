@@ -687,8 +687,23 @@ canon. 8 strict tests (GP-CB1..8) для timezone-correct boundary computation.
 - `domains/booking/guest-portal.test.ts` — 8 strict (GP-CB1..8): pre_checkin × 4 cases (day before / 00:00 / 14:00 / 23:59) + day_of_or_later × 2 + edge cases (checkIn 23:00 UTC = next-day Moscow / 00:00 UTC = 03:00 Moscow same day)
 - `app.ts` wire `createGuestPortalRoutes` под `/api/public`
 
-### A3.4 (commit pending)
-TBD — frontend (5 routes + screens + 12 E2E) findings.
+### A3.4 (commit pending — minimum-viable frontend)
+
+Magic-link landing route + guest portal route + booking-portal API helpers.
+Confirmation screen + sub-route + find-by-ref-email + 12 E2E = explicit
+carry-forward к next session (substantial UX/screenshot scope).
+
+**Files committed:**
+- `features/public-widget/lib/booking-portal-api.ts` — fetch helpers (renderMagicLink + consumeMagicLink + getGuestPortal + cancelBooking) + typed result unions, `credentials: 'include'` for cookie roundtrip
+- `routes/booking.$jwt.tsx` — magic-link landing: GET /render → button «Открыть бронирование» → POST /consume → navigate к /booking/guest-portal/:bookingId. Apple MPP defense via two-step (GET non-consuming, button → POST consume).
+- `routes/booking.guest-portal.$bookingId.tsx` — view + cancel UI: `<dl>` booking details + cancel section с ПП-1912 disclosure copy. Cancel button enabled когда scope='mutate' + status not terminal. Reason input required (max 500 chars).
+
+**Carry-forwards к A3 closure / future session:**
+- `screens/confirmation.tsx` (Screen 4 post-payment confirmation)
+- `routes/widget.$tenantSlug_.$propertyId_.confirmation.tsx` (sub-route с validateSearch)
+- `routes/booking.find-by-ref-email.tsx` (recovery flow для lost magic-link)
+- ~12 E2E tests (Playwright + axe)
+- Frontend unit tests для new routes
 
 ---
 

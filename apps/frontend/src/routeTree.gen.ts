@@ -15,8 +15,10 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as WidgetTenantSlugRouteImport } from './routes/widget.$tenantSlug'
+import { Route as BookingJwtRouteImport } from './routes/booking.$jwt'
 import { Route as AppOSelectRouteImport } from './routes/_app.o-select'
 import { Route as WidgetTenantSlugPropertyIdRouteImport } from './routes/widget.$tenantSlug_.$propertyId'
+import { Route as BookingGuestPortalBookingIdRouteImport } from './routes/booking.guest-portal.$bookingId'
 import { Route as AppOOrgSlugRouteImport } from './routes/_app.o.$orgSlug'
 import { Route as AppOOrgSlugIndexRouteImport } from './routes/_app.o.$orgSlug.index'
 import { Route as WidgetTenantSlugPropertyIdGuestAndPayRouteImport } from './routes/widget.$tenantSlug_.$propertyId_.guest-and-pay'
@@ -60,6 +62,11 @@ const WidgetTenantSlugRoute = WidgetTenantSlugRouteImport.update({
   path: '/widget/$tenantSlug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BookingJwtRoute = BookingJwtRouteImport.update({
+  id: '/booking/$jwt',
+  path: '/booking/$jwt',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppOSelectRoute = AppOSelectRouteImport.update({
   id: '/o-select',
   path: '/o-select',
@@ -69,6 +76,12 @@ const WidgetTenantSlugPropertyIdRoute =
   WidgetTenantSlugPropertyIdRouteImport.update({
     id: '/widget/$tenantSlug_/$propertyId',
     path: '/widget/$tenantSlug/$propertyId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const BookingGuestPortalBookingIdRoute =
+  BookingGuestPortalBookingIdRouteImport.update({
+    id: '/booking/guest-portal/$bookingId',
+    path: '/booking/guest-portal/$bookingId',
     getParentRoute: () => rootRouteImport,
   } as any)
 const AppOOrgSlugRoute = AppOOrgSlugRouteImport.update({
@@ -150,8 +163,10 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/o-select': typeof AppOSelectRoute
+  '/booking/$jwt': typeof BookingJwtRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
   '/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
@@ -171,8 +186,10 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/o-select': typeof AppOSelectRoute
+  '/booking/$jwt': typeof BookingJwtRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
   '/': typeof AppIndexRoute
+  '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
@@ -194,9 +211,11 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/_app/o-select': typeof AppOSelectRoute
+  '/booking/$jwt': typeof BookingJwtRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
   '/_app/': typeof AppIndexRoute
   '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
+  '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug_/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
   '/_app/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/_app/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
@@ -219,8 +238,10 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/signup'
     | '/o-select'
+    | '/booking/$jwt'
     | '/widget/$tenantSlug'
     | '/o/$orgSlug'
+    | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug/$propertyId'
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
@@ -240,8 +261,10 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/signup'
     | '/o-select'
+    | '/booking/$jwt'
     | '/widget/$tenantSlug'
     | '/'
+    | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug/$propertyId'
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
@@ -262,9 +285,11 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/signup'
     | '/_app/o-select'
+    | '/booking/$jwt'
     | '/widget/$tenantSlug'
     | '/_app/'
     | '/_app/o/$orgSlug'
+    | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug_/$propertyId'
     | '/_app/o/$orgSlug/grid'
     | '/_app/o/$orgSlug/receivables'
@@ -285,7 +310,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
   SignupRoute: typeof SignupRoute
+  BookingJwtRoute: typeof BookingJwtRoute
   WidgetTenantSlugRoute: typeof WidgetTenantSlugRoute
+  BookingGuestPortalBookingIdRoute: typeof BookingGuestPortalBookingIdRoute
   WidgetTenantSlugPropertyIdRoute: typeof WidgetTenantSlugPropertyIdRoute
   WidgetTenantSlugPropertyIdExtrasRoute: typeof WidgetTenantSlugPropertyIdExtrasRoute
   WidgetTenantSlugPropertyIdGuestAndPayRoute: typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
@@ -335,6 +362,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WidgetTenantSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/booking/$jwt': {
+      id: '/booking/$jwt'
+      path: '/booking/$jwt'
+      fullPath: '/booking/$jwt'
+      preLoaderRoute: typeof BookingJwtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/o-select': {
       id: '/_app/o-select'
       path: '/o-select'
@@ -347,6 +381,13 @@ declare module '@tanstack/react-router' {
       path: '/widget/$tenantSlug/$propertyId'
       fullPath: '/widget/$tenantSlug/$propertyId'
       preLoaderRoute: typeof WidgetTenantSlugPropertyIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/booking/guest-portal/$bookingId': {
+      id: '/booking/guest-portal/$bookingId'
+      path: '/booking/guest-portal/$bookingId'
+      fullPath: '/booking/guest-portal/$bookingId'
+      preLoaderRoute: typeof BookingGuestPortalBookingIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/o/$orgSlug': {
@@ -495,7 +536,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
   SignupRoute: SignupRoute,
+  BookingJwtRoute: BookingJwtRoute,
   WidgetTenantSlugRoute: WidgetTenantSlugRoute,
+  BookingGuestPortalBookingIdRoute: BookingGuestPortalBookingIdRoute,
   WidgetTenantSlugPropertyIdRoute: WidgetTenantSlugPropertyIdRoute,
   WidgetTenantSlugPropertyIdExtrasRoute: WidgetTenantSlugPropertyIdExtrasRoute,
   WidgetTenantSlugPropertyIdGuestAndPayRoute:
