@@ -1,0 +1,33 @@
+-- 0047_property_public_embed_domains.sql — M9.widget.6 / А4.3
+-- per plans/m9_widget_6_canonical.md §D11 + §D24
+-- + project_m9_widget_6_canonical.md memory.
+--
+-- Adds per-tenant embed-origin allowlist to `property`. The widget embed
+-- backend route GET /embed/v1/:slug.{hash}.js reads this column to:
+--   * derive `Access-Control-Allow-Origin` reflection (D21 — JS bundle
+--     cross-tenant access boundary; CSP frame-ancestors не работает на JS
+--     responses per MDN 2026)
+--   * inject `Content-Security-Policy: frame-ancestors <list>` ТОЛЬКО на
+--     iframe HTML route /embed/v1/:slug.html (А4.4)
+--
+-- Schema: JSON array of strings, each `https://[host](:port)?` origin.
+-- Example: `["https://hotel-aurora.ru", "https://www.hotel-aurora.ru"]`
+--   - NULL = embedding NOT allowed (tenant must explicitly opt-in via admin
+--     UI carry-forward к M11)
+--   - Empty array `[]` = same as NULL semantically (defensive parity; admin
+--     UI MUST collapse empty-array writes back to NULL)
+--
+-- Strict input sanitization (D24, R2 F1 Critical Apr 2026):
+--   * Application zod schema at `embed.repo.ts` write-side enforces regex
+--     `/^https:\/\/[a-z0-9.-]+(:\d+)?$/i` per element + array-length cap.
+--   * `assertNoCRLF()` helper called read-side BEFORE every `c.header(...)`
+--     to defend against tenant-operator CRLF-splice (Hono CVE-2026-29086
+--     class — `c.header()` does not centrally reject \r\n on edge runtimes).
+--
+-- Why JSON not List<Utf8>:
+--   YDB native list types lack indexable predicates we'd need anyway (we
+--   read the WHOLE list per request). JSON keeps the column shape consistent
+--   with `property.contactJson`, `bookingDraft.draftJson` patterns + lets
+--   us ship admin-side UI editing as a single text-area без schema migration.
+
+ALTER TABLE property ADD COLUMN publicEmbedDomains Json;

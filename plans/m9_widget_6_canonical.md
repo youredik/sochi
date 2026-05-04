@@ -100,6 +100,15 @@
 | **D18** | Click-jacking in-DOM | **IntersectionObserver v2 (`trackVisibility: true, delay: 100, threshold: 1.0`) на submit button → disable если `isVisible === false` + server-side `clientCommitToken` issued ≥800ms after first user input + visibility-confirmed-at-click** | **NEW 2026-05-04 (R2 #5)**: in-DOM Web Component path doesn't have iframe `frame-ancestors` defense. Tenant `position: fixed; pointer-events: none;` overlay + decoy "Confirm" button = canonical CSS+SVG clickjacking (The Register 2025-12-05). |
 | **D19** | AbortController canon | **One `#abort = new AbortController()` per `connectedCallback`; ALL async resources (`addEventListener`, `fetch`, `IntersectionObserver`, `ResizeObserver`, `setTimeout` wrapper) take `signal: this.#abort.signal`; `disconnectedCallback` calls `#abort.abort()`** | **NEW 2026-05-04 (R2 #7)**: Lit lifecycle docs canonical pattern. Tenant React/Vue SPA mount/unmount 50× → no listener/fetch/observer leak. Memlab smoke test (heap delta <1 MB) в CI. |
 | **D20** | RKN/CDN unavailability fallback | **Embed snippet recommends `<sochi-booking-widget-v1 slug="aurora"><a href="https://aurora.sochi.app/book" class="sochi-fallback">Забронировать на сайте отеля</a></sochi-booking-widget-v1>` + `:not(:defined)` CSS reveals fallback when bundle fails (503 / RKN throttle / SW staleness)** | **NEW 2026-05-04 (R2 #8)**: TSPU DPI throttles edge subnets без notice (Zona.media 2026-04-07). Versioned URL `?v=BUILD_HASH` + `Cache-Control: public, max-age=300, must-revalidate` + admin endpoint `/embed/v1/_kill/:hash` для emergency rotation. |
+| **D21** | Cross-tenant access control on JS bundle response | **Dynamic CORS `Access-Control-Allow-Origin` reflection from `publicEmbedDomains` allowlist** (NOT CSP frame-ancestors на JS) | **NEW 2026-05-04 (R1a Q9 + Q5)**: `Content-Security-Policy: frame-ancestors` is **silently ignored** on JS responses per MDN 2026 — applies ТОЛЬКО к embeddable docs (HTML/iframe). For `*.js` routes the actual access boundary = CORS. CSP `frame-ancestors` lives на iframe HTML route (A4.4). |
+| **D22** | `Sec-Fetch-Site` verification scope | **Decorative defense-in-depth on bundle GET; primary trust = CSP `frame-ancestors` on iframe HTML route** | **NEW 2026-05-04 (R2 F3)**: W3C webappsec-fetch-metadata #10 — `Sec-Fetch-Site` describes initiator-to-resource relationship, NOT top-level frame. Iframe-in-iframe attack produces identical headers as legitimate embed → cannot distinguish at server. Hono `csrf()` only на POST routes (commit-token / kill-switch). Bundle GET routes have NO CSRF check. |
+| **D23** | Versioned URL pattern (cache busting + invalidation) | **Path-segment hash** `/embed/v1/:slug.{HASH}.js` + `/embed/v1/booking-flow.{HASH}.js` (NOT `?v=HASH` query string) | **NEW 2026-05-04 (R2 F5)**: Yandex Cloud CDN docs (yandex.cloud/cdn/concepts/caching, 2026): `ignore_query_params: true` is DEFAULT. Query-string cache-busting silently ineffective at edge. Path-hash = canonical (Stripe `/v3/` canon). Closes both cache-poisoning + invalidation problems atomically. |
+| **D24** | Operator input sanitization for `publicEmbedDomains` | **zod write-side regex `/^https:\/\/[a-z0-9.-]+(:\d+)?$/i` + `assertNoCRLF()` read-side helper before `c.header(...)`** | **NEW 2026-05-04 (R2 F1, Critical)**: GHSA-26PP-8WGV-HJVM (Apr 2026) + CVE-2026-29086 (Hono setCookie CRLF, patched 4.12.4). Hono `c.header()` doesn't centrally reject `\r\n` — Edge runtimes (workerd/Bun) inconsistent. Tenant operator с malicious origin string can inject `Set-Cookie:` lines via `Content-Security-Policy` header value splice. |
+| **D25** | `clientCommitToken` HMAC key rotation | **`kid`-based sliding-window** (`current` + `previous` HMAC secrets from env, seeded from Yandex Lockbox); mirror jose JWKS pattern in `lib/magic-link/jwt.ts`; nbf claim = `iat + 0.8s` (D18 800ms minimum gap) | **NEW 2026-05-04 (R2 F4)**: Yandex Lockbox supports versioned secrets natively (yandex.cloud/lockbox 2026); AWS KMS canon Apr 2026 — HMAC manual rotation only. Without `kid`, leaked secret has unbounded forge window. |
+| **D26** | Kill-switch atomicity + tamper-evidence | **Migration 0048 `widget_release_audit` append-only** + `_kill/:hash` route writes both `widget_release` (status='revoked') AND `widget_release_audit` (insert) in single YDB tx + fire-and-forget CDN purge | **NEW 2026-05-04 (R2 F7)**: SRI hash revocation has no browser-side mechanism — once tenant page hardcodes `<script integrity="sha384-…">`, only path change works. Audit log = forensic baseline (operator key signature + timestamp + reason). |
+| **D27** | Slug-enumeration timing oracle | **`Promise.allSettled([slugLookup, fixedDelay(15ms)])` + `Math.max` padding** — port magic-link consume pattern A3 to embed `:slug.js` GET | **NEW 2026-05-04 (R2 F2)**: D11 rate-limit bounds enumeration RATE not SIGNAL. YDB lookup ~5-15ms vs 404 short-circuit ~0.5ms — statistical distinguishability after ~200 trials at 30 req/min. Constant-tail-latency closes timing oracle. |
+| **D28** | `Integrity-Policy` + Reporting-Endpoints | **Emit unconditionally**: `Integrity-Policy: blocked-destinations=(script)` + `Reporting-Endpoints: integrity-endpoint="/embed/v1/_report/integrity"` on BOTH bundles | **NEW 2026-05-04 (R1a Q4)**: caniuse 82% global 2026-05-04 — Chrome 138+ / Edge 138+ / Safari 26+ full + Firefox 145+ partial. Multi-engine, ship without UA-gating. Reporting endpoint helps detect SRI bypass attempts. |
+| **D29** | Hono static asset serving | **`@hono/node-server/serve-static` + `onFound(_path, c) => c.header('Cache-Control', 'public, immutable, max-age=31536000')`** for `/embed/v1/*.js` (path-hash pattern) — NOT blanket middleware | **NEW 2026-05-04 (R1a Q1)**: Hono ≥4.12.4 closes CVE-2026-29045 serveStatic decode mismatch — we're 4.12.16 ✓. `onFound` callback ensures 404s don't get the immutable header. |
 
 ---
 
@@ -243,13 +252,27 @@ ALTER TABLE property ADD COLUMN publicEmbedDomains Json;
 12. CustomEvent emission для tenant analytics integration (`sochi-widget:booking_complete` etc) — NOT internal Yandex.Metrica
 13. W1-W10 component tests via Vitest Browser Mode + Playwright
 
-### A4.3 Backend embed.routes + migration 0047 (~1 day, ~10 tests + 1 migration)
+### A4.3 Backend embed.routes + migrations 0047 + 0048 (~1.5 days, ~15 tests + 2 migrations)
 14. Migration 0047 — `property.publicEmbedDomains` Json column
-15. `domains/widget/embed.routes.ts` — facade delivery + lazy chunk delivery + per-tenant CSP + Integrity-Policy + versioned URL `?v=BUILD_HASH`
-16. `clientCommitToken` issuance + verification endpoint (D18 — clickjacking server-side defense)
-17. Backend gets `@lit-labs/ssr` 4.0 dep для DSD render
-18. Wire `app.ts` под `/embed/v1`
-19. E1-E10 integration tests
+15. Migration 0048 — `widget_release_audit` append-only table (D26)
+16. `domains/widget/embed.repo.ts` — read `publicEmbedDomains` + insert audit rows; zod write-side regex `/^https:\/\/[a-z0-9.-]+(:\d+)?$/i` (D24)
+17. `lib/embed/header-safety.ts` — `assertNoCRLF()` helper before `c.header(...)` calls (D24)
+18. `lib/embed/commit-token.ts` — HMAC sign + verify с `kid` rotation (D25); mirror jose JWKS pattern from `lib/magic-link/jwt.ts`
+19. `lib/embed/timing.ts` — `Promise.allSettled([slugLookup, fixedDelay(15ms)])` constant-tail-latency helper (D27)
+20. `domains/widget/embed.routes.ts` — 4 routes:
+    - `GET /embed/v1/:slug.{hash}.js` — facade delivery + dynamic CORS reflection from `publicEmbedDomains` (D21) + Integrity-Policy + SHA-384 SRI + immutable cache-control (D29) + constant-tail-latency (D27)
+    - `GET /embed/v1/booking-flow.{hash}.js` — lazy chunk shared, NO per-tenant headers (SRI validates integrity)
+    - `POST /embed/v1/:slug/commit-token` — Hono `csrf()` middleware (origin allowlist) + HMAC sign с nbf=iat+0.8s (D25)
+    - `POST /embed/v1/_kill/:hash` — admin-auth + atomic update to `widget_release` + `widget_release_audit` (D26)
+21. `app.ts` wires `/embed/v1` под new factory; `hono-rate-limiter@0.5.3` mounted на slug GET + commit-token POST (D11)
+22. **15 tests** — E1-E15:
+    - E1-E5 GET facade (success, unknown slug 404 timing-safe, CORS reflection, cross-tenant isolated, immutable headers)
+    - E6 GET lazy chunk (path-hash, immutable, no CORS)
+    - E7-E9 POST commit-token (nbf enforced, kid rotation, csrf reject)
+    - E10-E12 POST _kill (admin-auth, audit row written, idempotent)
+    - E13-E15 publicEmbedDomains zod (CRLF reject, regex valid, allowlist read consistent)
+23. `app.ts` `csrf()` middleware ONLY на POST routes (D22 — bundle GET legitimately cross-site)
+24. Empirical curl: `GET /embed/v1/sirius.{hash}.js` → 200 + correct headers + bundle ≤ 15 KB
 
 ### A4.4 iframe fallback + postMessage handshake (~1 day, ~5 tests)
 20. iframe fallback wrapper component (`/embed/v1/:slug.html` route)
@@ -516,8 +539,76 @@ A4.2 — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
 - [ ] axe AA audit — DEFER к А4.4 closure (full visual smoke pass с iframe)
 - [ ] Visual smoke 4 viewports + Read screenshots — DEFER к А4.4 closure
 
-### A4.3 (commit pending)
-TBD — backend embed.routes + migration 0047 findings.
+### A4.3.a (commit pending) — Foundation: migrations + helpers + repo + 42 strict tests
+
+Per-sub-phase canonical cycle (`feedback_session_startup_for_widget_subphases.md`):
+fresh R1+R2 round 2026-05-04 surfaced 9 new corrections → plan §4 D21-D29 added.
+Foundation lands: schema + sanitization + crypto + timing helpers + repo +
+strict tests. Routes + factory + integration tests + wire-up = A4.3.b carry-forward.
+
+Files added:
+- `apps/backend/src/db/migrations/0047_property_public_embed_domains.sql` (D11)
+- `apps/backend/src/db/migrations/0048_widget_release_audit.sql` (D26)
+- `apps/backend/src/lib/embed/header-safety.ts` (D24 — `assertHeaderSafe` /
+  `assertOriginSafe` / `HTTPS_ORIGIN_REGEX`; `charCodeAt` loop avoids Biome
+  `noControlCharactersInRegex` warning AND keeps RFC 7230 byte-literal semantics)
+- `apps/backend/src/lib/embed/header-safety.test.ts` — 14 tests H1-H6 + O1-O8
+  (CR/LF/NUL injection rejection; HTTPS regex strictness; Cyrillic punycode
+  enforcement; CRLF-in-origin composition test)
+- `apps/backend/src/lib/embed/timing.ts` (D27 — `constantTailLatency` floor
+  helper port magic-link consume canon)
+- `apps/backend/src/lib/embed/timing.test.ts` — 5 tests T1-T5 (floor enforcement;
+  no-extra-delay above floor; rejection class preservation; floor-before-reject)
+- `apps/backend/src/lib/embed/commit-token.ts` (D25 — HMAC HS256 signing с
+  `kid: 'current'` + sliding-window verify accepting `previous`; jose 6.2.3)
+- `apps/backend/src/lib/embed/commit-token.test.ts` — 7 tests CT1-CT7 (sign/verify
+  roundtrip; nbf enforces ≥0.8s gap; custom delay/ttl; kid rotation accepts previous;
+  rotation drops oldest; forged token reject; malformed sub reject)
+- `apps/backend/src/domains/widget/embed.repo.ts` — `getPublicEmbedDomains` /
+  `setPublicEmbedDomains` / `appendAudit` / `listAudit`; zod schemas
+  (`publicEmbedOriginSchema`, `publicEmbedDomainsSchema` max-32, `auditInputShape`
+  с hash regex `^[a-f0-9]{96}$`, `auditReasonSchema` ≤500ch + CRLF reject)
+- `apps/backend/src/domains/widget/embed.repo.test.ts` — 16 tests PED1+PED3-PED10 +
+  AUD1-AUD7 (cross-tenant isolation × 3; CRLF rejection × 2; max-size cap;
+  Cyrillic/non-HTTPS/path-component/array-bounds rejection; append-only
+  list ordering)
+- `packages/shared/src/ids.ts` — added `widgetReleaseAudit: 'wrla'` typeid prefix
+
+A4.3.a — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
+- [X] Migration 0047 created — `property.publicEmbedDomains Json` nullable column
+- [X] Migration 0048 created — `widgetReleaseAudit` append-only table + 2 indexes
+      (idxWidgetReleaseAuditHash + idxWidgetReleaseAuditActionAt)
+- [X] Both migrations applied empirically (`pnpm migrate` 46 already at HEAD →
+      48 applied; backfill ran clean)
+- [X] D24 zod write-side regex `/^https:\/\/[a-z0-9.-]+(:\d+)?$/i` enforced via
+      `publicEmbedOriginSchema`; max-32 cap via `publicEmbedDomainsSchema`
+- [X] D24 read-side `assertOriginSafe()` helper exported (route layer will call
+      before `c.header(...)` splice in A4.3.b)
+- [X] D25 HMAC `kid` rotation pattern — `current` + `previous` keys; verifier
+      tries current first, falls back to previous if non-null
+- [X] D27 `constantTailLatency` helper ready for slug GET timing-safety
+- [X] D26 `widgetReleaseAudit` append-only — only INSERT path; tx-optional
+      parameter so route can wrap with kill-switch UPDATE atomically
+- [X] Cross-tenant isolation × every method (PED4 + PED10 + AUD3 verified)
+- [X] CRLF/NUL rejection × every operator-controlled string field (H2-H5 + O7 +
+      PED6 + AUD4 verified)
+- [X] Enum FULL coverage — `widgetBundleKindSchema` 2 values + `widgetReleaseActionSchema`
+      3 values + `widgetReleaseActorSourceSchema` 4 values; AUD7 verifies invalid
+      action='garbage' rejected
+- [X] `feedback_strict_tests.md` adversarial canon: 42 tests cover (cross-tenant
+      leak / header injection / max bounds / format violations / forgery / clock
+      enforcement / append-only-isolation)
+- [X] 9-gate green: sherif / biome / depcruise (691 modules) / knip / typecheck
+      (4 packages) / build / vitest unit (42/42)
+- [ ] embed.routes.ts (4 routes: facade GET + lazy GET + commit-token POST +
+      kill-switch POST) — DEFER к A4.3.b
+- [ ] embed.factory.ts wiring repo + routes — DEFER к A4.3.b
+- [ ] app.ts mount `/embed/v1` + `csrf()` middleware on POST routes only — DEFER к A4.3.b
+- [ ] E1-E15 integration tests — DEFER к A4.3.b
+- [ ] Empirical curl `GET /embed/v1/sirius.{hash}.js` — DEFER к A4.3.b
+
+### A4.3.b (commit pending after .a)
+TBD — embed routes + factory + integration tests + empirical curl + wire-up.
 
 ### A4.4 (commit pending)
 TBD — iframe fallback + postMessage handshake findings.

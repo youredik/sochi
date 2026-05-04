@@ -46,6 +46,9 @@ export const ID_PREFIXES = {
 	passkey: 'pk',
 	// M9.widget.5 — magic-link guest portal tokens (single-use via stateful consumedAt).
 	magicLinkToken: 'mlt',
+	// M9.widget.6 / А4.3 — append-only audit log for embed bundle release lifecycle
+	// (publish / revoke / reauthorize). Tamper-evidence baseline для kill-switch.
+	widgetReleaseAudit: 'wrla',
 } as const
 
 export type EntityKind = keyof typeof ID_PREFIXES
