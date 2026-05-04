@@ -1,9 +1,14 @@
 /**
- * Bundle size CI gate — `dist/embed.js` gzip-size ≤ 30 720 bytes.
+ * Bundle size CI gate — `dist/embed.js` (facade) gzip-size ≤ 15 360 bytes.
  *
- * Per `plans/m9_widget_6_canonical.md` §D12 (BLD1):
- *   - Hard gate: 30 KiB gzip ceiling, ≤ 0.5% headroom (Mews 11 kB precedent
- *     leaves ~19 kB for our domain logic before SSR / fallback / theme).
+ * Per `plans/m9_widget_6_canonical.md` §D12 (REFRAMED 2026-05-04):
+ *   - **Facade pattern canon** — Stripe Buy Button (3.5 KB gzip), Bnovo
+ *     (4.2 KB), SiteMinder (12.3 KB), Yandex.Travel (4.8 KB) ВСЕ ship a tiny
+ *     loader that lazy-fetches the heavy booking flow. Defends tenant Core
+ *     Web Vitals — INP attribution from in-DOM widgets counts against
+ *     tenant's PSI score.
+ *   - Hard gate facade ≤ 15 KB gzip; future `dist/booking-flow.js` lazy chunk
+ *     gets a separate ≤ 80 KB gate during A4.2.
  *   - Run via `pnpm --filter @horeca/widget-embed build:check` in post-push CI.
  *   - Exit 1 if missing OR over budget so workflow fails red.
  *
@@ -18,7 +23,7 @@ import { gzipSync } from 'node:zlib'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const bundlePath = path.resolve(__dirname, '..', 'dist', 'embed.js')
-const LIMIT_BYTES = 30 * 1024
+const LIMIT_BYTES = 15 * 1024
 
 let stat
 try {

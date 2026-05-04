@@ -6,7 +6,10 @@
 		"rootDir": ".",
 		"target": "ES2022",
 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
-		"types": []
+		"types": [],
+		"experimentalDecorators": true,
+		"useDefineForClassFields": false,
+		"emitDecoratorMetadata": false
 	},
-	"include": ["src", "scripts", "vite.config.ts"]
+	"include": ["src", "scripts", "vite.config.ts", "vitest.config.ts"]
 }

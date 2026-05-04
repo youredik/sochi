@@ -24,9 +24,10 @@
 
 **Track A4 — M9.widget.6 Embed Web Component** (A4.1 ⅓ DONE 2026-05-04). Plan canon: [`plans/m9_widget_6_canonical.md`](m9_widget_6_canonical.md). Memory: `project_m9_widget_6_canonical.md`. R1×5 broad + R2 adversarial + npm verify 2026-05-01. **12 decisions + 9 R2 security corrections**: Lit 3.3.2 + Vite 8.0.10 IIFE native (NO vite-plugin-singlefile) + Integrity-Policy HTTP + iframe distinct eTLD+1 + CHIPS Partitioned cookies + MessageChannel handshake + per-tenant CSP frame-ancestors + bundle ≤30 kB gzip CI gate + customElements defensive guard.
 
-**A4 Sub-phase progress (1 unpushed commit pending):**
-- ✅ A4.1 — `apps/widget-embed/` scaffold + Vite IIFE + Terser + bundle CI gate + 5 BLD tests + 3 pre-existing biome lint cleanups. **Bundle 6.06 KiB gzip / 30 KiB ceiling = 23.94 KiB headroom**.
-- 🔴 A4.2 — Lit Web Component implementation (~10 W tests)
+**A4 Sub-phase progress (2 unpushed commits pending):**
+- ✅ A4.1 — `apps/widget-embed/` scaffold + Vite IIFE + Terser + bundle CI gate + 5 BLD tests + 3 pre-existing biome lint cleanups (commit `d74ce5c`)
+- ✅ A4.1.fix — apply 15 R1+R2 corrections fresh research 2026-05-04: legacy decorators (D13) + DOM clobbering stash (D16) + Trusted Types policy (D15) + prototype pollution defense (D17) + AbortController canon (D19) + Vitest Browser Mode + Playwright (D14) + facade pattern reframe (D12: ≤15 KB facade + ≤80 KB lazy) + `:not(:defined)` fallback (D20) + `@lit-labs/ssr-client` hydrate-support (D1). Plan §M9.widget.6 D13-D20 added. **Bundle 9.39 KiB gzip / 15 KiB facade ceiling = 5.6 KiB headroom для А4.2 IO v2 + lazy-trigger.**
+- 🔴 A4.2 — Lit Web Component implementation (~10 W tests via Vitest Browser Mode)
 - 🔴 A4.3 — backend embed.routes + migration 0047 publicEmbedDomains (~10 E tests)
 - 🔴 A4.4 — iframe fallback + postMessage handshake (~5 IF tests)
 

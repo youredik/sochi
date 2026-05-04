@@ -1,15 +1,15 @@
 /**
- * Build artifact tests — BLD1 through BLD5 per `plans/m9_widget_6_canonical.md` §9.
+ * Build artifact tests — BLD1..5 + BLD-FX1..3 per `plans/m9_widget_6_canonical.md`
+ * §9 + A4.1.fix corrections (R1+R2 2026-05-04).
  *
- *   BLD1: bundle size gate ≤ 30 720 bytes gzip
- *   BLD2: IIFE format — single self-contained `embed.js`
- *   BLD3: no external imports (Lit bundled, не externalized)
- *   BLD4: subpath imports enforced (no `lit` barrel — bundle lookup table)
- *   BLD5: source map separate `.map` file
- *
- * `beforeAll` builds the bundle if `dist/embed.js` is missing so the test is
- * self-contained when run via `pnpm test:serial`. CI workflow can build once
- * upfront via `pnpm --filter @horeca/widget-embed build` to skip the rebuild.
+ *   BLD1     : facade gzip size ≤ 15 360 bytes (D12 reframed)
+ *   BLD2     : IIFE format — single self-contained `embed.js`
+ *   BLD3     : no external imports (Lit bundled, hydrate-support inlined)
+ *   BLD4     : subpath imports enforced (no `lit` barrel)
+ *   BLD5     : source map separate `.map` file
+ *   BLD-FX1  : DOM-clobbering stash present at IIFE prologue (D16)
+ *   BLD-FX2  : Trusted Types `lit-html` policy registration emitted (D15)
+ *   BLD-FX3  : Lit DSD hydrate-support code inlined (D1)
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -24,7 +24,7 @@ const distDir = path.join(pkgRoot, 'dist')
 const bundlePath = path.join(distDir, 'embed.js')
 const sourceMapPath = path.join(distDir, 'embed.js.map')
 
-const LIMIT_BYTES = 30 * 1024 // 30 720
+const LIMIT_BYTES = 15 * 1024 // 15 360 — facade pattern (D12 reframed)
 
 beforeAll(async () => {
 	if (!existsSync(bundlePath)) {
@@ -38,7 +38,7 @@ beforeAll(async () => {
 }, 90_000)
 
 describe('widget-embed build artifact', () => {
-	it('BLD1 — gzip size ≤ 30 720 bytes', () => {
+	it('BLD1 — facade gzip size ≤ 15 360 bytes (D12)', () => {
 		const raw = readFileSync(bundlePath)
 		const gzipped = gzipSync(raw, { level: 9 })
 		expect(gzipped.length).toBeLessThanOrEqual(LIMIT_BYTES)
@@ -86,5 +86,26 @@ describe('widget-embed build artifact', () => {
 		// embed.js должен ссылаться на отдельный .map (sourceMappingURL comment).
 		const code = readFileSync(bundlePath, 'utf-8')
 		expect(code).toMatch(/\/\/# sourceMappingURL=embed\.js\.map\s*$/m)
+	})
+
+	it('BLD-FX1 — DOM-clobbering stash markers present (D16)', () => {
+		const code = readFileSync(bundlePath, 'utf-8')
+		// `dom-stash.ts` throws on hostile env via these specific marker strings —
+		// proves stash module survived minification + tree-shaking.
+		expect(code).toContain('document clobbered')
+		expect(code).toContain('customElements clobbered')
+	})
+
+	it('BLD-FX2 — Trusted Types policy registration emitted (D15)', () => {
+		const code = readFileSync(bundlePath, 'utf-8')
+		// Lit reads a policy named `lit-html`; security-prologue registers it.
+		expect(code).toContain('lit-html')
+	})
+
+	it('BLD-FX3 — Lit DSD hydrate-support inlined (D1)', () => {
+		const code = readFileSync(bundlePath, 'utf-8')
+		// `@lit-labs/ssr-client/lit-element-hydrate-support` exports
+		// `litElementHydrateSupport`; minifier preserves the call site.
+		expect(code).toContain('litElementHydrateSupport')
 	})
 })

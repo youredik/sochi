@@ -7,16 +7,20 @@
 		"build": "vite build",
 		"build:size": "gzip-size dist/embed.js --raw",
 		"build:check": "vite build && node scripts/check-size.mjs",
-		"test": "vitest run"
+		"test": "vitest run",
+		"test:browser": "vitest run --config vitest.browser.config.ts"
 	},
 	"dependencies": {
+		"@lit-labs/ssr-client": "^1.1.8",
 		"lit": "3.3.2"
 	},
 	"devDependencies": {
+		"@vitest/browser-playwright": "^4.1.5",
 		"gzip-size-cli": "^5.1.0",
 		"rollup-plugin-visualizer": "^7.0.1",
 		"terser": "^5.46.2",
 		"vite": "^8.0.10",
-		"vitest": "^4.1.5"
+		"vitest": "^4.1.5",
+		"vitest-browser-lit": "^1.0.1"
 	}
 }
