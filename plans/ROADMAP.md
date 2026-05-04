@@ -9,7 +9,9 @@
 
 ## Сейчас работаем над
 
-**Track A6 — M9.widget.8 Demo polish** (next sub-phase, pre-flight pending). Plan canon: TBD `plans/m9_widget_8_canonical.md` (создать перед стартом). Scope: реалистичный «Гостиница Сириус» seed (24 номера, 30+ бронирований, photos, JSON-LD Schema.org Hotel) + 24h refresh cron + landing с tour-указателями. Pre-flight требует R1+R2 ≥ today + npm-empirical-verify per `feedback_session_startup_for_widget_subphases.md`.
+**Track A7 — M10 Channel Manager Mock** (next sub-phase, pre-flight pending). Plan canon: TBD `plans/m10_canonical.md` (создать перед стартом). Scope: TravelLine + Я.Путешествия + Ostrovok behaviour-faithful Mock'и + canonical adapter interface + двусторонняя sync визуально на demo. Pre-flight требует R1+R2+R3 ≥ today per `feedback_session_startup_for_widget_subphases.md`.
+
+**Track A6 — M9.widget.8 Demo polish** ✅ DONE 2026-05-04 — see `project_m9_widget_8_done.md`. 3 commits local awaiting push (`a65819f` pre-flight + `a953873` A6.1 + `5cdc1f9` A6.2). **39 strict tests** (target ~25, overdelivered 1.6×). Senior pivot driver.js→native Popover API caught UPFRONT.
 
 **Track A5 — M9.widget.7 Perf + a11y CI gate** ✅ DONE 2026-05-04 — see `project_m9_widget_7_done.md`. 4 commits local awaiting push (`f3bac87` A5.1 + `05c76b7` A5.2 + `dd99cca` A5.3 + `8446695` A5.4). **130 strict tests** across 4 sub-phases (target ~62, overdelivered 2.1×). Lighthouse CI 0.15.1 + size-limit 12 + axe matrix 48 cells + RUM 152-ФЗ + Speculation Rules + Sec-Purpose middleware. 9-gate green: backend test:serial 4668/1 skipped/0 failed, frontend 1328, e2e smoke 65 passed.
 
@@ -100,7 +102,7 @@
 | **A3** | M9.widget.5 — Confirmation | Боль 2.3 (continuing) | magic-link service (jose 6.2.3, HS256) + email voucher (Postbox/Mailpit) + .ics + guest portal | ~45 | §5 |
 | **A4** | M9.widget.6 — Embed Web Component | Боль 2.3 (closure) | `apps/widget-embed` Vite build → Lit 3.3.2 + Declarative Shadow DOM SSR + iframe fallback ≤30 kB gzip | ~30 | §6 |
 | **A5** ✅ | M9.widget.7 — Perf + a11y gate | Quality canon | Lighthouse CI 0.15.1 + size-limit 12 + RUM 152-ФЗ pipeline (web-vitals 5 attribution + YC Monitoring HTTP exporter) + axe matrix 48 cells (4 surfaces × 3 themes × 4 viewports) + forced-colors Cyrillic visual smoke + Speculation Rules + Sec-Purpose middleware + noscript fallback — closed `8446695` | **130 strict + 65 e2e** (target ~62 — overdelivered 2.1×) | done memory `project_m9_widget_7_done.md` |
-| **A6** | M9.widget.8 — Demo polish | Acquisition surface | Реалистичный «Гостиница Сириус» seed (24 номера, 30+ бронирований, photos, JSON-LD Schema.org Hotel) + 24h refresh cron + landing с tour-указателями | ~25 | §8 |
+| **A6** ✅ | M9.widget.8 — Demo polish | Acquisition surface | Schema.org Hotel JSON-LD (XSS-escape D7 + RU compliance) + 24h Croner cron (idempotent UPSERT + cold-start startup-check) + 24 rooms (8+16) + 30 bookings (deterministic distribution) + 5 photos (Picsum) + native HTML Popover API tour overlay (driver.js REJECTED per «современно или в топку») — closed `5cdc1f9` | **39 strict** (target ~25, overdelivered 1.6×) | done memory `project_m9_widget_8_done.md` |
 | **A7** | M10 — Channel Manager Mock | Боль 2.2 (closure) | TravelLine + Я.Путешествия + Ostrovok behaviour-faithful Mock'и + canonical adapter interface + двусторонняя sync визуально на demo | ~80 | TBD `plans/m10_canonical.md` (создать перед стартом) |
 
 ### Track A DoD
