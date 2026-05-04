@@ -18,6 +18,7 @@ import { createBookingRoutes } from './domains/booking/booking.routes.ts'
 import { createGuestPortalRepo } from './domains/booking/guest-portal.repo.ts'
 import { createGuestPortalRoutes } from './domains/booking/guest-portal.routes.ts'
 import { createChannelFactory } from './domains/channel/channel.factory.ts'
+import { registerTravellineWithChannelFactory } from './domains/channel/travelline/travelline.factory.ts'
 import { createMockArchiveBuilder } from './domains/epgu/archive/mock-archive.ts'
 import { createMigrationRegistrationFactory } from './domains/epgu/registration/registration.factory.ts'
 import { createMigrationRegistrationRoutes } from './domains/epgu/registration/registration.routes.ts'
@@ -237,6 +238,20 @@ const rumBuffer = new RumBuffer({ capacity: 5000 })
 // integration calls dispatcher.processRow directly with inline mocks).
 const channelFactory = createChannelFactory(sql, {
 	enableDispatcher: process.env.NODE_ENV !== 'test',
+})
+
+// M10 / A7.2 — TravelLine Mock adapter registered. Live-flip = swap factory body
+// в `travelline.factory.ts` к live HTTP client; ZERO domain code changes.
+registerTravellineWithChannelFactory(channelFactory)
+registerAdapter({
+	name: 'channel.travelline.mock',
+	category: 'channel',
+	mode: 'mock',
+	description:
+		'Behaviour-faithful TravelLine Mock (D1-D5: source-of-truth ARI / polling-not-webhook / ' +
+		'OAuth Client-Credentials JWT 15min / 3rps-15rpm-300rph per-IP rate-limit / verify→create ' +
+		'two-step + 24h CreateBookingToken + Checksum / tlRoomTypeId-tlRatePlanId mapping). ' +
+		'Replace with live HTTP client adapter in M10.live (партнёр TL onboarding).',
 })
 
 // CDC consumers — exactly-once projection pipeline.
