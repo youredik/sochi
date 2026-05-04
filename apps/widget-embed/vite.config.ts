@@ -1,17 +1,28 @@
 /**
- * Vite IIFE library mode build for embed bundle.
+ * Vite multi-entry IIFE library build — facade pattern (D12).
  *
- * Per `plans/m9_widget_6_canonical.md` §D2:
- *   - Native `build.lib.formats: ['iife']` produces single self-contained
- *     bundle. Vite 8 disables code-splitting automatically для IIFE/UMD.
- *   - Terser (D3) — Vite 8 default Oxc loses ~0.5-2% gzip on the 30 kB cliff;
- *     Terser is canonical for byte-tight bundles.
- *   - rollup-plugin-visualizer writes `dist/stats.html` for chunk inspection.
- *   - SourceMap separate `.map` per BLD5.
- *   - `target: 'es2022'` matches `tsconfig.json`. Browsers без support
- *     (≤2% global per caniuse 2026) fall back на iframe path.
+ *   `embed.js`         — facade, ≤15 KB gzip target. Renders CTA button +
+ *                        IntersectionObserver lazy trigger + dynamic
+ *                        `import('./booking-flow.js')` on click.
+ *   `booking-flow.js`  — lazy chunk, ≤80 KB gzip target. Full booking flow
+ *                        (search/extras/guest/confirm screens).
  *
- * Bundle size CI gate (D12, BLD1): `gzip-size dist/embed.js --raw` ≤ 30720 bytes.
+ * Per `plans/m9_widget_6_canonical.md` §D12 (REFRAMED 2026-05-04 from R1b
+ * industry benchmark + R1c INP attribution):
+ *   - Stripe Buy Button (3.5 KB facade → 259 KB Stripe.js lazy), Bnovo
+ *     (4.2 KB → iframe lazy), SiteMinder (12.3 KB → hosted iframe),
+ *     Yandex.Travel (4.8 KB) ВСЕ ship two-stage. Industry canonical.
+ *   - INP attribution: in-DOM widget event handlers count against tenant's
+ *     PSI score (web-vitals 5 attribution build 2026). Tiny facade keeps
+ *     first-paint cheap; heavy flow loads on user intent.
+ *
+ * Two-entry strategy: build runs twice (one per entry) because IIFE format
+ * does not support multi-entry в native lib mode (Vite 8 рестрикция). Each
+ * pass writes one self-contained bundle to `dist/`. CI runs
+ * `pnpm build` + `node scripts/check-size.mjs` (gates BOTH artifacts).
+ *
+ * Selection: `EMBED_ENTRY=embed` (default) builds facade; `EMBED_ENTRY=flow`
+ * builds the lazy chunk. `package.json scripts.build` chains both.
  */
 
 import path from 'node:path'
@@ -20,6 +31,21 @@ import { visualizer } from 'rollup-plugin-visualizer'
 import { defineConfig } from 'vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+const ENTRY = process.env.EMBED_ENTRY === 'flow' ? 'flow' : 'embed'
+
+const entryConfig =
+	ENTRY === 'flow'
+		? {
+				entryPath: 'src/booking-flow-entry.ts',
+				name: 'SochiBookingFlow',
+				fileName: 'booking-flow.js',
+			}
+		: {
+				entryPath: 'src/index.ts',
+				name: 'SochiBookingWidget',
+				fileName: 'embed.js',
+			}
 
 export default defineConfig({
 	build: {
@@ -31,12 +57,15 @@ export default defineConfig({
 			format: { comments: false },
 		},
 		sourcemap: true,
-		emptyOutDir: true,
+		// `false` so the second build (`EMBED_ENTRY=flow`) does NOT wipe the
+		// facade artifact emitted by the first pass. CI / scripts orchestrate
+		// the two-step build.
+		emptyOutDir: false,
 		lib: {
-			entry: path.resolve(__dirname, 'src/index.ts'),
-			name: 'SochiBookingWidget',
+			entry: path.resolve(__dirname, entryConfig.entryPath),
+			name: entryConfig.name,
 			formats: ['iife'],
-			fileName: () => 'embed.js',
+			fileName: () => entryConfig.fileName,
 		},
 		rollupOptions: {
 			output: {
@@ -47,7 +76,7 @@ export default defineConfig({
 	},
 	plugins: [
 		visualizer({
-			filename: 'dist/stats.html',
+			filename: `dist/stats-${ENTRY}.html`,
 			gzipSize: true,
 			brotliSize: false,
 			template: 'treemap',
