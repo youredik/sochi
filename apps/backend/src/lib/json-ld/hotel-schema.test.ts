@@ -73,32 +73,32 @@ describe('buildHotelJsonLd — structure (D1-D8)', () => {
 
 	it('[JL2] RU compliance — addressCountry "RU" ISO-2 + 6-digit postal (D2)', () => {
 		const obj = buildHotelJsonLd(SIRIUS_BASE)
-		const addr = obj['address'] as Record<string, unknown>
+		const addr = obj.address as Record<string, unknown>
 		expect(addr['@type']).toBe('PostalAddress')
-		expect(addr['addressCountry']).toBe('RU') // ISO-2, NOT "Russia"/"Россия"
-		expect(addr['postalCode']).toBe('354340') // 6-digit string
-		expect(typeof addr['postalCode']).toBe('string') // never integer (loses leading zeros для других regions)
-		expect(addr['addressLocality']).toBe('Сочи')
+		expect(addr.addressCountry).toBe('RU') // ISO-2, NOT "Russia"/"Россия"
+		expect(addr.postalCode).toBe('354340') // 6-digit string
+		expect(typeof addr.postalCode).toBe('string') // never integer (loses leading zeros для других regions)
+		expect(addr.addressLocality).toBe('Сочи')
 	})
 
 	it('[JL3] containsPlace HotelRoom array (NOT N sibling Hotel blocks) — D3', () => {
 		const obj = buildHotelJsonLd(SIRIUS_BASE)
-		const rooms = obj['containsPlace'] as Array<Record<string, unknown>>
+		const rooms = obj.containsPlace as Array<Record<string, unknown>>
 		expect(Array.isArray(rooms)).toBe(true)
 		expect(rooms).toHaveLength(2)
 		for (const room of rooms) {
 			expect(room['@type']).toBe('HotelRoom')
-			const occ = room['occupancy'] as Record<string, unknown>
+			const occ = room.occupancy as Record<string, unknown>
 			expect(occ['@type']).toBe('QuantitativeValue')
-			expect(occ['unitCode']).toBe('C62') // dimensionless per UN/CEFACT
+			expect(occ.unitCode).toBe('C62') // dimensionless per UN/CEFACT
 		}
 	})
 
 	it('[JL4] aggregateRating OMITTED entirely (D5 — Google suppression rule)', () => {
 		const obj = buildHotelJsonLd(SIRIUS_BASE)
-		expect(obj['aggregateRating']).toBeUndefined()
+		expect(obj.aggregateRating).toBeUndefined()
 		// starRating ≠ aggregateRating; starRating is canonical + safe.
-		expect(obj['starRating']).toEqual({ '@type': 'Rating', ratingValue: '4' })
+		expect(obj.starRating).toEqual({ '@type': 'Rating', ratingValue: '4' })
 	})
 
 	it('[JL4.b] flat nested object (NOT @graph wrapper) — D4', () => {
@@ -110,10 +110,10 @@ describe('buildHotelJsonLd — structure (D1-D8)', () => {
 
 	it('[JL4.c] priceRange symbolic string (D6 — NOT inline Offer[])', () => {
 		const obj = buildHotelJsonLd(SIRIUS_BASE)
-		expect(typeof obj['priceRange']).toBe('string')
-		expect(obj['priceRange']).toBe('5000–15000 ₽')
-		expect(obj['offers']).toBeUndefined()
-		expect(obj['makesOffer']).toBeUndefined()
+		expect(typeof obj.priceRange).toBe('string')
+		expect(obj.priceRange).toBe('5000–15000 ₽')
+		expect(obj.offers).toBeUndefined()
+		expect(obj.makesOffer).toBeUndefined()
 	})
 })
 
@@ -188,8 +188,8 @@ describe('renderHotelJsonLdScript — encoding + valid JSON round-trip', () => {
 		// JSON.parse must succeed (escaped form is valid JSON).
 		const parsed = JSON.parse(inner) as Record<string, unknown>
 		// And round-trip must restore original Cyrillic + emoji.
-		expect(parsed['name']).toBe('Гостиница Сириус 🏨')
-		expect(parsed['description']).toBe('Тест Cyrillic ёжик ©')
+		expect(parsed.name).toBe('Гостиница Сириус 🏨')
+		expect(parsed.description).toBe('Тест Cyrillic ёжик ©')
 	})
 
 	it('[JL7] images array with ≥3 entries preserved as-is', () => {
@@ -204,18 +204,18 @@ describe('renderHotelJsonLdScript — encoding + valid JSON round-trip', () => {
 		const block = renderHotelJsonLdScript({ ...SIRIUS_BASE, roomTypes: [] })
 		const inner = block.slice('<script type="application/ld+json">'.length, -'</script>'.length)
 		const parsed = JSON.parse(inner) as Record<string, unknown>
-		expect(parsed['containsPlace']).toBeUndefined()
+		expect(parsed.containsPlace).toBeUndefined()
 	})
 
 	it('[JL8.b] potentialAction ReserveAction with EntryPoint (booking flow)', () => {
 		const block = renderHotelJsonLdScript(SIRIUS_BASE)
 		const inner = block.slice('<script type="application/ld+json">'.length, -'</script>'.length)
 		const parsed = JSON.parse(inner) as Record<string, unknown>
-		const action = parsed['potentialAction'] as Record<string, unknown>
+		const action = parsed.potentialAction as Record<string, unknown>
 		expect(action['@type']).toBe('ReserveAction')
-		const target = action['target'] as Record<string, unknown>
+		const target = action.target as Record<string, unknown>
 		expect(target['@type']).toBe('EntryPoint')
-		expect(target['urlTemplate']).toBe('https://demo-sirius.sochi.app/widget/demo-sirius')
-		expect((target['actionPlatform'] as Array<string>).length).toBe(2)
+		expect(target.urlTemplate).toBe('https://demo-sirius.sochi.app/widget/demo-sirius')
+		expect((target.actionPlatform as Array<string>).length).toBe(2)
 	})
 })

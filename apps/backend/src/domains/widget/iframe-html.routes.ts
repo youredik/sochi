@@ -28,6 +28,8 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { assertHeaderSafe, assertOriginSafe } from '../../lib/embed/header-safety.ts'
+import { getDemoAugments } from '../../lib/json-ld/demo-augments.ts'
+import { renderHotelJsonLdScript } from '../../lib/json-ld/hotel-schema.ts'
 import { resolveTenantBySlug } from '../../lib/tenant-resolver.ts'
 import { secPurposeGuard } from '../../middleware/sec-purpose-guard.ts'
 import type { EmbedService } from './embed.service.ts'
@@ -114,18 +116,24 @@ function renderIframeHtml(input: {
 	bundleUrl: string
 	sriDigest: string
 	nonce: string
+	jsonLdScript?: string
 }): string {
 	const safeSlug = escapeHtml(input.tenantSlug)
 	const safePropertyId = escapeHtml(input.propertyId)
 	const safeBundleUrl = escapeHtml(input.bundleUrl)
 	const safeSriDigest = escapeHtml(input.sriDigest)
 	const safeNonce = escapeHtml(input.nonce)
+	// jsonLdScript is the COMPLETE pre-escaped <script type="application/ld+json">
+	// block from `lib/json-ld/hotel-schema.ts`. No further escaping — that file
+	// already canonical-escapes (D7).
+	const jsonLdBlock = input.jsonLdScript ?? ''
 	return `<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Бронирование — ${safeSlug}</title>
+${jsonLdBlock}
 <style>
 html, body { margin: 0; padding: 0; min-height: 100dvh; background: #fff; color: #0a0a0a; font: 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .sochi-iframe-shell { display: block; min-height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
@@ -212,6 +220,54 @@ export function createIframeHtmlRoutes(deps: IframeHtmlRoutesDeps) {
 			const bundleUrl = `${bundleOrigin}/api/embed/v1/${tenantSlug}/${propertyId}/${facade.hashHex}.js`
 			const nonce = crypto.randomUUID()
 
+			// JSON-LD Hotel schema (M9.widget.8 / A6.1) — D7 escape internalized.
+			// Demo augments overlay onto DB property data. Production tenants
+			// degrade gracefully (minimal Hotel JSON-LD без image/geo/starRating)
+			// until M11+ admin UI exposes those fields.
+			const jsonLdData = await service.getHotelJsonLdData(resolved.tenantId, propertyId)
+			const augments = getDemoAugments(tenantSlug)
+			let jsonLdScript: string | undefined
+			if (jsonLdData !== null && augments !== null) {
+				jsonLdScript = renderHotelJsonLdScript({
+					tenantSlug,
+					name: jsonLdData.property.name,
+					description: augments.description,
+					address: {
+						streetAddress: jsonLdData.property.address,
+						addressLocality: jsonLdData.property.city,
+						addressRegion: augments.addressRegion,
+						postalCode: augments.postalCode,
+						addressCountry: augments.addressCountry,
+					},
+					geo: augments.geo,
+					telephone: augments.telephone,
+					starRating: augments.starRating,
+					priceRange: augments.priceRange,
+					numberOfRooms: jsonLdData.roomTypes.reduce((sum, rt) => sum + rt.inventoryCount, 0),
+					images: augments.images,
+					checkinTime: augments.checkinTime,
+					checkoutTime: augments.checkoutTime,
+					roomTypes: jsonLdData.roomTypes.map((rt) => {
+						const out: {
+							name: string
+							description: string
+							maxOccupancy: number
+							baseBeds: number
+							extraBeds: number
+							areaSqm?: number
+						} = {
+							name: rt.name,
+							description: rt.description,
+							maxOccupancy: rt.maxOccupancy,
+							baseBeds: rt.baseBeds,
+							extraBeds: rt.extraBeds,
+						}
+						if (rt.areaSqm !== null) out.areaSqm = rt.areaSqm
+						return out
+					}),
+				})
+			}
+
 			const cspValue = buildCspHeader(allowlist, bundleOrigin)
 			c.header('Content-Type', 'text/html; charset=utf-8')
 			c.header('Content-Security-Policy', cspValue)
@@ -222,16 +278,22 @@ export function createIframeHtmlRoutes(deps: IframeHtmlRoutesDeps) {
 			c.header('X-Content-Type-Options', 'nosniff')
 			c.header('Cache-Control', 'private, max-age=60, must-revalidate')
 
-			return c.body(
-				renderIframeHtml({
-					tenantSlug,
-					propertyId,
-					bundleUrl,
-					sriDigest: facade.sriDigest,
-					nonce,
-				}),
-				200,
-			)
+			const renderInput: {
+				tenantSlug: string
+				propertyId: string
+				bundleUrl: string
+				sriDigest: string
+				nonce: string
+				jsonLdScript?: string
+			} = {
+				tenantSlug,
+				propertyId,
+				bundleUrl,
+				sriDigest: facade.sriDigest,
+				nonce,
+			}
+			if (jsonLdScript !== undefined) renderInput.jsonLdScript = jsonLdScript
+			return c.body(renderIframeHtml(renderInput), 200)
 		},
 	)
 	return app

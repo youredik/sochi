@@ -11,6 +11,7 @@
 	},
 	"dependencies": {
 		"@better-auth/passkey": "^1.6.9",
+		"@floating-ui/dom": "1.7.6",
 		"@fontsource-variable/geist": "^5.2.8",
 		"@lingui/core": "^6.0.0",
 		"@lingui/react": "^6.0.0",

@@ -15,6 +15,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ruPlural } from '../lib/ru-plural.ts'
 import { listPublicProperties } from '../lib/widget-api.ts'
+import { DemoTourOverlay } from '../tour/demo-tour-overlay.tsx'
+import { DemoTourTrigger } from '../tour/demo-tour-trigger.tsx'
 
 export interface WidgetPageProps {
 	readonly tenantSlug: string
@@ -67,6 +69,7 @@ export function WidgetPage({ tenantSlug, onNotFound }: WidgetPageProps) {
 			lang="ru"
 			className="min-h-svh bg-gradient-to-b from-primary/5 via-background to-background"
 		>
+			{data.tenant.mode === 'demo' ? <DemoTourOverlay /> : null}
 			<main className="mx-auto max-w-3xl p-4 sm:p-6 md:p-8">
 				<header className="pt-2 pb-6 md:pt-6 md:pb-8">
 					<p className="text-xs font-medium uppercase tracking-wider text-primary">
@@ -76,13 +79,16 @@ export function WidgetPage({ tenantSlug, onNotFound }: WidgetPageProps) {
 						{data.tenant.name}
 					</h1>
 					{data.tenant.mode === 'demo' ? (
-						<p
-							data-testid="demo-banner"
-							className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary"
-						>
-							<span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
-							<span>Демо-режим — это живая витрина продукта</span>
-						</p>
+						<div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
+							<p
+								data-testid="demo-banner"
+								className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary"
+							>
+								<span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
+								<span>Демо-режим — это живая витрина продукта</span>
+							</p>
+							<DemoTourTrigger mode={data.tenant.mode} />
+						</div>
 					) : null}
 				</header>
 

@@ -359,4 +359,95 @@ describe('iframe-html.routes', { tags: ['db'], timeout: 60_000 }, () => {
 		expect(res.status).toBe(503)
 		expect(res.headers.get('cache-control')).toBe('no-store')
 	})
+
+	it('[IF14] JSON-LD Hotel block emitted для demo tenant с canonical augments (M9.widget.8 / A6.1 / D1-D8)', async () => {
+		// demo-sirius tenant has hardcoded augments в `lib/json-ld/demo-augments.ts`.
+		// Test uses unique slug + registers it under canonical Сириус augments via
+		// test-only seam (avoids UNIQUE-slug collision с real seed `demo-sirius`).
+		const { registerDemoAugmentForTest } = await import('../../lib/json-ld/demo-augments.ts')
+		const { app } = bootRoutes()
+		const slug = randomSlug('if14')
+		const tenantId = newId('organization')
+		const propertyId = newId('property')
+		const dispose = registerDemoAugmentForTest(slug)
+		try {
+			await seedPublicProperty({
+				tenantId,
+				propertyId,
+				publicEmbedDomains: ['https://hotel-sirius.demo'],
+				slug,
+			})
+			// Create a roomType so JSON-LD has containsPlace[] non-empty.
+			const sql = getTestSql()
+			const now = new Date()
+			const nowTs = toTs(now)
+			await sql`
+			UPSERT INTO roomType (
+				\`tenantId\`, \`id\`, \`propertyId\`, \`name\`, \`description\`,
+				\`maxOccupancy\`, \`baseBeds\`, \`extraBeds\`, \`areaSqm\`,
+				\`inventoryCount\`, \`isActive\`, \`createdAt\`, \`updatedAt\`
+			) VALUES (
+				${tenantId}, ${newId('roomType')}, ${propertyId},
+				${'Deluxe Sea View'}, ${'25 м², 2 гостя, балкон'},
+				${2}, ${1}, ${0}, ${25},
+				${5}, ${true}, ${nowTs}, ${nowTs}
+			)
+		`
+
+			const res = await app.request(`/v1/iframe/${slug}/${propertyId}.html`)
+			expect(res.status).toBe(200)
+			const body = await res.text()
+
+			// JSON-LD <script> block present.
+			expect(body).toContain('<script type="application/ld+json">')
+
+			// Parse the block для structural verification (D7 escape MUST round-trip).
+			const match = body.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)
+			expect(match).not.toBeNull()
+			const inner = match?.[1] ?? ''
+			const parsed = JSON.parse(inner) as Record<string, unknown>
+			expect(parsed['@type']).toBe('Hotel')
+			expect(parsed['@context']).toBe('https://schema.org')
+			const addr = parsed['address'] as Record<string, unknown>
+			expect(addr['addressCountry']).toBe('RU')
+			expect(addr['postalCode']).toBe('354340')
+			// addressLocality mirrors `property.city` from DB — test fixture seeds
+			// English 'Sochi'; real demo seed uses Cyrillic 'Сириус'.
+			expect(addr['addressLocality']).toBe('Sochi')
+			expect(parsed['starRating']).toEqual({ '@type': 'Rating', ratingValue: '4' })
+			expect(parsed['aggregateRating']).toBeUndefined() // D5 omitted
+			expect(parsed['image']).toBeDefined()
+			expect((parsed['image'] as Array<string>).length).toBeGreaterThanOrEqual(3) // Google Hotel rich-results spec
+			const containsPlace = parsed['containsPlace'] as Array<Record<string, unknown>>
+			expect(containsPlace).toHaveLength(1)
+			expect(containsPlace[0]?.['@type']).toBe('HotelRoom')
+
+			// JSON-LD must appear BEFORE the body (canonical placement в <head>).
+			const jsonLdIdx = body.indexOf('<script type="application/ld+json">')
+			const bodyIdx = body.indexOf('<body>')
+			expect(jsonLdIdx).toBeGreaterThan(0)
+			expect(jsonLdIdx).toBeLessThan(bodyIdx)
+		} finally {
+			dispose()
+		}
+	})
+
+	it('[IF15] non-demo tenant (no augments) → JSON-LD block ABSENT (graceful degrade)', async () => {
+		const { app } = bootRoutes()
+		const slug = randomSlug('if15')
+		const tenantId = newId('organization')
+		const propertyId = newId('property')
+		await seedPublicProperty({
+			tenantId,
+			propertyId,
+			publicEmbedDomains: ['https://hotel.ru'],
+			slug,
+		})
+		const res = await app.request(`/v1/iframe/${slug}/${propertyId}.html`)
+		expect(res.status).toBe(200)
+		const body = await res.text()
+		// Production tenant без augments → no JSON-LD until M11 admin UI exposes
+		// geo / starRating / photo CDN URLs.
+		expect(body).not.toContain('<script type="application/ld+json">')
+	})
 })

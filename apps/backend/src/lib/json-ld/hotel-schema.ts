@@ -116,9 +116,9 @@ export function buildHotelJsonLd(input: HotelSchemaInput): Record<string, unknow
 			result: { '@type': 'LodgingReservation', name: 'Бронирование номера' },
 		},
 	}
-	if (input.images.length > 0) obj['image'] = [...input.images]
+	if (input.images.length > 0) obj.image = [...input.images]
 	if (input.roomTypes.length > 0) {
-		obj['containsPlace'] = input.roomTypes.map((rt) => {
+		obj.containsPlace = input.roomTypes.map((rt) => {
 			const room: Record<string, unknown> = {
 				'@type': 'HotelRoom',
 				name: rt.name,
@@ -130,14 +130,14 @@ export function buildHotelJsonLd(input: HotelSchemaInput): Record<string, unknow
 				},
 			}
 			if (rt.areaSqm !== undefined) {
-				room['floorSize'] = {
+				room.floorSize = {
 					'@type': 'QuantitativeValue',
 					value: rt.areaSqm,
 					unitCode: 'MTK',
 				}
 			}
 			if (rt.baseBeds + rt.extraBeds > 0) {
-				room['bed'] = { '@type': 'BedDetails', numberOfBeds: rt.baseBeds + rt.extraBeds }
+				room.bed = { '@type': 'BedDetails', numberOfBeds: rt.baseBeds + rt.extraBeds }
 			}
 			return room
 		})

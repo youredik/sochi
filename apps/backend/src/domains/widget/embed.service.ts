@@ -132,6 +132,18 @@ export function createEmbedService(deps: EmbedServiceDeps) {
 			return deps.repo.getPublicEmbedDomains(tenantId, propertyId)
 		},
 
+		/**
+		 * Read property + roomTypes data for JSON-LD Hotel schema rendering —
+		 * M9.widget.8 / A6.1. Forward-pass to repo; route layer composes augments
+		 * (geo / starRating / images) via `lib/json-ld/demo-augments.ts`.
+		 */
+		async getHotelJsonLdData(
+			tenantId: string,
+			propertyId: string,
+		): ReturnType<typeof deps.repo.getHotelJsonLdData> {
+			return deps.repo.getHotelJsonLdData(tenantId, propertyId)
+		},
+
 		async signCommitToken(input: { tenantId: string; slug: string }): Promise<string> {
 			const nowSeconds = Math.floor(Date.now() / 1000)
 			return signCommitToken(

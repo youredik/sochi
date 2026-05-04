@@ -101,7 +101,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			${'Deluxe Sea View'},
 			${'25 м², 2 гостя, балкон с видом на море. Завтрак включён.'},
 			${2}, ${1}, ${0}, ${25},
-			${5}, ${true}, ${nowTs}, ${nowTs}
+			${8}, ${true}, ${nowTs}, ${nowTs}
 		)
 	`
 	await sql`
@@ -114,7 +114,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			${'Standard Mountain View'},
 			${'18 м², 2 гостя, вид на горы Красной Поляны.'},
 			${2}, ${1}, ${1}, ${18},
-			${10}, ${true}, ${nowTs}, ${nowTs}
+			${16}, ${true}, ${nowTs}, ${nowTs}
 		)
 	`
 
@@ -349,12 +349,373 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		`
 	}
 
+	// M9.widget.8 / A6.1 — 5 propertyMedia photo rows (Picsum.photos URLs as demo placeholders).
+	// Real S3-CDN photos carry-forward к Track B operator onboarding. originalKey holds
+	// either an S3 key OR a full https URL — read-side resolves accordingly.
+	console.log('  → Step 8/10: 5 propertyMedia photos (Picsum.photos demo placeholders)')
+	const DEMO_PHOTOS: ReadonlyArray<{
+		mediaId: string
+		seed: string
+		altRu: string
+		isHero: boolean
+		sortOrder: number
+	}> = [
+		{
+			mediaId: 'demo-photo-facade',
+			seed: 'sirius-facade',
+			altRu: 'Фасад гостиницы',
+			isHero: true,
+			sortOrder: 10,
+		},
+		{
+			mediaId: 'demo-photo-lobby',
+			seed: 'sirius-lobby',
+			altRu: 'Лобби',
+			isHero: false,
+			sortOrder: 20,
+		},
+		{
+			mediaId: 'demo-photo-deluxe',
+			seed: 'sirius-deluxe',
+			altRu: 'Номер Deluxe Sea View',
+			isHero: false,
+			sortOrder: 30,
+		},
+		{
+			mediaId: 'demo-photo-standard',
+			seed: 'sirius-standard',
+			altRu: 'Номер Standard Mountain View',
+			isHero: false,
+			sortOrder: 40,
+		},
+		{
+			mediaId: 'demo-photo-restaurant',
+			seed: 'sirius-restaurant',
+			altRu: 'Ресторан',
+			isHero: false,
+			sortOrder: 50,
+		},
+	]
+	for (const ph of DEMO_PHOTOS) {
+		await sql`
+			UPSERT INTO propertyMedia (
+				\`tenantId\`, \`propertyId\`, \`mediaId\`, \`roomTypeId\`, \`kind\`,
+				\`originalKey\`, \`mimeType\`, \`widthPx\`, \`heightPx\`, \`fileSizeBytes\`,
+				\`exifStripped\`, \`derivedReady\`,
+				\`sortOrder\`, \`isHero\`,
+				\`altRu\`, \`altEn\`, \`captionRu\`, \`captionEn\`,
+				\`createdAt\`, \`updatedAt\`
+			) VALUES (
+				${TENANT_ID}, ${DEMO_PROPERTY_ID}, ${ph.mediaId}, ${NULL_TEXT}, ${'photo'},
+				${`https://picsum.photos/seed/${ph.seed}/1200/800`},
+				${'image/jpeg'}, ${1200}, ${800}, ${250000},
+				${true}, ${true},
+				${ph.sortOrder}, ${ph.isHero},
+				${ph.altRu}, ${NULL_TEXT}, ${NULL_TEXT}, ${NULL_TEXT},
+				${nowTs}, ${nowTs}
+			)
+		`
+	}
+
+	// M9.widget.8 / A6.1 — 30 bookings (deterministic distribution across past/present/future).
+	// Status distribution: 8 checked_out + 5 in_house + 12 confirmed + 3 cancelled + 2 no_show.
+	// All linked to 30 deterministic guests (ИИ-generated Russian names via fixed lookup).
+	console.log('  → Step 9/10: 30 guests + 30 bookings (varied statuses + dates)')
+
+	// Deterministic surname / first-name pool (fixed lookup, NO Math.random).
+	// Common Russian surnames; matches realistic demo without hitting actual people.
+	const SURNAMES = [
+		'Иванов',
+		'Петров',
+		'Сидоров',
+		'Кузнецов',
+		'Смирнов',
+		'Васильев',
+		'Михайлов',
+		'Новиков',
+		'Фёдоров',
+		'Морозов',
+	]
+	const FIRST_NAMES_M = ['Алексей', 'Дмитрий', 'Сергей', 'Андрей', 'Михаил']
+	const FIRST_NAMES_F = ['Анна', 'Мария', 'Елена', 'Ольга', 'Татьяна']
+
+	// Anchor «today» for deterministic booking dates (UTC-midnight today).
+	const todayUtc = new Date(now)
+	todayUtc.setUTCHours(0, 0, 0, 0)
+	function offsetDays(days: number): Date {
+		const d = new Date(todayUtc)
+		d.setUTCDate(d.getUTCDate() + days)
+		return d
+	}
+
+	// 30 entries: [statusOffset], dayOffset relative to today, nightsCount, roomTypeIdx (0=Deluxe, 1=Standard), ratePlanIdx (0=Flex, 1=NR).
+	const BOOKING_PLAN: ReadonlyArray<{
+		status: string
+		dayOffset: number
+		nights: number
+		roomTypeIdx: 0 | 1
+		ratePlanIdx: 0 | 1
+		guestCount: number
+	}> = [
+		// 8 checked_out (past)
+		{
+			status: 'checked_out',
+			dayOffset: -45,
+			nights: 3,
+			roomTypeIdx: 0,
+			ratePlanIdx: 0,
+			guestCount: 2,
+		},
+		{
+			status: 'checked_out',
+			dayOffset: -40,
+			nights: 2,
+			roomTypeIdx: 1,
+			ratePlanIdx: 1,
+			guestCount: 1,
+		},
+		{
+			status: 'checked_out',
+			dayOffset: -35,
+			nights: 5,
+			roomTypeIdx: 0,
+			ratePlanIdx: 1,
+			guestCount: 2,
+		},
+		{
+			status: 'checked_out',
+			dayOffset: -30,
+			nights: 4,
+			roomTypeIdx: 1,
+			ratePlanIdx: 0,
+			guestCount: 3,
+		},
+		{
+			status: 'checked_out',
+			dayOffset: -25,
+			nights: 2,
+			roomTypeIdx: 0,
+			ratePlanIdx: 0,
+			guestCount: 2,
+		},
+		{
+			status: 'checked_out',
+			dayOffset: -20,
+			nights: 3,
+			roomTypeIdx: 1,
+			ratePlanIdx: 0,
+			guestCount: 2,
+		},
+		{
+			status: 'checked_out',
+			dayOffset: -15,
+			nights: 1,
+			roomTypeIdx: 0,
+			ratePlanIdx: 1,
+			guestCount: 1,
+		},
+		{
+			status: 'checked_out',
+			dayOffset: -10,
+			nights: 2,
+			roomTypeIdx: 1,
+			ratePlanIdx: 0,
+			guestCount: 2,
+		},
+		// 5 in_house (currently staying — checkIn in past, checkOut in future)
+		{ status: 'in_house', dayOffset: -1, nights: 4, roomTypeIdx: 0, ratePlanIdx: 0, guestCount: 2 },
+		{ status: 'in_house', dayOffset: -2, nights: 5, roomTypeIdx: 1, ratePlanIdx: 0, guestCount: 3 },
+		{ status: 'in_house', dayOffset: 0, nights: 2, roomTypeIdx: 0, ratePlanIdx: 1, guestCount: 2 },
+		{ status: 'in_house', dayOffset: -3, nights: 7, roomTypeIdx: 1, ratePlanIdx: 1, guestCount: 4 },
+		{ status: 'in_house', dayOffset: -1, nights: 3, roomTypeIdx: 0, ratePlanIdx: 0, guestCount: 2 },
+		// 12 confirmed (future)
+		{ status: 'confirmed', dayOffset: 5, nights: 3, roomTypeIdx: 0, ratePlanIdx: 0, guestCount: 2 },
+		{ status: 'confirmed', dayOffset: 7, nights: 4, roomTypeIdx: 1, ratePlanIdx: 1, guestCount: 2 },
+		{
+			status: 'confirmed',
+			dayOffset: 10,
+			nights: 2,
+			roomTypeIdx: 0,
+			ratePlanIdx: 1,
+			guestCount: 1,
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 12,
+			nights: 5,
+			roomTypeIdx: 1,
+			ratePlanIdx: 0,
+			guestCount: 3,
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 14,
+			nights: 3,
+			roomTypeIdx: 0,
+			ratePlanIdx: 0,
+			guestCount: 2,
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 18,
+			nights: 2,
+			roomTypeIdx: 1,
+			ratePlanIdx: 0,
+			guestCount: 2,
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 21,
+			nights: 4,
+			roomTypeIdx: 0,
+			ratePlanIdx: 1,
+			guestCount: 2,
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 25,
+			nights: 3,
+			roomTypeIdx: 1,
+			ratePlanIdx: 1,
+			guestCount: 1,
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 28,
+			nights: 6,
+			roomTypeIdx: 0,
+			ratePlanIdx: 0,
+			guestCount: 2,
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 32,
+			nights: 2,
+			roomTypeIdx: 1,
+			ratePlanIdx: 0,
+			guestCount: 2,
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 35,
+			nights: 4,
+			roomTypeIdx: 0,
+			ratePlanIdx: 1,
+			guestCount: 2,
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 40,
+			nights: 3,
+			roomTypeIdx: 1,
+			ratePlanIdx: 0,
+			guestCount: 3,
+		},
+		// 3 cancelled
+		{ status: 'cancelled', dayOffset: 8, nights: 3, roomTypeIdx: 0, ratePlanIdx: 0, guestCount: 2 },
+		{
+			status: 'cancelled',
+			dayOffset: 15,
+			nights: 4,
+			roomTypeIdx: 1,
+			ratePlanIdx: 1,
+			guestCount: 1,
+		},
+		{
+			status: 'cancelled',
+			dayOffset: 22,
+			nights: 2,
+			roomTypeIdx: 0,
+			ratePlanIdx: 1,
+			guestCount: 2,
+		},
+		// 2 no_show (past, terminal status)
+		{ status: 'no_show', dayOffset: -7, nights: 2, roomTypeIdx: 0, ratePlanIdx: 1, guestCount: 1 },
+		{ status: 'no_show', dayOffset: -14, nights: 3, roomTypeIdx: 1, ratePlanIdx: 1, guestCount: 2 },
+	]
+
+	// roomTypeId / ratePlanId resolution.
+	const roomTypeIds: ReadonlyArray<string> = [DEMO_ROOM_TYPE_DELUXE_ID, DEMO_ROOM_TYPE_STANDARD_ID]
+	const ratePlanIds: ReadonlyArray<ReadonlyArray<string>> = [
+		// roomTypeIdx 0 (Deluxe): [Flex, NR]
+		['demo-rateplan-deluxe-bar-flex', 'demo-rateplan-deluxe-bar-nr'],
+		// roomTypeIdx 1 (Standard): [Flex, NR]
+		['demo-rateplan-standard-bar-flex', 'demo-rateplan-standard-bar-nr'],
+	]
+	const ratePlanNightlyMicros: ReadonlyArray<ReadonlyArray<bigint>> = [
+		[8_000_000_000n, 7_200_000_000n], // Deluxe Flex/NR
+		[5_000_000_000n, 4_500_000_000n], // Standard Flex/NR
+	]
+
+	for (let i = 0; i < BOOKING_PLAN.length; i++) {
+		const b = BOOKING_PLAN[i]
+		if (!b) continue
+		const guestId = `demo-guest-${String(i).padStart(2, '0')}`
+		const surname = SURNAMES[i % SURNAMES.length] ?? 'Иванов'
+		const isMale = i % 2 === 0
+		const firstName = (isMale ? FIRST_NAMES_M : FIRST_NAMES_F)[Math.floor(i / 2) % 5] ?? 'Алексей'
+		const docNumber = `${4500 + i}-${String(100000 + i).padStart(6, '0')}`
+
+		await sql`
+			UPSERT INTO guest (
+				\`tenantId\`, \`id\`, \`lastName\`, \`firstName\`, \`middleName\`,
+				\`birthDate\`, \`citizenship\`, \`documentType\`, \`documentSeries\`, \`documentNumber\`,
+				\`documentIssuedBy\`, \`documentIssuedDate\`, \`registrationAddress\`,
+				\`phone\`, \`email\`, \`notes\`,
+				\`createdAt\`, \`updatedAt\`
+			) VALUES (
+				${TENANT_ID}, ${guestId}, ${surname}, ${firstName}, ${NULL_TEXT},
+				${dateFromIso(`198${i % 10}-0${(i % 9) + 1}-1${i % 9}`)}, ${'RU'}, ${'PASSPORT_RF'},
+				${docNumber.slice(0, 4)}, ${docNumber.slice(5)},
+				${'УФМС России по г. Москве'}, ${dateFromIso('2015-06-15')},
+				${'г. Москва, ул. Демонстрационная, 1'},
+				${`+7900${String(1000000 + i).padStart(7, '0')}`},
+				${`demo-guest-${i}@example.test`}, ${'demo seed'},
+				${nowTs}, ${nowTs}
+			)
+		`
+
+		const checkInDate = offsetDays(b.dayOffset)
+		const checkOutDate = offsetDays(b.dayOffset + b.nights)
+		const nightlyMicros = ratePlanNightlyMicros[b.roomTypeIdx]?.[b.ratePlanIdx] ?? 5_000_000_000n
+		const totalMicros = nightlyMicros * BigInt(b.nights)
+		const paidMicros = b.status === 'cancelled' ? 0n : totalMicros
+		const totalRub = (Number(totalMicros) / 1_000_000_000).toFixed(2)
+		const paidRub = (Number(paidMicros) / 1_000_000_000).toFixed(2)
+		const bookingId = `demo-booking-${String(i).padStart(2, '0')}`
+		const roomTypeId = roomTypeIds[b.roomTypeIdx] ?? DEMO_ROOM_TYPE_DELUXE_ID
+		const ratePlanId =
+			ratePlanIds[b.roomTypeIdx]?.[b.ratePlanIdx] ?? 'demo-rateplan-deluxe-bar-flex'
+
+		await sql`
+			UPSERT INTO booking (
+				\`tenantId\`, \`id\`, \`propertyId\`,
+				\`roomTypeId\`, \`ratePlanId\`, \`assignedRoomId\`,
+				\`primaryGuestId\`,
+				\`checkIn\`, \`checkOut\`,
+				\`status\`, \`source\`, \`externalId\`,
+				\`guestsCount\`, \`totalAmount\`, \`paidAmount\`, \`currency\`,
+				\`notes\`,
+				\`createdAt\`, \`updatedAt\`, \`createdBy\`
+			) VALUES (
+				${TENANT_ID}, ${bookingId}, ${DEMO_PROPERTY_ID},
+				${roomTypeId}, ${ratePlanId}, ${NULL_TEXT},
+				${guestId},
+				${checkInDate}, ${checkOutDate},
+				${b.status}, ${'direct'}, ${NULL_TEXT},
+				${b.guestCount}, ${totalRub}, ${paidRub}, ${'RUB'},
+				${'demo seed'},
+				${nowTs}, ${nowTs}, ${'system:demo-seed'}
+			)
+		`
+	}
+
 	console.log(`✅ Demo tenant ready: tenantId=${TENANT_ID} slug=${SLUG} mode=demo`)
 	console.log(
 		'   M9.widget.2 seed: 1 property + 2 roomTypes + 4 ratePlans + 120 avail + 240 rates.',
 	)
 	console.log('   M9.widget.3 seed: 5 Сочи addons (BREAKFAST/PARKING/LATE_CHECKOUT/TRANSFER/SPA).')
-	console.log('   Full polish (photos / reviews / JSON-LD) — M9.widget.8.')
+	console.log('   M9.widget.8 seed: 24 rooms (8+16) + 30 bookings + 5 photos + JSON-LD ready.')
 	return { tenantId: TENANT_ID }
 }
 

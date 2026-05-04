@@ -97,6 +97,95 @@ export function createEmbedRepo(sqlInstance: SqlInstance) {
 		 * (operator must fix data; route maps to 500 to avoid silent
 		 * security-relevant degradation).
 		 */
+		/**
+		 * Read property + roomTypes + first 5 media for JSON-LD Hotel schema —
+		 * M9.widget.8 / A6.1 / D1-D8 (`renderHotelJsonLdScript` consumer).
+		 *
+		 * Returns null if property is private/inactive or doesn't exist.
+		 * Media ordered by `sortOrder` ascending; hard-cap 5 entries.
+		 *
+		 * Snapshot read-only — no contention с writers; SEO data is read-mostly.
+		 */
+		/**
+		 * Read property + roomTypes for JSON-LD Hotel schema — M9.widget.8 / A6.1.
+		 *
+		 * Returns null if property is private/inactive or doesn't exist.
+		 * Snapshot read-only — no contention с writers; SEO data is read-mostly.
+		 *
+		 * **Photos / geo / starRating come from `lib/json-ld/demo-augments.ts`** —
+		 * propertyMedia table stores S3 keys (operator uploads); JSON-LD needs
+		 * absolute https URLs. Demo tenant ships hard-coded canonical augments;
+		 * production tenants degrade gracefully (no `image[]` field) until
+		 * M11 admin UI exposes geo/starRating/photo CDN URLs.
+		 */
+		async getHotelJsonLdData(
+			tenantId: string,
+			propertyId: string,
+		): Promise<{
+			property: { name: string; address: string; city: string; timezone: string }
+			roomTypes: ReadonlyArray<{
+				name: string
+				description: string
+				maxOccupancy: number
+				baseBeds: number
+				extraBeds: number
+				areaSqm: number | null
+				inventoryCount: number
+			}>
+		} | null> {
+			const [propRows = []] = await sqlInstance<
+				{
+					name: string
+					address: string
+					city: string
+					timezone: string
+				}[]
+			>`
+				SELECT name, address, city, timezone
+				FROM property
+				WHERE tenantId = ${tenantId} AND id = ${propertyId}
+				  AND isPublic = ${true} AND isActive = ${true}
+				LIMIT 1
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const property = propRows[0]
+			if (!property) return null
+
+			const [roomTypeRows = []] = await sqlInstance<
+				{
+					name: string
+					description: string | null
+					maxOccupancy: number
+					baseBeds: number
+					extraBeds: number
+					areaSqm: number | null
+					inventoryCount: number
+				}[]
+			>`
+				SELECT name, description, maxOccupancy, baseBeds, extraBeds, areaSqm, inventoryCount
+				FROM roomType
+				WHERE tenantId = ${tenantId} AND propertyId = ${propertyId}
+				  AND isActive = ${true}
+				ORDER BY name
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+
+			return {
+				property,
+				roomTypes: roomTypeRows.map((r) => ({
+					name: r.name,
+					description: r.description ?? '',
+					maxOccupancy: r.maxOccupancy,
+					baseBeds: r.baseBeds,
+					extraBeds: r.extraBeds,
+					areaSqm: r.areaSqm,
+					inventoryCount: r.inventoryCount,
+				})),
+			}
+		},
+
 		async getPublicEmbedDomains(
 			tenantId: string,
 			propertyId: string,
