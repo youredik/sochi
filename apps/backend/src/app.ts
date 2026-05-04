@@ -49,12 +49,15 @@ import { createTenantComplianceFactory } from './domains/tenant/compliance.facto
 import { createTenantComplianceRoutes } from './domains/tenant/compliance.routes.ts'
 import { createWidgetBookingCreateFactory } from './domains/widget/booking-create.factory.ts'
 import { createWidgetBookingCreateRoutes } from './domains/widget/booking-create.routes.ts'
+import { createMagicLinkFactory } from './domains/widget/magic-link.factory.ts'
+import { createMagicLinkConsumeRoutes } from './domains/widget/magic-link-consume.routes.ts'
 import { createWidgetFactory } from './domains/widget/widget.factory.ts'
 import { createWidgetRoutes } from './domains/widget/widget.routes.ts'
 import { env } from './env.ts'
 import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
 import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
+import { createMagicLinkSecretResolver } from './lib/magic-link/secret.ts'
 import { logger } from './logger.ts'
 import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
@@ -189,6 +192,13 @@ const widgetBookingCreateFactory = createWidgetBookingCreateFactory({
 	bookingService: bookingFactory.service,
 	paymentService: paymentFactory.service,
 })
+
+// M9.widget.5 / A3.1.b — magic-link factory + cookie secret resolver shared
+// across magic-link consume routes (and future booking-find / guest-portal).
+// Phase 1: cookie secret = magicLinkSecret (same value, dual purpose).
+// Phase 2 Track B5/Lockbox: dedicated cookie-signing secret.
+const magicLinkFactory = createMagicLinkFactory(sql)
+const magicLinkSecretResolver = createMagicLinkSecretResolver(sql)
 
 // CDC consumers — exactly-once projection pipeline.
 //
@@ -500,6 +510,18 @@ const routes = app
 		createWidgetBookingCreateRoutes({
 			service: widgetBookingCreateFactory.service,
 			idempotency,
+		}),
+	)
+	// M9.widget.5 / A3.1.b — magic-link two-step consume:
+	//   GET  /api/public/booking/jwt/:jwt/render  — verify + JSON, no consume
+	//   POST /api/public/booking/jwt/:jwt/consume — atomic consume + Set-Cookie
+	// Apple MPP / Slack unfurl prefetch DoS защита через split GET (read-only)
+	// vs POST (mutating).
+	.route(
+		'/api/public',
+		createMagicLinkConsumeRoutes({
+			magicLinkService: magicLinkFactory.service,
+			resolveCookieSecret: (tenantId) => magicLinkSecretResolver.resolve(tenantId),
 		}),
 	)
 	.route('/api/v1/properties', createPropertyRoutes(propertyFactory))

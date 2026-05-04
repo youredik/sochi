@@ -162,32 +162,38 @@ export function createMagicLinkTokenRepo(sql: SqlInstance) {
 			// but each caller думает «я decremented K→K-1» (false success). Caught
 			// empirically [MLR17]: 3 concurrent mutate calls (attempts=1) all
 			// succeeded — strict single-use invariant violated.
-			return await sql.begin({ idempotent: true }, async (tx) => {
-				const [readRows = []] = await tx<DbRow[]>`
+			//
+			// Race-loser fallback: under heavy contention, @ydbjs retry budget
+			// can exhaust → throws YDB error (code 400140 «Transaction not found»
+			// или 400110 ABORTED). Каноничный race-loser semantic: re-read
+			// canonical post-state в fresh tx, return graceful `consumed: false`.
+			try {
+				return await sql.begin({ idempotent: true }, async (tx) => {
+					const [readRows = []] = await tx<DbRow[]>`
 					SELECT * FROM magicLinkToken
 					WHERE tenantId = ${input.tenantId} AND jti = ${input.jti}
 					LIMIT 1
 				`
-				const existing = readRows[0]
-				if (!existing) {
-					return { consumed: false, attemptsRemaining: 0, fullyConsumed: false, token: null }
-				}
-				const token = rowToToken(existing)
-				if (token.attemptsRemaining <= 0) {
-					return { consumed: false, attemptsRemaining: 0, fullyConsumed: true, token }
-				}
-				if (token.expiresAt.getTime() <= input.now.getTime()) {
-					return {
-						consumed: false,
-						attemptsRemaining: token.attemptsRemaining,
-						fullyConsumed: false,
-						token,
+					const existing = readRows[0]
+					if (!existing) {
+						return { consumed: false, attemptsRemaining: 0, fullyConsumed: false, token: null }
 					}
-				}
+					const token = rowToToken(existing)
+					if (token.attemptsRemaining <= 0) {
+						return { consumed: false, attemptsRemaining: 0, fullyConsumed: true, token }
+					}
+					if (token.expiresAt.getTime() <= input.now.getTime()) {
+						return {
+							consumed: false,
+							attemptsRemaining: token.attemptsRemaining,
+							fullyConsumed: false,
+							token,
+						}
+					}
 
-				const newAttempts = token.attemptsRemaining - 1
-				const willFullyConsume = newAttempts === 0
-				await tx`
+					const newAttempts = token.attemptsRemaining - 1
+					const willFullyConsume = newAttempts === 0
+					await tx`
 					UPDATE magicLinkToken
 					SET
 						attemptsRemaining = ${newAttempts},
@@ -196,22 +202,68 @@ export function createMagicLinkTokenRepo(sql: SqlInstance) {
 						consumedFromUa = ${textOpt(willFullyConsume ? input.fromUa : null)}
 					WHERE tenantId = ${input.tenantId} AND jti = ${input.jti}
 				`
-				const postToken: MagicLinkTokenRow = {
-					...token,
-					attemptsRemaining: newAttempts,
-					consumedAt: willFullyConsume ? input.now : null,
-					consumedFromIp: willFullyConsume ? input.fromIp : null,
-					consumedFromUa: willFullyConsume ? input.fromUa : null,
+					const postToken: MagicLinkTokenRow = {
+						...token,
+						attemptsRemaining: newAttempts,
+						consumedAt: willFullyConsume ? input.now : null,
+						consumedFromIp: willFullyConsume ? input.fromIp : null,
+						consumedFromUa: willFullyConsume ? input.fromUa : null,
+					}
+					return {
+						consumed: true,
+						attemptsRemaining: newAttempts,
+						fullyConsumed: willFullyConsume,
+						token: postToken,
+					}
+				})
+			} catch (err) {
+				if (!isYdbRaceError(err)) throw err
+				// Race-loser: another tx committed first; re-read canonical post-state.
+				const [postRows = []] = await sql<DbRow[]>`
+					SELECT * FROM magicLinkToken
+					WHERE tenantId = ${input.tenantId} AND jti = ${input.jti}
+					LIMIT 1
+				`.idempotent(true)
+				const postRow = postRows[0]
+				if (!postRow) {
+					return { consumed: false, attemptsRemaining: 0, fullyConsumed: false, token: null }
 				}
+				const post = rowToToken(postRow)
 				return {
-					consumed: true,
-					attemptsRemaining: newAttempts,
-					fullyConsumed: willFullyConsume,
-					token: postToken,
+					consumed: false,
+					attemptsRemaining: post.attemptsRemaining,
+					fullyConsumed: post.attemptsRemaining <= 0,
+					token: post,
 				}
-			})
+			}
 		},
 	}
+}
+
+/**
+ * Detect YDB race-class errors что indicate «another tx committed first»
+ * (TLI retry exhaustion). Walks err.cause chain (max 4 levels) checking:
+ *   - code 400140 (NOT_FOUND TX) issue 2015 «Transaction not found»
+ *   - code 400110 (ABORTED) — concurrent tx aborted ours
+ *   - code 400120 (PRECONDITION_FAILED) — UNIQUE conflict (relevant для UPSERT scenarios)
+ */
+function isYdbRaceError(err: unknown): boolean {
+	let cur: unknown = err
+	for (let depth = 0; depth < 4 && cur; depth++) {
+		if (cur && typeof cur === 'object') {
+			const c = cur as { code?: unknown; message?: unknown; cause?: unknown }
+			if (c.code === 400140 || c.code === 400110 || c.code === 400120) return true
+			if (typeof c.message === 'string') {
+				if (c.message.includes('Transaction not found')) return true
+				if (c.message.includes('ABORTED')) return true
+				if (c.message.includes('Conflict with existing key')) return true
+			}
+			cur = c.cause
+		} else {
+			return false
+		}
+	}
+	return false
 }
 
 export type MagicLinkTokenRepo = ReturnType<typeof createMagicLinkTokenRepo>

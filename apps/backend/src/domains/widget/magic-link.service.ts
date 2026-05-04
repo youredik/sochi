@@ -70,6 +70,8 @@ export interface MagicLinkServiceDeps {
 	readonly tokenRepo: MagicLinkTokenRepo
 }
 
+export type MagicLinkService = ReturnType<typeof createMagicLinkService>
+
 export function createMagicLinkService(deps: MagicLinkServiceDeps) {
 	return {
 		/**

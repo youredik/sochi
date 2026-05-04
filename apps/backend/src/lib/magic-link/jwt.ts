@@ -16,7 +16,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { jwtVerify, SignJWT } from 'jose'
+import { decodeJwt, jwtVerify, SignJWT } from 'jose'
 
 export type MagicLinkScope = 'view' | 'mutate'
 
@@ -161,4 +161,32 @@ export async function verifyMagicLinkJwt(
 
 function decodeSecret(secret: string): Uint8Array {
 	return Buffer.from(secret, 'base64url')
+}
+
+const ISSUER_PATTERN = /^sochi-horeca:(.+)$/
+
+/**
+ * Decode JWT iss claim WITHOUT verifying signature — used for tenant
+ * resolution before full verify (need tenantId to load per-tenant secret).
+ *
+ * Throws if JWT malformed or iss claim missing/wrong format. Does NOT
+ * validate signature, expiry, or any other claim — caller MUST follow up
+ * with `verifyMagicLinkJwt(secret, jwt, tenantId)`.
+ *
+ * Security: returning untrusted tenantId from this function is OK — it's
+ * only used to load the secret. If attacker forged an iss claim для tenant
+ * B, they'd load tenant B's secret and signature verification would fail
+ * (their fake JWT wasn't signed with tenant B's secret).
+ */
+export function extractTenantIdFromJwtUnsafe(jwt: string): string {
+	const claims = decodeJwt(jwt)
+	const iss = claims.iss
+	if (typeof iss !== 'string') {
+		throw new Error('magic-link JWT: missing iss claim')
+	}
+	const match = ISSUER_PATTERN.exec(iss)
+	if (!match || !match[1]) {
+		throw new Error(`magic-link JWT: invalid iss format "${iss}"`)
+	}
+	return match[1]
 }
