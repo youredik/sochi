@@ -395,3 +395,32 @@ Sync orchestrator + RU compliance gates + admin overlay UI + senior pivot test l
 
 ### M10 final tally (2026-05-05)
 **237 strict tests** (target ~102, overdelivered 2.3×). 7 commits pushed origin/main. 0 regressions. 9 migrations (0050-0059). 3 channel adapters behaviour-faithful. Closes Боль 2.2 channel distribution. Track A complete; next = Track B deploy phase. Done memory: `project_m10_done.md`.
+
+### A7.5.fix — `<pending commit>` (2026-05-05, post-deeper-self-audit)
+
+**Honest catch via user push «как сеньер хорошо подумай»**: Боль 2.2 declared closed prematurely. End-to-end demo flow audit revealed: (a) zero `channelConnection` rows для demo tenant → orchestrator skips all channels, 0 dispatch enqueued; (b) `channelStatusOverlay` component built но не mounted в admin route → invisible; (c) dispatcher worker never updates `channelConnection.syncStatus + lastSyncAt + autoDisabledReason` after dispatch → overlay forever shows `idle/lastSyncAt=null`; (d) sanctions HARD-DISABLE only at orchestrator level, not factory (D16 canon = factory-level defense-in-depth). Same trap pattern as A7.1 interface-only-without-runtime-wiring.
+
+**A7.5.fix closes Боль 2.2 properly (single bundled commit)**:
+- `db/seed-demo-tenant.ts` — 3 channelConnection rows для `demo-sochi-sirius` (TL processor_with_dpa с dpaSignedAt, YT independent_operator, ETG independent_operator; всё mock-mode + isEnabled=true)
+- `workers/channel-dispatcher.ts` — `onDispatchOutcome` callback added; emits per dispatch outcome (sent | retry | dlq | auto_disabled)
+- `domains/channel/channel.factory.ts` — wired `onDispatchOutcome` к `connectionRepo.patch` (updates syncStatus + lastSyncAt + autoDisabledReason); plus `SanctionedChannelError` HTTP 451 throw в `registerAdapterFactory` + `registerHttpAttempt` (defense-in-depth D16)
+- `routes/admin/channels.ts` — `GET /api/admin/channels` returning canonical `ChannelOverlayRow[]` shape
+- `frontend/features/admin-channels/hooks/use-channels.ts` — TanStack Query options (10s stale + 30s refetch interval для live sync visibility)
+- `frontend/routes/_app.o.$orgSlug.admin.channels.tsx` — `/o/:slug/admin/channels` route с RBAC gate (`report:read`) + skeleton + error panel + `<ChannelStatusOverlay>` mount
+
+**14 strict tests added (target ~12, +2 over)**:
+- 5 SF1-SF5 (factory sanctions HARD-DISABLE: BCOM/EXP/ABN reject + TL/YT/ETG allow)
+- 5 OUT1-OUT5 (dispatcher onDispatchOutcome: sent/retry/dlq/auto_disabled/optional-callback)
+- 4 AC1-AC4 (admin route response shape: empty/3-channel/error-message/healthy)
+
+**Senior pivots**:
+- Schema reuse — no new migration (existing `channelConnection` table sufficient)
+- Defense-in-depth at TWO layers (factory throws on register, orchestrator gates at dispatch evaluate)
+- TanStack Query 30s refetch interval — admin overlay shows real sync activity within 30s of any dispatch
+
+**Verified empirically**:
+- 9-gate green: typecheck / biome / sherif / knip / depcruise
+- pnpm test:fast 3974/0 (+14 от A7.5 baseline 3960)
+- pnpm test:serial channel domain (35/35 в 6.13s isolated)
+
+**Closes Боль 2.2 truly**: `pnpm seed:demo` populates 3 channels → admin opens `/admin/channels` → sees 3 channel cards с canonical badges → bookings trigger dispatch → connections update → overlay refreshes within 30s showing «5с назад / синхронизация / idle» activity flow.

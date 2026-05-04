@@ -64,6 +64,18 @@ export interface ChannelDispatcherDeps {
 		readonly channelId: string
 		readonly reason: string
 	}) => Promise<void>
+	/**
+	 * A7.5.fix — connection status sink. Called после каждого dispatch outcome
+	 * to update `channelConnection.syncStatus + lastSyncAt + autoDisabledReason`
+	 * so admin overlay UI shows live sync activity. Wired in channel.factory
+	 * via connectionRepo.patch.
+	 */
+	readonly onDispatchOutcome?: (input: {
+		readonly tenantId: string
+		readonly channelId: string
+		readonly outcome: 'sent' | 'retry' | 'dlq' | 'auto_disabled'
+		readonly errorMessage?: string
+	}) => Promise<void>
 	readonly pollIntervalMs?: number
 	readonly batchLimit?: number
 	readonly leaseMs?: number
@@ -147,6 +159,13 @@ async function processRow(
 			dispatchId: row.dispatchId,
 			httpStatus: result.httpStatus,
 		})
+		if (deps.onDispatchOutcome) {
+			await deps.onDispatchOutcome({
+				tenantId: row.tenantId,
+				channelId: row.channelId,
+				outcome: 'sent',
+			})
+		}
 		return
 	}
 
@@ -160,6 +179,14 @@ async function processRow(
 			httpStatus: result.httpStatus,
 			errorJson: { message: result.errorMessage, response: result.responseBody ?? null },
 		})
+		if (deps.onDispatchOutcome) {
+			await deps.onDispatchOutcome({
+				tenantId: row.tenantId,
+				channelId: row.channelId,
+				outcome: 'dlq',
+				errorMessage: result.errorMessage,
+			})
+		}
 		return
 	}
 
@@ -181,6 +208,14 @@ async function processRow(
 				reason: 'dispatch_budget_exhausted',
 			})
 		}
+		if (deps.onDispatchOutcome) {
+			await deps.onDispatchOutcome({
+				tenantId: row.tenantId,
+				channelId: row.channelId,
+				outcome: 'auto_disabled',
+				errorMessage: result.errorMessage,
+			})
+		}
 		return
 	}
 
@@ -196,7 +231,23 @@ async function processRow(
 			httpStatus: result.httpStatus,
 			errorJson: { message: result.errorMessage, scheduleExhausted: true },
 		})
+		if (deps.onDispatchOutcome) {
+			await deps.onDispatchOutcome({
+				tenantId: row.tenantId,
+				channelId: row.channelId,
+				outcome: 'dlq',
+				errorMessage: result.errorMessage,
+			})
+		}
 		return
+	}
+	if (deps.onDispatchOutcome) {
+		await deps.onDispatchOutcome({
+			tenantId: row.tenantId,
+			channelId: row.channelId,
+			outcome: 'retry',
+			errorMessage: result.errorMessage,
+		})
 	}
 	await deps.dispatchRepo.markRetry({
 		tenantId: row.tenantId,

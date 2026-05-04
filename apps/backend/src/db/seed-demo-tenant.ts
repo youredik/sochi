@@ -27,7 +27,7 @@
  */
 
 import { sql } from './index.ts'
-import { dateFromIso, NULL_INT32, NULL_TEXT, toJson, toTs } from './ydb-helpers.ts'
+import { dateFromIso, NULL_INT32, NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from './ydb-helpers.ts'
 
 const TENANT_ID = 'demo-sochi-sirius'
 const SLUG = 'demo-sirius'
@@ -404,15 +404,15 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 				\`exifStripped\`, \`derivedReady\`,
 				\`sortOrder\`, \`isHero\`,
 				\`altRu\`, \`altEn\`, \`captionRu\`, \`captionEn\`,
-				\`createdAt\`, \`updatedAt\`
+				\`createdAt\`, \`createdBy\`, \`updatedAt\`, \`updatedBy\`
 			) VALUES (
 				${TENANT_ID}, ${DEMO_PROPERTY_ID}, ${ph.mediaId}, ${NULL_TEXT}, ${'photo'},
 				${`https://picsum.photos/seed/${ph.seed}/1200/800`},
-				${'image/jpeg'}, ${1200}, ${800}, ${250000},
+				${'image/jpeg'}, ${1200}, ${800}, ${250_000n},
 				${true}, ${true},
 				${ph.sortOrder}, ${ph.isHero},
 				${ph.altRu}, ${NULL_TEXT}, ${NULL_TEXT}, ${NULL_TEXT},
-				${nowTs}, ${nowTs}
+				${nowTs}, ${'system:demo-seed'}, ${nowTs}, ${'system:demo-seed'}
 			)
 		`
 	}
@@ -675,8 +675,16 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			)
 		`
 
-		const checkInDate = offsetDays(b.dayOffset)
-		const checkOutDate = offsetDays(b.dayOffset + b.nights)
+		const checkInDateObj = offsetDays(b.dayOffset)
+		const checkOutDateObj = offsetDays(b.dayOffset + b.nights)
+		// YDB Date column requires `dateFromIso` wrap; plain JS Date binds к
+		// Datetime which YDB rejects (per project_ydb_specifics.md #10).
+		const isoDay = (d: Date) =>
+			`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
+				d.getUTCDate(),
+			).padStart(2, '0')}`
+		const checkInDate = dateFromIso(isoDay(checkInDateObj))
+		const checkOutDate = dateFromIso(isoDay(checkOutDateObj))
 		const nightlyMicros = ratePlanNightlyMicros[b.roomTypeIdx]?.[b.ratePlanIdx] ?? 5_000_000_000n
 		const totalMicros = nightlyMicros * BigInt(b.nights)
 		const paidMicros = b.status === 'cancelled' ? 0n : totalMicros
@@ -687,25 +695,88 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		const ratePlanId =
 			ratePlanIds[b.roomTypeIdx]?.[b.ratePlanIdx] ?? 'demo-rateplan-deluxe-bar-flex'
 
+		const guestSnapshot = {
+			firstName,
+			lastName: surname,
+			middleName: null,
+			email: `demo-guest-${i}@example.test`,
+			phone: `+7900${String(1000000 + i).padStart(7, '0')}`,
+			documentType: 'PASSPORT_RF',
+			citizenship: 'RU',
+		}
+		const timeSlices = [
+			{
+				checkIn: typeof checkInDate === 'string' ? checkInDate : checkInDate.toString(),
+				checkOut: typeof checkOutDate === 'string' ? checkOutDate : checkOutDate.toString(),
+				rateMicros: nightlyMicros.toString(),
+				roomTypeId,
+				ratePlanId,
+			},
+		]
+		// Сочи tourism tax 2% (200 bps) — applied к totalMicros для demo.
+		const tourismTaxBaseMicros = totalMicros
+		const tourismTaxMicros = (totalMicros * 200n) / 10_000n
+		void totalRub
+		void paidRub
 		await sql`
 			UPSERT INTO booking (
 				\`tenantId\`, \`id\`, \`propertyId\`,
 				\`roomTypeId\`, \`ratePlanId\`, \`assignedRoomId\`,
-				\`primaryGuestId\`,
-				\`checkIn\`, \`checkOut\`,
-				\`status\`, \`source\`, \`externalId\`,
-				\`guestsCount\`, \`totalAmount\`, \`paidAmount\`, \`currency\`,
+				\`primaryGuestId\`, \`guestSnapshot\`,
+				\`checkIn\`, \`checkOut\`, \`nightsCount\`,
+				\`status\`, \`confirmedAt\`,
+				\`channelCode\`, \`externalId\`,
+				\`guestsCount\`, \`totalMicros\`, \`paidMicros\`, \`currency\`, \`timeSlices\`,
+				\`registrationStatus\`, \`rklCheckResult\`,
+				\`tourismTaxBaseMicros\`, \`tourismTaxMicros\`,
 				\`notes\`,
-				\`createdAt\`, \`updatedAt\`, \`createdBy\`
+				\`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
 			) VALUES (
 				${TENANT_ID}, ${bookingId}, ${DEMO_PROPERTY_ID},
 				${roomTypeId}, ${ratePlanId}, ${NULL_TEXT},
-				${guestId},
-				${checkInDate}, ${checkOutDate},
-				${b.status}, ${'direct'}, ${NULL_TEXT},
-				${b.guestCount}, ${totalRub}, ${paidRub}, ${'RUB'},
+				${guestId}, ${toJson(guestSnapshot)},
+				${checkInDate}, ${checkOutDate}, ${b.nights},
+				${b.status}, ${nowTs},
+				${'direct'}, ${NULL_TEXT},
+				${b.guestCount}, ${totalMicros}, ${paidMicros}, ${'RUB'}, ${toJson(timeSlices)},
+				${'not_required'}, ${'not_checked'},
+				${tourismTaxBaseMicros}, ${tourismTaxMicros},
 				${'demo seed'},
-				${nowTs}, ${nowTs}, ${'system:demo-seed'}
+				${nowTs}, ${nowTs}, ${'system:demo-seed'}, ${'system:demo-seed'}
+			)
+		`
+	}
+
+	// M10 / A7.5.fix — channel connections для demo tenant (Боль 2.2 visible).
+	// 3 channel adapters TL/YT/ETG bound к demo property. mock-mode + isEnabled=true.
+	// Behaviour-faithful: same canonical interface для Mock + Sandbox + Live.
+	// Live-flip = swap channelConnection.mode + populate credentialsLockboxRef.
+	console.log('  → Step 7/7: M10 channel connections (3 channels TL/YT/ETG в mock mode)')
+	const channelSeed: ReadonlyArray<{
+		readonly channelId: 'TL' | 'YT' | 'ETG'
+		readonly role: 'processor_with_dpa' | 'independent_operator'
+		readonly dpaSignedAt: Date | null
+	}> = [
+		{ channelId: 'TL', role: 'processor_with_dpa', dpaSignedAt: now },
+		{ channelId: 'YT', role: 'independent_operator', dpaSignedAt: null },
+		{ channelId: 'ETG', role: 'independent_operator', dpaSignedAt: null },
+	]
+	for (const ch of channelSeed) {
+		await sql`
+			UPSERT INTO channelConnection (
+				tenantId, propertyId, channelId, mode, role,
+				credentialsLockboxRef, dpaSignedAt, rknOperatorId,
+				crossBorderNotificationStatus, syncStatus,
+				lastSyncAt, autoDisabledReason, autoDisabledAt,
+				isEnabled, createdAt, updatedAt
+			) VALUES (
+				${TENANT_ID}, ${DEMO_PROPERTY_ID}, ${ch.channelId},
+				${'mock'}, ${ch.role},
+				${NULL_TEXT},
+				${ch.dpaSignedAt === null ? NULL_TIMESTAMP : toTs(ch.dpaSignedAt)},
+				${NULL_TEXT}, ${NULL_TEXT}, ${'idle'},
+				${NULL_TIMESTAMP}, ${NULL_TEXT}, ${NULL_TIMESTAMP},
+				${true}, ${nowTs}, ${nowTs}
 			)
 		`
 	}
@@ -716,6 +787,9 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	)
 	console.log('   M9.widget.3 seed: 5 Сочи addons (BREAKFAST/PARKING/LATE_CHECKOUT/TRANSFER/SPA).')
 	console.log('   M9.widget.8 seed: 24 rooms (8+16) + 30 bookings + 5 photos + JSON-LD ready.')
+	console.log(
+		'   M10 / A7.5.fix seed: 3 channel connections (TL/YT/ETG mock-mode, isEnabled=true).',
+	)
 	return { tenantId: TENANT_ID }
 }
 

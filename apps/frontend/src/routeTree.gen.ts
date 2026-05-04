@@ -29,6 +29,7 @@ import { Route as AppOOrgSlugGridRouteImport } from './routes/_app.o.$orgSlug.gr
 import { Route as AppOOrgSlugAdminTaxRouteImport } from './routes/_app.o.$orgSlug.admin.tax'
 import { Route as AppOOrgSlugAdminNotificationsRouteImport } from './routes/_app.o.$orgSlug.admin.notifications'
 import { Route as AppOOrgSlugAdminMigrationRegistrationsRouteImport } from './routes/_app.o.$orgSlug.admin.migration-registrations'
+import { Route as AppOOrgSlugAdminChannelsRouteImport } from './routes/_app.o.$orgSlug.admin.channels'
 import { Route as AppOOrgSlugAccountSecurityRouteImport } from './routes/_app.o.$orgSlug.account.security'
 import { Route as AppOOrgSlugPropertiesPropertyIdContentRouteImport } from './routes/_app.o.$orgSlug.properties.$propertyId.content'
 import { Route as AppOOrgSlugBookingsBookingIdFoliosFolioIdRouteImport } from './routes/_app.o.$orgSlug.bookings.$bookingId.folios.$folioId'
@@ -138,6 +139,12 @@ const AppOOrgSlugAdminMigrationRegistrationsRoute =
     path: '/admin/migration-registrations',
     getParentRoute: () => AppOOrgSlugRoute,
   } as any)
+const AppOOrgSlugAdminChannelsRoute =
+  AppOOrgSlugAdminChannelsRouteImport.update({
+    id: '/admin/channels',
+    path: '/admin/channels',
+    getParentRoute: () => AppOOrgSlugRoute,
+  } as any)
 const AppOOrgSlugAccountSecurityRoute =
   AppOOrgSlugAccountSecurityRouteImport.update({
     id: '/account/security',
@@ -175,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/widget/$tenantSlug/$propertyId/guest-and-pay': typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
   '/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
   '/o/$orgSlug/account/security': typeof AppOOrgSlugAccountSecurityRoute
+  '/o/$orgSlug/admin/channels': typeof AppOOrgSlugAdminChannelsRoute
   '/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   '/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
@@ -198,6 +206,7 @@ export interface FileRoutesByTo {
   '/widget/$tenantSlug/$propertyId/guest-and-pay': typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
   '/o/$orgSlug': typeof AppOOrgSlugIndexRoute
   '/o/$orgSlug/account/security': typeof AppOOrgSlugAccountSecurityRoute
+  '/o/$orgSlug/admin/channels': typeof AppOOrgSlugAdminChannelsRoute
   '/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   '/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
@@ -224,6 +233,7 @@ export interface FileRoutesById {
   '/widget/$tenantSlug_/$propertyId_/guest-and-pay': typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
   '/_app/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
   '/_app/o/$orgSlug/account/security': typeof AppOOrgSlugAccountSecurityRoute
+  '/_app/o/$orgSlug/admin/channels': typeof AppOOrgSlugAdminChannelsRoute
   '/_app/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   '/_app/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/_app/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
@@ -250,6 +260,7 @@ export interface FileRouteTypes {
     | '/widget/$tenantSlug/$propertyId/guest-and-pay'
     | '/o/$orgSlug/'
     | '/o/$orgSlug/account/security'
+    | '/o/$orgSlug/admin/channels'
     | '/o/$orgSlug/admin/migration-registrations'
     | '/o/$orgSlug/admin/notifications'
     | '/o/$orgSlug/admin/tax'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/widget/$tenantSlug/$propertyId/guest-and-pay'
     | '/o/$orgSlug'
     | '/o/$orgSlug/account/security'
+    | '/o/$orgSlug/admin/channels'
     | '/o/$orgSlug/admin/migration-registrations'
     | '/o/$orgSlug/admin/notifications'
     | '/o/$orgSlug/admin/tax'
@@ -298,6 +310,7 @@ export interface FileRouteTypes {
     | '/widget/$tenantSlug_/$propertyId_/guest-and-pay'
     | '/_app/o/$orgSlug/'
     | '/_app/o/$orgSlug/account/security'
+    | '/_app/o/$orgSlug/admin/channels'
     | '/_app/o/$orgSlug/admin/migration-registrations'
     | '/_app/o/$orgSlug/admin/notifications'
     | '/_app/o/$orgSlug/admin/tax'
@@ -460,6 +473,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugAdminMigrationRegistrationsRouteImport
       parentRoute: typeof AppOOrgSlugRoute
     }
+    '/_app/o/$orgSlug/admin/channels': {
+      id: '/_app/o/$orgSlug/admin/channels'
+      path: '/admin/channels'
+      fullPath: '/o/$orgSlug/admin/channels'
+      preLoaderRoute: typeof AppOOrgSlugAdminChannelsRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
+    }
     '/_app/o/$orgSlug/account/security': {
       id: '/_app/o/$orgSlug/account/security'
       path: '/account/security'
@@ -490,6 +510,7 @@ interface AppOOrgSlugRouteChildren {
   AppOOrgSlugSetupRoute: typeof AppOOrgSlugSetupRoute
   AppOOrgSlugIndexRoute: typeof AppOOrgSlugIndexRoute
   AppOOrgSlugAccountSecurityRoute: typeof AppOOrgSlugAccountSecurityRoute
+  AppOOrgSlugAdminChannelsRoute: typeof AppOOrgSlugAdminChannelsRoute
   AppOOrgSlugAdminMigrationRegistrationsRoute: typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   AppOOrgSlugAdminNotificationsRoute: typeof AppOOrgSlugAdminNotificationsRoute
   AppOOrgSlugAdminTaxRoute: typeof AppOOrgSlugAdminTaxRoute
@@ -503,6 +524,7 @@ const AppOOrgSlugRouteChildren: AppOOrgSlugRouteChildren = {
   AppOOrgSlugSetupRoute: AppOOrgSlugSetupRoute,
   AppOOrgSlugIndexRoute: AppOOrgSlugIndexRoute,
   AppOOrgSlugAccountSecurityRoute: AppOOrgSlugAccountSecurityRoute,
+  AppOOrgSlugAdminChannelsRoute: AppOOrgSlugAdminChannelsRoute,
   AppOOrgSlugAdminMigrationRegistrationsRoute:
     AppOOrgSlugAdminMigrationRegistrationsRoute,
   AppOOrgSlugAdminNotificationsRoute: AppOOrgSlugAdminNotificationsRoute,

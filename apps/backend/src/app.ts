@@ -75,6 +75,7 @@ import { logger } from './logger.ts'
 import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
 import { createOtelIngest } from './otel-ingest.ts'
+import { createAdminChannelRoutes } from './routes/admin/channels.ts'
 import { createAdminNotificationsRoutes } from './routes/admin/notifications.ts'
 import { createAdminTaxRoutes } from './routes/admin/tax.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
@@ -717,6 +718,9 @@ const routes = app
 	.route('/api/v1', createVisionRoutes(visionOcrAdapter))
 	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
 	.route('/api/admin', createAdminNotificationsRoutes(notificationFactory.service))
+	// M10 / A7.5.fix — admin channel-status overlay backing endpoint.
+	// GET /api/admin/channels — list channelConnection rows для current tenant.
+	.route('/api/admin', createAdminChannelRoutes(channelFactory))
 	.get('/health', (c) =>
 		// `service: 'sochi-horeca'` = canonical marker per
 		// `feedback_no_disrupt_other_dev.md` + symmetric boundary с stankoff-v2

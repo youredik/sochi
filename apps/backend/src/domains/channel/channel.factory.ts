@@ -19,6 +19,7 @@ import {
 	createPerTenantAdapterCache,
 	resolveAdapter,
 } from '../../lib/channel-manager/tenant-context.ts'
+import { logger } from '../../logger.ts'
 import {
 	type ChannelDispatcherDeps,
 	type DispatcherHandle,
@@ -29,8 +30,27 @@ import { createChannelConnectionRepo } from './connection.repo.ts'
 import { createChannelDispatchRepo } from './dispatch.repo.ts'
 import { createInboxRepo } from './inbox.repo.ts'
 import { createInventoryPoolRepo } from './inventory-pool.repo.ts'
+import { SANCTIONED_CHANNEL_IDS } from './sync-orchestrator.ts'
 import { createChannelWebhookRoutes } from './webhook.routes.ts'
 import { createWebhookSecretRepo } from './webhook-secret.repo.ts'
+
+/**
+ * D16 sanctions HARD-DISABLE — defense-in-depth at factory level.
+ * Refused at registration AND orchestrator gate (see sync-orchestrator.ts).
+ *
+ * Re-enable trigger: sanctions lift + RKN re-notify + manual code change.
+ */
+export class SanctionedChannelError extends Error {
+	readonly httpStatus = 451 // RFC 7725 — Unavailable For Legal Reasons
+	constructor(channelId: string) {
+		super(
+			`Channel '${channelId}' is HARD-DISABLED at factory level (D16 sanctions May 2026: ` +
+				'Booking.com / Expedia / Airbnb refused for РФ). Re-enable requires sanctions ' +
+				'lift + RKN re-notify + manual code change.',
+		)
+		this.name = 'SanctionedChannelError'
+	}
+}
 
 type SqlInstance = typeof SQL
 
@@ -166,6 +186,51 @@ export function createChannelFactory(
 					payload: row.payload,
 				})
 			},
+			// A7.5.fix — update channelConnection state after dispatch outcome
+			// so admin overlay UI shows live sync activity.
+			onDispatchOutcome: async ({ tenantId, channelId, outcome, errorMessage }) => {
+				try {
+					const matches = await connectionRepo.listByTenant(tenantId)
+					const targets = matches.filter((c) => c.channelId === channelId)
+					for (const c of targets) {
+						const patch =
+							outcome === 'sent'
+								? {
+										syncStatus: 'idle' as const,
+										lastSyncAt: new Date().toISOString(),
+										autoDisabledReason: null,
+									}
+								: outcome === 'retry'
+									? {
+											syncStatus: 'syncing' as const,
+											autoDisabledReason: errorMessage ?? null,
+										}
+									: outcome === 'dlq'
+										? {
+												syncStatus: 'error' as const,
+												autoDisabledReason: errorMessage ?? null,
+											}
+										: {
+												syncStatus: 'auto_disabled' as const,
+												autoDisabledReason: errorMessage ?? null,
+												autoDisabledAt: new Date().toISOString(),
+											}
+						await connectionRepo.patch(
+							{
+								tenantId: c.tenantId,
+								propertyId: c.propertyId,
+								channelId: c.channelId,
+							},
+							patch,
+						)
+					}
+				} catch (err) {
+					logger.error(
+						{ err, tenantId, channelId, outcome },
+						'channel.factory: onDispatchOutcome connection patch failed',
+					)
+				}
+			},
 			...(opts.dispatcherDeps ?? {}),
 		})
 	}
@@ -181,12 +246,19 @@ export function createChannelFactory(
 			return resolveAdapter({ cache: adapterCache, versionLookup, factory: defaultFactory }, input)
 		},
 		registerAdapterFactory(channelId, factory) {
+			// D16 factory-level sanctions HARD-DISABLE (defense-in-depth).
+			if (SANCTIONED_CHANNEL_IDS.has(channelId)) {
+				throw new SanctionedChannelError(channelId)
+			}
 			if (adapterFactories.has(channelId)) {
 				throw new Error(`channel adapter factory already registered: ${channelId}`)
 			}
 			adapterFactories.set(channelId, factory)
 		},
 		registerHttpAttempt(channelId, handler) {
+			if (SANCTIONED_CHANNEL_IDS.has(channelId)) {
+				throw new SanctionedChannelError(channelId)
+			}
 			if (httpAttempts.has(channelId)) {
 				throw new Error(`channel httpAttempt already registered: ${channelId}`)
 			}
