@@ -80,6 +80,7 @@ import { createAdminTaxRoutes } from './routes/admin/tax.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
 import { startDemoRefreshCron } from './workers/demo-refresh.cron.ts'
 import { createCancelFeeFinalizerHandler } from './workers/handlers/cancel-fee-finalizer.ts'
+import { createChannelBroadcastHandler } from './workers/handlers/channel-broadcast.ts'
 import { createCheckoutFinalizerHandler } from './workers/handlers/checkout-finalizer.ts'
 import { createFolioBalanceHandler } from './workers/handlers/folio-balance.ts'
 import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
@@ -475,6 +476,20 @@ const cancelFeeConsumer = startCdcConsumer(driver, sql, {
 	label: 'cancel_fee:booking',
 })
 
+// M10 / A7.5 — channel broadcast on booking INSERT. Fans out к per-channel
+// dispatch row через orchestrateAriBroadcast (D16-D20 RU compliance gates).
+// Skipped channels logged INFO с audit reason. Migration 0059 ALTER TOPIC adds
+// consumer.
+const channelBroadcastConsumer = startCdcConsumer(driver, sql, {
+	topic: 'booking/booking_events',
+	consumer: 'channel_broadcast_writer',
+	projection: createChannelBroadcastHandler({
+		connectionRepo: channelFactory.connectionRepo,
+		dispatchRepo: channelFactory.dispatchRepo,
+	}),
+	label: 'channel_broadcast:booking',
+})
+
 // Night-audit cron — posts per-night accommodation lines on `in_house`
 // bookings at 03:00 Europe/Moscow. Boot catch-up handles restart-during-window
 // gaps. Idempotent via deterministic folioLine.id (PK collision = no-op).
@@ -531,6 +546,7 @@ const allCdcConsumers = [
 	channelInboxActivityConsumer,
 	tourismTaxConsumer,
 	cancelFeeConsumer,
+	channelBroadcastConsumer,
 ] as const
 
 // Graceful shutdown: SIGTERM (Serverless Container / K8s) drains the CDC
