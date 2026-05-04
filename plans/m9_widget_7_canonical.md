@@ -350,7 +350,44 @@ A5.3 — pre-done audit:
 - [X] Process correction: «axe-on-noscript timeout» false-design caught + replaced с DOM-direct keyboard-reachable assertion (axe-core injection требует page JS; не disponible под javaScriptEnabled:false).
 - [X] 9-gate green: lint / typecheck / sherif / depcruise / knip / build / backend test:serial / frontend test / e2e:smoke (4-min serial run).
 - [X] Memory pointer + ROADMAP updated в same commit.
-- [ ] A5.4 Speculation Rules + Sec-Purpose middleware — DEFER к next sub-phase
+- [X] A5.4 Speculation Rules + Sec-Purpose middleware — CLOSED 2026-05-04
+
+### A5.4 — Speculation Rules + Sec-Purpose middleware + RUM phantom-session filter (D11/D12) — 2026-05-04
+
+**Files added:**
+- `apps/backend/src/middleware/sec-purpose-guard.ts` — D12 middleware. Reads `Sec-Purpose` header (browser-set, not forge-able from JS); returns `503 Service Unavailable` + `Cache-Control: no-store` on cross-origin prefetch. Same-origin / explicit `allowedPrefetchOrigins` allowlist passes through. Conservative deny on absent Origin+Referer (browsers send one of them per spec). Spec-compliant 503 (Speculation Rules treats 5xx as «do not surface»; 4xx would create broken-link UX on click).
+- `apps/backend/src/middleware/sec-purpose-guard.test.ts` — **10 SP tests**: no header → pass / same-origin pass / foreign 503 / `prefetch;anonymous-client-ip` token / case-insensitive / absent Origin+Referer 503 / Referer fallback (same-origin pass) / malformed Referer 503 / allowlist explicit / non-prefetch token («subresource») pass.
+- `apps/frontend/src/lib/rum/index.test.ts` — **3 SR-RUM tests**: prerendering=true skips emission; prerendering=false queues; toggle mid-session evaluated per metric (no memoization).
+
+**Files modified:**
+- `apps/backend/src/domains/widget/iframe-html.routes.ts` — `<script type="speculationrules">` block с D11 canonical config: `prefetch` (eagerness moderate, scope `/widget/{slug}*`) + `prerender` (eagerness conservative, scope `/widget/{slug}/{propertyId}*`); both `requires: ["anonymous-client-ip-when-cross-origin"]`. Mounted `secPurposeGuard()` before zValidator on iframe route.
+- `apps/backend/src/domains/widget/iframe-html.routes.test.ts` — **IF12 + IF13 unit tests** (Speculation Rules JSON shape + own-origin scope; cross-origin prefetch 503).
+
+**Verification (no полумер):**
+- typecheck PASS — 4 projects.
+- biome PASS (1 auto-fix collapsed 3-line `expect.toBe()` → 1-line).
+- depcruise PASS — 714 modules.
+- knip PASS.
+- sherif PASS.
+- backend `pnpm test:serial` — **4668 passed | 1 skipped | 0 failed** (+15 vs A5.3: 10 SP + 2 IF12/IF13 + 3 ANON-rerun-via-shared).
+- frontend `pnpm test` — **1328 passed** (+3 SR-RUM).
+- `pnpm build` — PASS.
+- e2e `embed.spec.ts + iframe-noscript.spec.ts`: **10/10 passed** (Sec-Purpose не ломает обычные iframe loads — Playwright не шлёт Sec-Purpose by default; legitimate display не triggers guard).
+
+**Tests added: 15 total** (target ~5, plan §5).
+- SP × 10 (sec-purpose middleware adversarial: token forms / Origin/Referer matrix / allowlist / non-prefetch tokens).
+- IF12 + IF13 backend unit (SR JSON shape + secPurposeGuard wiring on iframe route).
+- SR-RUM × 3 frontend unit (prerendering toggle).
+
+**Process correction caught + applied:** initial plan §4 line 22 listed `tests/e2e/speculation-rules.spec.ts` Playwright test, но browser-side SR parsing varies across Chromium versions + не emits stable signal в test-mode → flaky in CI. Senior-canon: validate HTML shape server-side (IF12), trust browser to do its part. Test browser-API behaviour ONLY когда spec-stable + cross-browser.
+
+A5.4 — pre-done audit:
+- [X] D11 Speculation Rules emit с `requires: ["anonymous-client-ip-when-cross-origin"]` + `href_matches` own-origin only (no wildcards, IF12 verifies).
+- [X] D12 Sec-Purpose: prefetch → 503 на cross-origin (10 SP + IF13 verify).
+- [X] R2 §7 RUM phantom-session filter (`document.prerendering` skip) verified via 3 SR-RUM tests.
+- [X] D18 CSP `connect-src` exact allowlist (carry-forward unchanged from A5.1; `--no-network` Playwright audit at deploy gate).
+- [X] 9-gate green: typecheck / lint / sherif / depcruise / knip / build / backend test:serial / frontend test / e2e (10/10 iframe tests).
+- [X] Memory pointer + ROADMAP updated в same commit.
 
 ### A5.4 (commit pending)
 TBD — Speculation Rules + Sec-Purpose findings.

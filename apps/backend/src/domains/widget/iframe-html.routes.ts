@@ -29,6 +29,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { assertHeaderSafe, assertOriginSafe } from '../../lib/embed/header-safety.ts'
 import { resolveTenantBySlug } from '../../lib/tenant-resolver.ts'
+import { secPurposeGuard } from '../../middleware/sec-purpose-guard.ts'
 import type { EmbedService } from './embed.service.ts'
 
 /**
@@ -156,6 +157,22 @@ html, body { margin: 0; padding: 0; min-height: 100dvh; background: #fff; color:
   </div>
 </noscript>
 <script defer src="${safeBundleUrl}" integrity="sha384-${safeSriDigest}" crossorigin="anonymous"></script>
+<script type="speculationrules">
+{
+  "prefetch": [{
+    "source": "document",
+    "where": { "href_matches": "/widget/${safeSlug}*" },
+    "requires": ["anonymous-client-ip-when-cross-origin"],
+    "eagerness": "moderate"
+  }],
+  "prerender": [{
+    "source": "document",
+    "where": { "href_matches": "/widget/${safeSlug}/${safePropertyId}*" },
+    "requires": ["anonymous-client-ip-when-cross-origin"],
+    "eagerness": "conservative"
+  }]
+}
+</script>
 </body>
 </html>
 `
@@ -175,6 +192,7 @@ export function createIframeHtmlRoutes(deps: IframeHtmlRoutesDeps) {
 	const { service } = deps
 	const app = new Hono().get(
 		'/v1/iframe/:tenantSlug/:propertyFile',
+		secPurposeGuard(),
 		zValidator('param', iframeParam),
 		async (c) => {
 			const { tenantSlug, propertyFile } = c.req.valid('param')

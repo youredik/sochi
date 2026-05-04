@@ -295,4 +295,68 @@ describe('iframe-html.routes', { tags: ['db'], timeout: 60_000 }, () => {
 		expect(hostIdx).toBeGreaterThan(0)
 		expect(noscriptIdx).toBeGreaterThan(hostIdx)
 	})
+
+	it('[IF12] Speculation Rules block with anonymous-client-ip + own-origin scoped (D11 / A5.4)', async () => {
+		// Per R2 §7: cross-site prefetch DDoS defense + RUM phantom-session
+		// filter. Speculation Rules MUST:
+		//   - require `anonymous-client-ip-when-cross-origin` (no third-party
+		//     RUM contamination from prefetch)
+		//   - scope `href_matches` к OWN origin pattern only (no wildcards
+		//     like `*` that would let attacker-injected SR exfil)
+		const { app } = bootRoutes()
+		const slug = randomSlug('if12')
+		const tenantId = newId('organization')
+		const propertyId = newId('property')
+		await seedPublicProperty({
+			tenantId,
+			propertyId,
+			publicEmbedDomains: ['https://hotel.ru'],
+			slug,
+		})
+		const res = await app.request(`/v1/iframe/${slug}/${propertyId}.html`)
+		const body = await res.text()
+
+		// SR <script type="speculationrules"> block present.
+		expect(body).toContain('<script type="speculationrules">')
+		// Required: anonymous-client-ip directive.
+		expect(body).toContain('anonymous-client-ip-when-cross-origin')
+		// Scoped: href_matches uses tenant slug — NOT a wildcard pattern.
+		const srBlockMatch = body.match(/<script type="speculationrules">([\s\S]*?)<\/script>/)
+		expect(srBlockMatch).not.toBeNull()
+		const srBlock = srBlockMatch?.[1] ?? ''
+		const srJson = JSON.parse(srBlock) as {
+			prefetch: Array<{ where: { href_matches: string }; requires: string[] }>
+			prerender: Array<{ where: { href_matches: string }; requires: string[] }>
+		}
+		// Both prefetch + prerender entries scoped к /widget/{slug}* — never
+		// `*` или `/*` (which would allow attacker injection scope).
+		expect(srJson.prefetch).toHaveLength(1)
+		expect(srJson.prefetch[0]?.where.href_matches).toBe(`/widget/${slug}*`)
+		expect(srJson.prefetch[0]?.requires).toEqual(['anonymous-client-ip-when-cross-origin'])
+		expect(srJson.prerender).toHaveLength(1)
+		expect(srJson.prerender[0]?.where.href_matches).toBe(`/widget/${slug}/${propertyId}*`)
+		expect(srJson.prerender[0]?.requires).toEqual(['anonymous-client-ip-when-cross-origin'])
+	})
+
+	it('[IF13] Sec-Purpose: prefetch from foreign origin → 503 (D12)', async () => {
+		// Verify secPurposeGuard middleware is wired to the iframe route.
+		const { app } = bootRoutes()
+		const slug = randomSlug('if13')
+		const tenantId = newId('organization')
+		const propertyId = newId('property')
+		await seedPublicProperty({
+			tenantId,
+			propertyId,
+			publicEmbedDomains: ['https://hotel.ru'],
+			slug,
+		})
+		const res = await app.request(`/v1/iframe/${slug}/${propertyId}.html`, {
+			headers: {
+				'sec-purpose': 'prefetch',
+				origin: 'https://attacker.example',
+			},
+		})
+		expect(res.status).toBe(503)
+		expect(res.headers.get('cache-control')).toBe('no-store')
+	})
 })
