@@ -9,7 +9,7 @@
  *     [IF4] HTML response sets Permissions-Policy minimal-trust
  *     [IF5] HTML response sets Cache-Control private + Referrer-Policy + COR-P + nosniff
  *     [IF6] empty publicEmbedDomains (NULL) → 404 (cross-tenant guard)
- *     [IF7] body contains `<script type="module" src=... integrity="sha384-...">` SRI tag
+ *     [IF7] body contains `<script defer src=... integrity="sha384-...">` SRI tag
  *     [IF8] body XSS-escapes slug into wrapper template (defense-in-depth)
  */
 
@@ -189,7 +189,7 @@ describe('iframe-html.routes', { tags: ['db'], timeout: 60_000 }, () => {
 		expect(res.status).toBe(404)
 	})
 
-	it('[IF7] body contains <script type="module" src=... integrity="sha384-...">', async () => {
+	it('[IF7] body contains <script defer src=... integrity="sha384-...">', async () => {
 		const { app, service } = bootRoutes()
 		const slug = randomSlug('if7')
 		const tenantId = newId('organization')
@@ -204,7 +204,7 @@ describe('iframe-html.routes', { tags: ['db'], timeout: 60_000 }, () => {
 		const body = await res.text()
 		const facadeHash = service.getBundle('embed').hashHex
 		expect(body).toMatch(
-			/<script type="module" src=".+\.js" integrity="sha384-.+" crossorigin="anonymous"><\/script>/,
+			/<script defer src=".+\.js" integrity="sha384-.+" crossorigin="anonymous"><\/script>/,
 		)
 		expect(body).toContain(facadeHash)
 		expect(body).toContain(`integrity="sha384-${service.getBundle('embed').sriDigest}"`)

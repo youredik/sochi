@@ -110,7 +110,9 @@ async function maybeReflectOrigin(
 	const matched = allowlist.find((o) => o === requestOrigin)
 	if (matched === undefined) return
 	c.header('Access-Control-Allow-Origin', assertOriginSafe(matched, 'CORS reflection'))
-	c.header('Vary', 'Origin')
+	// `Vary` MUST list every header that influences cache-key. Use
+	// `mergeVary` so multiple call-sites don't emit duplicates.
+	c.header('Vary', mergeVary(c.res.headers.get('vary'), 'Origin'))
 }
 
 const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable'

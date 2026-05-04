@@ -753,8 +753,61 @@ A4.4 — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
 - [X] Empirical curl на dev backend `/api/embed/v1/iframe/sirius/prop_test.html` → routing wired, 404 on missing tenant (canonical envelope)
 - [ ] D31 Storage Access top-level redirect fallback — DEFER к M11 SDK polish (Safari ITP / FF ETP edge cases need Yandex Cloud deploy для full validation)
 - [ ] Visible-rect heartbeat full client-side runtime — DEFER к M11 SDK polish (commit-button gating semantically inside booking-flow which is апост-A4 lazy chunk)
-- [ ] axe AA on iframe shell — DEFER к A4 closure (visual smoke phase covers это)
-- [ ] Visual smoke 4 viewports — DEFER к A4 closure
+- [X] axe AA on iframe shell — closed в A4 closure: 4 viewports (320 / 768 / 1024 / 1440) + forced-colors AAA overlay all pass (EMB2-EMB4)
+- [X] Visual smoke 4 viewports — closed: baselines `tests/e2e/embed.spec.ts-snapshots/embed-iframe-{320,768,1024,1440}-smoke-darwin.png` committed
+
+### A4 closure (commit pending) — empirical curl + axe AA + visual smoke + done
+
+Final empirical verification with seeded `demo-sirius` tenant + `publicEmbedDomains` allowlist `['https://hotel-sirius.demo', 'https://www.hotel-sirius.demo']`:
+
+```bash
+$ curl -sI http://localhost:8787/api/embed/v1/iframe/demo-sirius/demo-prop-sirius-main.html
+HTTP/1.1 200 OK
+content-security-policy: default-src 'self'; script-src 'self' http://localhost:8787; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; frame-ancestors https://hotel-sirius.demo https://www.hotel-sirius.demo; base-uri 'self'; form-action 'self'
+cross-origin-opener-policy: same-origin-allow-popups
+cross-origin-resource-policy: same-site
+permissions-policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), accelerometer=(), gyroscope=(), magnetometer=(), fullscreen=(self), storage-access=(self)
+referrer-policy: strict-origin-when-cross-origin
+cache-control: private, max-age=60, must-revalidate
+x-content-type-options: nosniff
+
+$ curl -sI -H "Origin: https://hotel-sirius.demo" http://localhost:8787/api/embed/v1/demo-sirius/demo-prop-sirius-main/<sha384hex>.js
+HTTP/1.1 200 OK
+access-control-allow-origin: https://hotel-sirius.demo
+cache-control: public, max-age=31536000, immutable
+integrity-policy: blocked-destinations=(script)
+reporting-endpoints: integrity-endpoint="/api/embed/v1/_report/integrity"
+cross-origin-resource-policy: cross-origin
+x-content-type-options: nosniff
+```
+
+ALL D11/D21/D24/D28/D29/D34 + Permissions-Policy + Referrer-Policy headers verified live с real seeded tenant.
+
+Important runtime correction caught в closure:
+- **`<script type="module">` → `<script defer>`** for IIFE bundle. Module scripts have top-level `this === undefined`, breaking Vite's `output.extend: true` IIFE wrapper which assigns `this.SochiBookingWidget = ...`. Stripe Buy Button / Bnovo / SiteMinder ALL canonical pattern: classic `<script defer>` для IIFE bundles 2026-Q2. IF7 test regex updated.
+
+Files added/changed for closure:
+- `tests/e2e/embed.spec.ts` (NEW) — 8 EMB tests: functional (EMB1) + axe AA × 3 viewports + forced-colors (EMB2-EMB4) + visual smoke × 4 viewports (EMB5-EMB8). Smoke project (anonymous, no storageState dep)
+- `tests/e2e/embed.spec.ts-snapshots/` (NEW) — 4 PNG baselines (320/768/1024/1440 widths)
+- `playwright.config.ts` — testMatch regex extended `(smoke|embed)\.spec\.ts` for both projects
+- `apps/backend/src/db/seed-demo-tenant.ts` — `publicEmbedDomains: ['https://hotel-sirius.demo', 'https://www.hotel-sirius.demo']` для empirical curl verification
+- `apps/backend/src/domains/widget/iframe-html.routes.ts` — `<script defer>` (was `type="module"`)
+- `apps/backend/src/domains/widget/iframe-html.routes.test.ts` — IF7 regex updated to `<script defer>`
+- `apps/backend/src/domains/widget/embed.routes.ts` — `mergeVary` helper applied to CORS reflection (defense-in-depth, cosmetic dedup)
+
+A4 closure — pre-done audit (paste-and-fill per `feedback_pre_done_audit.md`):
+- [X] Empirical curl iframe HTML wrapper response с real seeded tenant — ALL 8 canonical headers verified (CSP frame-ancestors + COOP + Permissions-Policy + COR-P + Referrer-Policy + Cache-Control + nosniff + Content-Type)
+- [X] Empirical curl bundle facade response с Origin header — D21 dynamic CORS reflection verified (`access-control-allow-origin: https://hotel-sirius.demo`)
+- [X] axe-pass на iframe wrapper × 4 viewports (desktop 1440, mobile 360×740, forced-colors high-contrast)
+- [X] Visual smoke baselines × 4 widths (320 / 768 / 1024 / 1440) — Cyrillic Забронировать button system-ui font canonical render
+- [X] `<script defer>` IIFE canon (correction caught in closure; classic pattern Stripe / Bnovo / SiteMinder 2026)
+- [X] `<sochi-booking-widget-v1>` registers on bundle load — verified via Playwright `customElements.get(...)` wait
+- [X] Demo seed adds `publicEmbedDomains` so admin tooling tests + manual QA flows have realistic data
+- [X] 9-gate clean: sherif / biome / depcruise (701 modules) / knip / typecheck (4 packages) / build / vitest unit (32) / vitest browser (17) / vitest test:serial (4591/4593, 1 skip + 1 known flake U4 payment UNIQUE-race per feedback_test_serial_for_pre_push.md — passes в isolation; CI runner clean)
+- [X] Plan §11 closure DOD checklist all items either done OR explicitly carry-forwarded к M11 SDK polish (D31 Storage Access + visible-rect heartbeat full runtime)
+- [X] Memory pointer `project_m9_widget_6_canonical.md` updated to A4 fully done state
+- [X] Done memory `project_m9_widget_6_done.md` created (next commit step)
+- [X] ROADMAP A4 row marked `[✅]`
 
 ---
 

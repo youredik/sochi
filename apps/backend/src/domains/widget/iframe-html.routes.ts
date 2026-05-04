@@ -146,7 +146,7 @@ html, body { margin: 0; padding: 0; min-height: 100dvh; background: #fff; color:
     </p>
   </sochi-booking-widget-v1>
 </main>
-<script type="module" src="${safeBundleUrl}" integrity="sha384-${safeSriDigest}" crossorigin="anonymous"></script>
+<script defer src="${safeBundleUrl}" integrity="sha384-${safeSriDigest}" crossorigin="anonymous"></script>
 </body>
 </html>
 `

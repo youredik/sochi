@@ -27,7 +27,7 @@
  */
 
 import { sql } from './index.ts'
-import { dateFromIso, NULL_INT32, NULL_TEXT, toTs } from './ydb-helpers.ts'
+import { dateFromIso, NULL_INT32, NULL_TEXT, toJson, toTs } from './ydb-helpers.ts'
 
 const TENANT_ID = 'demo-sochi-sirius'
 const SLUG = 'demo-sirius'
@@ -62,11 +62,20 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	`
 
 	// M9.widget.1 — minimal property с isPublic=true для widget endpoint.
-	console.log('  → Step 3/4: property (public, active, Сочи tourism tax 2%)')
+	// M9.widget.6 / А4 — `publicEmbedDomains` для embed widget allowlist.
+	// Demo origins: localhost ports for dev tenant page testing + sample
+	// "hotel-sirius.demo" public origin (production deploy adds real
+	// tenant origins via admin UI carry-forward в M11).
+	console.log('  → Step 3/4: property (public, active, Сочи tourism tax 2%, embed allowlist)')
+	// HTTPS only — D24 canon enforced via `embed.repo` zod schema. For local
+	// empirical curl testing we hit the route directly (no Origin verification
+	// on bundle GET path itself; CORS reflection is opt-in).
+	const demoEmbedAllowlist = ['https://hotel-sirius.demo', 'https://www.hotel-sirius.demo']
 	await sql`
 		UPSERT INTO property (
 			\`tenantId\`, \`id\`, \`name\`, \`address\`, \`city\`, \`timezone\`,
 			\`tourismTaxRateBps\`, \`isActive\`, \`isPublic\`,
+			\`publicEmbedDomains\`,
 			\`createdAt\`, \`updatedAt\`
 		) VALUES (
 			${TENANT_ID}, ${DEMO_PROPERTY_ID},
@@ -76,6 +85,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			${'Europe/Moscow'},
 			${200},
 			${true}, ${true},
+			${toJson(demoEmbedAllowlist)},
 			${nowTs}, ${nowTs}
 		)
 	`
