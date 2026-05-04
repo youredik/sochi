@@ -1,0 +1,242 @@
+# M9.widget.7 — Perf + a11y CI gate (canonical sub-phase plan)
+
+**Дата:** 2026-05-04
+**Track:** A5 (per `plans/ROADMAP.md`) — closes Боль 2.4 формальный perf+a11y CI gate перед production deploy.
+**Scope:** Lighthouse CI + web-vitals 5 INP attribution → OTel → Yandex Cloud Monitoring + axe-core comprehensive matrix + size-limit бюджет SPA + Speculation Rules + noscript fallback + 152-ФЗ-compliant RUM pipeline.
+**Canonical guard:** `feedback_behaviour_faithful_mock_canon.md` — perf+a11y gate same код для demo + production tenants (mode-flag NO влияет на gate).
+**Research:** R1 broad + R2 adversarial 2026-05-04. **Recurring косяки applied UPFRONT** (см. §0).
+
+---
+
+## §0. Косяки из предыдущих sub-phases applied upfront
+
+Per session retrospective:
+
+| Категория | Косяк | Mitigation в этом плане |
+|---|---|---|
+| Process | Claim "done" без paste-and-fill audit | DOD checklist в commit body перед TodoWrite completed |
+| Process | Stop after "continuing X" narration | Execute, не narrate |
+| Process | Skip per-sub-phase canonical cycle | R1+R2 ≥today done в pre-flight; closure has fresh recheck |
+| Process | Memory pointer stale after sub-phase | Update memory immediately after EACH commit |
+| Process | Defer items "к closure" → forget | Track в TodoWrite + paste-and-fill |
+| Process | Skip `pnpm test:serial` regression | Run before closure commit |
+| Process | Skip empirical с seeded tenant | Use real `demo-sirius` data |
+| Process | Skip MEMORY.md index update | Update в same commit as memory pointer |
+| Tech | Half-measure dropping canon defense to pacify lint | Bend lint (biome-ignore), NEVER drop security primitive |
+| Tech | Bundle barrel imports → blowup | ALWAYS subpath; verify size after each refactor |
+| Tech | Hono route order: general swallows specific | Specific patterns FIRST в mount order |
+| Tech | Hono `:param.ext` literal-suffix breaks | `:filename` + zod regex strip canon |
+| Tech | `<script type="module">` breaks IIFE bundles | `<script defer>` classic для IIFE |
+| Tech | dev backend ne re-reads dist files | Restart после rebuild |
+| Tech | Visual smoke first run no baselines | `--update-snapshots` + commit baselines |
+| Tech | Test contamination от dev backend CDC | Filter by `createdBy` actor |
+| Senior | Per-sub-phase R1+R2 must be ≥ today | Sources rejected if < today; honest flag |
+| Senior | Verify "canonical" claims via fresh research | Don't ride training-data assumptions |
+| Bug-hunt | Strict tests canon | Adversarial paths + exact values + cross-tenant × every method + enum FULL |
+
+---
+
+## §1. North-star alignment
+
+Закрывает Боль 2.4 (perf+a11y CI gate) — formal go/no-go signal перед production deploy. Same gate applies к demo и production tenants без mode-branching (canon).
+
+**Что строится:**
+- Lighthouse CI configuration с performance budgets (LCP / TBT / CLS / SI / FCP — INP separately via web-vitals)
+- web-vitals 5.x attribution build → backend RUM endpoint → Yandex Cloud Monitoring (proprietary HTTP API; OTLP NOT native)
+- axe-core comprehensive matrix: ALL public surfaces × all themes × all viewports × forced-colors AAA
+- size-limit@11.x bundle budget enforcement (extends current widget-embed dual-bundle gate to SPA)
+- Speculation Rules `<script>` block в iframe-html (D34 popup + new D36 anti-DDoS check)
+- `<noscript>` fallback в iframe-html для strict-CSP RU gov tenant pages
+
+**Что defer'ится:**
+- Hard-fail на perf regression в master push — warn-only canon Stripe / Vercel / Cloudflare 2026 (hard-fail moves к deploy gate в Track B)
+- Yandex.Metrica per-tenant integration (M11 admin UI carry-forward; opt-in 152-ФЗ consent gate)
+- Stryker mutation testing for a11y rules (overkill для SaaS; carry-forward к coverage:full canon)
+
+---
+
+## §2. 12 Decisions (final, post R1+R2)
+
+| # | Decision | Choice | Rationale |
+|---|---|---|---|
+| **D1** | Lighthouse CI runner | **`@lhci/cli@0.15.1` + Lighthouse 12.6.1** lab metrics: LCP/TBT/CLS/SI/FCP | INP NOT lab metric per LH team — field-only via web-vitals (R1 Q1 cite) |
+| **D2** | Lighthouse CI config format | **`lighthouserc.cjs`** (CommonJS, comment-friendly, Node-compat) + separate `budgets.json` | JSON has no comments; .js triggers ESM warnings on pnpm workspace |
+| **D3** | LCP gaming defense | **`lcp-lazy-loaded: 'error'` + `largest-contentful-paint-element: 'error'` + `prioritize-lcp-image: 'error'`** | R2 §1 — Unlighthouse 2025 cite: 10.4% mobile pages lazy-load LCP, score gaming |
+| **D4** | TBT aggregation | **`aggregationMethod: 'pessimistic'`** для TBT (worst run, не median) | R2 §1 — defends idle-period noise gaming |
+| **D5** | Lighthouse runs per build | **`numberOfRuns: 5`** + `tolerance: 100ms` band | R2 §6 — LHCI 2026 canon median-of-5 (3 = high false-fail) |
+| **D6** | INP measurement | **web-vitals 5.x attribution build** через `web-vitals/attribution` subpath | INP = field-only canonical 2026 |
+| **D7** | RUM backend pipeline | **Frontend → `/api/rum` POST → backend batch-write → Yandex Cloud Monitoring proprietary HTTP API** (OTLP NOT native per docs 2026-03-24) | YC Monitoring NOT OTLP-receiving; bridge via backend (R1 Q6) |
+| **D8** | RUM 152-ФЗ anonymization | **MANDATORY `anonymize.ts` pipeline** strips attribute-value selectors `[name="..."]` / `aria-label` / `placeholder` / IDs / `value`; bucket UA `{browser, os, mobile}`; truncate IP at edge | R2 §4 Critical: `interactionTarget` для `<input name="passport_serial">` IS ПДн под 152-ФЗ ст. 3 ч. 1 |
+| **D9** | YC Monitoring batching | **Reservoir-sample edge buffer + histogram-bucket aggregation + 10k-metrics-per-write batch + Cockatiel-class circuit breaker on 429/5xx** | R2 §5: YC Monitoring 10k metrics/req limit 2026-03-24; 100k INP/min unbatched = throttled |
+| **D10** | Bundle CI gate (SPA) | **`size-limit@11.x` + `@size-limit/preset-app`** в root package.json: SPA index ≤180kB gzip + per-route lazy chunks ≤60kB; widget facade ≤15kB + lazy ≤80kB (existing) | R1 Q5 — size-limit dominant 2026 (728k vs 136k weekly) |
+| **D11** | Speculation Rules в embed snippet | **`<script type="speculationrules">` с `requires: ["anonymous-client-ip-when-cross-origin"]` + `href_matches` scoped to OWN origin only (no wildcards)** | R2 §7: cross-site prefetch DDoS defense + RUM phantom-session filter via `document.prerendering` check |
+| **D12** | Sec-Purpose: prefetch handling | **Backend `/book/...` returns 503 для `Sec-Purpose: prefetch` when not from hosted facade origin** | R2 §7: malicious embedder cross-tenant prefetch defense |
+| **D13** | `<noscript>` fallback canon | **iframe-html template adds `<noscript>` block с `tel:` + tenant phone**; Playwright test с `javaScriptEnabled: false` | R2 §9: RU gov sites strict CSP без `unsafe-inline` |
+| **D14** | Forced-colors + Cyrillic visual a11y | **Playwright `forcedColors: 'active'` axe matrix + `toHaveScreenshot()` assertion** для glyph-drop catch (axe color-contrast skips forced-colors by design) | R2 §10: Segoe UI Variable Cyrillic ligature drop on Windows |
+| **D15** | Hard-fail vs warn convention | **Warn-only post-push (Slack ping); hard-fail на deploy gate Track B** | R2 §10 + Stripe / Vercel / Cloudflare canon 2026 |
+| **D16** | axe-core version pinning | **EXACT `axe-core@4.11.4` + `@axe-core/playwright@4.11.1`** (no caret) + `disableRules: []` blanket-disable banned; tuple-allowlist pattern только | R2 §2: shadow-DOM false-positive class needs surgical disable, не blanket |
+| **D17** | Lit + axe-core canary | **Renovate weekly informational-only matrix-canary job** runs `lit@latest` + `axe-core@latest` against e2e suite | R2 §8 forward-compat early-warning |
+| **D18** | SRI + CSP `connect-src` | **CSP `connect-src 'self' api.yookassa.ru https://monitoring.api.cloud.yandex.net` exact allowlist** + `--no-network` Playwright audit at CI | R2 §3: polyfill.io 2024 supply-chain class — size-limit measures build не runtime exfil |
+
+---
+
+## §3. Library canon (May 4 2026 npm-verify required at A5.1 kickoff)
+
+**HONESTY flag:** R1 returned 403 from npm registry — empirical verify обязательно at sub-phase start.
+
+| Library | Pinned version | Source |
+|---|---|---|
+| `@lhci/cli` | `0.15.1` (Jun 2025) | Lighthouse 12.6.1 wrapper |
+| `lighthouse` | `12.6.1` (transitive) | bundled with @lhci/cli |
+| `web-vitals` | `5.2.0` (existing apps/frontend) | attribution build subpath |
+| `axe-core` | **`4.11.4` exact** | (pin no caret) |
+| `@axe-core/playwright` | **`4.11.1` exact** | (pin no caret) |
+| `size-limit` | `11.x.x` | + `@size-limit/preset-app` |
+| `@playwright/test` | `1.59.x` (existing) | unchanged |
+| `vite-plugin-bundlesize` | `0.x` (drwpow) | OPTIONAL build-time alternative — evaluate vs size-limit |
+
+---
+
+## §4. Sub-phase split (golden middle)
+
+Per лессонs-applied: each sub-phase has its own paste-and-fill audit + memory pointer update + 9-gate clean.
+
+### A5.1 Foundation: Lighthouse + size-limit + post-push CI (~1 day, ~5 tests)
+1. `lighthouserc.cjs` + `budgets.json` (D1-D5 applied)
+2. `.size-limit.json` root config (D10 — SPA index + lazy chunks + widget budgets)
+3. `.github/workflows/post-push.yml` extended (Lighthouse + size-limit jobs, warn-only per D15)
+4. `tests/lighthouse-config.test.ts` — config shape + assertion presence + numberOfRuns + tolerance
+5. Empirical: run `lhci collect` once locally + size-limit report
+
+### A5.2 RUM pipeline: web-vitals attribution + anonymize + YC Monitoring (~1.5 days, ~12 tests)
+6. `apps/frontend/src/lib/rum/anonymize.ts` (D8 — strip `[name=..]`, `[value=..]`, `aria-label`, `placeholder`, `#id`, salt+truncate IP)
+7. `apps/frontend/src/lib/rum/index.ts` — onINP/onLCP/onCLS handlers → anonymize → batch → POST `/api/rum`
+8. `apps/frontend/src/lib/rum/anonymize.test.ts` — 8 ANON tests adversarial (passport scrub / aria scrub / ID scrub / IP truncate / UA bucket / value strip / canonical roundtrip / honest gap noise inputs)
+9. `apps/backend/src/domains/observability/rum.routes.ts` — `POST /api/rum/v1/web-vitals` zod-validated body + rate-limit per IP
+10. `apps/backend/src/domains/observability/rum.repo.ts` — reservoir-sample buffer (D9 5000-cap, drop-oldest на overflow) + histogram bucketing
+11. `apps/backend/src/domains/observability/yc-monitoring-exporter.ts` — batch flush 10k-metrics/req с Cockatiel-class circuit breaker (D9)
+12. `apps/backend/src/domains/observability/rum.routes.test.ts` — 4 RUM integration tests
+13. `apps/backend/src/domains/observability/yc-monitoring-exporter.test.ts` — 4 YCM tests с mock fetch
+
+### A5.3 axe-core comprehensive matrix (~1 day, ~36 tests)
+14. `tests/e2e/perf-a11y.spec.ts` — matrix loop `[/, /widget/demo-sirius, /book/demo-sirius/<propId>, /api/embed/v1/iframe/...html]` × `['light','dark','forced-colors']` × `[320,768,1024,1440]` = 48 axe scans
+15. `tests/axe-known-noise.ts` (D16 — tuple-allowlist `<rule-id, selector>` pattern; blanket disable banned)
+16. Visual a11y `toHaveScreenshot()` для forced-colors mode (D14 Cyrillic)
+17. `tests/e2e/iframe-noscript.spec.ts` — Playwright `javaScriptEnabled: false` context (D13)
+18. axe full-run integrated в post-push.yml workflow
+
+### A5.4 Speculation Rules + Sec-Purpose handling (~½ day, ~5 tests)
+19. iframe-html.routes.ts emits `<script type="speculationrules">` block (D11)
+20. `apps/backend/src/middleware/sec-purpose-guard.ts` (D12) — 503 on cross-origin prefetch
+21. RUM filter: `document.prerendering` check skip (R2 §7)
+22. `tests/e2e/speculation-rules.spec.ts` — 4 SR tests (allowed prefetch / cross-origin reject / RUM phantom-session filter / `requires: anonymous-client-ip` enforced)
+23. iframe-html.routes.test.ts — IF11 noscript block present + Sec-Purpose handling
+
+### A5 closure (~½ day)
+24. `pnpm lhci collect` + `pnpm lhci assert` — empirical perf gate verified live
+25. `pnpm exec playwright test --project=smoke` — 48-axe matrix passes
+26. Memory pointer + done memory (project_m9_widget_7_done.md)
+27. ROADMAP A5 row `[✅]`
+28. plan §17 implementation log appended per sub-phase
+
+---
+
+## §5. Strict test plan (target ~62 tests across A5)
+
+- **Lighthouse config**: 5 LH tests (D1-D5 assertion presence, budgets shape, numberOfRuns, tolerance, lcp-lazy-loaded error level)
+- **anonymize.ts**: 8 ANON tests adversarial (passport scrub / aria scrub / ID scrub / IP truncate / UA bucket / value strip / canonical roundtrip / fuzz)
+- **RUM routes**: 4 RUM integration (rate-limit / shape validate / 152-ФЗ post-anonymize verify / cross-tenant)
+- **YC Monitoring exporter**: 4 YCM (batch shape / 10k cap / 429 circuit / drop-oldest reservoir)
+- **axe matrix**: 48 = 4 surfaces × 3 themes × 4 viewports
+- **noscript**: 1 IFNS test
+- **Speculation Rules**: 4 SR tests
+- **size-limit**: integration into existing build:check command — add 3 SPA entries
+
+**Total target: ~62 strict tests + Lighthouse run + size-limit gate + axe matrix coverage.**
+
+---
+
+## §6. Pre-done audit checklist (paste-and-fill в КАЖДОМ commit body)
+
+```
+A5.{N} — pre-done audit
+- [ ] Per-sub-phase R1+R2 ≥2026-05-04 (если scope шире baseline R1+R2 sub-phase pre-flight)
+- [ ] D8 anonymize.ts strips ALL attribute-values + IDs + UA bucketing (152-ФЗ)
+- [ ] D9 batch + reservoir-sample + circuit breaker tested (YC Monitoring 10k/req limit)
+- [ ] D11 Speculation Rules requires anonymous-client-ip + href_matches own origin
+- [ ] D12 Sec-Purpose: prefetch 503 для cross-origin
+- [ ] D14 forced-colors visual a11y `toHaveScreenshot()` Cyrillic glyph-drop
+- [ ] D16 axe-core 4.11.4 EXACT pin + tuple-allowlist (no blanket disable)
+- [ ] D18 CSP connect-src exact allowlist + Playwright --no-network audit
+- [ ] Cross-tenant × every RUM method (rum.repo + yc-monitoring-exporter)
+- [ ] Empirical: `pnpm lhci collect` + `lhci assert` + axe matrix runs locally
+- [ ] 9-gate green: sherif / biome / depcruise / knip / typecheck / build / vitest unit / vitest browser / test:serial
+- [ ] Plan §17 implementation log appended
+- [ ] Memory pointer (`project_m9_widget_7_canonical.md`) updated
+- [ ] ROADMAP A5 row updated
+- [ ] MEMORY.md index updated (если closure)
+```
+
+---
+
+## §7. Definition of Done M9.widget.7
+
+- [ ] `lighthouserc.cjs` + `budgets.json` shipped с D1-D5 assertions live
+- [ ] web-vitals 5 attribution build → `/api/rum` → YC Monitoring exporter pipeline live
+- [ ] `anonymize.ts` strips ALL 152-ФЗ-relevant fields verified via 8 ANON adversarial tests
+- [ ] axe-core 48-cell matrix passes (4 surfaces × 3 themes × 4 viewports)
+- [ ] size-limit gate enforced at post-push (warn-only); size budgets honored
+- [ ] iframe-html `<noscript>` fallback verified Playwright `javaScriptEnabled: false`
+- [ ] Speculation Rules block emitted в iframe-html + Sec-Purpose middleware blocks abuse
+- [ ] CSP `connect-src` exact allowlist + Playwright `--no-network` audit at deploy gate (carry-forward к Track B)
+- [ ] Empirical `pnpm lhci collect` + axe matrix run locally — captured screenshots archived
+- [ ] Per-sub-phase paste-and-fill audit applied в every commit body
+- [ ] Plan §17 implementation log appended per sub-phase
+- [ ] Memory pointer reflects A5 done state
+- [ ] Done memory `project_m9_widget_7_done.md` created
+- [ ] MEMORY.md index updated к `_done` pointer
+- [ ] ROADMAP A5 row marked `[✅]`
+
+---
+
+## §8. Risks / honest gaps
+
+1. **YC Monitoring no published RPS quota** — soft-throttled by region. Reservoir-sample + 10k-metrics/req batch defends but full quota empirical-untested до production deploy.
+2. **2026-Q2 RU mobile-mix data unavailable** — assume Yandex.Metrica 2025 industry mix (~85% 4G/LTE+, ~12% 3G, ~3% wifi-only). Empirical re-verify post-deploy.
+3. **npm registry blocked R1 fetch** — empirical npm-verify ВСЕХ pinned versions при A5.1 kickoff обязательно.
+4. **No 2026 cite for "RU gov sites embedding 3rd party widgets"** — evergreen reasoning + iframe-fallback canon already covers это; honest flag.
+5. **axe-core 4.12+ might ship during A5 implementation** — pin EXACT + matrix-canary informational job catches forward-compat regressions early.
+
+---
+
+## §9. Anchor commits
+
+- `<TBD>` — A5 pre-flight canon (this file's commit)
+- `<TBD>` — A5.1 Lighthouse + size-limit + post-push CI
+- `<TBD>` — A5.2 RUM pipeline (anonymize + routes + YC exporter)
+- `<TBD>` — A5.3 axe matrix
+- `<TBD>` — A5.4 Speculation Rules + Sec-Purpose
+- `<TBD>` — A5 closure (memory + ROADMAP + done)
+
+---
+
+## §17. Implementation log (carry-forward, populated per sub-phase commit)
+
+### A5.1 (commit pending)
+TBD — Lighthouse + size-limit + post-push CI findings.
+
+### A5.2 (commit pending)
+TBD — RUM pipeline findings.
+
+### A5.3 (commit pending)
+TBD — axe matrix findings.
+
+### A5.4 (commit pending)
+TBD — Speculation Rules + Sec-Purpose findings.
+
+### A5 closure (commit pending)
+TBD — empirical run + done memory.
+
+---
+
+**End of M9.widget.7 canonical sub-phase plan.**
