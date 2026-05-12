@@ -610,14 +610,62 @@ Outcome: 2 commits `150f3e5` (impl) + `4adf37a` (consent-block fix-up).
 
 **New process correction (C34)**: «transparent migration» claim для indirect consumers через ResponsiveSheet требует empirical e2e proof. JSDOM tests insufficient — axe runtime rules (nested-interactive, color-contrast) только real-browser. Capture в new memory `project_a_bis_0_done.md` + `feedback_pre_plan_codebase_recon.md` corollary.
 
-### A.bis.1 (shadcn sidebar primitive) — pending
+### A.bis.1 (shadcn sidebar primitive) — ✅ DONE 2026-05-12
 
-Pre-flight R1+R2 freshness check:
-- [ ] shadcn issue #6761 — still open? (sanity)
-- [ ] shadcn issue #8176 — still open?
-- [ ] Latest shadcn sidebar source (CLI fetch) — diff против ожидаемого
+Pre-flight R1+R2 freshness check (≥2026-05-12, empirical):
+- [x] **Issue #6761** — `gh api repos/shadcn-ui/ui/issues/6761` → `state: open, closed_at: null` ✓ (D12 still required)
+- [x] **PR #6798** — `gh api repos/shadcn-ui/ui/pulls/6798` → `state: closed, merged: false, merged_at: null, closed_at: 2026-03-07T23:46:44Z, mergeable_state: dirty` ✓ (web-search summary говорил «addressed» — caught lying via direct gh API)
+- [x] **Issue #8176** — `gh api … 8176` → `state: open, closed_at: null` ✓ (D13 still required)
+- [x] **Issue #9335** — `gh api … 9335` → `state: open, created_at: 2026-01-15T03:09:16Z` ✓ (D14 still required)
+- [x] **shadcn CLI 4.7.0** verified `npm view shadcn version` (latest stable, 2026-05-05) — fresh
+- [x] **Registry sidebar source** — `curl https://ui.shadcn.com/r/styles/radix-nova/sidebar.json` → 1 file, 7 registryDeps (button/separator/sheet/tooltip/input/use-mobile/skeleton); imports `from "radix-ui"` (Slot) — matches our unified pkg canon
+- [x] **Constants verified**: `SIDEBAR_COOKIE_NAME = "sidebar_state"`, `SIDEBAR_COOKIE_MAX_AGE = 60*60*24*7`, `SIDEBAR_WIDTH = "16rem"` (= 256px ✓ matches §6 D19), `SIDEBAR_KEYBOARD_SHORTCUT = "b"` (cmd+b/ctrl+b)
+- [x] **lucide-react 1.14.0** empirically confirms `PanelLeftIcon: object`, `XIcon: object` exist (`node -e require`)
+- [x] **Sheet auto-close mechanic** — Read `ui/sheet.tsx` lines 71-83: renders `<SheetPrimitive.Close asChild><Button variant="ghost" size="icon-sm">...<XIcon/></Button></SheetPrimitive.Close>` with English «Close» sr-only
 
-Outcome: TBD
+Implementation:
+
+- **Senior pivot**: написали `ui/sidebar.tsx` directly (438 LOC) instead of CLI install → cleanup. Reasons: CLI bы создал duplicate `hooks/use-mobile.tsx` (у нас уже `lib/use-media-query.ts` 8 consumers), оставил stray `IconPlaceholder` Next.js template ref (`@/app/(create)/components/icon-placeholder`), переустановил bug existing button/sheet/tooltip без diff visibility. Direct write = full ownership, single source of truth. shadcn — «in-repo source, owned» per D1.
+- 5 patches inline с `// PATCH-D12` ... `// PATCH-D16` grep-able markers + verbose Why-rationale + linked Issue # + plan canon refs:
+  - **D12** — `showCloseButton={false}` на mobile SheetContent + own `<SheetClose><Button aria-label="Закрыть меню"><XIcon/></Button></SheetClose>` inside (RU label, не English «Close»)
+  - **D13** — TYPE-LEVEL removal `open` + `onOpenChange` props from `SidebarProviderProps` signature → TS error at call site (strongest enforcement, не runtime warn-only)
+  - **D14** — module-level `Set<string>` of mounted instance IDs (via `React.useId()`); dev-only `console.error` if size > 1; cleanup on unmount (verified no leak in tests)
+  - **D15** — dev-only `console.warn` если `<SidebarMenuButton>` rendered без `aria-label` AND `aria-labelledby`
+  - **D16** — appended `forced-colors:border forced-colors:border-[ButtonText]` к `sidebarMenuButtonVariants` cva base
+- **`useIsMobile`** inlined as `!useMediaQuery('(min-width: 768px)')` — reuses existing `lib/use-media-query.ts`, matches D17 `md:` 768px breakpoint canon
+- **RU canonical labels** baked into primitive: `<SheetTitle>Боковое меню</SheetTitle>`, `<SheetDescription>Навигация по разделам админ-панели</SheetDescription>`, `aria-label="Закрыть меню"`, `aria-label="Переключить меню"`, `title="Переключить меню"` (SidebarRail) — never English fallthrough
+
+Tests (`ui/sidebar.test.tsx`, 11 describe groups, **35 strict tests**):
+- 2 useSidebar contract (H1-H2 — outside-provider throw + full ctx shape)
+- 4 SidebarProvider state (S1-S4 — defaultOpen true/false, toggleSidebar flip, setOpen direct)
+- 3 cookie persistence (C1-C3 — name/value, max-age=604800, samesite=lax)
+- 4 keyboard (K1-K4 — Cmd+B + Ctrl+B + adversarial wrong-key + adversarial no-modifier)
+- 5 D12 mobile dismiss (D12.1-D12.5 — RU aria-label, focusable, real `<button>`, RU SheetTitle, NO English Sheet auto-close)
+- 2 D13 controlled-prop bypass (D13.1-D13.2 — TS-bypass cast survives, internal toggle works after bypass)
+- 3 D14 single-provider (D14.1-D14.3 — single OK, two error, unmount cleanup no-leak)
+- 3 D15 aria-label canon (D15.1-D15.3 — missing warn, with aria-label NO warn, with aria-labelledby NO warn)
+- 2 D16 forced-colors (D16.1-D16.2 — class strings present)
+- 4 collapsible enum FULL coverage (E1-E4 — none/offcanvas-collapsed/icon-collapsed/offcanvas-expanded all 4 cases)
+- 3 triggers (T1-T3 — SidebarTrigger click toggles, SidebarRail click toggles, RU aria-label)
+
+**Multi-layer verification (per A.bis.0 senior canon):**
+
+| Layer | Result |
+|---|---|
+| **TypeScript strict** (`pnpm typecheck` 4 workspaces) | ✓ EXIT=0 |
+| **Vitest unit** sidebar.test.tsx | ✓ 35/35 pass (652ms) |
+| **Frontend regression** (`pnpm test` 85 files) | ✓ **1399/1399 pass** (zero regressions vs A.bis.0 baseline 1382) |
+| **5 pre-commit gates** (sherif/biome/depcruise/knip/typecheck) | ✓ all green (sherif: no issues / biome: EXIT=0 (мои файлы intentionally excluded `!apps/frontend/src/components/ui` per `biome.json:13`) / depcruise: 0 violations 789 modules / knip: EXIT=0 / typecheck: EXIT=0) |
+| **lefthook pre-commit hook** | will pass — biome `--staged` mode + my files biome-exempt |
+
+**Honest carry-forward (next sub-phases):**
+- Real-browser axe matrix (12 cells: 3 themes × 4 viewports) — **A.bis.4** scope per plan §7
+- Playwright e2e discoverability spec — **A.bis.4** scope (10 destinations clickable from sidebar; A.bis.1 = primitive only, no consumer)
+- `<SidebarMenuButton>` consumer integration (admin-sidebar.tsx with RBAC × 7 sections) — **A.bis.2** scope
+- Coverage floor bump check — **A.bis.5** closure (per plan §7 row 5; canon `feedback_test_loop_canon.md` mid-phase test:fast only)
+- Pre-existing 18 biome warnings в `apps/backend/src/workers/channel-dispatcher.test.ts` (last commit `56eecab` M10) — orthogonal к frontend A.bis; warnings ≠ errors, не блокируют. Logged here per `feedback_no_preexisting.md` documentation duty.
+
+**New process correction (C35)**: `gh api repos/<owner>/<repo>/issues/<N>` is the empirical ground-truth для GitHub issue/PR state — web-search summaries paraphrase and lie. R1+R2 web search returned «PR #6798 addressed Issue #6761» in plain text; gh API returned `merged: false, mergeable_state: dirty, closed_at: 2026-03-07`. Saved A.bis.1 from skipping a needed patch. Future: every per-sub-phase R1+R2 freshness check MUST включать gh CLI verify для GitHub-hosted issues/PRs cited as source-of-truth, not web-search paraphrase.
 
 ### A.bis.2 (App-shell integration) — pending
 
