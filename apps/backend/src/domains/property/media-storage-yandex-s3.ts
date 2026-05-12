@@ -22,10 +22,23 @@
  *
  * Wired через `getMediaStorage()` lazy singleton — flip via APP_MODE / env.
  */
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { registerAdapter } from '../../lib/adapters/index.ts'
 import type { MediaStorage } from './media-storage.ts'
+
+// `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` are lazy-imported inside
+// `getAwsBindings()` below (instead of top-level `import`). Two wins:
+//
+//   1. Backend boot in stub mode (default dev / test) avoids the ~50 ms cold load
+//      of the AWS SDK + 200+ transitive dependencies; we only pay when the live
+//      Yandex S3 adapter is actually instantiated in `APP_MODE=production`.
+//
+//   2. Vitest #9492 mitigation: with `isolate: false`, eager top-level imports
+//      of `@aws-sdk/client-s3` from any other test file polluted the shared
+//      worker module graph, so `vi.mock('@aws-sdk/client-s3', …)` in
+//      `media-storage-yandex-s3.test.ts` was no-op — its hoisted interceptor
+//      could not retroactively replace the already-resolved module. Lazy
+//      `await import('@aws-sdk/client-s3')` resolves *inside* the test's worker
+//      context where the mock is registered, restoring deterministic mocking.
 
 export interface YandexS3StorageOptions {
 	readonly endpoint: string
@@ -47,25 +60,45 @@ export interface YandexS3StorageOptions {
  *     style yet, в отличие от AWS S3)
  *   - Region must be `ru-central1` (other Yandex regions reject S3 v4 signature)
  */
+interface AwsBindings {
+	readonly client: import('@aws-sdk/client-s3').S3Client
+	readonly PutObjectCommand: typeof import('@aws-sdk/client-s3').PutObjectCommand
+	readonly GetObjectCommand: typeof import('@aws-sdk/client-s3').GetObjectCommand
+	readonly getSignedUrl: typeof import('@aws-sdk/s3-request-presigner').getSignedUrl
+}
+
 export function createYandexS3MediaStorage(opts: YandexS3StorageOptions): MediaStorage {
 	const ttlSec = opts.ttlSec ?? 300
-	const client = new S3Client({
-		endpoint: opts.endpoint,
-		region: opts.region,
-		credentials: {
-			accessKeyId: opts.accessKeyId,
-			secretAccessKey: opts.secretAccessKey,
-		},
-		forcePathStyle: true,
-	})
 	const bucket = opts.bucket
 	const now = opts.now ?? Date.now
+
+	let bindingsPromise: Promise<AwsBindings> | null = null
+	async function getAwsBindings(): Promise<AwsBindings> {
+		if (!bindingsPromise) {
+			bindingsPromise = (async () => {
+				const [{ GetObjectCommand, PutObjectCommand, S3Client }, { getSignedUrl }] =
+					await Promise.all([import('@aws-sdk/client-s3'), import('@aws-sdk/s3-request-presigner')])
+				const client = new S3Client({
+					endpoint: opts.endpoint,
+					region: opts.region,
+					credentials: {
+						accessKeyId: opts.accessKeyId,
+						secretAccessKey: opts.secretAccessKey,
+					},
+					forcePathStyle: true,
+				})
+				return { client, PutObjectCommand, GetObjectCommand, getSignedUrl }
+			})()
+		}
+		return bindingsPromise
+	}
 
 	return {
 		mode: 'live',
 		async getPresignedPut(input) {
 			if (input.key.length === 0) throw new Error('key must be non-empty')
 			if (input.maxBytes <= 0) throw new Error('maxBytes must be positive')
+			const { client, PutObjectCommand, getSignedUrl } = await getAwsBindings()
 			const cmd = new PutObjectCommand({
 				Bucket: bucket,
 				Key: input.key,
@@ -96,6 +129,7 @@ export function createYandexS3MediaStorage(opts: YandexS3StorageOptions): MediaS
 			return true
 		},
 		async getOriginalBytes(key) {
+			const { client, GetObjectCommand } = await getAwsBindings()
 			try {
 				const cmd = new GetObjectCommand({ Bucket: bucket, Key: key })
 				const res = await client.send(cmd)
@@ -111,6 +145,7 @@ export function createYandexS3MediaStorage(opts: YandexS3StorageOptions): MediaS
 			}
 		},
 		async putDerivedBytes(key, bytes) {
+			const { client, PutObjectCommand } = await getAwsBindings()
 			const cmd = new PutObjectCommand({
 				Bucket: bucket,
 				Key: key,
