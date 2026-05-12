@@ -417,7 +417,7 @@ describe('widget booking-create routes — HTTP', { tags: ['db'], timeout: 90_00
 		})
 		expect(res.status).toBe(200)
 		const text = await res.text()
-		expect(text).not.toMatch(/\d+n[",}\]]/)
+		expect(text).not.toMatch(/(?<![A-Za-z0-9_])\d+n[",}\]]/)
 	})
 
 	test('[BCR14] Cross-tenant: tenant A booking NOT visible from tenant B context (slug isolation)', async () => {

@@ -122,7 +122,7 @@ export function createRateRepo(sql: SqlInstance) {
 			const now = new Date()
 			const nowTs = toTs(now)
 
-			await sql.begin(async (tx) => {
+			await sql.begin({ idempotent: true }, async (tx) => {
 				for (const r of input.rates) {
 					const micros = decimalToMicros(r.amount)
 					// Preserve createdAt on overwrite so audit trail doesn't lie;

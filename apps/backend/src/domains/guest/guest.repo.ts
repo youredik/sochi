@@ -128,7 +128,7 @@ export function createGuestRepo(sql: SqlInstance) {
 		},
 
 		async update(tenantId: string, id: string, patch: GuestUpdateInput): Promise<Guest | null> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<GuestRow[]>`
 					SELECT * FROM guest
 					WHERE tenantId = ${tenantId} AND id = ${id}

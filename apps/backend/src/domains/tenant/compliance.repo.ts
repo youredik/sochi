@@ -92,7 +92,7 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 		 * concurrent wizard saves overwriting each other.
 		 */
 		async patch(tenantId: string, patch: TenantCompliancePatch): Promise<TenantCompliance | null> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<ComplianceRow[]>`
 					SELECT
 						ksrRegistryId, ksrCategory, legalEntityType, taxRegime,

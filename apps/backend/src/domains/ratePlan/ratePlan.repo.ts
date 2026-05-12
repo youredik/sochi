@@ -127,7 +127,7 @@ export function createRatePlanRepo(sql: SqlInstance) {
 			const nowTs = toTs(now)
 
 			try {
-				return await sql.begin(async (tx) => {
+				return await sql.begin({ idempotent: true }, async (tx) => {
 					// App-level uniqueness check: see class docstring + project_ydb_specifics #12.
 					const [collision = []] = await tx<{ id: string }[]>`
 						SELECT id FROM ratePlan
@@ -190,7 +190,7 @@ export function createRatePlanRepo(sql: SqlInstance) {
 			patch: RatePlanUpdateInput,
 		): Promise<RatePlan | null> {
 			try {
-				return await sql.begin(async (tx) => {
+				return await sql.begin({ idempotent: true }, async (tx) => {
 					const [rows = []] = await tx<RatePlanRow[]>`
 						SELECT * FROM ratePlan
 						WHERE tenantId = ${tenantId} AND id = ${id}

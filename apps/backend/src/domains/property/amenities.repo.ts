@@ -82,7 +82,7 @@ export function createAmenitiesRepo(sql: SqlInstance) {
 				throw new Error(`Unknown amenity code: ${input.amenityCode}`)
 			}
 
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [existingRows = []] = await tx<AmenityDbRow[]>`
 					SELECT *
 					FROM propertyAmenity
@@ -191,7 +191,7 @@ export function createAmenitiesRepo(sql: SqlInstance) {
 				codes.add(i.amenityCode)
 			}
 
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				await tx`
 					DELETE FROM propertyAmenity
 					WHERE tenantId = ${tenantId} AND propertyId = ${propertyId}

@@ -447,7 +447,7 @@ export function ydbAdapter(sql: SqlInstance) {
 		adapter: () => ({
 			...buildCrudAdapter(sql),
 			transaction: <R>(callback: (trx: CustomAdapter) => Promise<R>): Promise<R> =>
-				sql.begin(async (tx) => callback(buildCrudAdapter(tx))),
+				sql.begin({ idempotent: true }, async (tx) => callback(buildCrudAdapter(tx))),
 		}),
 	})
 }

@@ -318,8 +318,13 @@ describe('widget.routes — HTTP', { tags: ['db'], timeout: 60_000 }, () => {
 		// If route returned bigint anywhere, hono would 500.
 		expect(res.status).toBe(200)
 		const text = await res.text()
-		// Sanity: NO 'n' suffix anywhere in serialized body (i.e., no leaked bigints)
-		expect(text).not.toMatch(/\d+n[",}\]]/)
+		// Bigint leak detection: JSON-value context only. Negative lookbehind
+		// `(?<![A-Za-z0-9_])` ensures the digit sequence is NOT a tail of an
+		// identifier (e.g. typeid `prop_…97n` would otherwise false-positive
+		// — caught empirically 2026-05-12 Phase 15 under parallel-storm load).
+		// A true bigint leak serializes as `<digits>n` directly after `:`,
+		// `[`, or `,` — guarded by the lookbehind rejecting word chars.
+		expect(text).not.toMatch(/(?<![A-Za-z0-9_])\d+n[",}\]]/)
 	})
 
 	test('[A8] cross-tenant: tenantA availability NOT visible через tenantB slug → 404', async () => {
@@ -433,6 +438,6 @@ describe('widget.routes — HTTP', { tags: ['db'], timeout: 60_000 }, () => {
 		expect(res.status).toBe(200)
 		const text = await res.text()
 		// Adversarial: NO 'n' suffix indicating bigint in JSON output
-		expect(text).not.toMatch(/\d+n[",}\]]/)
+		expect(text).not.toMatch(/(?<![A-Za-z0-9_])\d+n[",}\]]/)
 	})
 })

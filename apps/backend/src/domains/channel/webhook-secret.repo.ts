@@ -108,7 +108,7 @@ export function createWebhookSecretRepo(sql: SqlInstance) {
 			readonly secret: string
 			readonly previousExpiresAtMs: number
 		}): Promise<{ readonly demoted: number }> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const expiresAt = new Date(input.previousExpiresAtMs)
 				const now = new Date()
 				const [activeRows = []] = await tx<SecretYdbRow[]>`

@@ -216,7 +216,7 @@ export function createAddonsRepo(sql: SqlInstance) {
 			input: AddonPatch,
 			actorId: string,
 		): Promise<Addon | null> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<AddonDbRow[]>`
 					SELECT *
 					FROM propertyAddon

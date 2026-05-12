@@ -118,7 +118,7 @@ export function createRoomTypeRepo(sql: SqlInstance) {
 			patch: RoomTypeUpdateInput,
 		): Promise<RoomType | null> {
 			// Atomic read-modify-write via YDB Serializable tx.
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<RoomTypeRow[]>`
 					SELECT * FROM roomType
 					WHERE tenantId = ${tenantId} AND id = ${id}

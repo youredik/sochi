@@ -157,7 +157,7 @@ export function createRoomRepo(sql: SqlInstance) {
 			// re-throw the original cause below so route handlers can `instanceof`
 			// our domain errors (RoomNumberTakenError) without walking .cause.
 			try {
-				return await sql.begin(async (tx) => {
+				return await sql.begin({ idempotent: true }, async (tx) => {
 					const [rows = []] = await tx<RoomRow[]>`
 						SELECT * FROM room
 						WHERE tenantId = ${tenantId} AND id = ${id}

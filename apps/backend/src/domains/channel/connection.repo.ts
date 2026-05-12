@@ -209,7 +209,7 @@ export function createChannelConnectionRepo(sql: SqlInstance) {
 			},
 			patch: ChannelConnectionPatch,
 		): Promise<ChannelConnection | null> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<ChannelConnectionRow[]>`
 					SELECT
 						tenantId, propertyId, channelId, mode, role,

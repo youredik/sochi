@@ -93,7 +93,7 @@ export function createInboxRepo(sql: SqlInstance) {
 		 *   - `tampered` on bodyHash mismatch (replay attack OR sender bug)
 		 */
 		async classifyAndInsert(input: InboxInsertInput): Promise<InboxClassification> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<InboxYdbRow[]>`
 					SELECT
 						source, eventId, tenantId, channelId, eventType,

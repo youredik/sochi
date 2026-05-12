@@ -102,7 +102,7 @@ export function createAvailabilityRepo(sql: SqlInstance) {
 			const now = new Date()
 			const nowTs = toTs(now)
 
-			await sql.begin(async (tx) => {
+			await sql.begin({ idempotent: true }, async (tx) => {
 				for (const r of input.rates) {
 					// Preserve sold + createdAt on overwrite.
 					const [existingRows = []] = await tx<{ sold: number | bigint; createdAt: Date }[]>`

@@ -62,7 +62,7 @@ export function createInventoryPoolRepo(sql: SqlInstance) {
 		 */
 		async reserve(input: InventoryReserveInput): Promise<InventoryReserveResult> {
 			const dateBind = dateFromIso(input.date)
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<AvailabilityRow[]>`
 					SELECT allotment, sold, stopSell
 					FROM availability
@@ -125,7 +125,7 @@ export function createInventoryPoolRepo(sql: SqlInstance) {
 			readonly count: number
 		}): Promise<{ readonly newAvailable: number }> {
 			const dateBind = dateFromIso(input.date)
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<AvailabilityRow[]>`
 					SELECT allotment, sold, stopSell
 					FROM availability

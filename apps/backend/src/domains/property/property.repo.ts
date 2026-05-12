@@ -115,7 +115,7 @@ export function createPropertyRepo(sql: SqlInstance) {
 			// Atomic read-modify-write. YDB default isolation is Serializable;
 			// concurrent PATCHes on the same row conflict → one commits, the
 			// other retries via @ydbjs/retry.
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<PropertyRow[]>`
 					SELECT * FROM property
 					WHERE tenantId = ${tenantId} AND id = ${id}

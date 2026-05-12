@@ -194,7 +194,7 @@ export function createMediaRepo(sql: SqlInstance) {
 			input: PropertyMediaPatch,
 			actorId: string,
 		): Promise<PropertyMedia | null> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<MediaDbRow[]>`
 					SELECT *
 					FROM propertyMedia
@@ -252,7 +252,7 @@ export function createMediaRepo(sql: SqlInstance) {
 			mediaId: string,
 			actorId: string,
 		): Promise<boolean> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<{ x: number }[]>`
 					SELECT 1 AS x
 					FROM propertyMedia
@@ -290,7 +290,7 @@ export function createMediaRepo(sql: SqlInstance) {
 			mediaId: string,
 			actorId: string,
 		): Promise<PropertyMedia | null> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [rows = []] = await tx<MediaDbRow[]>`
 					SELECT *
 					FROM propertyMedia

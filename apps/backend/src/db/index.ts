@@ -40,29 +40,30 @@ export { closeDriver, driver, readyDriver } from './driver.ts'
  *     with existing key».
  *   - Under parallel-write load (multiple concurrent createIntent на same
  *     idempotencyKey), driver may surface code=400110 (ABORTED) ИЛИ wrap
- *     the YDBError one extra level deep (cause.cause.code).
+ *     the YDBError several levels deep.
  *
- * Walks err.cause chain (max 4 levels) checking:
- *   - .code === 400120 OR .code === 400110
- *   - OR .message includes 'Conflict with existing key' OR 'PRECONDITION_FAILED'
+ * Walks err.cause chain UNCONDITIONALLY (with cycle-protection) checking:
+ *   - .code === 400120 (PRECONDITION_FAILED) OR
+ *   - .code === 400110 (ABORTED)
+ *
+ * Status-code-only per 2026 canon — `@ydbjs/error` does not contractually
+ * fix cause-chain depth, so fixed-depth walks drift under storm. Phase 15
+ * (2026-05-12) bumped depth-4 + message-substring → unconditional code walk
+ * after parallel test:db empirical drift observed (`payment.repo.test:608`).
  *
  * Conservative: returns false for unrelated errors. Use at every UPSERT
  * catch site that wants to translate UNIQUE-collision к domain error.
  */
 export function isYdbUniqueConflict(err: unknown): boolean {
+	const visited = new WeakSet<object>()
 	let cur: unknown = err
-	for (let depth = 0; depth < 4 && cur; depth++) {
-		if (cur && typeof cur === 'object') {
-			const c = cur as { code?: unknown; message?: unknown; cause?: unknown }
-			if (c.code === 400120 || c.code === 400110) return true
-			if (typeof c.message === 'string') {
-				if (c.message.includes('Conflict with existing key')) return true
-				if (c.message.includes('PRECONDITION_FAILED')) return true
-			}
-			cur = c.cause
-		} else {
-			return false
-		}
+	while (cur && typeof cur === 'object') {
+		const obj = cur as object
+		if (visited.has(obj)) return false
+		visited.add(obj)
+		const c = cur as { code?: unknown; cause?: unknown }
+		if (c.code === 400120 || c.code === 400110) return true
+		cur = c.cause
 	}
 	return false
 }

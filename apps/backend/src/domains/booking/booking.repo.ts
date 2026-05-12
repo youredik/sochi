@@ -367,7 +367,7 @@ export function createBookingRepo(sql: SqlInstance) {
 			}
 
 			try {
-				return await sql.begin(async (tx) => {
+				return await sql.begin({ idempotent: true }, async (tx) => {
 					// Pre-check externalId uniqueness if provided (UNIQUE index also catches at commit).
 					if (input.externalId) {
 						const [collision = []] = await tx<{ id: string }[]>`
@@ -513,7 +513,7 @@ export function createBookingRepo(sql: SqlInstance) {
 			actorUserId: string,
 		): Promise<Booking | null> {
 			try {
-				return await sql.begin(async (tx) => {
+				return await sql.begin({ idempotent: true }, async (tx) => {
 					const current = await loadByIdForTx(tx, tenantId, id)
 					if (!current) return null
 
@@ -566,7 +566,7 @@ export function createBookingRepo(sql: SqlInstance) {
 			actorUserId: string,
 		): Promise<Booking | null> {
 			try {
-				return await sql.begin(async (tx) => {
+				return await sql.begin({ idempotent: true }, async (tx) => {
 					const current = await loadByIdForTx(tx, tenantId, id)
 					if (!current) return null
 					if (current.status !== 'confirmed') {
@@ -592,7 +592,7 @@ export function createBookingRepo(sql: SqlInstance) {
 
 		async checkOut(tenantId: string, id: string, actorUserId: string): Promise<Booking | null> {
 			try {
-				return await sql.begin(async (tx) => {
+				return await sql.begin({ idempotent: true }, async (tx) => {
 					const current = await loadByIdForTx(tx, tenantId, id)
 					if (!current) return null
 					if (current.status !== 'in_house') {
@@ -622,7 +622,7 @@ export function createBookingRepo(sql: SqlInstance) {
 			actorUserId: string,
 		): Promise<Booking | null> {
 			try {
-				return await sql.begin(async (tx) => {
+				return await sql.begin({ idempotent: true }, async (tx) => {
 					const current = await loadByIdForTx(tx, tenantId, id)
 					if (!current) return null
 					// `no_show` can only be set BEFORE check-in (guest didn't arrive).

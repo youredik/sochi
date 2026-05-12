@@ -147,6 +147,7 @@ describe('dispatcher — happy path', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 
 		const stats = await dispatcher.pollOnce()
@@ -167,6 +168,7 @@ describe('dispatcher — happy path', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		await dispatcher.pollOnce()
 
@@ -190,6 +192,7 @@ describe('dispatcher — skip filters', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		await dispatcher.pollOnce()
 
@@ -212,6 +215,7 @@ describe('dispatcher — skip filters', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		await dispatcher.pollOnce()
 
@@ -230,6 +234,7 @@ describe('dispatcher — skip filters', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		await dispatcher.pollOnce()
 
@@ -247,6 +252,7 @@ describe('dispatcher — skip filters', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		await dispatcher.pollOnce()
 
@@ -269,6 +275,7 @@ describe('dispatcher — permanent error', { tags: ['db'] }, () => {
 
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		const stats = await dispatcher.pollOnce()
 		expect(stats.permanent).toBeGreaterThanOrEqual(1)
@@ -300,6 +307,7 @@ describe('dispatcher — transient retry', { tags: ['db'] }, () => {
 
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		const stats = await dispatcher.pollOnce()
 		expect(stats.transientRetries).toBeGreaterThanOrEqual(1)
@@ -322,6 +330,7 @@ describe('dispatcher — transient retry', { tags: ['db'] }, () => {
 
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		const stats = await dispatcher.pollOnce()
 		expect(stats.deadLettered).toBeGreaterThanOrEqual(1)
@@ -347,6 +356,7 @@ describe('dispatcher — cross-tenant', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantA, tenantB],
 		})
 		await dispatcher.pollOnce()
 
@@ -447,6 +457,7 @@ describe('dispatcher — recipient resolution', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		await dispatcher.pollOnce()
 
@@ -471,6 +482,7 @@ describe('dispatcher — recipient resolution', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		await dispatcher.pollOnce()
 
@@ -495,6 +507,7 @@ describe('dispatcher — recipient resolution', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		await dispatcher.pollOnce()
 
@@ -511,6 +524,7 @@ describe('dispatcher — recipient resolution', { tags: ['db'] }, () => {
 		const adapter = new StubAdapter()
 		const dispatcher = startNotificationDispatcher(getTestSql(), adapter, silentLog, {
 			skipTimer: true,
+			tenantIds: [tenantId],
 		})
 		await dispatcher.pollOnce()
 

@@ -115,7 +115,7 @@ export function createPropertyDescriptionsRepo(sql: SqlInstance) {
 			input: PropertyDescriptionInput,
 			actorId: string,
 		): Promise<PropertyDescription> {
-			return sql.begin(async (tx) => {
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const [existingRows = []] = await tx<DescriptionDbRow[]>`
 					SELECT createdAt
 					FROM propertyDescription

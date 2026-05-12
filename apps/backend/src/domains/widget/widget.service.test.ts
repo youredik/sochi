@@ -34,7 +34,6 @@
  *     [AD5] listAddons — JSON.stringify(view) succeeds (no bigint leak)
  *     [AD6] listAddons — tenant.mode demo|production|null propagates в view
  */
-import { fc } from '@fast-check/vitest'
 import { newId } from '@horeca/shared'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { dateFromIso, NULL_INT32 } from '../../db/ydb-helpers.ts'
@@ -166,29 +165,26 @@ describe('widget.service — orchestration', { tags: ['db'], timeout: 60_000 }, 
 		expect('isActive' in firstProp).toBe(false) // internal flag тоже не должен утечь
 	})
 
-	// ─── Property-based invariant ─────────────────────────────────
-	// Random string input → service.listProperties либо resolves либо throws
-	// ОНЛИ TenantNotFoundError. Никакого generic Error / TypeError leakage.
-	test('[FC-S1] listProperties — any input string: resolves OR TenantNotFoundError invariant', async () => {
+	// [FC-S1] removed 2026-05-12 Phase 15 — DB-bound property test violates
+	// `project_fastcheck_gotchas.md`: «Property-based only for pure functions,
+	// not DB paths». 30 random DB hits per run × storm = chronic flake risk.
+	// Invariant is covered by typed [TENANT-NX] (unknown slug → TenantNotFoundError)
+	// + adversarial string-edge tests below ([AL3-AL7] covering empty, whitespace,
+	// SQL-meta chars, very-long, unicode).
+	test.each([
+		{ name: 'empty', input: '' },
+		{ name: 'whitespace', input: '   ' },
+		{ name: 'sql-meta', input: "'; DROP TABLE--" },
+		{ name: 'unicode-emoji', input: '🏨сочи' },
+		{ name: 'very-long', input: 'a'.repeat(50) },
+		{ name: 'null-byte', input: 'a b' },
+	])('[FC-S1] listProperties($name) — resolves OR TenantNotFoundError', async ({ input }) => {
 		const { service } = createWidgetFactory(getTestSql())
-		await fc.assert(
-			fc.asyncProperty(
-				// Bound length to avoid pathological-long strings hitting URL limits
-				fc.string({ minLength: 0, maxLength: 50 }),
-				async (input) => {
-					try {
-						await service.listProperties(input)
-						return true
-					} catch (err) {
-						if (err instanceof TenantNotFoundError) return true
-						// Adversarial canon: ANY other error class = test failure
-						console.error('Unexpected error class:', err)
-						return false
-					}
-				},
-			),
-			{ numRuns: 30 }, // numRuns low — каждый run hits real DB
-		)
+		try {
+			await service.listProperties(input)
+		} catch (err) {
+			expect(err).toBeInstanceOf(TenantNotFoundError)
+		}
 	})
 
 	test('[AL2] tenant DTO имеет только {slug,name,mode} — tenantId НЕ leaked', async () => {
@@ -606,47 +602,15 @@ describe('widget.service — orchestration', { tags: ['db'], timeout: 60_000 }, 
 		).rejects.toBeInstanceOf(InvalidAvailabilityInputError)
 	})
 
-	test('[FC-AV] getAvailability — random adults/children/dates: resolves OR throws Invalid|TenantNotFound|PublicPropertyNotFound (никаких unknown errors)', async () => {
-		const { service } = createWidgetFactory(getTestSql())
-		await fc.assert(
-			fc.asyncProperty(
-				fc.string({ minLength: 0, maxLength: 30 }),
-				fc.string({ minLength: 0, maxLength: 30 }),
-				fc.integer({ min: -2, max: 12 }),
-				fc.integer({ min: -1, max: 8 }),
-				fc.date({ min: new Date('2026-01-01'), max: new Date('2027-01-01') }),
-				fc.integer({ min: -10, max: 60 }),
-				async (slug, propId, adults, children, checkInDate, checkOutDelta) => {
-					const checkIn = checkInDate.toISOString().slice(0, 10)
-					const checkOutDate = new Date(checkInDate)
-					checkOutDate.setUTCDate(checkOutDate.getUTCDate() + checkOutDelta)
-					const checkOut = checkOutDate.toISOString().slice(0, 10)
-					try {
-						await service.getAvailability({
-							tenantSlug: slug,
-							propertyId: propId,
-							checkIn,
-							checkOut,
-							adults,
-							children,
-						})
-						return true
-					} catch (err) {
-						if (
-							err instanceof InvalidAvailabilityInputError ||
-							err instanceof TenantNotFoundError ||
-							err instanceof PublicPropertyNotFoundError
-						) {
-							return true
-						}
-						console.error('Unexpected error class:', err)
-						return false
-					}
-				},
-			),
-			{ numRuns: 25 }, // numRuns low — каждый run hits real DB
-		)
-	})
+	// [FC-AV] removed 2026-05-12 Phase 15 — violated TWO canons of
+	// project_fastcheck_gotchas.md:
+	//   1. `fc.date({min,max})` can silently ignore bounds → emits invalid
+	//      Date values → `toISOString()` throws RangeError (caught empirically
+	//      under parallel test:db storm).
+	//   2. Property-based test on a DB-bound path (`service.getAvailability`
+	//      hits YDB on every run × numRuns:25 = 25 random DB calls per file).
+	// Validation surface is fully covered by the typed tests above (Invalid
+	// boundary cases) and by the integration tests in iframe-html.routes.test.
 
 	async function seedAddon(opts: {
 		tenantId: string

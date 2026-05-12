@@ -156,7 +156,12 @@ export function createChannelDispatchRepo(sql: SqlInstance) {
 			readonly limit: number
 			readonly leaseMs: number
 		}): Promise<ReadonlyArray<ChannelDispatchRow>> {
-			return sql.begin(async (tx) => {
+			// idempotent:true — claim is naturally idempotent (UPDATE sets
+			// nextAttemptAt=leaseUntil; replay yields identical state). Required
+			// for SDK retry under parallel-storm 400140 NOT_FOUND (session-tx
+			// GC mid-block). @ydbjs/query 6.1.0 release-notes (2026-04-23):
+			// «idempotent flag is honored end-to-end + attempt-scoped tx context».
+			return sql.begin({ idempotent: true }, async (tx) => {
 				const dueAt = new Date(input.nowMs)
 				const leaseUntil = new Date(input.nowMs + input.leaseMs)
 				const limit = Math.max(1, Math.min(input.limit, 1000))

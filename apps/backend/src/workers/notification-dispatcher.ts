@@ -60,6 +60,16 @@ export interface NotificationDispatcherOptions {
 	random?: () => number
 	/** Skip starting the timer (useful in tests calling `pollOnce` directly). */
 	skipTimer?: boolean
+	/**
+	 * Restrict polling to specific tenant ids. When unset, polls across all
+	 * tenants (production default — single dispatcher replica processes the
+	 * full queue). When set, only rows where `tenantId IN tenantIds` are
+	 * picked up — required for parallel integration tests, each test worker
+	 * passing its own tenant fixture so concurrent workers cannot steal each
+	 * other's pending rows. Production hardening (multi-replica claim
+	 * pattern) tracked separately.
+	 */
+	tenantIds?: readonly string[]
 }
 
 interface PendingRow {
@@ -109,6 +119,7 @@ export function startNotificationDispatcher(
 	const fromAddress = opts.fromAddress ?? 'noreply@example.local'
 	const policy = opts.policy ?? DEFAULT_RETRY_POLICY
 	const random = opts.random ?? Math.random
+	const tenantIds = opts.tenantIds ? Array.from(opts.tenantIds) : null
 
 	let stopped = false
 	let timer: NodeJS.Timeout | null = null
@@ -124,18 +135,32 @@ export function startNotificationDispatcher(
 		const stats = { scanned: 0, sent: 0, permanent: 0, transientRetries: 0, deadLettered: 0 }
 		const now = new Date()
 
-		const [rows = []] = await sql<PendingRow[]>`
-			SELECT tenantId, id, kind, channel, recipient, subject, bodyText,
-			       payloadJson, attachmentsJson, retryCount, sourceObjectType, sourceObjectId,
-			       sourceEventDedupKey, createdAt, createdBy
-			FROM notificationOutbox
-			WHERE status = 'pending'
-			  AND retryCount < ${policy.maxRetries}
-			  AND (nextAttemptAt IS NULL OR nextAttemptAt <= ${toTs(now)})
-			LIMIT ${batchSize}
-		`
-			.isolation('snapshotReadOnly')
-			.idempotent(true)
+		const [rows = []] = tenantIds
+			? await sql<PendingRow[]>`
+				SELECT tenantId, id, kind, channel, recipient, subject, bodyText,
+				       payloadJson, attachmentsJson, retryCount, sourceObjectType, sourceObjectId,
+				       sourceEventDedupKey, createdAt, createdBy
+				FROM notificationOutbox
+				WHERE status = 'pending'
+				  AND retryCount < ${policy.maxRetries}
+				  AND (nextAttemptAt IS NULL OR nextAttemptAt <= ${toTs(now)})
+				  AND tenantId IN ${tenantIds}
+				LIMIT ${batchSize}
+			`
+					.isolation('snapshotReadOnly')
+					.idempotent(true)
+			: await sql<PendingRow[]>`
+				SELECT tenantId, id, kind, channel, recipient, subject, bodyText,
+				       payloadJson, attachmentsJson, retryCount, sourceObjectType, sourceObjectId,
+				       sourceEventDedupKey, createdAt, createdBy
+				FROM notificationOutbox
+				WHERE status = 'pending'
+				  AND retryCount < ${policy.maxRetries}
+				  AND (nextAttemptAt IS NULL OR nextAttemptAt <= ${toTs(now)})
+				LIMIT ${batchSize}
+			`
+					.isolation('snapshotReadOnly')
+					.idempotent(true)
 
 		stats.scanned = rows.length
 
