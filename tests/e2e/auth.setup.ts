@@ -54,16 +54,16 @@ setup('authenticate owner + complete setup wizard', async ({ page }) => {
 	await page.getByRole('button', { name: /Далее — номера/ }).click()
 
 	// --- Wizard step 3: Rooms ---
-	await expect(page.getByLabel('Номер')).toBeVisible()
+	await expect(page.getByLabel('Номер', { exact: true })).toBeVisible()
 	// Adversarial: "Далее — тариф" button disabled when 0 rooms created
 	// (can't advance until at least one room exists).
 	await expect(page.getByRole('button', { name: /Далее — тариф/ })).toBeDisabled()
 	// Add one room without floor (floor optional — important adversarial).
-	await page.getByLabel('Номер').fill('101')
+	await page.getByLabel('Номер', { exact: true }).fill('101')
 	await page.getByRole('button', { name: /Добавить номер/ }).click()
 	await expect(page.getByText(/Добавлено: 1/)).toBeVisible()
 	// Add second room with floor.
-	await page.getByLabel('Номер').fill('102')
+	await page.getByLabel('Номер', { exact: true }).fill('102')
 	await page.getByLabel(/Этаж/).fill('1')
 	await page.getByRole('button', { name: /Добавить номер/ }).click()
 	await expect(page.getByText(/Добавлено: 2/)).toBeVisible()
@@ -88,7 +88,7 @@ setup('authenticate owner + complete setup wizard', async ({ page }) => {
 	// date columns rendered (= grid loaded bookings query without error).
 	// Without this assertion "wizard succeeded" was trust-me; now it's
 	// proven end-to-end from form → POST → grid render.
-	await page.getByRole('link', { name: /Шахматка/ }).click()
+	await page.locator('[data-section-id="grid"]').first().click()
 	await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/grid$/)
 	await expect(page.getByRole('rowheader', { name: /Стандарт/ })).toBeVisible()
 	// Grid has 1 rowheader (Тип номера) + 15 date columnheaders = 16 total.

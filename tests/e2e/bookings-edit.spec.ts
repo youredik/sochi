@@ -40,7 +40,7 @@ async function createConfirmedBooking(
 	dayOffset: number,
 ) {
 	await page.goto('/')
-	await page.getByRole('link', { name: /Шахматка/ }).click()
+	await page.locator('[data-section-id="grid"]').first().click()
 	const targetDate = futureIso(dayOffset)
 	await page.locator(`button[data-cell-date="${targetDate}"]`).click()
 	const dialog = page.getByRole('dialog')

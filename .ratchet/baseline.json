@@ -1,0 +1,28 @@
+{
+  "_doc": "Ratchet baseline — these metrics may ONLY decrease (or stay equal). Pre-push gate fails when a metric regresses past these caps. To improve: ship the improvement + lower the value here in the same commit, explicit reasoning in commit message. Adapted from stankoff-v2 canonical pattern (`fix(test): vitest 4 isolate:false` lineage 2026-05-08).",
+  "_updated": "2026-05-12",
+  "_updated_by_commit": "feat(a-bis.2.fix) — initial baseline",
+
+  "depcruise_violations_max": 0,
+  "knip_unused_max": 0,
+  "audit_high_critical_max": 7,
+  "ts_strict_errors_max": 0,
+  "biome_errors_max": 0,
+  "weak_assertions_max": 234,
+  "multi_line_biome_ignore_max": 0,
+
+  "_depcruise_baseline_note": "0 (clean across 790 modules / 2313 deps). Any new circular / banned import → fail.",
+  "_knip_baseline_note": "0 — clean. New unused export / file / dep → fail.",
+  "_audit_baseline_note": "7 PRE-EXISTING transitive CVEs surfaced 2026-05-12 by ratchet introduction: @tanstack/history malware (GHSA-rmmr-r34h-pfm5 — same stankoff suppressed «empirically not exposed»; transitive via @tanstack/router-plugin), serialize-javascript<=7.0.2 RCE (via vite-plugin-pwa>workbox-build>@rollup/plugin-terser), fast-xml-builder<=1.1.6 attribute bypass (via @aws-sdk/client-s3), fast-uri path-traversal, plus 3 more. Carry-forward to separate security sub-phase (`pnpm overrides` strategy + upstream bump tracking). Ratchet locked at 7 — any NEW high+critical → fail.",
+  "_ts_strict_baseline_note": "0 (4 workspaces strict, EXIT=0). Any TS error → fail.",
+  "_biome_baseline_note": "0 errors (28 → 6 → 0 после A.bis.2 fix-up cleanup). Warnings tracked separately, не gate. New error → fail.",
+  "_weak_assertions_baseline_note": "234 — initial measurement 2026-05-12. PRE-EXISTING from prior milestones. NOT a regression from A.bis.2; locked here as starting point. Ratchet down each milestone closure (per `feedback_strict_tests.md` canon — exact-value asserts > existence-only). New `.toBeDefined()/.toBeTruthy()/.toBeFalsy()/.toBeInstanceOf(Array)` → count > 234 → fail.",
+  "_multi_line_biome_ignore_baseline_note": "0 after A.bis.2.fix collapsed 10 PRE-EXISTING M10 multi-line biome-ignore comments. New multi-line `// biome-ignore` → suppression doesn't reach the violation → fail. Move comment directly above the violating line OR use `biome-ignore-start/end` block syntax.",
+
+  "_excluded": {
+    "test_leaks": "Vitest 4 detect-async-leaks reports false positives on Promise.race losing branches per stankoff research 2026-04-25. Structural noise, не prod threat.",
+    "mutation_score": "Stryker 9.6.1 too slow для per-PR ratchet (20+ min). Tracked separately on-demand per `project_coverage_mutation_gates.md`.",
+    "biome_warnings": "Hygiene track, не regression gate. Currently 0 after cleanup; if rises, address per priority (not blocked).",
+    "missing_tests": "Sochi monorepo doesn't follow service/repo file convention strictly (mixed factory/service patterns per domain). Re-introduce когда patterns stabilize."
+  }
+}

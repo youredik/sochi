@@ -22,7 +22,7 @@ import { expect, test } from '@playwright/test'
 test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 	test('empty grid (no bookings) passes WCAG 2.2 AA', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 		await expect(page).toHaveURL(/\/grid$/)
 		await expect(page.getByRole('grid')).toBeVisible()
 
@@ -47,7 +47,7 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		// the empty date deterministically from the CURRENT DOM (not a
 		// fixed offset that might collide with prior tests).
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 		// Wait for grid to finish loading (either bands OR empty cells are
 		// present, never neither).
 		await expect(page.locator('button[data-cell-date], [data-booking-id]').first()).toBeVisible()
@@ -86,7 +86,7 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		// what flips the :focus-visible pseudo-class in Chromium (2026),
 		// whereas programmatic .focus() alone does not.
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const firstCell = page.locator('[role="gridcell"][aria-colindex="2"]').first()
 		await firstCell.focus()
@@ -111,7 +111,7 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		// (aria-label="Закрыть" on X icon), focus trap. Scope the scan to
 		// the role=dialog surface so other page chrome doesn't mask findings.
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		// Click any empty cell — test-order-independent (the first data-cell-
 		// date in DOM is always the first empty cell in row 0).
@@ -151,7 +151,7 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		// bands in various statuses (confirmed / in_house / cancelled / …).
 		// Pick the FIRST band in DOM and open its edit dialog.
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const firstBand = page.locator('[data-booking-id]').first()
 		await expect(firstBand).toBeVisible()

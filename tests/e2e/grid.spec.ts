@@ -20,7 +20,7 @@ test.describe('reservation grid', () => {
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/?$/)
 
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/grid$/)
 
 		// Grid container present with correct ARIA metadata.
@@ -32,20 +32,20 @@ test.describe('reservation grid', () => {
 
 	test('roomType row shows "Стандарт" from setup wizard', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 		await expect(page.getByRole('rowheader', { name: /Стандарт/ })).toBeVisible()
 	})
 
 	test('today column marked with aria-current="date"', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 		const todayHeader = page.locator('[aria-current="date"]')
 		await expect(todayHeader).toBeVisible()
 	})
 
 	test('date navigation: Вперёд shifts window forward by 15 days', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		// The 2nd column header (index 1) is the leftmost date cell.
 		const firstDateHeader = page.locator('[role="columnheader"]').nth(1)
@@ -60,7 +60,7 @@ test.describe('reservation grid', () => {
 
 	test('Сегодня button resets window to include today', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 		await page.getByRole('button', { name: 'Следующие 15 дней' }).click()
 		await expect(page.locator('[aria-current="date"]')).toHaveCount(0)
 
@@ -80,7 +80,7 @@ test.describe('reservation grid', () => {
 
 	test('Назад button shifts window back (symmetric to Вперёд)', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const firstDateHeader = page.locator('[role="columnheader"]').nth(1)
 		const before = (await firstDateHeader.textContent())?.trim() ?? ''

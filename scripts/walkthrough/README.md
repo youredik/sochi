@@ -55,7 +55,7 @@ continues so a partial tour is always recoverable.
 
 - **macOS** (for `say` Milena voice; SpeechKit lifts this when wired).
 - **`ffmpeg`** on PATH — `brew install ffmpeg`.
-- **Dev servers running** — `pnpm dev` (frontend `:5273`, backend `:3000`).
+- **Dev servers running** — `pnpm dev` (frontend `:5273`, backend `:8787`).
 - **No other E2E session running** — they share YDB and port-thrash the
   dev servers. Wait for `pnpm e2e` / `pnpm test` to finish first.
 - **Clean local YDB not strictly required** — script signs up a fresh

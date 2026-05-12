@@ -24,5 +24,10 @@ export default defineConfig({
 		environment: 'happy-dom',
 		include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
 		exclude: ['src/**/*.e2e.test.ts'],
+		// Canonical Vitest 4 shared mocks (TanStack Router + sonner) per
+		// `feedback_stankoff_testing_innovations_adoption.md`. Per-file
+		// `vi.mock` calls override (last-wins); existing 4 frontend test
+		// files keep local mocks for now and migrate in batched cleanup.
+		setupFiles: ['./src/tests/global-mocks.ts'],
 	},
 })

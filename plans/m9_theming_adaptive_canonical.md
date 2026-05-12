@@ -716,7 +716,7 @@ pnpm test:e2e:smoke   # expected: 71+ green
 
 **Risks:**
 - MinIO bucket не auto-created в dev — добавить `mc mb` в docker init
-- CORS на MinIO для browser PUT — добавить allowlist origin localhost:5173 (`mc admin policy add ...`)
+- CORS на MinIO для browser PUT — добавить allowlist origin localhost:5273 (`mc admin policy add ...`)
 - Cleanup orphaned uploads (signed but не confirmed) — не критично для M9, добавить TTL job в M-фазе деплоя
 
 ### M9.8 — Pre-done audit (0.5 дня)

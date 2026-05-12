@@ -26,7 +26,7 @@ function futureIso(daysFromToday: number): string {
 test.describe('reservation grid — APG keyboard navigation', () => {
 	test('Tab enters grid, lands on the initial roving-tabindex cell', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 		await expect(page).toHaveURL(/\/grid$/)
 		// Wait for grid + its initial tabStop cell to be present BEFORE
 		// starting the Tab dance. Without this, the test is racy — grid may
@@ -53,7 +53,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 
 	test('ArrowRight / ArrowLeft move focus within row; no wrap', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		// Focus the first empty cell deterministically via click (no bands
 		// at futureIso(1) yet in a fresh tenant-less context — but we share
@@ -92,7 +92,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 
 	test('Home/End jump to row boundaries', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const firstCell = page.locator('[role="gridcell"][aria-colindex="2"]').first()
 		await firstCell.focus()
@@ -114,7 +114,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 
 	test('Ctrl+Home / Ctrl+End jump to grid corners', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		// Put focus somewhere non-corner first
 		const someCell = page.locator('[role="gridcell"][aria-colindex="5"]').first()
@@ -143,7 +143,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 
 	test('Enter on focused empty cell opens create dialog', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		// Focus a specific empty cell via aria-label to avoid band collisions.
 		// Use a mid-window date that's likely empty in a fresh state; if not
@@ -168,7 +168,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		page,
 	}) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const targetDate = futureIso(8)
 		const cell = page.locator(`button[data-cell-date="${targetDate}"]`)
@@ -185,7 +185,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		page,
 	}) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const firstCell = page.locator('[role="gridcell"][aria-colindex="2"]').first()
 		await firstCell.focus()
@@ -205,7 +205,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 
 	test('ArrowDown moves focus across rows', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const firstCell = page.locator('[role="gridcell"][aria-colindex="2"]').first()
 		await firstCell.focus()
@@ -229,7 +229,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		page,
 	}) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const firstCell = page.locator('[role="gridcell"][aria-colindex="2"]').first()
 		await firstCell.focus()
@@ -245,7 +245,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		page,
 	}) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const firstCell = page.locator('[role="gridcell"][aria-colindex="2"]').first()
 		await firstCell.focus()
@@ -282,7 +282,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		// Create a booking FIRST so there's a band to focus. Use day 0 (today)
 		// to keep this test independent from other date-offset tests.
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const targetDate = futureIso(0)
 		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
@@ -310,7 +310,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 
 	test('focus return after dialog close: roving tabindex preserved', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		// Arrow away from initial position so we know focus has actually moved
 		// before opening the dialog.

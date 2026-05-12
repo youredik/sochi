@@ -370,12 +370,29 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   )
 }
 
-function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
+function SidebarInset({ className, ...props }: React.ComponentProps<"div">) {
+  // PATCH-D17: shadcn upstream renders this as `<main>`, but our 27 admin
+  // routes each render their own `<main>` (W3C-canonical: one main per
+  // page, scoped to the page's primary content + unique heading + skip-
+  // link target). Wrapping `<main>` in `<main>` violates
+  // `landmark-no-duplicate-main` AND breaks Playwright click targeting
+  // (caught 2026-05-12 e2e: «<main> intercepts pointer events» — the
+  // outer main steals clicks meant for inner buttons). Senior choice:
+  // rendering as `<div>` here, routes own the canonical `<main>`.
   return (
-    <main
+    <div
       data-slot="sidebar-inset"
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
+        // PATCH-D17 (cont.): shadcn upstream uses `flex w-full flex-1
+        // flex-col`. The flex-col cross-axis collapses any child with
+        // `mx-auto` (e.g. chessboard `<main className="mx-auto max-w-7xl">`)
+        // to content-width because flex auto-margins on cross-axis disable
+        // stretch alignment. Empirical 2026-05-12: chessboard rendered at
+        // 48 px inside a 1024 px inset → grid clipped → Playwright pointer
+        // events intercepted by sidebar-inset itself. Senior fix: render
+        // as block flow + `min-w-0` (allows grid horizontal scroll without
+        // pushing parent), keep `flex-1` for the SidebarProvider flex row.
+        "relative block min-w-0 flex-1 bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className,
       )}
       {...props}

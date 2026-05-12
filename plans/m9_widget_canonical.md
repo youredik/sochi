@@ -164,7 +164,7 @@ pnpm test:serial   # expected: 3767+ pass
 pnpm test:e2e:smoke   # expected: 79+ green
 
 # 5. CWV baseline на текущих pages (для regression detection после M9.widget)
-pnpm exec lhci autorun --collect.url=http://localhost:5173/login --collect.url=http://localhost:5173/signup
+pnpm exec lhci autorun --collect.url=http://localhost:5273/login --collect.url=http://localhost:5273/signup
 # expected: LCP ≤2.5s, INP ≤200ms, CLS ≤0.1 на текущих anonymous routes
 
 # 6. Bundle baseline (для tracking ≤30kB embed canon)

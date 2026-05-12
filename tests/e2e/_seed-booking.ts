@@ -17,7 +17,9 @@ export async function seedBookingFixture(
 ): Promise<{ bookingId: string; orgSlug: string; checkInIso: string }> {
 	const futureDays = opts.futureDays ?? 1
 	const docSuffix = opts.docSuffix ?? Date.now().toString().slice(-6)
-	const apiBase = (await page.evaluate(() => location.origin)).replace(':5273', ':3000') + '/api/v1'
+	// Sochi backend port = 8787 (frontend 5273). Stankoff convention is :3000
+	// — copy-pasted from there без adaptation, surfaced 2026-05-12 e2e regression.
+	const apiBase = (await page.evaluate(() => location.origin)).replace(':5273', ':8787') + '/api/v1'
 
 	// Pull active org slug + first property.
 	const meRes = await page.request.get(`${apiBase}/auth/me`)

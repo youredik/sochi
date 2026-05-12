@@ -28,7 +28,7 @@ function futureIso(daysFromToday: number): string {
 test.describe('booking-create dialog', () => {
 	test('click cell → fill guest → booking band appears with success toast', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 		await expect(page).toHaveURL(/\/grid$/)
 
 		const targetDate = futureIso(5)
@@ -68,7 +68,7 @@ test.describe('booking-create dialog', () => {
 		page,
 	}) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		// First booking: single night on today+6
 		const firstDate = futureIso(6)
@@ -113,7 +113,7 @@ test.describe('booking-create dialog', () => {
 
 	test('form guard: checkOut <= checkIn → submit disabled + hint shown', async ({ page }) => {
 		await page.goto('/')
-		await page.getByRole('link', { name: /Шахматка/ }).click()
+		await page.locator('[data-section-id="grid"]').first().click()
 
 		const targetDate = futureIso(10)
 		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
