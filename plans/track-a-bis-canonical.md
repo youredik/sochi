@@ -583,6 +583,9 @@ export const SIDEBAR_SECTIONS = [
 | C32.3 | v1 §13 «Split `ui/responsive-sheet.tsx`» — но **уже bifurcates** desktop/mobile через useMediaQuery | Read | §13 + §0 |
 | C32.4 | v1 «8 package mutations» — реально **4** (1 DROP + 2 BUMP + 1 ADD `@base-ui/react`) | §0 recon | §5 + §7 A.bis.0 |
 | C33 | **New canon** `feedback_pre_plan_codebase_recon.md` — mandatory §0 «Codebase state» в каждом plan canon ДО §1 Mission. Read all existing relevant files + grep deps + verify «create X» не существует. Predicts plan canon factual accuracy. | this session learning | new memory + MEMORY.md pointer |
+| C35 | **New canon** `feedback_gh_api_ground_truth.md` — для GitHub issue/PR state ВСЕГДА `gh api` direct, не web-search. Web-search summaries paraphrase + lie. Caught 2026-05-12 (search said «PR addressed Issue», gh API: `merged: false, mergeable_state: dirty`). Saved A.bis.1 D12 patch. | A.bis.1 R1+R2 freshness | new memory `feedback_gh_api_ground_truth.md` + MEMORY.md pointer |
+| C36 | **POST-AUDIT C36 (A.bis.2)** — when plan canon spec'ит frontend hook reading server state (e.g. `useCurrentOrg().mode`), pre-flight recon MUST verify field is actually surfaced through API — не just exists in DB. A.bis plan §0 missed `/me` lacks `mode` field; caught at A.bis.2 implementation. POST-AUDIT correction = minimal backend enrichment of EXISTING endpoint (NOT new endpoint per §2 spirit). Pattern: dependency-injected loader allows test stubs without DB. | A.bis.2 recon gap caught | `me.routes.ts:createMeRoutes(loadTenantMode?)` enrichment + `useTenantMode()` frontend hook |
+| **C37** | **POST-AUDIT C37 (A.bis.2.fix)** — Layer 4+5 multi-layer (real-browser Playwright + axe) is NOT optional per «погнали» canon — каждое «done» claim проходит через ВСЕ слои. A.bis.2 main commit `4934bb5` shipped с typecheck + 1447 unit + 5 pre-commit gates green BUT skipped Layers 4-5. User pushed full e2e regression check; **23 chromium failures surfaced**. A.bis.0 had **the exact same lesson** (consent-block axe nested-interactive caught by widget e2e GP7); A.bis.2 forgot. Henceforth: e2e Layers 4-5 mandatory ВНУТРИ sub-phase scope, не carry-forward к closure sub-phase. | A.bis.2.fix recovery effort | new canon `feedback_layer_4_5_mandatory_per_subphase.md` + MEMORY.md pointer |
 
 ---
 
@@ -726,6 +729,46 @@ Wait — sidebar-sections + demo-badge + admin-sidebar = 62 frontend tests (same
 - A.bis.3 — Dashboard refactor `_app.o.$orgSlug.index.tsx` (tiles → KPI cards внутри content)
 - A.bis.4 — Playwright e2e (10 destinations clickable from sidebar) + axe matrix 12 cells (3 themes × 4 viewports) + visual smoke 4 viewports + forced-colors spec
 - A.bis.5 — Closure: ROADMAP insert + locked-versions + dependency freshness + coverage floor bump check + plan §10 «Owner sees 10» prose drift fix (D28 corrected к 7 sections, prose summary not updated)
+
+### A.bis.2.fix POST-AUDIT (2026-05-12, commit `6a6f60c`)
+
+A.bis.2 main commit `4934bb5` shipped после Layers 1-3 green BUT skipped Layers 4-5 (real-browser Playwright + axe). User pushed full e2e regression check; **23 chromium failures surfaced**.
+
+**Root causes (real-browser caught что JSDOM пропустил):**
+
+1. Nested `<main>` × 27 routes — SidebarInset shadcn-canonical `<main>` collided с each route's own `<main>`. Fix: SidebarInset → `<div data-slot="sidebar-inset">` (PATCH-D17 inline marker). W3C single-main canon honored — routes own canonical `<main>`.
+2. Chessboard rendered at 48 px inside 1024 px inset — empirically inspected via Playwright `page.evaluate`. Root cause: SidebarInset `flex flex-col` parent + chessboard's `<main className="mx-auto ...">` interaction (flex auto-margins на cross-axis disable stretch). Fix: SidebarInset `flex flex-col` → `block min-w-0` (PATCH-D17 cont.).
+3. 30 e2e selector collisions — `getByRole('link', { name: /Шахматка/ })` matched both new sidebar row AND legacy dashboard tile. Bulk-replaced 30 sites across 6 spec files с stable `[data-section-id="grid"]`.
+4. `tests/e2e/_seed-booking.ts:21` stankoff port-residue (`:5273 → :3000`). Sochi backend = `:8787`. Fixed + grepped repo для других port-residue (3 plan/docs had `:5173`/`:3000` — all fixed).
+5. `getByLabel('Номер')` wizard step 3 → `{ exact: true }` (sidebar's «Шахматка — занятость номеров» substring-collision).
+
+**Stankoff testing-innovations Phase 1 adopted in same commit (per «применяешь все новшества?» user push):**
+
+- `scripts/ratchet-check.sh` 7-metric pre-push gate adapted from stankoff `3fd25d0`: depcruise / knip / audit-high-critical / typecheck / biome-errors / weak-assertions / multi-line-biome-ignore vs `.ratchet/baseline.json`. **Surfaced 7 PRE-EXISTING transitive CVEs** (@tanstack/history malware GHSA-rmmr-r34h-pfm5 + 6 more — locked at baseline=7, carry-forward к security sub-phase via `pnpm overrides`).
+- `apps/frontend/src/tests/global-mocks.ts` (149 LOC, globalThis-pinned canonical Vitest 4 setupFile adapted from stankoff `2afcef0` — TanStack Router Link + sonner toast + cleanup hooks).
+- `lefthook.yml` pre-push: `ratchet` job alongside `dev-doctor` (~3s, fits ≤5s pre-push hard cap).
+- `apps/frontend/vitest.config.ts` setupFiles wired.
+
+**Multi-layer verification (post-fix-up):**
+
+| Layer | Result |
+|---|---|
+| TypeScript strict (`pnpm typecheck` 4 workspaces) | ✓ EXIT=0 |
+| Frontend `pnpm test` (85 files) | ✓ 1447/1447 pass |
+| Backend `pnpm test:fast` root (190 files) | ✓ 4078/4078 pass + 986 skipped DB-tagged intentional |
+| 5 pre-commit gates | ✓ all green |
+| **Ratchet** (7 metrics) | ✓ Ratchet OK: depcruise=0 knip=0 audit_high=7 ts_err=0 biome_err=0 weak_assertions=234 multi_biome_ignore=0 |
+| **e2e chromium full** (124 tests) | **✓ 123 passed / 1 carry-forward** (m9_5_phase_a band hover — seedBookingFixture seeds `futureDays=25` outside default 15-day window; A.bis.4 scope) |
+| **e2e admin-sidebar** (7 tests) | ✓ 7/7 pass + axe WCAG 2.2 AA zero violations |
+
+**Phase 2 deferred (документировано в `feedback_stankoff_testing_innovations_adoption.md`):**
+
+- Vitest browser-mode migration (`*.browser.test.tsx` + Playwright provider) — `project_m5_tech_decisions.md` deferral. **Schedule M9.5 / A.bis.5+.**
+- Backend isolate:false + threads pool (24× speedup) — blocked by single-shared YDB per `feedback_test_serial_for_pre_push.md`. **Requires Testcontainers-per-worker M9+.**
+- 5 frontend test files migration к globalMocks — separate batched cleanup commit.
+- 7 PRE-EXISTING transitive CVEs — separate security sub-phase via `pnpm overrides`.
+
+**New process correction (C37)**: «Layer 4+5 multi-layer (real-browser Playwright + axe) is NOT optional per «погнали» canon — каждое «done» claim проходит через ВСЕ слои.» A.bis.2 main commit deferred Layers 4-5 к A.bis.4 closure; real-browser e2e surfaced 23 layout regressions. A.bis.0 had **the exact same lesson** (consent-block axe nested-interactive); A.bis.2 forgot. Henceforth: e2e Layers 4-5 mandatory ВНУТРИ sub-phase scope, не carry-forward к closure. New canon `feedback_layer_4_5_mandatory_per_subphase.md`.
 
 ### A.bis.3 (Dashboard refactor) — pending
 
