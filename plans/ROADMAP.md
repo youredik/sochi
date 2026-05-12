@@ -9,22 +9,23 @@
 
 ## Сейчас работаем над
 
-**Track A.bis ✅ DONE 2026-05-12** — Hotelier Admin App-Shell Sidebar (6 sub-phases + senior bug-hunt fix-up). Plan canon: [`plans/track-a-bis-canonical.md`](track-a-bis-canonical.md). Consolidated memory: [`project_a_bis_done.md`](../.claude/projects/-Users-ed-dev-sochi/memory/project_a_bis_done.md). R1+R2+R3+R4 empirical-verify ≥2026-05-12 — 22+ corrections + per-sub-phase POST-AUDIT C32-C46 (15 new process corrections captured). **7 active sidebar destinations** + dashboard refactored к 4 tactical operator KPIs + Recent activity + Alerts. **Vaul → Base UI 1.4.1 GA Drawer** migration done. **shadcn sidebar primitive** in-repo с 6 local patches (D12-D16 + D27 input-focus guard). **220+ strict tests** across A.bis.0-5 (target was ~102, overdelivered 2.1×). Domain breakpoint `md:` (768px) для front-desk tablets.
+**Track A.bis ✅ DONE 2026-05-12** — Hotelier Admin App-Shell Sidebar (6 sub-phases + senior bug-hunt + dep-freshness bump + senior self-audit). Plan canon: [`plans/track-a-bis-canonical.md`](track-a-bis-canonical.md). Consolidated memory: [`project_a_bis_done.md`](../.claude/projects/-Users-ed-dev-sochi/memory/project_a_bis_done.md). R1+R2+R3+R4 empirical-verify ≥2026-05-12 — 22+ corrections + per-sub-phase POST-AUDIT **C32-C46** (15 new process corrections captured). **7 active sidebar destinations** + dashboard refactored к 4 tactical operator KPIs + Recent activity + Alerts. **Vaul → Base UI 1.4.1 GA Drawer** migration done. **shadcn sidebar primitive** in-repo с 6 local patches (D12-D16 + **PATCH-BH1** input-focus guard). **~260 strict tests + 30 e2e** across A.bis.0-5 (target was ~102, overdelivered 2.5×). Domain breakpoint `md:` (768px) для front-desk tablets.
 
-**Sub-phase progress (6/6 DONE — local commits awaiting batched push):**
-- ✅ **A.bis.0 DONE** (`150f3e5` impl + `4adf37a` fix-up + `6b667fe` closure docs) — Vaul → Base UI Drawer migration. 18 new strict + 43 widget e2e. Senior learning: transparent migration claim требует real-browser e2e proof (C34).
-- ✅ **A.bis.1 DONE** (`4d6da48`) — shadcn sidebar primitive `ui/sidebar.tsx` (438 LOC direct write) + 5 patches D12-D16 + **35 strict tests** (1.75× over plan). New canon: gh API ground-truth для GitHub state (C35).
-- ✅ **A.bis.2 DONE** (`4934bb5` main + `6a6f60c` fix-up + `88422f7` plan docs) — App-shell integration: SidebarProvider+AdminSidebar+SidebarInset в `_app.tsx` + 7 RBAC-gated sections + DemoModeBadge (POST-AUDIT C36 backend `/me` mode enrichment). DELETE 7 mobile-nav files. **67 strict tests**. A.bis.2.fix recovered 22/23 e2e regressions + adopted stankoff testing canon (ratchet + global-mocks setupFile). C37: Layer 4+5 mandatory per sub-phase.
-- ✅ **A.bis.3 DONE** (`3dee303` main + `c9ad1ed` fix-up) — Dashboard tiles→4 tactical KPIs + Recent activity via NEW `/activity/recent` + Alerts. **89 strict + 7 e2e + axe** (5.9× over plan). C38 (replaced Occupancy/ADR/RevPAR per `project_dashboard_external.md` + Cloudbeds R1) + C39 (biome prop-name collision) + C40 (namespace separation).
-- ✅ **A.bis.4 DONE** (`c70c15b` main + `cc90f62` senior-bug-hunt fix-up) — 12-cell axe matrix (3 themes × 4 viewports) + 2 state variants (offcanvas-OPEN at 320 + collapsed-icon at 1440) + 4 fullpage visual snapshots + 3 D12 adversarial cells (Esc + Tab-trap + Shift+Tab) + 6 D22 per-path active-highlight + 1 D12 mobile dismiss functional + 28 strict tests from senior bug hunt. C41 viewport-state breakpoint mapping + C42 visual snapshot tenant-zone masking + **C43-C46 senior bug hunt** (Cmd+B input-guard / D15 empty-string bypass / `/activity/recent` RBAC leak / matrix adversarial paths).
-- ✅ **A.bis.5 DONE** (`cc90f62` bug-hunt + 1 closure commit) — ROADMAP A.bis row ✅, consolidated memory `project_a_bis_done.md`, locked-versions update, architecture decisions, Lingui v6 drift fix, pnpm outdated audit, coverage floor bump check, plan §10 prose drift fix.
+**Sub-phase commits (6/6 DONE — 5 commits unpushed awaiting batched push):**
+- ✅ **A.bis.0** (`150f3e5` + `4adf37a` fix-up + `6b667fe` closure) — Vaul → Base UI Drawer migration. 18 strict + 43 widget e2e. C34: transparent migration claim требует real-browser e2e proof.
+- ✅ **A.bis.1** (`4d6da48`) — shadcn sidebar primitive `ui/sidebar.tsx` (438 LOC direct write) + 5 patches D12-D16 + **35 strict** (1.75× over plan). C35: gh API ground-truth для GitHub state.
+- ✅ **A.bis.2** (`4934bb5` + `6a6f60c` fix-up + `88422f7` plan docs) — App-shell integration: SidebarProvider+AdminSidebar+SidebarInset + 7 RBAC sections + DemoModeBadge (C36 backend `/me` mode enrichment). DELETE 7 mobile-nav files. **67 strict**. A.bis.2.fix recovered 22/23 e2e + adopted stankoff canon (ratchet + global-mocks). C37: Layer 4+5 mandatory per sub-phase.
+- ✅ **A.bis.3** (`3dee303` + `c9ad1ed` fix-up) — Dashboard tiles→4 tactical KPIs + Recent activity via NEW `/activity/recent` + Alerts. **89 strict + 7 e2e + axe** (5.9× over plan). C38 (replaced Occupancy/ADR/RevPAR per `project_dashboard_external.md`) + C39 (biome prop-name collision) + C40 (namespace separation).
+- ✅ **A.bis.4** (`c70c15b` initial + `cc90f62` senior-bug-hunt fix-up) — 12-cell axe matrix (3 themes × 4 viewports) + 2 state variants + 4 fullpage visual + 3 D12 adversarial (Esc + Tab-trap + Shift+Tab) + 6 D22 per-path + 1 D12 mobile dismiss + **28 strict + 25 e2e**. C41 viewport-state breakpoint + C42 visual mask + **C43-C46** senior bug-hunt: 7 bugs (Cmd+B input-guard / D15 empty-string / `/activity/recent` RBAC leak / matrix adversarial paths / §10 prose drift).
+- ✅ **A.bis.5** (`aa0ac24` closure docs + `f879d25` dep bump + `eb83da8` senior self-audit) — Track closure: ROADMAP ✅, consolidated memory, Lingui v6 drift fix, plan §10 prose drift, **latest-stable dep bump** (`react-day-picker` 9→10 major + ~30 minor/patch + Playwright 1.60), **coverage floor ratchet 60/60/55/60 → 65/63/60/64**, **CVE ratchet 7→6→1→0** (`pnpm.overrides: serialize-javascript@^7.0.5`). Senior self-audit поймал **1 REAL production BUG-BH8** (`_app.tsx` peer-tab logout без `reloadDocument: true` → multi-tab logout silently fails в prod) + 3 my-commit bugs + 4 halfmeasures.
 
-**Track A.bis cumulative summary:**
-- 9 commits local-only (awaiting explicit push signal per [[batched-push]])
-- 220+ strict tests + 25 e2e + 12-cell axe matrix + 4 fullpage visual baselines
-- 7 senior-bug-hunt bugs surfaced + fixed + adversarial tests added
-- Ratchet tightened `audit_high_critical_max` 7→6 (one transitive CVE auto-resolved)
-- 9-gate green: typecheck ✓ test:fast 4185/0 ✓ ratchet ✓ chromium 226/226 ✓
+**Track A.bis final state (after all 5 commits):**
+- **~260 strict tests + 30 e2e + 12-cell axe matrix + 4 fullpage visual baselines**
+- **ZERO high CVEs** (`pnpm audit --prod` clean; ratchet `audit_high_critical_max=0`; orig baseline was 7 PRE-EXISTING)
+- **Coverage floor ratcheted** 60/60/55/60 → **65/63/60/64** (measured 65.69/63.91/61.05/64.48)
+- **8 bugs пойманы + устранены** (7 bug-hunt + 1 production BUG-BH8 from adversarial e2e)
+- **Latest stable deps everywhere** (react-day-picker 10 + Playwright 1.60 + ~30 patches/minor)
+- **9-gate green**: typecheck ✓ test:fast 4185/0 ✓ ratchet (depcruise=0/knip=0/audit_high=0/ts_err=0/biome_err=0/weak=234/multi_biome=0) ✓ chromium 160/160 ✓ smoke 68/68 ✓ — **228/228** total e2e
 
 **Next: Track B kickoff (Yandex Cloud deploy)** — Plan canon `plans/track-b-deploy-canonical.md` to be created (R1+R2+R3 ≥ today's date обязательно перед стартом). Cached research в [[deferred-deploy-plan]] — 5+ days old by then, requires re-verify.
 
