@@ -141,14 +141,17 @@ function ConsentRow({
 					</label>
 					<p className="text-xs text-muted-foreground">{labelMeta}</p>
 					<ResponsiveSheet open={readOpen} onOpenChange={setReadOpen}>
-						<ResponsiveSheetTrigger asChild>
-							<button
-								type="button"
-								className="text-left text-xs font-medium text-primary underline underline-offset-2 hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-								data-testid={`${testId}-read`}
-							>
-								Прочитать полностью
-							</button>
+						{/*
+						 * A.bis.0 Vaul→Base UI: Trigger renders as <button> by default
+						 * (both Sheet desktop + Drawer mobile paths). NO asChild wrap —
+						 * Base UI Drawer.Trigger не поддерживает Radix-style asChild,
+						 * inline className на Trigger. Fix: axe nested-interactive.
+						 */}
+						<ResponsiveSheetTrigger
+							className="text-left text-xs font-medium text-primary underline underline-offset-2 hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+							data-testid={`${testId}-read`}
+						>
+							Прочитать полностью
 						</ResponsiveSheetTrigger>
 						<ResponsiveSheetContent
 							side="right"
