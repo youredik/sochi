@@ -28,12 +28,12 @@ pre-commit:
 
     - name: typecheck
       glob: "*.{ts,tsx}"
-      # tsgo (TS 7 native-preview) via run-p: 15s → 4s on this monorepo
-      # (4-project parallel, 0 divergence vs tsc on baseline 2026-05-12).
-      # ratchet-check.sh in pre-push still runs authoritative tsc (parallel
-      # variant); if tsgo silently passes anything tsc would fail, pre-push
-      # catches it. See project_tsgo_pilot_2026_05_12.md.
-      run: pnpm typecheck:tsgo
+      # `pnpm typecheck` is now canonical = tsgo parallel (Phase 4 full
+      # 2026-05-12). `pnpm typecheck:fallback` = tsc parallel for triage.
+      # Microsoft endorsement: TS 7 Beta «ready for CI pipelines today».
+      # Audit trail: post-push.yml shadow diff-runner. Revert path: swap
+      # `typecheck` value back to `run-p typecheck:tsc:*` in package.json.
+      run: pnpm typecheck
 
     - name: knip
       glob: "*.{ts,tsx,json}"

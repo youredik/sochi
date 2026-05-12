@@ -61,12 +61,13 @@ if [ "$AUDIT" -gt "$AUDIT_MAX" ]; then
 fi
 
 # 4. typecheck (strict mode errors)
-# Uses authoritative `typecheck:parallel` (tsc via run-p) — 32% faster than
-# sequential, same compiler, same diagnostics. tsgo is NOT used here
-# pre-TS-7-GA: ratchet is the pre-push final gate; flipping to tsgo
-# requires GA + 10+ consecutive zero-divergence pushes from shadow CI
-# (post-push.yml `tsgo divergence shadow`). See project_tsgo_pilot_2026_05_12.md.
-if ! pnpm typecheck:parallel > /dev/null 2>&1; then
+# `pnpm typecheck` is canonical = tsgo parallel (TS 7 Beta, Phase 4 full
+# 2026-05-12). Microsoft endorsement: TS 7 Beta «ready for CI pipelines
+# today» (devblog 2026-04-21). Pilot baseline: 0 divergence vs tsc on
+# full codebase; known issues (Storybook hang #3335, --build mode, JSDoc
+# generics) — none apply. Audit trail: post-push.yml shadow diff-runner.
+# Triage path on suspect failure: `pnpm typecheck:fallback` (parallel tsc).
+if ! pnpm typecheck > /dev/null 2>&1; then
 	TS_ERR=1
 else
 	TS_ERR=0
