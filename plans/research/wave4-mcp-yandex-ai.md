@@ -234,11 +234,13 @@ AI Studio API «**fully compatible with OpenAI API**» (Responses + Realtime + V
 ### 7.1 v1 (M8.A — конкретный плановый эпик)
 
 **Транспорт:**
+
 - Streamable HTTP через `@hono/mcp` + `@modelcontextprotocol/sdk@1.29.x`.
 - Endpoint: `/api/v1/mcp` (single endpoint, multi-tenant через token).
 - Stateless по умолчанию.
 
 **Auth:**
+
 - Bridge на Better Auth + organization plugin:
   - Discovery: `GET /.well-known/oauth-protected-resource` → наш Better Auth issuer.
   - Token = Better Auth session JWT с claim `activeOrganizationId`.
@@ -246,6 +248,7 @@ AI Studio API «**fully compatible with OpenAI API**» (Responses + Realtime + V
 - DCR через Better Auth client-registration — Phase 2.
 
 **Tools (v1, READ-only):**
+
 - `bookings.list`, `bookings.get`
 - `rooms.list`, `roomTypes.list`, `ratePlans.list`
 - `availability.check` — самый ценный voice-booking tool
@@ -256,38 +259,46 @@ AI Studio API «**fully compatible with OpenAI API**» (Responses + Realtime + V
 - `kpi.summary` — Occupancy / ADR / RevPAR
 
 **Tools (v2 — separate audit-flow):**
+
 - `bookings.create`, `bookings.cancel`, `bookings.update`
 - `notifications.send`
 - НЕ через MCP: `payments.charge`, `payments.refund` — отдельный fiscalization-flow.
 
 **Resources:**
+
 - `property://current` — JSON с org-spec.
 - `room-types://list`.
 - `housekeeping-sop://standard` — text/markdown SOPs.
 
 **Prompts:**
+
 - `morning-briefing` — «Покажи arrivals, departures, dirty rooms на сегодня».
 - `weekend-occupancy-forecast`.
 - `late-checkout-template` — параметризуемое сообщение гостю.
 
 **Multi-tenancy:**
+
 - Per-call: middleware извлекает `activeOrganizationId` из JWT, инжектит в YDB-query.
 - Cross-tenant assertion в каждом tool unit-test.
 - Single-issuer pinning.
 
 **Tracing:**
+
 - OTEL-span на каждый MCP-call: `mcp.tool.name` / `mcp.tenant.id` / `mcp.duration_ms`.
 - Activity-log row через CDC-outbox.
 
 **Hosting:**
+
 - v1: тот же Hono backend.
 - v2: отдельный Yandex Cloud Function / Serverless Container. Yandex MCP Gateway — для federation.
 
 **LLM-agnostic:**
+
 - Open standard. Claude / GPT / YandexGPT / Mistral — все могут подключиться.
 - Тестируем с Claude Desktop, Yandex AI Studio, собственным admin-UI assistant (YandexGPT).
 
 **Sandbox/Production:**
+
 - Per-tenant `sandbox-mode` flag — read-only fake-data для разработки интеграций.
 
 ---
@@ -337,12 +348,14 @@ AI Studio API «**fully compatible with OpenAI API**» (Responses + Realtime + V
 ### 9.3 Pro/Contra на 2026
 
 **Pro:**
+
 - Cloudbeds Engage показал 25% phone-booking growth за 30 дней.
 - 40% звонков в отели остаются без ответа.
 - Sub-100ms latency реален в 2026.
 - Multilingual auto-detect.
 
 **Contra на v1:**
+
 - Тонкий продукт — нужна качественная intent-extraction.
 - Compliance ответственности (запись звонка, согласие на обработку голоса = ПД).
 - В Сочи multilingual (русский + английский + китайский + турецкий) — non-trivial calibration.
@@ -406,26 +419,31 @@ Apaleo и Hospitable релизнули MCP в марте-апреле 2026. Ave
 ## Sources
 
 **MCP Protocol & SDK:**
+
 - [The 2026 MCP Roadmap (09.03.2026)](https://blog.modelcontextprotocol.io/posts/2026-mcp-roadmap/)
 - [MCP Authorization spec 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
 - [MCP TypeScript SDK GitHub (v1.29.0)](https://github.com/modelcontextprotocol/typescript-sdk)
 - [@hono/mcp npm](https://www.npmjs.com/package/@hono/mcp)
 
 **Hospitable:**
+
 - [Connect AI Agent to Hospitable Using MCP](https://help.hospitable.com/en/articles/14424057-connect-an-ai-agent-to-hospitable-using-mcp)
 - [Hospitable MCP launch (Apr 3, 2026)](https://community.hospitable.com/hospitable-changelog-3/introducing-the-essentials-plan-and-hospitable-mcp-april-3-2026-1434)
 
 **Apaleo:**
+
 - [Apaleo launches MCP Server](https://apaleo.com/blog/apaleo-news/apaleo-launches-mcp-server)
 - [Apaleo Copilot launch (26.03.2026)](https://www.hospitalitynet.org/news/4131640/apaleo-launches-ai-copilot-to-ease-operational-pressure-on-hotel-teams)
 
 **Aven / Mews / Cloudbeds:**
+
 - [Aven Hospitality MCP enablement (03.03.2026)](https://www.prnewswire.com/news-releases/aven-hospitality-announces-mcp-enablement-across-its-platform-strengthening-hotels-position-in-ai-driven-discovery-302701925.html)
 - [Mews $300M raise (Jan 2026)](https://hoteltechnologynews.com/2026/01/mews-secures-300-million-to-accelerate-agentic-ai-for-autonomous-hotel-management/)
 - [Cloudbeds Engage](https://engage.cloudbeds.com/)
 - [Cloudbeds × Sadie voice (Jan 2026)](https://www.heysadie.ai/blog/sadie-launches-cloudbeds-integration-to-automate-guest-calls-and-reservation-management-with-voice-ai)
 
 **Yandex AI Studio / SpeechKit:**
+
 - [Yandex AI Studio overview](https://yandex.cloud/en/services/ai-studio)
 - [YandexGPT 5 product page](https://yandex.cloud/en/services/yandexgpt)
 - [Yandex SpeechKit](https://yandex.cloud/en/services/speechkit)

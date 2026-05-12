@@ -10,13 +10,13 @@
 
 ### 1.1 Base + Auth
 
-| Параметр | Значение |
-|---|---|
-| Base URL | `https://api.yookassa.ru/v3/` |
-| Протокол | HTTPS only, TLS 1.2+ |
-| Auth | HTTP Basic — username = `shopId`, password = `secretKey`. Альтернатива OAuth 2.0 только для партнёрской программы |
-| Content | `Content-Type: application/json` для POST/DELETE |
-| Тестовый режим | Отдельные test `shopId` + `secretKey`. Все объекты помечены `test: true`. Money не двигается |
+| Параметр       | Значение                                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Base URL       | `https://api.yookassa.ru/v3/`                                                                                     |
+| Протокол       | HTTPS only, TLS 1.2+                                                                                              |
+| Auth           | HTTP Basic — username = `shopId`, password = `secretKey`. Альтернатива OAuth 2.0 только для партнёрской программы |
+| Content        | `Content-Type: application/json` для POST/DELETE                                                                  |
+| Тестовый режим | Отдельные test `shopId` + `secretKey`. Все объекты помечены `test: true`. Money не двигается                      |
 
 ### 1.2 Endpoints
 
@@ -88,18 +88,19 @@ GET    /v3/me                                shop info; в 2026 включает
 
 ### 1.5 Webhook events — полный список (8)
 
-| Event | Когда | Группа |
-|---|---|---|
-| `payment.waiting_for_capture` | Two-stage авторизация прошла, ждём capture | payment |
-| `payment.succeeded` | Деньги списаны | payment |
-| `payment.canceled` | Платёж отменён | payment |
-| `refund.succeeded` | Возврат завершён | refund |
-| `payout.succeeded` | Выплата завершена | payouts |
-| `payout.canceled` | Выплата отменена | payouts |
-| `deal.closed` | Safe-deal закрыт | platforms |
-| `payment_method.active` | Сохранённый метод активирован | recurring |
+| Event                         | Когда                                      | Группа    |
+| ----------------------------- | ------------------------------------------ | --------- |
+| `payment.waiting_for_capture` | Two-stage авторизация прошла, ждём capture | payment   |
+| `payment.succeeded`           | Деньги списаны                             | payment   |
+| `payment.canceled`            | Платёж отменён                             | payment   |
+| `refund.succeeded`            | Возврат завершён                           | refund    |
+| `payout.succeeded`            | Выплата завершена                          | payouts   |
+| `payout.canceled`             | Выплата отменена                           | payouts   |
+| `deal.closed`                 | Safe-deal закрыт                           | platforms |
+| `payment_method.active`       | Сохранённый метод активирован              | recurring |
 
 **ВАЖНО:**
+
 - **Нет `refund.canceled` event.** При canceled refund узнаём через GET `/v3/refunds/{id}`.
 - **Нет `payment.pending`.** Создание = синхронный POST, ответ сразу содержит `pending`.
 
@@ -144,28 +145,28 @@ GET    /v3/me                                shop info; в 2026 включает
 
 ### 1.9 Cancellation reasons (полный список)
 
-| reason | retryable | смысл |
-|---|---|---|
-| `3d_secure_failed` | yes | гость не прошёл 3DS |
-| `call_issuer` | yes | банк-эмитент отказал |
-| `canceled_by_merchant` | no | мы сами отменили |
-| `card_expired` | yes | срок карты |
-| `country_forbidden` | yes | blocked country |
-| `deal_expired` | no | safe-deal истёк |
-| `expired_on_capture` | yes | мы не сделали capture |
-| `expired_on_confirmation` | yes | гость не подтвердил |
-| `fraud_suspected` | yes | антифрод |
-| `general_decline` | yes | без специфики |
-| `identification_required` | yes | YooMoney wallet ID |
-| `insufficient_funds` | yes | мало денег |
-| `internal_timeout` | yes | таймаут 30s — ретрай |
-| `invalid_card_number` | yes | опечатка |
-| `invalid_csc` | yes | CVV2 неверен |
-| `issuer_unavailable` | yes | банк недоступен |
-| `payment_method_limit_exceeded` | yes | лимит |
-| `payment_method_restricted` | yes | блокировка/sanctions |
-| `permission_revoked` | no | recurring отозван |
-| `unsupported_mobile_operator` | yes | для оплаты «с мобильного» |
+| reason                          | retryable | смысл                     |
+| ------------------------------- | --------- | ------------------------- |
+| `3d_secure_failed`              | yes       | гость не прошёл 3DS       |
+| `call_issuer`                   | yes       | банк-эмитент отказал      |
+| `canceled_by_merchant`          | no        | мы сами отменили          |
+| `card_expired`                  | yes       | срок карты                |
+| `country_forbidden`             | yes       | blocked country           |
+| `deal_expired`                  | no        | safe-deal истёк           |
+| `expired_on_capture`            | yes       | мы не сделали capture     |
+| `expired_on_confirmation`       | yes       | гость не подтвердил       |
+| `fraud_suspected`               | yes       | антифрод                  |
+| `general_decline`               | yes       | без специфики             |
+| `identification_required`       | yes       | YooMoney wallet ID        |
+| `insufficient_funds`            | yes       | мало денег                |
+| `internal_timeout`              | yes       | таймаут 30s — ретрай      |
+| `invalid_card_number`           | yes       | опечатка                  |
+| `invalid_csc`                   | yes       | CVV2 неверен              |
+| `issuer_unavailable`            | yes       | банк недоступен           |
+| `payment_method_limit_exceeded` | yes       | лимит                     |
+| `payment_method_restricted`     | yes       | блокировка/sanctions      |
+| `permission_revoked`            | no        | recurring отозван         |
+| `unsupported_mobile_operator`   | yes       | для оплаты «с мобильного» |
 
 `cancellation_details.party`: `merchant` | `yoo_money` | `payment_network`.
 
@@ -173,15 +174,15 @@ GET    /v3/me                                shop info; в 2026 включает
 
 **Успешный happy path:**
 
-| PAN | Сеть | 3DS |
-|---|---|---|
-| 5555555555554477 | Mastercard | да |
+| PAN              | Сеть       | 3DS |
+| ---------------- | ---------- | --- |
+| 5555555555554477 | Mastercard | да  |
 | 5555555555554444 | Mastercard | нет |
-| 4793128161644804 | Visa | да |
-| 4111111111111111 | Visa | нет |
-| 2200000000000004 | Mir | да |
-| 2202474301322987 | Mir | нет |
-| 370000000000002 | AmEx | нет |
+| 4793128161644804 | Visa       | да  |
+| 4111111111111111 | Visa       | нет |
+| 2200000000000004 | Mir        | да  |
+| 2202474301322987 | Mir        | нет |
+| 370000000000002  | AmEx       | нет |
 
 **Decline-сценарии:** специальные PAN, симулирующие конкретный `cancellation_details.reason` (insufficient_funds, 3d_secure_failed, card_expired, fraud_suspected, и т.д.).
 
@@ -270,20 +271,21 @@ GET    /v3/me                                shop info; в 2026 включает
 
 ### 4.2 Обязательные tags (FFD 1.2)
 
-| tag | name | значение для отеля |
-|---|---|---|
-| 1054 | признак расчёта | 1=приход, 2=возврат, 3=коррекция прихода, 4=коррекция возврата |
-| 1055 | признак системы налогообложения | 1=ОСН, 2=УСН доход, 3=УСН доход-расход, 4=ЕСХН, 5=ПСН, 6=НПД |
-| 1059 | предмет расчёта (line item) | массив объектов |
-| 1199 | ставка НДС | для accommodation = **5 (НДС 0%)** до 31.12.2030; для остального в 2026 = **11 (НДС 22%)** |
-| 1212 | признак предмета расчёта | **4 = услуга** для проживания |
-| 1214 | признак способа расчёта | 1=полный расчёт, 2=аванс с известным предметом, ... |
-| 1008 | email/phone | **обязательно** для онлайн-чеков с 09.2025 |
-| 2108 | единица измерения | **новое в ФФД 1.2** — `day` для проживания, `another` для services |
+| tag  | name                            | значение для отеля                                                                         |
+| ---- | ------------------------------- | ------------------------------------------------------------------------------------------ |
+| 1054 | признак расчёта                 | 1=приход, 2=возврат, 3=коррекция прихода, 4=коррекция возврата                             |
+| 1055 | признак системы налогообложения | 1=ОСН, 2=УСН доход, 3=УСН доход-расход, 4=ЕСХН, 5=ПСН, 6=НПД                               |
+| 1059 | предмет расчёта (line item)     | массив объектов                                                                            |
+| 1199 | ставка НДС                      | для accommodation = **5 (НДС 0%)** до 31.12.2030; для остального в 2026 = **11 (НДС 22%)** |
+| 1212 | признак предмета расчёта        | **4 = услуга** для проживания                                                              |
+| 1214 | признак способа расчёта         | 1=полный расчёт, 2=аванс с известным предметом, ...                                        |
+| 1008 | email/phone                     | **обязательно** для онлайн-чеков с 09.2025                                                 |
+| 2108 | единица измерения               | **новое в ФФД 1.2** — `day` для проживания, `another` для services                         |
 
 ### 4.3 ⚠️ Расхождение с нашим каноном
 
 Наш canon `tag1199 = literal(5)` слишком жёсткий. **Корректно:**
+
 - Receipt-уровень `tag1199 ∈ {5, 6, 11, 12}` (0% / без НДС / 22% / 22-122).
 - Per-line `vat_code` 1..12 — каждая строка может иметь свой.
 
@@ -294,41 +296,43 @@ GET    /v3/me                                shop info; в 2026 включает
 **Как работает:** к payment-запросу добавляется `receipt` объект. ЮKassa сама регистрирует чек в **Первом ОФД** и отправляет email клиенту.
 
 **Структура `receipt`:**
+
 ```jsonc
 {
-  "customer": {
-    "full_name": "Иванов Иван Иванович",
-    "email": "guest@example.com",
-    "phone": "+79991234567"
-  },
-  "items": [
-    {
-      "description": "Проживание, номер Standard, 27.04.2026 - 30.04.2026",
-      "quantity": "3.00",                  // 3 ночи
-      "amount": { "value": "4500.00", "currency": "RUB" },
-      "vat_code": 5,                       // НДС 0% accommodation
-      "payment_subject": "service",
-      "payment_mode": "full_payment",
-      "measure": "day"                     // ФФД 1.2 tag 2108
-    },
-    {
-      "description": "Завтрак",
-      "quantity": "3.00",
-      "amount": { "value": "900.00", "currency": "RUB" },
-      "vat_code": 11,                      // НДС 22%
-      "payment_subject": "service",
-      "payment_mode": "full_payment",
-      "measure": "piece"
-    }
-  ],
-  "tax_system_code": 1,                    // ОСН
-  "send_at": "2026-04-27T10:00:30+03:00"
+	"customer": {
+		"full_name": "Иванов Иван Иванович",
+		"email": "guest@example.com",
+		"phone": "+79991234567",
+	},
+	"items": [
+		{
+			"description": "Проживание, номер Standard, 27.04.2026 - 30.04.2026",
+			"quantity": "3.00", // 3 ночи
+			"amount": { "value": "4500.00", "currency": "RUB" },
+			"vat_code": 5, // НДС 0% accommodation
+			"payment_subject": "service",
+			"payment_mode": "full_payment",
+			"measure": "day", // ФФД 1.2 tag 2108
+		},
+		{
+			"description": "Завтрак",
+			"quantity": "3.00",
+			"amount": { "value": "900.00", "currency": "RUB" },
+			"vat_code": 11, // НДС 22%
+			"payment_subject": "service",
+			"payment_mode": "full_payment",
+			"measure": "piece",
+		},
+	],
+	"tax_system_code": 1, // ОСН
+	"send_at": "2026-04-27T10:00:30+03:00",
 }
 ```
 
 **Refund чек:** при `/v3/refunds` передаётся аналогичный `receipt` с `tag1054 = 2`. ЮKassa автоматически формирует refund-чек.
 
 **Ограничения ЮKassa Чеки:**
+
 - Только email-доставка чека (SMS не поддерживается).
 - **Не делает correction-чеки** (для этого — внешний фискализатор).
 - ОФД фиксирован — Первый ОФД.
@@ -339,15 +343,15 @@ GET    /v3/me                                shop info; в 2026 включает
 
 ### 4.5 Внешний фискализатор vs ЮKassa Чеки — рекомендация
 
-| критерий | ЮKassa Чеки | АТОЛ Онлайн / OFD.ru / ОФД-Я |
-|---|---|---|
-| setup time | минуты | 1-3 дня |
-| ОФД | фиксирован Первый ОФД | свободный выбор |
-| абон.плата | нет (входит в acquiring fee) | АТОЛ ~1733 ₽/мес/касса; OFD.ru ~3000/год |
-| **correction чек** | **нет — критично** если будут ошибки | да, полный набор (ФФД 1.2) |
-| API-связность | один API | отдельные адаптеры |
-| 152-ФЗ | данные у ЮKassa+1ОФД | данные у acquirer + ОФД |
-| масштаб | до ~300-400К ₽/мес ROI лучше | свыше — ROI flips |
+| критерий           | ЮKassa Чеки                          | АТОЛ Онлайн / OFD.ru / ОФД-Я             |
+| ------------------ | ------------------------------------ | ---------------------------------------- |
+| setup time         | минуты                               | 1-3 дня                                  |
+| ОФД                | фиксирован Первый ОФД                | свободный выбор                          |
+| абон.плата         | нет (входит в acquiring fee)         | АТОЛ ~1733 ₽/мес/касса; OFD.ru ~3000/год |
+| **correction чек** | **нет — критично** если будут ошибки | да, полный набор (ФФД 1.2)               |
+| API-связность      | один API                             | отдельные адаптеры                       |
+| 152-ФЗ             | данные у ЮKassa+1ОФД                 | данные у acquirer + ОФД                  |
+| масштаб            | до ~300-400К ₽/мес ROI лучше         | свыше — ROI flips                        |
 
 **Для V1 / small hotel в Сочи:** **ЮKassa Чеки.** Architectural seam в `PaymentProvider.capabilities.fiscalization: 'native'|'external'|'none'` уже зарезервирован.
 
@@ -358,6 +362,7 @@ GET    /v3/me                                shop info; в 2026 включает
 Отель оказывает услуги **сам** ⇒ **не агент**. `agent_type` НЕ передаётся.
 
 Агентский режим включается, если:
+
 - отель собирает плату за услуги OTA (мы — agent, OTA — поставщик).
 - отель собирает плату за услуги SPA, экскурсии от внешнего ИП.
 
@@ -389,21 +394,23 @@ GET    /v3/me                                shop info; в 2026 включает
 
 ## 5. CloudPayments как альтернатива
 
-| критерий | YooKassa | CloudPayments |
-|---|---|---|
-| owner | YooMoney | Tinkoff Group |
-| webhook signature | **отсутствует HMAC**, IP+poll | **HMAC-SHA256** (`X-Content-HMAC`) |
-| recurring API | сохранённый payment_method_id | **полноценная Subscriptions API** |
-| 54-ФЗ embedded | Чеки от ЮKassa (Первый ОФД) | CloudKassir (Атол) |
-| 3DS | redirect-only | redirect + Charge API (3DS hosted form) |
-| тарифы | 2.8% + 1% receipt | от 1.7% карты, 0.8% СБП |
+| критерий          | YooKassa                      | CloudPayments                           |
+| ----------------- | ----------------------------- | --------------------------------------- |
+| owner             | YooMoney                      | Tinkoff Group                           |
+| webhook signature | **отсутствует HMAC**, IP+poll | **HMAC-SHA256** (`X-Content-HMAC`)      |
+| recurring API     | сохранённый payment_method_id | **полноценная Subscriptions API**       |
+| 54-ФЗ embedded    | Чеки от ЮKassa (Первый ОФД)   | CloudKassir (Атол)                      |
+| 3DS               | redirect-only                 | redirect + Charge API (3DS hosted form) |
+| тарифы            | 2.8% + 1% receipt             | от 1.7% карты, 0.8% СБП                 |
 
 **CloudPayments сильнее:**
+
 - HMAC подпись webhooks.
 - Subscription API нативная — для подписочной части нашего SaaS.
 - Чарджи через JS SDK без redirect.
 
 **CloudPayments слабее:**
+
 - Embedded fiscalization сложнее (через CloudKassir + Атол).
 - РФ сильное смещение к Tinkoff acquiring.
 - Документация менее детальна по edge cases.
@@ -449,6 +456,7 @@ GET    /v3/me                                shop info; в 2026 включает
 ### 7.2 Тестовые карты
 
 Hardcoded набор PAN с deterministic outcomes по hash:
+
 - Successful happy: `4111111111111111`, `5555555555554444`, `2202474301322987`.
 - 3DS happy: `4793128161644804`, `2200000000000004`.
 - Decline scenarios: `4000000000000002` → insufficient_funds, `4000000000000093` → 3ds_authentication_failed, и т.д.
@@ -502,6 +510,7 @@ Hardcoded набор PAN с deterministic outcomes по hash:
 ## 10. Источники (URL + дата 27.04.2026)
 
 **YooKassa официальные:**
+
 - [API root](https://yookassa.ru/developers/api)
 - [Idempotence-Key](https://yookassa.ru/developers/using-api/interaction-format)
 - [Webhooks](https://yookassa.ru/developers/using-api/webhooks)
@@ -517,11 +526,13 @@ Hardcoded набор PAN с deterministic outcomes по hash:
 - [Fees](https://yookassa.ru/fees/)
 
 **54-ФЗ + туристический налог:**
+
 - [TravelLine — НДС 0% до 2030](https://www.travelline.ru/blog/kak-izmenitsya-nds-dlya-gostinits-v-2025-godu-klyuchevye-stavki-i-usloviya-dlya-polucheniya-nds-0/)
 - [Yandex Travel Pro — НДС 22%](https://travel.yandex.ru/pro/kak-izmenilsya-nds-dlya-gostinic-v-2026-godu-k-chemu-gotovitsya-oteleram/)
 - [nalog-nalog.ru — туристический налог в чеке](https://nalog-nalog.ru/dontknows/kak-probivat-turisticheskij-nalog-v-kassovom-cheke/)
 - [Сочи администрация — туристический налог](https://sochi.ru/gorod/turizm/turisticheskiy-nalog/)
 
 **CloudPayments:**
+
 - [CloudPayments developers](https://developers.cloudpayments.ru/en/)
 - [CloudKassir developers](https://developers.cloudkassir.ru/en/)

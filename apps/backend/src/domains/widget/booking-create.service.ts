@@ -98,8 +98,10 @@ export interface WidgetBookingCreateInput {
  * Re-exporting wire result type для consumers — same shape, only `paymentStatus`
  * type widens here.
  */
-export interface WidgetBookingCreateResult
-	extends Omit<WidgetBookingCommitResult, 'paymentStatus'> {
+export interface WidgetBookingCreateResult extends Omit<
+	WidgetBookingCommitResult,
+	'paymentStatus'
+> {
 	readonly paymentStatus: PaymentStatus
 }
 

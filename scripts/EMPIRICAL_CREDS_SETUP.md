@@ -5,6 +5,7 @@
 Перед запуском empirical curl скриптов нужно получить credentials для трёх external API, чтобы заверить behaviour-faithful contract наших Mock/Stub адаптеров.
 
 **Все три ставятся бесплатно**:
+
 - Yandex Vision OCR sandbox = бесплатно (free quota + sandbox endpoint)
 - ЮKassa Test mode = бесплатно (separate test shop, no real money)
 - Yandex Cloud Postbox sandbox = бесплатно (10 000 emails/month free tier)
@@ -16,6 +17,7 @@
 ## 1. Yandex Cloud Vision OCR — `verify-vision-empirical.ts`
 
 ### Что нужно
+
 ```dotenv
 YC_API_KEY=AQVN...        # API key с scope yc.ai.vision.execute
 YC_FOLDER_ID=b1g...       # ID папки YC
@@ -62,6 +64,7 @@ YC_FOLDER_ID=b1g...       # ID папки YC
 ## 2. ЮKassa Test mode — `verify-yookassa-empirical.ts`
 
 ### Что нужно
+
 ```dotenv
 YOOKASSA_TEST_SHOP_ID=...          # test shop ID (отличается от prod)
 YOOKASSA_TEST_SECRET_KEY=...       # test secret key
@@ -106,11 +109,13 @@ YOOKASSA_TEST_SECRET_KEY=...       # test secret key
 ### Webhook empirical (отдельный flow)
 
 Webhook требует public HTTPS endpoint. Опции:
+
 - **ngrok**: `ngrok http 3000` → public URL
 - **cloudflared tunnel**: `cloudflared tunnel --url http://localhost:8787`
 - **Bore.pub**: `bore local 3000 --to bore.pub`
 
 После tunnel:
+
 1. Test shop → "Настройки" → "HTTP-уведомления" → URL = `https://<your-tunnel>.ngrok-free.app/api/webhooks/yookassa`
 2. Subscribe events: `payment.succeeded`, `payment.canceled`, `payment.waiting_for_capture`, `refund.succeeded`
 3. Триггер тестового платежа → watch tunnel inspector + наш backend log
@@ -126,6 +131,7 @@ ZERO. Test mode полностью бесплатный, sandbox-only.
 ## 3. Yandex Cloud Postbox — `verify-postbox-empirical.ts`
 
 ### Что нужно
+
 ```dotenv
 POSTBOX_ACCESS_KEY_ID=YCAJ...
 POSTBOX_SECRET_ACCESS_KEY=YC...
@@ -176,6 +182,7 @@ POSTBOX_VERIFIED_TO=<your-personal-email-for-test>
 ### DNS records — domain ownership
 
 Для production launch нужны:
+
 - **DKIM** — 2 CNAME (auto-generated Postbox console) — **обязательно**
 - **SPF** — 1 TXT record `v=spf1 include:_spf.yandex.net ~all` — **обязательно** для anti-spam
 - **DMARC** — 1 TXT record `v=DMARC1; p=quarantine; rua=mailto:dmarc@your-domain.ru; pct=20` — **рекомендуется**, ramp up до `p=reject` после 30 дней мониторинга
@@ -183,6 +190,7 @@ POSTBOX_VERIFIED_TO=<your-personal-email-for-test>
 ### Production access promotion (post-empirical)
 
 Sandbox = только verified recipients. Promotion к production access (10M+/day):
+
 - Console → Postbox → "Request production access"
 - Заполнить justification (опишите use case — "transactional emails for HoReCa SaaS")
 - Wait 1-2 business days (lead time не задокументирован)
@@ -190,6 +198,7 @@ Sandbox = только verified recipients. Promotion к production access (10M+
 ### SMS gate (отдельный сервис от Postbox)
 
 **НЕ часть empirical-batch** — `Yandex Cloud Notification Service` (SNS-compatible) — это отдельный сервис. Канон для Сочи HoReCa 2026:
+
 - `Yandex Cloud Notification Service` — primary (Yandex-canon stack)
 - SMS.ru (5.64–8.80 ₽/SMS) — backup если Yandex не дотягивает по deliverability
 
@@ -208,6 +217,7 @@ ZERO до 10 000 emails/мес (Postbox free tier). Verification calls в скр
 3. **Postbox evidence** → подтверждена SES v2 endpoint reachability + signing → подтверждение нашего PostboxAdapter контракта
 
 После этого:
+
 - Memory: write `project_empirical_batch_2026_04_29_results.md` с findings
 - Update `project_empirical_batch_2026_04_29.md` со ссылкой "Phase 2 DONE" + дата
 - Все Mock/Stub помечены `empirical-verified <date>` в комментариях

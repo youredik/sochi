@@ -148,7 +148,9 @@ async function main(): Promise<void> {
 		if (messageId && messageId.length > 0) {
 			console.log(`✅ MessageId returned (${messageId.length} chars)`)
 		} else {
-			console.log('⚠️  MessageId empty or missing — adapter classifyPostboxError treats as transient')
+			console.log(
+				'⚠️  MessageId empty or missing — adapter classifyPostboxError treats as transient',
+			)
 		}
 
 		console.log(`\n📁 Evidence: ${EVIDENCE_DIR}/real-postbox-send.json`)

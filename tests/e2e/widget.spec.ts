@@ -294,9 +294,9 @@ test.describe('widget Screen 2 Extras / Addons — happy + adversarial + axe mat
 		// URL should now contain /extras
 		await page.waitForURL(/\/extras/)
 		// Screen 2 header rendered
-		await expect(page.getByRole('heading', { level: 1, name: /Дополнительные услуги/ })).toBeVisible(
-			{ timeout: 10_000 },
-		)
+		await expect(
+			page.getByRole('heading', { level: 1, name: /Дополнительные услуги/ }),
+		).toBeVisible({ timeout: 10_000 })
 	})
 
 	test('[X3] addons rendered + opt-in canon (all qty=0 default ЗоЗПП ст. 16 ч. 3.1)', async ({
@@ -352,9 +352,7 @@ test.describe('widget Screen 2 Extras / Addons — happy + adversarial + axe mat
 		await expect(card).toContainText('Бесплатная отмена до')
 	})
 
-	test('[X8] VAT 22% line per addon (ст. 10 ЗоЗПП — обязательная цена с НДС)', async ({
-		page,
-	}) => {
+	test('[X8] VAT 22% line per addon (ст. 10 ЗоЗПП — обязательная цена с НДС)', async ({ page }) => {
 		await page.goto(extrasUrlWithDefaults())
 		const card = page.getByTestId('addon-card-BREAKFAST')
 		await card.waitFor()

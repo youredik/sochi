@@ -110,16 +110,16 @@ domains/{domain}/adapter/
 
 Проверка через grep+ls по репозиторию, не по памяти.
 
-| # | Функция мандата | Backend | Frontend | End-to-end | Закрытие боли |
-|---|---|---|---|---|---|
-| 1.1 | Госуслуги (Скала-ЕПГУ) | ❌ только поле `registrationStatus` в комментарии [packages/shared/src/guest.ts:16](../packages/shared/src/guest.ts#L16) | ❌ | ❌ | Боль 1 — 0% |
-| 1.2 | AI-сканер паспортов (Yandex Vision) | ❌ | ❌ ручной ввод | ❌ | Боль 1 — 0% |
-| 2.1 | Шахматка | ✅ M3-M4 [booking + availability + atomic overbooking](../apps/backend/src/domains/booking/) | ✅ M5 [features/chessboard/](../apps/frontend/src/features/chessboard/) + [routes/_app.o.$orgSlug.grid.tsx](../apps/frontend/src/routes/_app.o.$orgSlug.grid.tsx) | ✅ | Боль 2 — 33% |
-| 2.2 | Channel Manager | ❌ ничего по TravelLine/Я.Путешествия/Ostrovok/Bnovo | ❌ | ❌ | Боль 2 — 0% |
-| 2.3 | Public widget + платежи | 🟡 платёжный домен M6 ([apps/backend/src/domains/payment/](../apps/backend/src/domains/payment/)) — но провайдер только stub ([provider/stub-provider.ts](../apps/backend/src/domains/payment/provider/stub-provider.ts)). Публичных роутов в [app.ts](../apps/backend/src/app.ts) нет | ❌ | ❌ | Боль 2 — 0% |
-| 3.1 | KPI Dashboard | ❌ | ❌ (решение через Yandex DataLens отложено) | ❌ | Боль 3 — 0% |
-| 3.2 | Email/SMS уведомления | ✅ M7.A+B шаблоны + диспетчер + Postbox/Mailpit | ✅ M7.fix.3.d админ-консоль | ✅ | Боль 3 — 50% |
-| Бонус | Туристический налог 2% | ✅ M7.A.3 авто-начисление | ✅ M7.fix.3.b XLSX export + KPI cards | ✅ | Compliance closed |
+| #     | Функция мандата                     | Backend                                                                                                                                                                                                                                                                                | Frontend                                                                                                                                                           | End-to-end | Закрытие боли     |
+| ----- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ----------------- |
+| 1.1   | Госуслуги (Скала-ЕПГУ)              | ❌ только поле `registrationStatus` в комментарии [packages/shared/src/guest.ts:16](../packages/shared/src/guest.ts#L16)                                                                                                                                                               | ❌                                                                                                                                                                 | ❌         | Боль 1 — 0%       |
+| 1.2   | AI-сканер паспортов (Yandex Vision) | ❌                                                                                                                                                                                                                                                                                     | ❌ ручной ввод                                                                                                                                                     | ❌         | Боль 1 — 0%       |
+| 2.1   | Шахматка                            | ✅ M3-M4 [booking + availability + atomic overbooking](../apps/backend/src/domains/booking/)                                                                                                                                                                                           | ✅ M5 [features/chessboard/](../apps/frontend/src/features/chessboard/) + [routes/\_app.o.$orgSlug.grid.tsx](../apps/frontend/src/routes/_app.o.$orgSlug.grid.tsx) | ✅         | Боль 2 — 33%      |
+| 2.2   | Channel Manager                     | ❌ ничего по TravelLine/Я.Путешествия/Ostrovok/Bnovo                                                                                                                                                                                                                                   | ❌                                                                                                                                                                 | ❌         | Боль 2 — 0%       |
+| 2.3   | Public widget + платежи             | 🟡 платёжный домен M6 ([apps/backend/src/domains/payment/](../apps/backend/src/domains/payment/)) — но провайдер только stub ([provider/stub-provider.ts](../apps/backend/src/domains/payment/provider/stub-provider.ts)). Публичных роутов в [app.ts](../apps/backend/src/app.ts) нет | ❌                                                                                                                                                                 | ❌         | Боль 2 — 0%       |
+| 3.1   | KPI Dashboard                       | ❌                                                                                                                                                                                                                                                                                     | ❌ (решение через Yandex DataLens отложено)                                                                                                                        | ❌         | Боль 3 — 0%       |
+| 3.2   | Email/SMS уведомления               | ✅ M7.A+B шаблоны + диспетчер + Postbox/Mailpit                                                                                                                                                                                                                                        | ✅ M7.fix.3.d админ-консоль                                                                                                                                        | ✅         | Боль 3 — 50%      |
+| Бонус | Туристический налог 2%              | ✅ M7.A.3 авто-начисление                                                                                                                                                                                                                                                              | ✅ M7.fix.3.b XLSX export + KPI cards                                                                                                                              | ✅         | Compliance closed |
 
 **Итог на старте этой фазы:** 0 из 3 болей закрыты полностью end-to-end. 2 функции из 7 закрыты. Туристический налог закрыт бонусом (RU-compliance). Это и есть отправная точка.
 
@@ -129,16 +129,16 @@ domains/{domain}/adapter/
 
 Нумерация продолжает существующую (M7.A/M7.B/M7.fix.3 уже использованы). Каждая подфаза — отдельный feature-branch и отдельный PR, или несколько PR при крупном объёме.
 
-| Подфаза | Что закрывает | Ориентир по времени |
-|---|---|---|
-| **M8.A** | ЕПГУ адаптер + AI passport + страница миграционного учёта | 2.5–3 недели |
-| **M8.B** | Public widget + YooKassa адаптер + 54-ФЗ фискализация | 2.5–3 недели |
-| **M8.C** | Channel Manager: 3 канала (TravelLine + Я.Путешествия + Ostrovok) | 3–4 недели |
-| **M8.D** | KPI domain + native UI + DataLens-готовность | 1–1.5 недели |
-| **M8.E** | Sandbox/Production gate + adapter factories + observability | 1 неделя |
-| **M8.F** | Документация интеграций + сидеры + видео-walkthroughs | 1 неделя |
-| **M8.G** | Финальный кросс-функциональный аудит готовности к M8 | 3–5 дней |
-| **Итого** | **6 функций мандата + 2 уже закрыты + sandbox-инфра** | **~10–13 недель** |
+| Подфаза   | Что закрывает                                                     | Ориентир по времени |
+| --------- | ----------------------------------------------------------------- | ------------------- |
+| **M8.A**  | ЕПГУ адаптер + AI passport + страница миграционного учёта         | 2.5–3 недели        |
+| **M8.B**  | Public widget + YooKassa адаптер + 54-ФЗ фискализация             | 2.5–3 недели        |
+| **M8.C**  | Channel Manager: 3 канала (TravelLine + Я.Путешествия + Ostrovok) | 3–4 недели          |
+| **M8.D**  | KPI domain + native UI + DataLens-готовность                      | 1–1.5 недели        |
+| **M8.E**  | Sandbox/Production gate + adapter factories + observability       | 1 неделя            |
+| **M8.F**  | Документация интеграций + сидеры + видео-walkthroughs             | 1 неделя            |
+| **M8.G**  | Финальный кросс-функциональный аудит готовности к M8              | 3–5 дней            |
+| **Итого** | **6 функций мандата + 2 уже закрыты + sandbox-инфра**             | **~10–13 недель**   |
 
 Параллелизация подфаз ограничена — слишком много общих абстракций и риск merge-конфликтов на factory-слоях.
 
@@ -206,15 +206,15 @@ domains/{domain}/adapter/
 
 ```ts
 interface EpguAdapter {
-  submit(submission: EpguSubmissionInput): Promise<EpguSubmissionAck>
-  // Ack приходит сразу (sync 200/4xx/5xx)
-  // Подтверждение/отказ — асинхронно через poll или webhook (мок имитирует через timer)
+	submit(submission: EpguSubmissionInput): Promise<EpguSubmissionAck>
+	// Ack приходит сразу (sync 200/4xx/5xx)
+	// Подтверждение/отказ — асинхронно через poll или webhook (мок имитирует через timer)
 
-  pollStatus(submissionId: string): Promise<EpguSubmissionStatus>
-  // 'pending' | 'confirmed' | 'rejected' | 'permanent_failed' + reason
+	pollStatus(submissionId: string): Promise<EpguSubmissionStatus>
+	// 'pending' | 'confirmed' | 'rejected' | 'permanent_failed' + reason
 
-  cancel(submissionId: string): Promise<void>
-  // если ЕПГУ поддерживает отмену — узнаем из ресерча
+	cancel(submissionId: string): Promise<void>
+	// если ЕПГУ поддерживает отмену — узнаем из ресерча
 }
 ```
 
@@ -234,11 +234,14 @@ interface EpguAdapter {
 
 ```ts
 interface VisionAdapter {
-  recognizePassport(image: Buffer, hints: { documentType: PassportKind }): Promise<PassportOcrResult>
+	recognizePassport(
+		image: Buffer,
+		hints: { documentType: PassportKind },
+	): Promise<PassportOcrResult>
 }
 type PassportOcrResult = {
-  fields: Record<PassportField, { value: string; confidence: number }>
-  rawResponse: unknown // для debug
+	fields: Record<PassportField, { value: string; confidence: number }>
+	rawResponse: unknown // для debug
 }
 ```
 
@@ -255,9 +258,13 @@ type PassportOcrResult = {
 
 ```ts
 interface RklAdapter {
-  check(document: RklCheckInput): Promise<RklCheckResult>
+	check(document: RklCheckInput): Promise<RklCheckResult>
 }
-type RklCheckResult = { status: 'clear' | 'match' | 'inconclusive'; reason?: string; checkedAt: Date }
+type RklCheckResult = {
+	status: 'clear' | 'match' | 'inconclusive'
+	reason?: string
+	checkedAt: Date
+}
 ```
 
 #### RklAdapterMockImpl поведение
@@ -511,12 +518,12 @@ Activity log: расширить `objectType` на `migration_registration`, `ac
 
 ```ts
 interface PaymentAdapter {
-  createPayment(input: CreatePaymentInput): Promise<PaymentCreated>
-  capture(paymentId: string, amount?: Money): Promise<PaymentCaptured>
-  cancel(paymentId: string): Promise<PaymentCancelled>
-  refund(input: RefundInput): Promise<RefundCreated>
-  getPayment(id: string): Promise<PaymentState>
-  // webhook simulation: setTimeout-based внешний sender в моке
+	createPayment(input: CreatePaymentInput): Promise<PaymentCreated>
+	capture(paymentId: string, amount?: Money): Promise<PaymentCaptured>
+	cancel(paymentId: string): Promise<PaymentCancelled>
+	refund(input: RefundInput): Promise<RefundCreated>
+	getPayment(id: string): Promise<PaymentState>
+	// webhook simulation: setTimeout-based внешний sender в моке
 }
 ```
 
@@ -537,9 +544,9 @@ interface PaymentAdapter {
 
 ```ts
 interface FiscalAdapter {
-  registerReceipt(input: ReceiptInput): Promise<ReceiptRegistered>
-  registerRefundReceipt(input: RefundReceiptInput): Promise<ReceiptRegistered>
-  getReceipt(id: string): Promise<ReceiptState>
+	registerReceipt(input: ReceiptInput): Promise<ReceiptRegistered>
+	registerRefundReceipt(input: RefundReceiptInput): Promise<ReceiptRegistered>
+	getReceipt(id: string): Promise<ReceiptState>
 }
 ```
 
@@ -711,13 +718,13 @@ public_session
 
 ```ts
 interface ChannelAdapter {
-  pushAvailability(input: AvailabilityPush): Promise<AvailabilityPushAck>
-  pushRates(input: RatesPush): Promise<RatesPushAck>
-  pullBookings(since: Date): Promise<ChannelBooking[]>
-  pullCancellations(since: Date): Promise<ChannelCancellation[]>
-  // mapping APIs
-  listExternalRoomTypes(): Promise<ExternalRoomType[]>
-  listExternalRatePlans(): Promise<ExternalRatePlan[]>
+	pushAvailability(input: AvailabilityPush): Promise<AvailabilityPushAck>
+	pushRates(input: RatesPush): Promise<RatesPushAck>
+	pullBookings(since: Date): Promise<ChannelBooking[]>
+	pullCancellations(since: Date): Promise<ChannelCancellation[]>
+	// mapping APIs
+	listExternalRoomTypes(): Promise<ExternalRoomType[]>
+	listExternalRatePlans(): Promise<ExternalRatePlan[]>
 }
 ```
 
@@ -1187,15 +1194,15 @@ axe-core gate на ВСЕХ новых страницах (existing canon: [proj
 
 ## 6. Решения (зафиксированы 2026-04-27)
 
-| # | Вопрос | Решение |
-|---|---|---|
-| Q1 | KPI dashboard: вариант A или B? | **A** — KPI-домен + native UI + DataLens-готовность |
-| Q2 | Channel Manager: 3 канала сразу или пошагово? | **3 сразу** — TravelLine + Я.Путешествия + Ostrovok |
-| Q3 | Public widget: отдельный SPA или роуты в основном frontend? | **Роуты в существующем frontend** |
-| Q4 | YooKassa vs CloudPayments: один или два? | **Только YooKassa** (фабрика готова к расширению) |
-| Q5 | MCP-сервер: в M8.A–G или позже? | **M9** — после реальных интеграций |
-| Q6 | Сидеры: интерактивный CLI или фиксированные команды? | **Фиксированные команды** (`pnpm seed:*`) |
-| Q7 | Custom Object Engine: отложен в M11+? | **Отложен в M11+** |
+| #   | Вопрос                                                      | Решение                                             |
+| --- | ----------------------------------------------------------- | --------------------------------------------------- |
+| Q1  | KPI dashboard: вариант A или B?                             | **A** — KPI-домен + native UI + DataLens-готовность |
+| Q2  | Channel Manager: 3 канала сразу или пошагово?               | **3 сразу** — TravelLine + Я.Путешествия + Ostrovok |
+| Q3  | Public widget: отдельный SPA или роуты в основном frontend? | **Роуты в существующем frontend**                   |
+| Q4  | YooKassa vs CloudPayments: один или два?                    | **Только YooKassa** (фабрика готова к расширению)   |
+| Q5  | MCP-сервер: в M8.A–G или позже?                             | **M9** — после реальных интеграций                  |
+| Q6  | Сидеры: интерактивный CLI или фиксированные команды?        | **Фиксированные команды** (`pnpm seed:*`)           |
+| Q7  | Custom Object Engine: отложен в M11+?                       | **Отложен в M11+**                                  |
 
 ---
 
@@ -1215,17 +1222,17 @@ axe-core gate на ВСЕХ новых страницах (existing canon: [proj
 
 ## 8. Риски и mitigations
 
-| Риск | Вероятность | Воздействие | Mitigation |
-|---|---|---|---|
-| Мок недостаточно реалистичен → реальная интеграция ломает обвязку | Средняя | Высокое | Ресерч-файл обязателен ДО мока. Behaviour-faithful требования (§2.1). Sверка на M8.G аудите. |
-| Sandbox-режим случайно уехал в продакшн | Низкая | Критично | APP_MODE=production отказывает при mock (§4.E.2). Banner в UI. health-endpoint. |
-| Скоп Channel Manager (M8.C) растягивается | Высокая | Высокое | Жёсткий time-cap 4 недели. Если не успеваем — урезать до 1 канала (TravelLine), 2 канала переносим в M8.C.2 |
-| Public widget overbooking race с CM | Средняя | Высокое | Adversarial тесты [B1] + [C2]. Atomic locking уже есть в booking domain |
-| 152-ФЗ нарушения через хранение фото | Низкая | Критично (юр) | TTL на Object Storage. Retention policy. Шифрование at rest. Согласие отдельно от ToS. |
-| Mock OCR даёт false positives → реальная регистрация в МВД с ошибочными данными | Низкая (это всё же sandbox) | Среднее | Confidence-флаги обязательны на каждом поле. Manual confirmation step перед submit. |
-| Время до выручки растягивается | Высокая | Высокое (для бизнеса) | Открытое обсуждение с пользователем. План корректируется при необходимости. |
-| Зависимости устаревают за 10–13 недель | Высокая | Среднее | npm-registry аудит после каждой подфазы (§2.7). |
-| Pre-push gate деградирует от объёма | Средняя | Среднее | Test partitioning (§5.1). Если test:serial > 5 минут — рассматриваем split. |
+| Риск                                                                            | Вероятность                 | Воздействие           | Mitigation                                                                                                  |
+| ------------------------------------------------------------------------------- | --------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Мок недостаточно реалистичен → реальная интеграция ломает обвязку               | Средняя                     | Высокое               | Ресерч-файл обязателен ДО мока. Behaviour-faithful требования (§2.1). Sверка на M8.G аудите.                |
+| Sandbox-режим случайно уехал в продакшн                                         | Низкая                      | Критично              | APP_MODE=production отказывает при mock (§4.E.2). Banner в UI. health-endpoint.                             |
+| Скоп Channel Manager (M8.C) растягивается                                       | Высокая                     | Высокое               | Жёсткий time-cap 4 недели. Если не успеваем — урезать до 1 канала (TravelLine), 2 канала переносим в M8.C.2 |
+| Public widget overbooking race с CM                                             | Средняя                     | Высокое               | Adversarial тесты [B1] + [C2]. Atomic locking уже есть в booking domain                                     |
+| 152-ФЗ нарушения через хранение фото                                            | Низкая                      | Критично (юр)         | TTL на Object Storage. Retention policy. Шифрование at rest. Согласие отдельно от ToS.                      |
+| Mock OCR даёт false positives → реальная регистрация в МВД с ошибочными данными | Низкая (это всё же sandbox) | Среднее               | Confidence-флаги обязательны на каждом поле. Manual confirmation step перед submit.                         |
+| Время до выручки растягивается                                                  | Высокая                     | Высокое (для бизнеса) | Открытое обсуждение с пользователем. План корректируется при необходимости.                                 |
+| Зависимости устаревают за 10–13 недель                                          | Высокая                     | Среднее               | npm-registry аудит после каждой подфазы (§2.7).                                                             |
+| Pre-push gate деградирует от объёма                                             | Средняя                     | Среднее               | Test partitioning (§5.1). Если test:serial > 5 минут — рассматриваем split.                                 |
 
 ---
 

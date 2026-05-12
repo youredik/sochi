@@ -44,9 +44,9 @@ test.describe('AdminSidebar — real-browser mount + RBAC visibility', () => {
 		// React 19.2.6 + TanStack Query 5.100.10 timing tightening 2026-05-12.
 		await expect(page.locator('[data-section-id]')).toHaveCount(7)
 		// Read all aria-labels off the rendered <a> rows.
-		const labels = await page.locator('[data-section-id]').evaluateAll((els) =>
-			els.map((el) => el.getAttribute('aria-label')),
-		)
+		const labels = await page
+			.locator('[data-section-id]')
+			.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')))
 		// All 7 must be non-empty AND contain Cyrillic.
 		expect(labels.length).toBe(7)
 		for (const label of labels) {
@@ -63,10 +63,7 @@ test.describe('AdminSidebar — real-browser mount + RBAC visibility', () => {
 		await page.locator('[data-section-id="grid"]').click()
 		await expect(page).toHaveURL(/\/grid$/)
 		// Active row has aria-current="page" (TanStack auto-emit per D22).
-		await expect(page.locator('[data-section-id="grid"]')).toHaveAttribute(
-			'aria-current',
-			'page',
-		)
+		await expect(page.locator('[data-section-id="grid"]')).toHaveAttribute('aria-current', 'page')
 	})
 
 	test('DemoModeBadge mounted in footer with valid mode (production|demo)', async ({ page }) => {
@@ -108,10 +105,7 @@ test.describe('AdminSidebar — axe-core WCAG 2.2 AA audit', () => {
 			.analyze()
 
 		if (results.violations.length > 0) {
-			console.error(
-				'admin-sidebar axe violations:',
-				JSON.stringify(results.violations, null, 2),
-			)
+			console.error('admin-sidebar axe violations:', JSON.stringify(results.violations, null, 2))
 		}
 		expect(results.violations).toEqual([])
 	})

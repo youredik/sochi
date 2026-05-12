@@ -17,6 +17,7 @@
 - Mandatory disclosure: размер номера, условия отмены, порядок возврата предоплаты, регистрация в реестре.
 
 **Implication для нашей системы:**
+
 - BAR-NR (legacy non-refundable) **больше не применим** в РФ. Должен быть rebrand'ed как `BAR-PROMO-1N` — discount preserved, penalty cap = 1 night.
 - Для OTAs которые публикуют 100% NR policy — OTA-side terms governed их own ToS, но hotel **не может enforce >1 night** против гостя под consumer law.
 - Tiered penalty schedules (T-30/T-14/T-7/...) теряют практический смысл в B2C — практически binary: 0% before arrival, 1 night after.
@@ -26,18 +27,18 @@
 
 ## 1. Канонические cancellation policy types (2026, post ПП №1912)
 
-| Code | Name | Free-cancel window | Penalty after window | RU-2026 status |
-|---|---|---|---|---|
-| `BAR-FLEX` | Best Available, fully flexible | до 18:00 в день заезда (24h в брендовых) | First-night charge | Permitted; cap = 1 night |
-| `BAR-MOD` | Moderate | 24-72h до заезда | First-night | Permitted; cap = 1 night |
-| `BAR-STR` | Strict | 7-14 дней до заезда | First-night (по новому правилу — не больше) | Permitted with disclosure |
-| `BAR-PROMO-1N` | Discounted promo (бывший NR) | none | First-night | **Replaces BAR-NR.** Discount preserved (e.g., -15%), penalty capped at 1 night |
-| `LOS-PROMO-1N` | Long-stay promo (≥7 nights) | none | First-night | Same RF cap |
-| `PAY-ON-ARRIVAL` | Hotel-collect, no prepayment | n/a | No-show fee = 1 night | Standard |
-| `PAY-NOW` / `PREPAID` | Full prepayment, refundable per window | по расписанию | First-night | Standard |
-| `GROUP` | Group block (≥10 rooms) | контрактная attrition (90/60/30/14/0 days) | Tiered % | Permitted via B2B contract; consumer law не применяется к ЮЛ |
-| `CORPORATE` / `NEG` | Negotiated rate с corp | per контракт | per контракт | B2B contractual freedom |
-| `EVENT-PEAK` | Olympic/festival peak | extended (14-30d) | First-night | Permitted, must disclose |
+| Code                  | Name                                   | Free-cancel window                         | Penalty after window                        | RU-2026 status                                                                  |
+| --------------------- | -------------------------------------- | ------------------------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------- |
+| `BAR-FLEX`            | Best Available, fully flexible         | до 18:00 в день заезда (24h в брендовых)   | First-night charge                          | Permitted; cap = 1 night                                                        |
+| `BAR-MOD`             | Moderate                               | 24-72h до заезда                           | First-night                                 | Permitted; cap = 1 night                                                        |
+| `BAR-STR`             | Strict                                 | 7-14 дней до заезда                        | First-night (по новому правилу — не больше) | Permitted with disclosure                                                       |
+| `BAR-PROMO-1N`        | Discounted promo (бывший NR)           | none                                       | First-night                                 | **Replaces BAR-NR.** Discount preserved (e.g., -15%), penalty capped at 1 night |
+| `LOS-PROMO-1N`        | Long-stay promo (≥7 nights)            | none                                       | First-night                                 | Same RF cap                                                                     |
+| `PAY-ON-ARRIVAL`      | Hotel-collect, no prepayment           | n/a                                        | No-show fee = 1 night                       | Standard                                                                        |
+| `PAY-NOW` / `PREPAID` | Full prepayment, refundable per window | по расписанию                              | First-night                                 | Standard                                                                        |
+| `GROUP`               | Group block (≥10 rooms)                | контрактная attrition (90/60/30/14/0 days) | Tiered %                                    | Permitted via B2B contract; consumer law не применяется к ЮЛ                    |
+| `CORPORATE` / `NEG`   | Negotiated rate с corp                 | per контракт                               | per контракт                                | B2B contractual freedom                                                         |
+| `EVENT-PEAK`          | Olympic/festival peak                  | extended (14-30d)                          | First-night                                 | Permitted, must disclose                                                        |
 
 **Apaleo canon**: rate plan must reference one `cancellationPolicy` and one `noShowPolicy`. Both store fee as `fixed amount | % of N nights | % of full stay | first-night`. `cancellationPolicy.dueDate` = computed deadline.
 
@@ -51,14 +52,14 @@ Extend от current `isRefundable + cancellationHours` к `cancellationPolicy` d
 
 ```ts
 type CancellationPolicy =
-  | { kind: 'free_until_hours', hours: number, postPenalty: PenaltyRule }
-  | { kind: 'tiered', steps: PenaltySchedule[] }
-  | { kind: 'locked_first_night' }  // = former NR под RF cap
+	| { kind: 'free_until_hours'; hours: number; postPenalty: PenaltyRule }
+	| { kind: 'tiered'; steps: PenaltySchedule[] }
+	| { kind: 'locked_first_night' } // = former NR под RF cap
 
 type PenaltyRule = {
-  type: 'first_night' | 'percent' | 'fixed'
-  value: number  // for percent: 0-100; for fixed: micros
-  includesAddons: boolean
+	type: 'first_night' | 'percent' | 'fixed'
+	value: number // for percent: 0-100; for fixed: micros
+	includesAddons: boolean
 }
 ```
 
@@ -102,6 +103,7 @@ T-0    : no-show → 100% first-night (RF-2026 cap)
 ### 3.1 Admin operator
 
 Full control:
+
 - Cancel + auto-post fee per policy (default).
 - Cancel + waive fee (manual override → audit log с reason + actor).
 - Cancel + custom fee (e.g., 50% goodwill).
@@ -156,6 +158,7 @@ Full control:
 **RF-2026 rule (ПП №1912)**: hotel который не может accommodate guest **обязан** провести equivalent или higher category accommodation **at no extra cost**, plus return any difference.
 
 Industry standard "walking" compensation:
+
 - 1 night room + tax at relocation hotel.
 - Transport to alternative property.
 - Phone call + internet at relocation hotel.
@@ -171,6 +174,7 @@ Industry standard "walking" compensation:
 States: `Confirmed → Canceled` | `Confirmed → InHouse → CheckedOut` | `Confirmed → NoShow` (terminal).
 
 Reasons (free-text + recommended taxonomy):
+
 - `GuestCancellation`
 - `NoShow`
 - `OverbookingWalk`
@@ -181,6 +185,7 @@ Reasons (free-text + recommended taxonomy):
 - `OperationalError`
 
 API surface:
+
 - `PUT /booking/v1/reservation-actions/{id}/cancel` — moves status, requires `reason`.
 - `POST /finance/v0-nswf/folio-actions/{folioId}/cancellation-fee` — posts the configured fee.
 - `POST /finance/v0-nswf/folio-actions/{folioId}/no-show-fee` — analogous.
@@ -197,6 +202,7 @@ Refund — **separate again** — handled via integrated payment provider.
 ## 5. Mews / Cloudbeds taxonomy
 
 **Mews**:
+
 - Cancellation handled at reservation-status tab; "Apply cancellation fee" tickbox.
 - Refundable rates: cancellation fee N/A (auto-rebate full).
 - Non-refundable: full charge stays. After payment, "rebate" (Mews term для refund-as-credit-against-bill).
@@ -204,6 +210,7 @@ Refund — **separate again** — handled via integrated payment provider.
 - **No "voucher" / "credit" concept** в Mews PMS-native — refund is monetary only.
 
 **Cloudbeds**:
+
 - Cancellation policy is **informational**, no auto-charge — operator must manually charge fee.
 - "Cancel For Any Reason" add-on (rolling out Q1 2026) — guest pays small non-refundable insurance fee, gets full refund на cancel within window даже from non-refundable rate.
 - Refunds: 5-7 business days, original payment method, only via Cloudbeds Payments.
@@ -214,18 +221,18 @@ Refund — **separate again** — handled via integrated payment provider.
 
 ## 6. Refund mechanics
 
-| Aspect | Canonical 2026 |
-|---|---|
-| Full refund | Refund = paid amount. Original method. T+1 to T+10 banking days. |
-| Partial refund | Refund = paid - retained_fee. Reason on receipt. |
-| No refund | Only legal in B2B; в RF B2C — only если 1-night cap applied to full prepayment of 1 night. |
-| Refund timing | YooKassa: ~seconds to 20min в API status; bank settlement T+1 to T+5. Real card refund: 5-30 days в зависимости от issuer. Communicate "5-10 рабочих дней" гостю. |
-| Method | Original card mandatory под bank rules (PCI/issuer). YooKassa `refunds` endpoint accepts no destination — tied to source payment. |
-| Expired card | YooKassa: refund still goes к **same card token**; bank routes to new card or returns to issuer's customer-service. Booking.com VCC: refund works даже if expired. Last-resort: bank transfer с signed application. |
-| 54-ФЗ refund receipt | Required. Recipient = `возврат прихода`. Same VAT as original (per ФНС 2026 — VAT-rate-locked-to-source). YooKassa generates автоматически с `receipt` param на refund call. |
-| Two-step (void + refund) | Pre-capture: cancel auth (no money moved). Post-capture: refund. |
-| Cumulative cap | `SUM(refunds.succeeded) <= payment.captured`. **Already enforced** в нашем `Refund` domain. |
-| Multi-payment refund order | YooKassa: каждый payment refunded independently. Order: **deposit first, then balance** (LIFO of payments) — standard hotel practice. |
+| Aspect                     | Canonical 2026                                                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Full refund                | Refund = paid amount. Original method. T+1 to T+10 banking days.                                                                                                                                                    |
+| Partial refund             | Refund = paid - retained_fee. Reason on receipt.                                                                                                                                                                    |
+| No refund                  | Only legal in B2B; в RF B2C — only если 1-night cap applied to full prepayment of 1 night.                                                                                                                          |
+| Refund timing              | YooKassa: ~seconds to 20min в API status; bank settlement T+1 to T+5. Real card refund: 5-30 days в зависимости от issuer. Communicate "5-10 рабочих дней" гостю.                                                   |
+| Method                     | Original card mandatory под bank rules (PCI/issuer). YooKassa `refunds` endpoint accepts no destination — tied to source payment.                                                                                   |
+| Expired card               | YooKassa: refund still goes к **same card token**; bank routes to new card or returns to issuer's customer-service. Booking.com VCC: refund works даже if expired. Last-resort: bank transfer с signed application. |
+| 54-ФЗ refund receipt       | Required. Recipient = `возврат прихода`. Same VAT as original (per ФНС 2026 — VAT-rate-locked-to-source). YooKassa generates автоматически с `receipt` param на refund call.                                        |
+| Two-step (void + refund)   | Pre-capture: cancel auth (no money moved). Post-capture: refund.                                                                                                                                                    |
+| Cumulative cap             | `SUM(refunds.succeeded) <= payment.captured`. **Already enforced** в нашем `Refund` domain.                                                                                                                         |
+| Multi-payment refund order | YooKassa: каждый payment refunded independently. Order: **deposit first, then balance** (LIFO of payments) — standard hotel practice.                                                                               |
 
 ### 6.1 RF 54-ФЗ specifics
 
@@ -238,15 +245,15 @@ Refund — **separate again** — handled via integrated payment provider.
 
 ## 7. Channel-pulled cancellations matrix
 
-| Channel | Payment model | Cancel propagation | Who refunds | Hotel-side action | Reconciliation gotcha |
-|---|---|---|---|---|---|
-| Booking.com Hotel-Collect | Hotel charged | CM push | Hotel via own acquirer | Refund through YooKassa | Card may expire; fall back bank transfer |
-| Booking.com Channel-Collect (VCC) | Booking charged guest, VCC issued | CM push + VCC update email | Hotel refunds VCC; Booking refunds guest | Refund through normal acquirer using VCC | 60-90d window; can refund expired VCC |
-| Я.Путешествия prepaid | Я.Travel charged guest | CM push (some don't propagate — Shelter known) | Я.Travel refunds, settles via payout deduction | Confirm cancellation в Extranet | Reconciliation lag; manual job |
-| Ostrovok ETG-collect | ETG charged, VCC to hotel | XML push | ETG refunds guest, deducts from hotel payout | Confirm в Ostrovok partner panel | Same VCC pattern as Booking |
-| Ostrovok hotel-collect | Hotel charges | XML push | Hotel | Hotel acquirer refund | Standard |
-| TravelLine direct | Hotel-collect always | Native | Hotel | Acquirer refund | Standard |
-| Bnovo | Both models | Native | Per model | Per model | Standard |
+| Channel                           | Payment model                     | Cancel propagation                             | Who refunds                                    | Hotel-side action                        | Reconciliation gotcha                    |
+| --------------------------------- | --------------------------------- | ---------------------------------------------- | ---------------------------------------------- | ---------------------------------------- | ---------------------------------------- |
+| Booking.com Hotel-Collect         | Hotel charged                     | CM push                                        | Hotel via own acquirer                         | Refund through YooKassa                  | Card may expire; fall back bank transfer |
+| Booking.com Channel-Collect (VCC) | Booking charged guest, VCC issued | CM push + VCC update email                     | Hotel refunds VCC; Booking refunds guest       | Refund through normal acquirer using VCC | 60-90d window; can refund expired VCC    |
+| Я.Путешествия prepaid             | Я.Travel charged guest            | CM push (some don't propagate — Shelter known) | Я.Travel refunds, settles via payout deduction | Confirm cancellation в Extranet          | Reconciliation lag; manual job           |
+| Ostrovok ETG-collect              | ETG charged, VCC to hotel         | XML push                                       | ETG refunds guest, deducts from hotel payout   | Confirm в Ostrovok partner panel         | Same VCC pattern as Booking              |
+| Ostrovok hotel-collect            | Hotel charges                     | XML push                                       | Hotel                                          | Hotel acquirer refund                    | Standard                                 |
+| TravelLine direct                 | Hotel-collect always              | Native                                         | Hotel                                          | Acquirer refund                          | Standard                                 |
+| Bnovo                             | Both models                       | Native                                         | Per model                                      | Per model                                | Standard                                 |
 
 Sandbox-friendly mocks: emit synthetic `OTA_HotelResNotifRQ` с `ResStatus=Cancelled` to channel-pull endpoint. Для VCC cases — emit fake-VCC payload с masked PAN.
 
@@ -278,6 +285,7 @@ Sandbox-friendly mocks: emit synthetic `OTA_HotelResNotifRQ` с `ResStatus=Cance
 ```
 
 **Transitions allowed**:
+
 - `confirmed → cancelled` ✓
 - `confirmed → in_house` ✓
 - `confirmed → no_show` ✓
@@ -312,13 +320,13 @@ Sandbox-friendly mocks: emit synthetic `OTA_HotelResNotifRQ` с `ResStatus=Cance
 
 ## 10. Tax consequences
 
-| Scenario | НДС 22% | Тур.налог 2% | Доход |
-|---|---|---|---|
-| Cancel free | ✗ | ✗ | ✗ (refund full) |
-| Cancel с 1-night fee | Compensation, no VAT | ✗ (no actual stay) | + 1 night fee |
-| No-show, 1 night charged | Same as above | ✗ | + 1 night |
-| Walked guest (relocate) | Refund VAT proportionally | Refund tour tax | Loss |
-| Refund partial | VAT on refund receipt = VAT в original | Tour tax base reduced | Income reduced |
+| Scenario                 | НДС 22%                                | Тур.налог 2%          | Доход           |
+| ------------------------ | -------------------------------------- | --------------------- | --------------- |
+| Cancel free              | ✗                                      | ✗                     | ✗ (refund full) |
+| Cancel с 1-night fee     | Compensation, no VAT                   | ✗ (no actual stay)    | + 1 night fee   |
+| No-show, 1 night charged | Same as above                          | ✗                     | + 1 night       |
+| Walked guest (relocate)  | Refund VAT proportionally              | Refund tour tax       | Loss            |
+| Refund partial           | VAT on refund receipt = VAT в original | Tour tax base reduced | Income reduced  |
 
 **Critical fix в нашем `tourismTaxOrgReport`**: currently `excludes cancelled`, но spec says `no_show retains liability`. Per RF-2026 reading + НК — no_show without actual occupancy should not accrue tour tax. **Recommend**: change to `excludes status IN ('cancelled', 'no_show')`. Verify с tax counsel.
 
@@ -342,6 +350,7 @@ Sandbox-friendly mocks: emit synthetic `OTA_HotelResNotifRQ` с `ResStatus=Cance
 ## 12. UX для public guest cancellation
 
 Mandatory components per RF-2026 + best practice 2026:
+
 1. **Email link** — signed JWT token, single-use, expires at check-in datetime.
 2. **Self-service page** showing: booking summary, cancellation deadline, fee preview, "Cancel" button.
 3. **NO universal 14-day cooling-off**. RF-2026 effectively gives "cooling-off until arrival date".
@@ -356,6 +365,7 @@ Mandatory components per RF-2026 + best practice 2026:
 Current `bookingStatusValues = ['confirmed','in_house','checked_out','cancelled','no_show']`.
 
 **Recommended additions**:
+
 - `walked` — overbooking relocation (RF-2026 mandatory).
 - Optional: `pending` для OTA-pull bookings awaiting guest confirmation; не нужно для direct/IBE.
 

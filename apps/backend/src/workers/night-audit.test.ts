@@ -273,27 +273,26 @@ describe('runNightAudit — trigger semantics', { tags: ['db'] }, () => {
 		expect(lines.filter((l) => l.id.startsWith('audit_'))).toHaveLength(0)
 	})
 
-	test.each([
-		'cancelled',
-		'no_show',
-		'checked_out',
-	] as const)('[T3] %s booking → 0 lines posted (terminal status)', async (status) => {
-		const tenantId = newId('organization')
-		const propertyId = newId('property')
-		const { folioId } = await seedBooking({
-			tenantId,
-			propertyId,
-			checkIn: '2026-04-25',
-			checkOut: '2026-04-28',
-			status,
-			nightlyMicros: NIGHTLY_MICROS,
-		})
+	test.each(['cancelled', 'no_show', 'checked_out'] as const)(
+		'[T3] %s booking → 0 lines posted (terminal status)',
+		async (status) => {
+			const tenantId = newId('organization')
+			const propertyId = newId('property')
+			const { folioId } = await seedBooking({
+				tenantId,
+				propertyId,
+				checkIn: '2026-04-25',
+				checkOut: '2026-04-28',
+				status,
+				nightlyMicros: NIGHTLY_MICROS,
+			})
 
-		await runNightAudit(getTestSql(), silentLog, { now: noonMskOn('2026-04-27') })
+			await runNightAudit(getTestSql(), silentLog, { now: noonMskOn('2026-04-27') })
 
-		const lines = await listLines(tenantId, folioId)
-		expect(lines.filter((l) => l.id.startsWith('audit_'))).toHaveLength(0)
-	})
+			const lines = await listLines(tenantId, folioId)
+			expect(lines.filter((l) => l.id.startsWith('audit_'))).toHaveLength(0)
+		},
+	)
 
 	test('[T4] businessDate < checkIn → 0 lines (audit before stay starts)', async () => {
 		const tenantId = newId('organization')

@@ -2,6 +2,11 @@
 	"name": "@horeca/shared",
 	"version": "0.0.1",
 	"private": true,
+	"files": [
+		"src",
+		"dist",
+		"package.json"
+	],
 	"type": "module",
 	"exports": {
 		".": {
@@ -97,11 +102,6 @@
 			}
 		}
 	},
-	"files": [
-		"src",
-		"dist",
-		"package.json"
-	],
 	"scripts": {
 		"build": "tsgo -p tsconfig.build.json"
 	},

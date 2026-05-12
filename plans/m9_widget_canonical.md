@@ -13,6 +13,7 @@
 **Что закрываем:** Боль 2 функция 2.3 — публичный виджет онлайн-бронирования с платежами. После M9.widget closure: **6/7 функций end-to-end закрыто** (остаётся 2.2 Channel Manager → M10). Always-on demo получает реальный booking flow вместо placeholder.
 
 **End-state pain-mapping:**
+
 - Сочи отель (5-50 номеров) встраивает виджет на свой сайт через `<script>` snippet или iframe link
 - Гость бронирует напрямую → отель не платит 17% OTA-комиссии (Booking/Ostrovok/Я.Путешествия) и +60% revenue per booking (per Skift 2026 baseline)
 - Мобильный flow first-class, в т.ч. iOS 26 «Open as Web App» Add to Home Screen (M9.4 PWA уже даёт)
@@ -20,6 +21,7 @@
 - Voice/AI booking via Yandex Auto + Alice (M+later strategic) — Сочи на конце трассы M4 Дон, road-trip traffic relevant
 
 **Не покрываем (out-of-scope для этой фазы):**
+
 - Yandex Auto Alice skill для голосового booking — стратегический differentiator, отдельная фаза M+later
 - Multi-room booking (Apaleo поддерживает, Bnovo нет) — defer M+later
 - Group bookings (>5 номеров) — обычно contact-form, не self-serve
@@ -41,16 +43,16 @@
 
 ## §2. Senior-level commitments (8 решений, не вопросы)
 
-| № | Решение | Reasoning |
-|---|---|---|
-| 1 | **Embed-tech: Lit 3.3.2 Web Component + Declarative Shadow DOM SSR + iframe fallback (для strict-CSP hosts)** | Wave 2 Luzmo benchmark: Web Components ~4-5× faster than iframe load. Declarative Shadow DOM Newly Available 2024-08-05, Widely Available 2026-08-20 (Baseline). research-cache claim "Apaleo Shadow DOM script-injection canon" NOT verified — Apaleo actual = API-first + третьи виджеты (Simultem/DIRS21/myIBE). Mews loader builds iframe under hood. Booking.com affiliate = iframe. Lit 3.3.2 (Dec 2025) + DSD = модернее всех existing vendors на 2026-04. **Bundle target: ≤30 kB gzip initial loader** (Mews ~11 kB baseline). |
-| 2 | **Payment: ЮKassa Checkout Widget v1 (iframe → SAQ-A scope) для card+СБП+MirPay+SberPay+T-Pay** | Wave 5 verified: 3 distinct ЮKassa products. **Checkout Widget v1** (`yookassa.ru/checkout-widget/v1/checkout-widget.js`) = ready-made iframe form, single embed handles all RU mobile pay rails, PCI scope = SAQ-A (22 reqs не 191 SAQ-A-EP). NSPK universal QR mandatory Sept 1 2026 — поддержка через ЮKassa Widget автоматически. **REJECT: ЮKassa Checkout.js v1 (tokenization library)** — попадаем в SAQ-A-EP с 191 reqs. **REJECT: T-Bank Acquiring Widget standalone** — Wave 5 URL 404'd, не canonical 2026. ЮKassa остаётся primary. |
-| 3 | **Magic-link booking management (signed JWT, 7-day view + 15-min mutate TTL, per-tenant secret)** | Research-cache §11.4 + memory `project_postbox_domain_pending.md`. Гость получает email с magic-link → JWT verify → set HttpOnly cookie + invalidate JWT on first click → access guest portal (view + cancel). НЕ требует password / signup. Booking reference в URL **недостаточен** для access — нужен JWT. Reference + email fallback с rate-limit (10 req/min IP, 5 req/hour email, 3 req/hour reference) + Yandex SmartCaptcha invisible после 3 fails. |
-| 4 | **3-screen flow: Search&Pick / Extras / Guest+Pay (не 4-step, не single-page)** | Cache canon + Baymard 2024 still primary 2026 (Wave 4: no fresh 2026 hotel-specific Baymard update). Apaleo IBE v2 (2024 redesign) + Mews + Cloudbeds IE 2.0 (Q2 2026 cutover) — все 3-screen. 5-step имеет cliff abandonment между steps; single-page Stripe-style overwhelms на mobile (>3000px scroll). 3 = sweet spot. |
-| 5 | **Pre-selected default room/rate (choice architecture canon 2026 — Wave 4 +82% adoption)** | Suebehaviouraldesign 2026 baseline: 82% выбирают pre-selected default. >5 options = decision fatigue. Default highlight: BAR-flex для гибкости (free cancel deadline visible) — гость видит безопасный выбор первым, может down-grade на BAR-NR за -15% если ОК с risk. |
-| 6 | **Mobile-first canon: bottom-sheet rate picker via Vaul (M9.5 lock 1.1.2) + sticky CTA + above-fold availability search (Hostaway 2026 pattern)** | Wave 1: Hostaway Booking Site Pro 2026 — mobile-first **availability search + booking CTA above-fold**. SiteMinder Little Hotelier Feb 2026 target <30-room — direct ICP overlap, изучаем их паттерны. Vaul уже в стеке после M9.5 — переиспользуем. Touch targets 44×44 (WCAG 2.5.5 AAA де-факто 2026 baseline). |
-| 7 | **Always-on demo seeder polish: realistic Сочи tenant с widget surface + 7×3 features visible** | Per `project_demo_strategy.md` + `project_initial_framing.md` reframe: demo IS permanent product surface. Demo tenant получает 5-7 номеров (Deluxe Sea View + Standard Mountain View + Family Suite + Apartment 2BR), 3 rate plans (BAR Flex / BAR NR / Long-stay -25%), realistic photos (placeholder Unsplash CC0 для Сочи), сезонная цена (winter / summer split), 14-day forward bookings (varied statuses) для chessboard demo. **JSON-LD structured data + `hotel-info.json`** (Wave 1 Mews 2026 strategic insight: AI agents will discover hotels via machine-readable content). |
-| 8 | **Performance budget hard gate: Bundle ≤30 kB gzip initial / LCP ≤2.5s / INP ≤200ms / CLS ≤0.1 at p75** | Wave 6: SchedulingKit 2026 industry standard ≤30 kB gzip initial. CWV 2026 thresholds unchanged from 2024 (LCP+INP Baseline Newly available 2025-12-12). Pre-push gate: Lighthouse CI `@lhci/cli` 0.15.x checks all 4 budgets per sub-phase commit. |
+| №   | Решение                                                                                                                                           | Reasoning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Embed-tech: Lit 3.3.2 Web Component + Declarative Shadow DOM SSR + iframe fallback (для strict-CSP hosts)**                                     | Wave 2 Luzmo benchmark: Web Components ~4-5× faster than iframe load. Declarative Shadow DOM Newly Available 2024-08-05, Widely Available 2026-08-20 (Baseline). research-cache claim "Apaleo Shadow DOM script-injection canon" NOT verified — Apaleo actual = API-first + третьи виджеты (Simultem/DIRS21/myIBE). Mews loader builds iframe under hood. Booking.com affiliate = iframe. Lit 3.3.2 (Dec 2025) + DSD = модернее всех existing vendors на 2026-04. **Bundle target: ≤30 kB gzip initial loader** (Mews ~11 kB baseline).                                                 |
+| 2   | **Payment: ЮKassa Checkout Widget v1 (iframe → SAQ-A scope) для card+СБП+MirPay+SberPay+T-Pay**                                                   | Wave 5 verified: 3 distinct ЮKassa products. **Checkout Widget v1** (`yookassa.ru/checkout-widget/v1/checkout-widget.js`) = ready-made iframe form, single embed handles all RU mobile pay rails, PCI scope = SAQ-A (22 reqs не 191 SAQ-A-EP). NSPK universal QR mandatory Sept 1 2026 — поддержка через ЮKassa Widget автоматически. **REJECT: ЮKassa Checkout.js v1 (tokenization library)** — попадаем в SAQ-A-EP с 191 reqs. **REJECT: T-Bank Acquiring Widget standalone** — Wave 5 URL 404'd, не canonical 2026. ЮKassa остаётся primary.                                         |
+| 3   | **Magic-link booking management (signed JWT, 7-day view + 15-min mutate TTL, per-tenant secret)**                                                 | Research-cache §11.4 + memory `project_postbox_domain_pending.md`. Гость получает email с magic-link → JWT verify → set HttpOnly cookie + invalidate JWT on first click → access guest portal (view + cancel). НЕ требует password / signup. Booking reference в URL **недостаточен** для access — нужен JWT. Reference + email fallback с rate-limit (10 req/min IP, 5 req/hour email, 3 req/hour reference) + Yandex SmartCaptcha invisible после 3 fails.                                                                                                                            |
+| 4   | **3-screen flow: Search&Pick / Extras / Guest+Pay (не 4-step, не single-page)**                                                                   | Cache canon + Baymard 2024 still primary 2026 (Wave 4: no fresh 2026 hotel-specific Baymard update). Apaleo IBE v2 (2024 redesign) + Mews + Cloudbeds IE 2.0 (Q2 2026 cutover) — все 3-screen. 5-step имеет cliff abandonment между steps; single-page Stripe-style overwhelms на mobile (>3000px scroll). 3 = sweet spot.                                                                                                                                                                                                                                                              |
+| 5   | **Pre-selected default room/rate (choice architecture canon 2026 — Wave 4 +82% adoption)**                                                        | Suebehaviouraldesign 2026 baseline: 82% выбирают pre-selected default. >5 options = decision fatigue. Default highlight: BAR-flex для гибкости (free cancel deadline visible) — гость видит безопасный выбор первым, может down-grade на BAR-NR за -15% если ОК с risk.                                                                                                                                                                                                                                                                                                                 |
+| 6   | **Mobile-first canon: bottom-sheet rate picker via Vaul (M9.5 lock 1.1.2) + sticky CTA + above-fold availability search (Hostaway 2026 pattern)** | Wave 1: Hostaway Booking Site Pro 2026 — mobile-first **availability search + booking CTA above-fold**. SiteMinder Little Hotelier Feb 2026 target <30-room — direct ICP overlap, изучаем их паттерны. Vaul уже в стеке после M9.5 — переиспользуем. Touch targets 44×44 (WCAG 2.5.5 AAA де-факто 2026 baseline).                                                                                                                                                                                                                                                                       |
+| 7   | **Always-on demo seeder polish: realistic Сочи tenant с widget surface + 7×3 features visible**                                                   | Per `project_demo_strategy.md` + `project_initial_framing.md` reframe: demo IS permanent product surface. Demo tenant получает 5-7 номеров (Deluxe Sea View + Standard Mountain View + Family Suite + Apartment 2BR), 3 rate plans (BAR Flex / BAR NR / Long-stay -25%), realistic photos (placeholder Unsplash CC0 для Сочи), сезонная цена (winter / summer split), 14-day forward bookings (varied statuses) для chessboard demo. **JSON-LD structured data + `hotel-info.json`** (Wave 1 Mews 2026 strategic insight: AI agents will discover hotels via machine-readable content). |
+| 8   | **Performance budget hard gate: Bundle ≤30 kB gzip initial / LCP ≤2.5s / INP ≤200ms / CLS ≤0.1 at p75**                                           | Wave 6: SchedulingKit 2026 industry standard ≤30 kB gzip initial. CWV 2026 thresholds unchanged from 2024 (LCP+INP Baseline Newly available 2025-12-12). Pre-push gate: Lighthouse CI `@lhci/cli` 0.15.x checks all 4 budgets per sub-phase commit.                                                                                                                                                                                                                                                                                                                                     |
 
 ---
 
@@ -107,26 +109,26 @@ EXTERNAL (CDN, не npm):
 
 ## §4. NOT to add (REJECT с reasoning)
 
-| Что | Почему reject |
-|---|---|
-| **ЮKassa Checkout.js v1 tokenization library** | SAQ-A-EP scope = 191 PCI reqs vs SAQ-A 22 reqs. Custom card form = forms host script integrity monitoring (PCI 6.4.3 + 11.6.1). Для small HoReCa overhead огромный. Choose ready-made Widget v1 iframe → SAQ-A. |
-| **CloudFlare Workers / Pages для edge** | RU-geopolitically-restricted (per `feedback_yandex_cloud_only.md`). Cloudflare acquired Astro 2026-01-16 — но это всё equally Cloudflare-locked = не для нас. Stay Yandex Cloud Functions / Yandex Cloud CDN. |
-| **React Server Components для embed** | Anti-pattern для 3rd-party HTML — server boundary в чужом DOM не работает. Wave 6 explicit: «RSC for embed = anti-pattern». Используем Streaming SSR shell + CSR islands. |
-| **Qwik 2.0 для виджета** | Adoption 4-7% 2026, niche. Lit 3.3.2 + Declarative Shadow DOM = более mainstream + better-supported для Web Component pattern. Risks: fewer libraries, fewer docs RU. |
-| **Astro Server Islands для widget host** | Astro acquired by Cloudflare 2026-01-16 → non-РФ-friendly trajectory. Server Islands отлично работают для SSG/SSR, но booking widget = full-CSR after initial hydration. Plain Vite 8 + React 19 = canonical. |
-| **scheduler.yield() / scheduler.postTask()** | Wave 6: NOT Baseline (no Safari implementation 2026Q2). Используем feature-detect fallback → `setTimeout(0)` или `await new Promise(r => MessageChannel)`. |
-| **Apple Pay / Google Pay в payment widget** | Non-functional в РФ с 2022 (Visa/MC suspension). Wave 5: ApplePay/GooglePay убраны из ЮKassa. Используем MirPay/SberPay/T-Pay/СБП через ЮKassa Widget (single-embed handles all). |
-| **Yandex Pay button** | Sanctioned 2026 (per [OpenSanctions Yandex Pay](https://www.opensanctions.org/entities/ca-sema-4a1e19737e79870d087f16df466c1f8879078c64/) verified 2026-04-29). Никогда не был в ЮKassa Widget enum — НЕ опция. Стратегически: Yandex Travel в проблемах (commission hike + chain withdrawals 2026), нашему widget'у НЕ нужна Yandex Pay интеграция. |
-| **Lighthouse 13.1.0 standalone (без LHCI)** | GA published, Node 22.19+ требование (наш Node 24+ OK). НО `@lhci/cli@0.15.1` pins `lighthouse@12.6.1` exact internally — для CI используем canonical LHCI pair. Когда LHCI 0.16+ обновится с Lighthouse 13 — bump пакетной парой. Это «lagging но canonical», НЕ stale. |
-| **`<input type="number">` для guest stepper** | Wave 7.4: на iOS показывает спинщики, на Android — текст. Используем buttons + visible number с aria-live="polite". |
-| **Soft-Navigation INP (2026 OT)** | Chrome 147 origin trial March 2026 — НЕ Baseline, no CrUX integration на 2026Q2. Wait until full release ≥H1 2027. |
-| **Hopper-style price prediction** | Hopper monetises 100% of planners vs OTA-scale inventory. Не применимо для small HoReCa без inventory volume. Skip. |
-| **Booking.com Genius blanket 10% / Hilton AI Trip Planner** | OTA-scale features (millions of guests, ML pipelines). Hilton +17% lift = data point, не блюпринт для SMB Сочи. Pre-selected default room (Wave 4: 82% adoption) — applicable, no AI required. |
-| **Apaleo MCP / "Hospitable MCP" для guest-facing widget** | Per `project_mcp_server_strategic.md` MCP — strategic differentiator на admin-facing AI agent. Guest-facing AI booking — defer M11+ если decisively выигрываем. |
-| **Astro 6.0 beta** | beta-6 in flight, не stable. Stay на Vite 8 + React 19 + Lit 3.3.2 — все Baseline-stable. |
-| **Apaleo IBE v2 / Mews Distributor / Cloudbeds IE 2.0 OEM как embed** | Не наш бизнес — мы строим первоклассный native widget. Конкурируем UX качеством, не интегрируем чужие виджеты. |
-| **Custom 3D card flip animation на success** | Шум. Linear/Stripe canon: subtle micro-interaction (success icon scale-in 150ms + tabular-nums booking ref reveal), нет 3D wow-эффектов. |
-| **`aria-live="assertive"` на live availability changes** | Spam screen reader. Use `aria-live="polite"` или `role="status"` per WCAG 2.2. |
+| Что                                                                   | Почему reject                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ЮKassa Checkout.js v1 tokenization library**                        | SAQ-A-EP scope = 191 PCI reqs vs SAQ-A 22 reqs. Custom card form = forms host script integrity monitoring (PCI 6.4.3 + 11.6.1). Для small HoReCa overhead огромный. Choose ready-made Widget v1 iframe → SAQ-A.                                                                                                                                      |
+| **CloudFlare Workers / Pages для edge**                               | RU-geopolitically-restricted (per `feedback_yandex_cloud_only.md`). Cloudflare acquired Astro 2026-01-16 — но это всё equally Cloudflare-locked = не для нас. Stay Yandex Cloud Functions / Yandex Cloud CDN.                                                                                                                                        |
+| **React Server Components для embed**                                 | Anti-pattern для 3rd-party HTML — server boundary в чужом DOM не работает. Wave 6 explicit: «RSC for embed = anti-pattern». Используем Streaming SSR shell + CSR islands.                                                                                                                                                                            |
+| **Qwik 2.0 для виджета**                                              | Adoption 4-7% 2026, niche. Lit 3.3.2 + Declarative Shadow DOM = более mainstream + better-supported для Web Component pattern. Risks: fewer libraries, fewer docs RU.                                                                                                                                                                                |
+| **Astro Server Islands для widget host**                              | Astro acquired by Cloudflare 2026-01-16 → non-РФ-friendly trajectory. Server Islands отлично работают для SSG/SSR, но booking widget = full-CSR after initial hydration. Plain Vite 8 + React 19 = canonical.                                                                                                                                        |
+| **scheduler.yield() / scheduler.postTask()**                          | Wave 6: NOT Baseline (no Safari implementation 2026Q2). Используем feature-detect fallback → `setTimeout(0)` или `await new Promise(r => MessageChannel)`.                                                                                                                                                                                           |
+| **Apple Pay / Google Pay в payment widget**                           | Non-functional в РФ с 2022 (Visa/MC suspension). Wave 5: ApplePay/GooglePay убраны из ЮKassa. Используем MirPay/SberPay/T-Pay/СБП через ЮKassa Widget (single-embed handles all).                                                                                                                                                                    |
+| **Yandex Pay button**                                                 | Sanctioned 2026 (per [OpenSanctions Yandex Pay](https://www.opensanctions.org/entities/ca-sema-4a1e19737e79870d087f16df466c1f8879078c64/) verified 2026-04-29). Никогда не был в ЮKassa Widget enum — НЕ опция. Стратегически: Yandex Travel в проблемах (commission hike + chain withdrawals 2026), нашему widget'у НЕ нужна Yandex Pay интеграция. |
+| **Lighthouse 13.1.0 standalone (без LHCI)**                           | GA published, Node 22.19+ требование (наш Node 24+ OK). НО `@lhci/cli@0.15.1` pins `lighthouse@12.6.1` exact internally — для CI используем canonical LHCI pair. Когда LHCI 0.16+ обновится с Lighthouse 13 — bump пакетной парой. Это «lagging но canonical», НЕ stale.                                                                             |
+| **`<input type="number">` для guest stepper**                         | Wave 7.4: на iOS показывает спинщики, на Android — текст. Используем buttons + visible number с aria-live="polite".                                                                                                                                                                                                                                  |
+| **Soft-Navigation INP (2026 OT)**                                     | Chrome 147 origin trial March 2026 — НЕ Baseline, no CrUX integration на 2026Q2. Wait until full release ≥H1 2027.                                                                                                                                                                                                                                   |
+| **Hopper-style price prediction**                                     | Hopper monetises 100% of planners vs OTA-scale inventory. Не применимо для small HoReCa без inventory volume. Skip.                                                                                                                                                                                                                                  |
+| **Booking.com Genius blanket 10% / Hilton AI Trip Planner**           | OTA-scale features (millions of guests, ML pipelines). Hilton +17% lift = data point, не блюпринт для SMB Сочи. Pre-selected default room (Wave 4: 82% adoption) — applicable, no AI required.                                                                                                                                                       |
+| **Apaleo MCP / "Hospitable MCP" для guest-facing widget**             | Per `project_mcp_server_strategic.md` MCP — strategic differentiator на admin-facing AI agent. Guest-facing AI booking — defer M11+ если decisively выигрываем.                                                                                                                                                                                      |
+| **Astro 6.0 beta**                                                    | beta-6 in flight, не stable. Stay на Vite 8 + React 19 + Lit 3.3.2 — все Baseline-stable.                                                                                                                                                                                                                                                            |
+| **Apaleo IBE v2 / Mews Distributor / Cloudbeds IE 2.0 OEM как embed** | Не наш бизнес — мы строим первоклассный native widget. Конкурируем UX качеством, не интегрируем чужие виджеты.                                                                                                                                                                                                                                       |
+| **Custom 3D card flip animation на success**                          | Шум. Linear/Stripe canon: subtle micro-interaction (success icon scale-in 150ms + tabular-nums booking ref reveal), нет 3D wow-эффектов.                                                                                                                                                                                                             |
+| **`aria-live="assertive"` на live availability changes**              | Spam screen reader. Use `aria-live="polite"` или `role="status"` per WCAG 2.2.                                                                                                                                                                                                                                                                       |
 
 ---
 
@@ -173,6 +175,7 @@ du -sh apps/frontend/dist/assets/*.js | sort -h | head -5
 ```
 
 **Definition of Done M9.widget.0:**
+
 - [ ] Все 6 grep checks executed → output logged в `M9_WIDGET_BASELINE.md` (working note, gitignored)
 - [ ] `npm view` 5 deps — versions match canonical (drift = update §3 stack section + commit lock file refresh)
 - [ ] `pnpm test:serial` all green (no pre-existing fails)
@@ -189,6 +192,7 @@ du -sh apps/frontend/dist/assets/*.js | sort -h | head -5
 **Цель:** новый public hosted виджет на routes `/widget/{tenantSlug}` (preview) + production tenant подключение через `book.{tenant}.ru` subdomain (configurable).
 
 **Files to add:**
+
 - `apps/backend/src/domains/widget/public.routes.ts` — public Hono routes, NO auth, NO tenant middleware (resolve tenant from URL slug):
   - `GET /api/public/widget/:tenantSlug/properties` — list properties для Sochi tenant
   - `GET /api/public/widget/:tenantSlug/properties/:propertyId/availability?from=&to=&adults=&children=` — availability + rates
@@ -201,16 +205,18 @@ du -sh apps/frontend/dist/assets/*.js | sort -h | head -5
 - `apps/frontend/src/features/public-widget/lib/widget-api.ts` — typed API client с TanStack Query
 
 **Files to modify:**
+
 - `apps/backend/src/app.ts` — mount `widgetRoutes` BEFORE auth middleware:
   ```ts
-  app.route('/api/public/widget', widgetRoutes)  // PUBLIC — no auth
-  app.use('*', authMiddleware())  // existing, applies to non-public routes
+  app.route('/api/public/widget', widgetRoutes) // PUBLIC — no auth
+  app.use('*', authMiddleware()) // existing, applies to non-public routes
   ```
 - `apps/frontend/src/routes/__root.tsx` — handle `/widget/*` route без auth redirect
 - CORS allow-list: extend `cors()` middleware с `allowOrigins` для tenant-supplied embed origins (per-tenant config). For M9.widget.1 — public routes accept `Origin: *` для read endpoints (availability/photos). Mutating endpoints (POST booking) — require explicit allow-list per tenant (М9.widget.4 concern).
 - `apps/backend/src/db/seed-demo-tenant.ts` — extend с realistic Сочи property content (5-7 rooms + 3 rate plans + 14-day availability + photo placeholders)
 
 **Strict tests (target ~30):**
+
 - `widget.routes.test.ts` — public access без auth (no 401), tenant slug case-insensitivity, unknown tenant → 404, rate-limit per IP (10 req/min на read endpoints)
 - `widget.repo.test.ts` — `isPublic=true` filter (cross-tenant isolation regression — публичный route не утечёт private property)
 - `widget.service.test.ts` — availability merge с booking lock (overlapping booking → not available), rate calculation с multi-night discount + tourism tax 2%
@@ -220,6 +226,7 @@ du -sh apps/frontend/dist/assets/*.js | sort -h | head -5
 **axe-gate:** новые routes (`/widget/{slug}`) добавляются в e2e axe matrix → 9 pages × 2 themes = 18 axe scans
 
 **CSP**: для public routes устанавливаем строгий CSP header через middleware:
+
 ```
 Content-Security-Policy:
   default-src 'self';
@@ -231,9 +238,11 @@ Content-Security-Policy:
   frame-ancestors 'self' {tenant-allowed-origins};
   require-trusted-types-for 'script';
 ```
+
 Trusted Types = Chromium-only stable, FF/Safari gated 2026 — header добавляется как progressive enhancement (graceful degrade).
 
 **Definition of Done M9.widget.1:**
+
 - [ ] Public hosted route `/widget/{slug}` рендерится anonymous user
 - [ ] Backend routes return realistic data для demo tenant (5-7 rooms + photos + availability)
 - [ ] CORS allow-list per-tenant configured (read endpoints `*`, mutating restricted)
@@ -251,6 +260,7 @@ Trusted Types = Chromium-only stable, FF/Safari gated 2026 — header добав
 **Cycle:** 3-screen flow, screen 1 = search dates + guests + promo + rate selection. Hostaway 2026 canon: **availability search + booking CTA above-fold** на mobile.
 
 **Files to add:**
+
 - `apps/frontend/src/features/public-widget/screens/search-and-pick.tsx`
 - `apps/frontend/src/features/public-widget/components/date-range-picker.tsx` — `react-day-picker 9.14.0` ru-RU + 2-month desktop / single-month mobile via `useMediaQuery`
 - `apps/frontend/src/features/public-widget/components/guest-selector.tsx` — stepper inside Popover panel (Adults/Children/Infants/Pets + children ages если children > 0)
@@ -261,9 +271,11 @@ Trusted Types = Chromium-only stable, FF/Safari gated 2026 — header добав
 - `apps/frontend/src/features/public-widget/hooks/use-availability.ts` — TanStack Query c staleTime 30s (per cache §3.4 "stale availability refetch перед commit")
 
 **Files to modify:**
+
 - `widget-api.ts` — add availability + photos query types + Zod schemas
 
 **Strict tests (target ~50):**
+
 - `date-range-picker.test.tsx` — range select, min stay restrictions visible перед клик, disabled dates с tooltip, ARIA APG combobox+grid pattern, keyboard navigation
 - `guest-selector.test.tsx` — stepper increment/decrement bounds (max adults=4, total=6, pets=2 per room.maxOccupancy), children require age picker
 - `rate-card.test.tsx` — photo lazy-load (only first eager), AVIF fallback chain, choice architecture (default highlight на BAR Flex)
@@ -275,11 +287,13 @@ Trusted Types = Chromium-only stable, FF/Safari gated 2026 — header добав
 **axe-gate:** screen 1 рендерится anonymous → axe-pass WCAG 2.2 AA + roving tabindex confirmed для date picker
 
 **Performance gate:**
+
 - LCP ≤2.5s на initial render screen 1 (hero photo `loading="eager"`)
 - INP ≤200ms на date select / guest stepper / rate card click
 - Lighthouse perf ≥90 на screen 1 mobile + desktop
 
 **Definition of Done M9.widget.2:**
+
 - [ ] Screen 1 рендерится для demo tenant (5-7 rooms visible + 3 rate plans)
 - [ ] Date range picker работает desktop + mobile (vertical scroll calendar mobile per NN/g 2024)
 - [ ] Guest selector с children ages picker (РФ-required)
@@ -297,6 +311,7 @@ Trusted Types = Chromium-only stable, FF/Safari gated 2026 — header добав
 **Cycle:** Screen 2 после rate select. Inline cards (НЕ в rate card per РФ ЗоЗПП), skip CTA обязательна.
 
 **Categories (Сочи-specific):**
+
 - Завтрак (per night, per person с picker quantity)
 - Парковка (flat per stay or per night)
 - Late check-out (flat fee + до какого времени)
@@ -307,16 +322,19 @@ Trusted Types = Chromium-only stable, FF/Safari gated 2026 — header добав
 - Экскурсии Красная Поляна (Сочи-specific)
 
 **Files to add:**
+
 - `apps/frontend/src/features/public-widget/screens/extras.tsx`
 - `apps/frontend/src/features/public-widget/components/addon-card.tsx`
 - `apps/frontend/src/features/public-widget/lib/addon-pricing.ts` — pure pricing helpers (per-night / per-stay calc + multi-quantity)
 
 **Strict tests (target ~25):**
+
 - `extras.test.tsx` — Skip CTA visible always, no "must select at least one"
 - `addon-card.test.tsx` — quantity picker bounds, conditional show (infant cot only if guest count infants>0)
 - `addon-pricing.test.ts` — pure calc invariants (per-night × nights × quantity for breakfast)
 
 **Definition of Done M9.widget.3:**
+
 - [ ] Screen 2 показывает realistic Сочи addons для demo tenant
 - [ ] "Continue without extras" CTA primary
 - [ ] axe-pass + Lighthouse ≥90
@@ -330,6 +348,7 @@ Trusted Types = Chromium-only stable, FF/Safari gated 2026 — header добав
 **Самая большая sub-phase.** Combines guest form + 152-ФЗ + 38-ФЗ consent + ЮKassa Embedded Widget v1 + Yandex SmartCaptcha invisible.
 
 **Files to add:**
+
 - `apps/frontend/src/features/public-widget/screens/guest-and-pay.tsx`
 - `apps/frontend/src/features/public-widget/components/guest-form.tsx` — TanStack Form ≤7 fields (per `feedback_form_pattern_rule.md` — TanStack для ≤7-field): firstName/lastName/email/phone/citizenship/countryOfResidence/specialRequests
 - `apps/frontend/src/features/public-widget/components/consent-block.tsx` — два отдельных unchecked checkbox: 152-ФЗ (обязательно accept до commit) + 38-ФЗ marketing (опционально)
@@ -342,6 +361,7 @@ Trusted Types = Chromium-only stable, FF/Safari gated 2026 — header добав
 - `apps/backend/src/lib/consent-record.ts` — write `consentLog` table (152-ФЗ + 38-ФЗ entries) с timestamp + IP + user-agent (audit trail per 152-ФЗ ст. 22.1)
 
 **New table migration** (M9.widget.4 specific): `0044_consent_log.sql`:
+
 ```sql
 CREATE TABLE consentLog (
   id Text NOT NULL,
@@ -360,10 +380,12 @@ CREATE TABLE consentLog (
 ```
 
 **Files to modify:**
+
 - `apps/backend/src/lib/idempotency.ts` — extend для public route (Idempotency-Key header per IETF, 24h dedup)
 - `apps/backend/src/app.ts` — register `bookingCreateRoutes` под `/api/public/widget/:slug/booking`
 
 **Strict tests (target ~70):**
+
 - `guest-form.test.tsx` — TanStack Form validation Zod schemas, autocomplete attrs (`given-name`/`family-name`/`email`/`tel`/`country-name`)
 - `consent-block.test.tsx` — оба checkbox unchecked default, 152-ФЗ обязательно accept (button disabled), 38-ФЗ опционально (no gate), exact wording rendered
 - `yookassa-checkout-widget.test.tsx` — lazy-load script через DOM mutation observer, init с `confirmation_token`, error path (no script load → fallback message)
@@ -380,6 +402,7 @@ CREATE TABLE consentLog (
 **Performance gate:** Screen 3 lazy-loads ЮKassa Widget script — initial bundle remains ≤30 kB (script loads on-demand при rendering payment section)
 
 **Definition of Done M9.widget.4:**
+
 - [ ] Guest form 7 fields с TanStack Form + Zod validation
 - [ ] 152-ФЗ + 38-ФЗ оба checkbox unchecked default, 152-ФЗ обязательно accept
 - [ ] consentLog table populated с exact wording + version + IP + UA
@@ -399,6 +422,7 @@ CREATE TABLE consentLog (
 **Cycle:** Screen 4 after payment success. Confirmation summary + email voucher + .ics + magic-link для guest portal.
 
 **Files to add:**
+
 - `apps/frontend/src/features/public-widget/screens/confirmation.tsx`
 - `apps/frontend/src/features/public-widget/components/booking-summary.tsx`
 - `apps/frontend/src/features/public-widget/components/calendar-add.tsx` — .ics download + Google Calendar deep-link
@@ -411,6 +435,7 @@ CREATE TABLE consentLog (
 - `apps/frontend/src/routes/booking.guest-portal.tsx` — guest portal (view + cancel) — auth via cookie set by magic-link
 
 **Strict tests (target ~45):**
+
 - `magic-link.service.test.ts` — JWT issue с per-tenant secret, verify with wrong secret → reject, TTL enforcement, scope (view vs mutate), reuse-after-first-click invalidation
 - `magic-link.routes.test.ts` — find-by-ref-email rate-limit (10/min IP, 5/hour email, 3/hour reference), captcha after 3 fails, never reveal "404 wrong reference" vs "403 wrong email" (same response time + body)
 - `booking-confirmation-email.test.ts` — HTML + text render, all 7 template fields populated, ICS attachment present, magic-link in body
@@ -419,6 +444,7 @@ CREATE TABLE consentLog (
 - `booking.$jwt.test.tsx` — verify path, invalid JWT → 410 Gone (token consumed), expired → 410 with "request new link" CTA
 
 **Definition of Done M9.widget.5:**
+
 - [ ] Screen 4 рендерится после payment success
 - [ ] Email voucher отправлен через Postbox (Stub в dev, real via Track 2 swap)
 - [ ] .ics attachment + magic-link в email
@@ -437,6 +463,7 @@ CREATE TABLE consentLog (
 **Cycle:** Distribution mechanism для отелей хостить виджет на их сайте.
 
 **Files to add:**
+
 - `apps/widget-embed/` — отдельный workspace package для embed bundle (separate Vite config + tsconfig для tree-shaking)
 - `apps/widget-embed/src/main.ts` — Lit 3.3.2 Web Component `<sochi-booking-widget tenant="{slug}">` с Declarative Shadow DOM SSR
 - `apps/widget-embed/src/widget-element.ts` — custom element class extends LitElement, fetches widget HTML from `widget.{ourdomain}.ru/widget/{slug}` SSR endpoint
@@ -446,35 +473,47 @@ CREATE TABLE consentLog (
 - `apps/frontend/src/routes/embed-test.tsx` — test page demonstrating embed integration (для tenant operator preview)
 
 **Files to modify:**
+
 - `pnpm-workspace.yaml` — add `apps/widget-embed`
 - `apps/backend/src/app.ts` — mount embed.routes под `/embed/v1` (no auth, public CDN-cached)
 
 **Two embed paths:**
+
 1. **Web Component (primary, modern hosts):**
+
 ```html
 <script type="module" src="https://widget.sochi.app/embed/v1/sample-hotel.js"></script>
 <sochi-booking-widget tenant="sample-hotel"></sochi-booking-widget>
 ```
+
 2. **iframe (fallback для strict CSP hosts):**
+
 ```html
-<iframe src="https://widget.sochi.app/widget/sample-hotel"
-        width="100%" height="800" frameborder="0"
-        title="Бронирование sample-hotel"></iframe>
+<iframe
+	src="https://widget.sochi.app/widget/sample-hotel"
+	width="100%"
+	height="800"
+	frameborder="0"
+	title="Бронирование sample-hotel"
+></iframe>
 ```
 
 **Strict tests (target ~30):**
+
 - `widget-element.test.ts` — custom element registration idempotent, attribute reactivity (`tenant` change → re-fetch), Shadow DOM rendering (light DOM SSR fallback for non-DSD browsers)
 - `embed.routes.test.ts` — bundle size assertion ≤30 kB gzip, cache-control headers, SRI hash compatibility
 - `embed-test.test.tsx` — Web Component integration smoke (load → render → screen 1 visible)
 - E2E: spawn HTML page с embed script + verify виджет загружается + booking flow runs end-to-end в Web Component context
 
 **Performance gate:**
+
 - Bundle size ≤30 kB gzip (Mews ~11 kB baseline; ours can be heavier due to features but ≤30 hard ceiling)
 - LCP ≤2.5s в embedded context
 - No CSS bleed parent → widget (Shadow DOM isolation verified)
 - postMessage (если используется для height auto-resize) с exact origin match (no `'*'`)
 
 **Definition of Done M9.widget.6:**
+
 - [ ] `apps/widget-embed` package собран отдельным Vite build → single-file `embed.js`
 - [ ] Web Component registered as `<sochi-booking-widget>` с DSD SSR
 - [ ] Bundle ≤30 kB gzip (Lighthouse CI assert)
@@ -493,6 +532,7 @@ CREATE TABLE consentLog (
 **Cycle:** Lock-in performance + a11y бюджеты как pre-push gate.
 
 **Files to add:**
+
 - `lighthouserc.json` — Lighthouse CI config с budgets:
   - LCP ≤2.5s
   - INP ≤200ms (p75)
@@ -503,15 +543,18 @@ CREATE TABLE consentLog (
 - `apps/frontend/src/lib/web-vitals-publish.ts` — extend M9.6 web-vitals → OTel publish с `attribution.interactionTarget` для INP slow path debugging
 
 **Files to modify:**
+
 - `pnpm-workspace.yaml` — add `lighthouserc` if needed
 - `lefthook.yml` — pre-push hook добавляет `lhci autorun` step
 
 **Strict tests (target ~15):**
+
 - `web-vitals-publish.test.ts` — INP attribution captured + OTel span attribute populated correctly
 - `lhci-config.test.ts` — config schema validation
 - E2E performance smoke: render screen 1 → measure CWV → assert thresholds
 
 **Definition of Done M9.widget.7:**
+
 - [ ] Lighthouse CI configured + running pre-push
 - [ ] All 4 budgets enforce (LCP/INP/CLS/Bundle)
 - [ ] web-vitals 5 attribution INP wired к OTel
@@ -527,6 +570,7 @@ CREATE TABLE consentLog (
 **Cycle:** Финальный polish demo tenant per `project_demo_strategy.md` — permanent product surface.
 
 **Files to modify:**
+
 - `apps/backend/src/db/seed-demo-tenant.ts` — extend:
   - 5-7 realistic Сочи rooms (Deluxe Sea View / Standard Mountain / Family Suite / Apartment 2BR / Premium Penthouse)
   - 3 rate plans (BAR Flex / BAR NR -15% / Long-stay -25%)
@@ -539,17 +583,20 @@ CREATE TABLE consentLog (
 - `apps/frontend/src/features/public-widget/lib/demo-helpers.ts` — demo-mode banner ("Это демо — данные не сохраняются permanently") отображается только когда `tenant.mode='demo'`
 
 **Files to add:**
+
 - `scripts/generate-demo-photos.ts` — pre-generate AVIF/WebP/JPEG variants для demo tenant photos (Sharp pipeline reuse from M8.A.0)
 - `apps/backend/src/lib/demo-tenant-refresh.ts` — cron job (через croner) каждые 24h refresh demo tenant data (reset bookings, regenerate forward availability)
 - JSON-LD structured data в widget pages — `<script type="application/ld+json">` с Schema.org `Hotel` markup (per Wave 1 Mews 2026 strategic — AI-agent discoverability)
 
 **Strict tests (target ~25):**
+
 - `seed-demo-tenant.test.ts` — exact-value assertion на seeded counts, multi-day availability shape
 - `demo-tenant-refresh.test.ts` — cron behavior (idempotent, only resets when stale)
 - `demo-helpers.test.tsx` — banner отображается только для demo mode
 - `json-ld.test.ts` — Schema.org Hotel markup valid (validate против schema.org JSON Schema)
 
 **Definition of Done M9.widget.8:**
+
 - [ ] Demo tenant seeded с realistic Сочи content (5-7 rooms + 3 rates + 14-day data + photos + reviews)
 - [ ] Demo refresh cron работает (24h reset)
 - [ ] Demo-mode banner visible на public routes для demo tenant
@@ -586,15 +633,15 @@ CREATE TABLE consentLog (
 
 ## §7. Test strategy
 
-| Layer | Tools | Target |
-|---|---|---|
-| Unit (pure logic) | vitest 4.1.5 + fast-check 0.4.0 | ~250 strict tests across 8 sub-phases |
-| Integration (DB + Hono) | vitest 4.1.5 + real YDB (test:serial canon) | ~80 integration tests (cross-tenant isolation × every method, consent log, magic-link JWT round-trip) |
-| Component (UI) | vitest-browser + @testing-library/react 16.3.2 + happy-dom 20.9.0 | ~100 component tests (TanStack Form fields, choice architecture default, photo gallery a11y) |
-| E2E (browser flow) | Playwright 1.59.1 + @axe-core/playwright 4.11.2 + Lighthouse CI 12.6.1 | ~30 E2E (4-screen flow happy path × mobile+desktop, magic-link, embed script, performance budget) |
-| A11y matrix | axe per route × theme matrix | 16 axe scans (4 screens × 4 themes: light/dark/contrast-more × mobile/desktop) |
-| Performance gate | Lighthouse CI pre-push | LCP+INP+CLS+Bundle on every commit |
-| Mutation testing | Stryker 9.6.1 + vitest runner | on-demand `pnpm mutate` per sub-phase critical paths (consent-record, magic-link-service) |
+| Layer                   | Tools                                                                  | Target                                                                                                |
+| ----------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Unit (pure logic)       | vitest 4.1.5 + fast-check 0.4.0                                        | ~250 strict tests across 8 sub-phases                                                                 |
+| Integration (DB + Hono) | vitest 4.1.5 + real YDB (test:serial canon)                            | ~80 integration tests (cross-tenant isolation × every method, consent log, magic-link JWT round-trip) |
+| Component (UI)          | vitest-browser + @testing-library/react 16.3.2 + happy-dom 20.9.0      | ~100 component tests (TanStack Form fields, choice architecture default, photo gallery a11y)          |
+| E2E (browser flow)      | Playwright 1.59.1 + @axe-core/playwright 4.11.2 + Lighthouse CI 12.6.1 | ~30 E2E (4-screen flow happy path × mobile+desktop, magic-link, embed script, performance budget)     |
+| A11y matrix             | axe per route × theme matrix                                           | 16 axe scans (4 screens × 4 themes: light/dark/contrast-more × mobile/desktop)                        |
+| Performance gate        | Lighthouse CI pre-push                                                 | LCP+INP+CLS+Bundle on every commit                                                                    |
+| Mutation testing        | Stryker 9.6.1 + vitest runner                                          | on-demand `pnpm mutate` per sub-phase critical paths (consent-record, magic-link-service)             |
 
 **Coverage floor bump (после M9.widget closure):** target 50/55/40/50 lines/branches/funcs/statements (текущий 47/53/36/47 floor — bump per `project_coverage_mutation_gates.md` canon).
 
@@ -602,17 +649,17 @@ CREATE TABLE consentLog (
 
 ## §8. Risk register
 
-| Risk | Mitigation |
-|---|---|
-| ЮKassa Widget v1 deprecation в 2026Q3-Q4 | Decoupled adapter — wrap script load. Watch ЮKassa changelog (already scheduled per `project_yookassa_canon_corrections.md`). |
-| Cross-shadow ARIA brokenness affects screen-reader UX | Interim `ElementInternals` ARIA reflection + iframe fallback for strict-a11y hosts. Watch Reference Target Interop 2026 release. |
-| 152-ФЗ wording changes (РКН clarifications) | Wording version (`consentVersion: 'v1.0'` в consentLog) + admin tooling для bulk re-consent prompt если version changes |
-| Bundle size drift past 30 kB после feature growth | Lighthouse CI hard gate, pre-push fail если drift. Lazy-load ЮKassa script + SmartCaptcha + Metrika до user interaction |
-| Demo tenant data drift (manual edits in DB) | 24h cron `demo-tenant-refresh.ts` resets state idempotent |
-| Booking lock contention под high concurrency | Backend booking service использует existing booking-domain optimistic concurrency (version field). M9.widget reuses, no new concurrency model |
-| ПП РФ №1912 cancellation rules misinterpretation | Empirical legal verify перед production launch (separate Track 2 step). Demo tenant использует safe defaults (always free cancel until check-in 18:00 local) |
-| Yandex SmartCaptcha v2 API breaking change | Wrap server-verify в `captcha-verify.ts` — single point of upgrade. Watch `cloud.yandex.ru/services/smartcaptcha` changelog |
-| Magic-link JWT secret leak | Per-tenant secret rotated 90 days с 30-day grace period. Audit log на every magic-link issuance |
+| Risk                                                  | Mitigation                                                                                                                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ЮKassa Widget v1 deprecation в 2026Q3-Q4              | Decoupled adapter — wrap script load. Watch ЮKassa changelog (already scheduled per `project_yookassa_canon_corrections.md`).                                |
+| Cross-shadow ARIA brokenness affects screen-reader UX | Interim `ElementInternals` ARIA reflection + iframe fallback for strict-a11y hosts. Watch Reference Target Interop 2026 release.                             |
+| 152-ФЗ wording changes (РКН clarifications)           | Wording version (`consentVersion: 'v1.0'` в consentLog) + admin tooling для bulk re-consent prompt если version changes                                      |
+| Bundle size drift past 30 kB после feature growth     | Lighthouse CI hard gate, pre-push fail если drift. Lazy-load ЮKassa script + SmartCaptcha + Metrika до user interaction                                      |
+| Demo tenant data drift (manual edits in DB)           | 24h cron `demo-tenant-refresh.ts` resets state idempotent                                                                                                    |
+| Booking lock contention под high concurrency          | Backend booking service использует existing booking-domain optimistic concurrency (version field). M9.widget reuses, no new concurrency model                |
+| ПП РФ №1912 cancellation rules misinterpretation      | Empirical legal verify перед production launch (separate Track 2 step). Demo tenant использует safe defaults (always free cancel until check-in 18:00 local) |
+| Yandex SmartCaptcha v2 API breaking change            | Wrap server-verify в `captcha-verify.ts` — single point of upgrade. Watch `cloud.yandex.ru/services/smartcaptcha` changelog                                  |
+| Magic-link JWT secret leak                            | Per-tenant secret rotated 90 days с 30-day grace period. Audit log на every magic-link issuance                                                              |
 
 ---
 
@@ -653,6 +700,7 @@ CREATE TABLE consentLog (
 ## §10. Success criteria
 
 **Hard gates:**
+
 - 6/7 функций end-to-end закрыто после M9.widget (только 2.2 Channel Manager pending → M10)
 - ≥350 strict tests added (≥250 unit + ~80 integration + ~30 E2E)
 - axe matrix ≥16 scans pass (4 screens × 4 themes)
@@ -664,6 +712,7 @@ CREATE TABLE consentLog (
 - demo tenant rendered с full Сочи content + JSON-LD + 24h refresh cron
 
 **Soft gates:**
+
 - Self-audit log captures ≥3 hallucination iterations (per m9_theming canon)
 - All 18 anti-patterns checked в pre-done audit
 - 0 regressions in prior tests (test:serial 3767+ baseline)
@@ -673,6 +722,7 @@ CREATE TABLE consentLog (
 ## §11. Postface — что после M9.widget
 
 После closure M9.widget:
+
 1. **M10 Channel Manager Mock** — TravelLine/Я.Путешествия/Ostrovok behaviour-faithful Mock-первого. Closes pain 2.2.
 2. **Demo deploy** ([project_deferred_deploy_plan.md] reactivated после M10 closure) — Yandex Cloud SourceCraft + TF + production-grade observability flip-switch + Postbox sender domain
 3. **Legal+Empirical Track 2** — ИП/ООО + 152-ФЗ РКН + 54-ФЗ ОФД + КЭП → run 3 turnkey curl scripts (Vision/ЮKassa/Postbox) → align Mock-к-real → flip-switch real adapters per-tenant `mode='production'`
@@ -710,6 +760,7 @@ CREATE TABLE consentLog (
 ### Iteration 4 — npm-empirical drift checks (initial draft)
 
 All 5 new deps verified npm 2026-04-29:
+
 - `lit@3.3.2` ✅ (Dec 2025)
 - `@lit-labs/ssr` — needs M9.widget.0 verify (initially uncertain)
 - `@lhci/cli@0.15.x` ✅ (Lighthouse 12.6.1)
@@ -719,6 +770,7 @@ All 5 new deps verified npm 2026-04-29:
 ### Iteration 5 — RU compliance load-bearing items (TODO before M9.widget.4 launch)
 
 **Carry-forward to M9.widget.4 pre-flight:**
+
 - ПП РФ №1912 от 2025-11-27 — verify exact thresholds на pravo.gov.ru (cancellation deadline / no-show cap / hold time)
 - 152-ФЗ 2025-09-01 — verify wording template на consultant.ru / Гарант (для consentText в migration 0044)
 - Yandex SmartCaptcha v2 — verify latest API + invisible mode + Shadow DOM compatibility на cloud.yandex.ru/services/smartcaptcha + empirical curl
@@ -773,6 +825,7 @@ These = mandatory legal verify before launching M9.widget.4 (consent block sub-p
 ### Cumulative honest hallucinations log: 26 (was 17, +9 caught в M9.widget.1 implementation phase)
 
 **Coverage verified 2026-04-29 после M9.widget.1 closure** (full `pnpm coverage` run):
+
 - Statements 62.95% (floor 47%, +15.95) ✅
 - Branches 64.01% (floor 53%, +11.01) ✅
 - Functions 56.35% (floor 36%, +20.35) ✅
@@ -802,6 +855,7 @@ These = mandatory legal verify before launching M9.widget.4 (consent block sub-p
 ### Cumulative honest hallucinations / process gaps log: 33 (was 26 в Iteration 7)
 
 **Final M9.widget.1 metrics** (after 7-commit sub-phase + 5 senior-iteration rounds):
+
 - 117 strict tests (target ~30, +87 over) + 8 E2E
 - 4-theme axe matrix complete (light + dark + mobile + contrast-more)
 - Visual smoke 4/4 viewports verified empirically через screenshots
@@ -872,6 +926,7 @@ These = mandatory legal verify before launching M9.widget.4 (consent block sub-p
 **Critical reframe (BLOCKING):**
 
 User caught two systemic confusions:
+
 1. **«Забыл изначальные цели»** — я приготовился к LIVE ЮKassa integration (CDN script, webhook IPs, PCI attestation), хотя M9.widget.4 = Track A2 = demo surface на Stub-провайдере. Track C2 (live integration) = parallel-trackable, не блокер.
 2. **«Мы буквально ничего не должны имитировать»** — я предложил `payment-stub-widget.tsx` как «UI mimicking ЮKassa hosted page card form». Это violation north-star canon: **Mock = полнофункциональный поставщик с canonical interface, НЕ имитация. Same UI работает с обоими (Stub demo + live production). Live-flip = factory binding swap, ZERO domain code changes.**
 
@@ -918,6 +973,7 @@ Frontend: screens/guest-and-pay.tsx + components/{guest-form,consent-block,payme
 **Triggered by:** R1+R2+R3 findings dissolved в conversation memory; user caught me forgetting research conclusions twice. Per-milestone canon (`m9_widget_canonical.md`) + Iteration N self-audit logs не enough для big sub-phases.
 
 **Canon:** Each big sub-phase (M9.widget.4+, M10, M11+) gets own `plans/m9_widget_<N>_canonical.md` file in repo с:
+
 - Reframed scope (north-star alignment)
 - Research findings (R1+R2+R3+stankoff+npm verify)
 - Decisions table с rationale
@@ -940,12 +996,14 @@ Memory pointer (`project_m9_widget_<N>_canonical.md`) indexed via MEMORY.md → 
 ### Iteration 11+ (carry-forward — будут добавлены при M9.widget.2 execution)
 
 Каждая `pnpm test:serial` regression / `npm view` drift / live empirical evidence = new iteration entry. Memory canon `feedback_no_preexisting.md` + `feedback_empirical_method.md` — never trust stale assumptions. **Process correction priority** для M9.widget.2:
+
 - Paste-and-fill audit BEFORE commit (Iteration 7 lesson #25)
 - Visual smoke 4 viewports + Read screenshots BEFORE «done» (Iteration 8 lesson #27)
 - RU plural CLDR canon (Iteration 9 lesson #30) — use `ruPlural()` for any count strings
 - Vite Fast Refresh canon (Iteration 10 lesson #33) — utilities в `lib/` отдельно от components
 
 **Carry-forward to M9.widget.4 pre-flight:**
+
 - ПП РФ №1912 от 2025-11-27 — verify exact thresholds на pravo.gov.ru (cancellation deadline / no-show cap / hold time)
 - 152-ФЗ 2025-09-01 — verify wording template на consultant.ru / Гарант (для consentText в migration 0044)
 - Yandex SmartCaptcha v2 — verify latest API + invisible mode + Shadow DOM compatibility на cloud.yandex.ru/services/smartcaptcha + empirical curl
@@ -962,6 +1020,7 @@ Per `feedback_batched_push.md` — commits локально, push only по expl
 **Commit cadence:** ~1 commit per sub-phase (8 sub-phases → 8 commits + ~3 fix-passes если нужны). Total estimated: 11-13 commits для full M9.widget closure.
 
 **Commit message convention:**
+
 ```
 feat(m9.widget.{N}): {sub-phase title}
 
@@ -978,6 +1037,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ```
 
 **Pre-push hook** (lefthook.yml — already configured per `feedback_test_serial_for_pre_push.md`):
+
 - typecheck (TS strict)
 - test:serial (--no-file-parallelism)
 - e2e:smoke
@@ -991,20 +1051,21 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 ## §14. Definition of Done — per sub-phase summary
 
-| Sub-phase | Strict tests target | New deps | Key DoD highlights |
-|---|---|---|---|
-| M9.widget.0 Pre-flight | 0 (verify only) | none | grep baseline + npm verify + CWV baseline + M9 closed |
-| M9.widget.1 Public route | ~30 | none | public hosted route + CSP strict + cross-tenant isolation + axe |
-| M9.widget.2 Screen 1 | ~50 | none | search & pick + date picker + sticky summary + Lighthouse ≥90 |
-| M9.widget.3 Screen 2 | ~25 | none | extras + Skip CTA + addon pricing |
-| M9.widget.4 Screen 3 | ~70 | none (jose deferred) | guest+pay + 152-ФЗ + 38-ФЗ + ЮKassa Widget v1 + SmartCaptcha + consentLog migration 0044 |
-| M9.widget.5 Screen 4 | ~45 | jose, ics | confirmation + magic-link + email voucher + .ics + guest portal |
-| M9.widget.6 Embed | ~30 | lit, @lit-labs/ssr | Web Component + iframe fallback + ≤30kB gzip + Shadow DOM SSR |
-| M9.widget.7 Perf gate | ~15 | @lhci/cli | Lighthouse CI pre-push + INP attribution + axe matrix expansion |
-| M9.widget.8 Demo polish | ~25 | none | demo tenant content + JSON-LD + 24h refresh + photo pre-generation |
-| **Total** | **~290** | **5 new** | **All 14 DoD highlights pass** |
+| Sub-phase                | Strict tests target | New deps             | Key DoD highlights                                                                       |
+| ------------------------ | ------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| M9.widget.0 Pre-flight   | 0 (verify only)     | none                 | grep baseline + npm verify + CWV baseline + M9 closed                                    |
+| M9.widget.1 Public route | ~30                 | none                 | public hosted route + CSP strict + cross-tenant isolation + axe                          |
+| M9.widget.2 Screen 1     | ~50                 | none                 | search & pick + date picker + sticky summary + Lighthouse ≥90                            |
+| M9.widget.3 Screen 2     | ~25                 | none                 | extras + Skip CTA + addon pricing                                                        |
+| M9.widget.4 Screen 3     | ~70                 | none (jose deferred) | guest+pay + 152-ФЗ + 38-ФЗ + ЮKassa Widget v1 + SmartCaptcha + consentLog migration 0044 |
+| M9.widget.5 Screen 4     | ~45                 | jose, ics            | confirmation + magic-link + email voucher + .ics + guest portal                          |
+| M9.widget.6 Embed        | ~30                 | lit, @lit-labs/ssr   | Web Component + iframe fallback + ≤30kB gzip + Shadow DOM SSR                            |
+| M9.widget.7 Perf gate    | ~15                 | @lhci/cli            | Lighthouse CI pre-push + INP attribution + axe matrix expansion                          |
+| M9.widget.8 Demo polish  | ~25                 | none                 | demo tenant content + JSON-LD + 24h refresh + photo pre-generation                       |
+| **Total**                | **~290**            | **5 new**            | **All 14 DoD highlights pass**                                                           |
 
 **Final pre-push commit (M9.widget.done):**
+
 - All 8 sub-phases closed
 - Coverage bumped to 50/55/40/50
 - Memory mirror: `project_m9_widget_done.md` written

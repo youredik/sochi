@@ -15,10 +15,6 @@
 		],
 		"ignoreUnknown": true
 	},
-	"formatter": {
-		"indentStyle": "tab",
-		"lineWidth": 100
-	},
 	"linter": {
 		"rules": {
 			"recommended": true,
@@ -165,12 +161,6 @@
 	"css": {
 		"parser": {
 			"tailwindDirectives": true
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "single",
-			"semicolons": "asNeeded"
 		}
 	}
 }

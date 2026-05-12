@@ -10,24 +10,24 @@ continues so a partial tour is always recoverable.
 
 ## What's recorded — 16 chapters, ~3:20, ~5.6 MB
 
-| #  | Chapter                       | What user sees                                          |
-| -- | ----------------------------- | ------------------------------------------------------- |
-| 01 | HoReCa Sochi                  | Landing → login screen                                  |
-| 02 | Регистрация владельца         | Signup form fill, 152-ФЗ consent, submit                |
-| 03 | Wizard 1: Гостиница           | Property step, Сочи default, налог 200 б.п.             |
-| 04 | Wizard 2: Тип номера          | Standard double room                                    |
-| 05 | Wizard 3: Номера              | Add 101 + 102, optional floor                           |
-| 06 | Wizard 4: Тариф               | BAR 5000₽/night, finish wizard                          |
-| 07 | Шахматка                      | API-seed 5 bookings → populated grid                    |
-| 08 | Создание бронирования         | Cell click → guest fill → submit (one more on day 5)    |
-| 09 | Заезд гостя                   | Band click → "Заезд" → palette flip blue→black          |
-| 10 | Фолио гостя                   | Add 5000₽ accommodation line via API → folio page       |
-| 11 | Принять оплату                | Mark Paid Sheet → "Принять" → toast 5000₽               |
-| 12 | Выезд гостя                   | Goto grid → band click → "Выезд"                        |
-| 13 | Дебиторская задолженность     | KPI cards, aging breakdown, debtors table               |
-| 14 | Туристический налог           | Q1 KPI, monthly breakdown, per-booking rows             |
-| 15 | Журнал уведомлений            | Email log, status filters                               |
-| 16 | HoReCa Sochi (recap)          | Dashboard final shot                                    |
+| #   | Chapter                   | What user sees                                       |
+| --- | ------------------------- | ---------------------------------------------------- |
+| 01  | HoReCa Sochi              | Landing → login screen                               |
+| 02  | Регистрация владельца     | Signup form fill, 152-ФЗ consent, submit             |
+| 03  | Wizard 1: Гостиница       | Property step, Сочи default, налог 200 б.п.          |
+| 04  | Wizard 2: Тип номера      | Standard double room                                 |
+| 05  | Wizard 3: Номера          | Add 101 + 102, optional floor                        |
+| 06  | Wizard 4: Тариф           | BAR 5000₽/night, finish wizard                       |
+| 07  | Шахматка                  | API-seed 5 bookings → populated grid                 |
+| 08  | Создание бронирования     | Cell click → guest fill → submit (one more on day 5) |
+| 09  | Заезд гостя               | Band click → "Заезд" → palette flip blue→black       |
+| 10  | Фолио гостя               | Add 5000₽ accommodation line via API → folio page    |
+| 11  | Принять оплату            | Mark Paid Sheet → "Принять" → toast 5000₽            |
+| 12  | Выезд гостя               | Goto grid → band click → "Выезд"                     |
+| 13  | Дебиторская задолженность | KPI cards, aging breakdown, debtors table            |
+| 14  | Туристический налог       | Q1 KPI, monthly breakdown, per-booking rows          |
+| 15  | Журнал уведомлений        | Email log, status filters                            |
+| 16  | HoReCa Sochi (recap)      | Dashboard final shot                                 |
 
 ## How it works
 
@@ -35,7 +35,7 @@ continues so a partial tour is always recoverable.
    - Default: macOS `say` with `Milena` (ru_RU, zero-config, offline).
    - When `YC_API_KEY + YC_FOLDER_ID` are set in `.env`: Yandex SpeechKit
      with `Алиса` (stub in `tts.ts` — implement when keys arrive).
-   Each chapter narration → MP3 + measured duration via `ffprobe`.
+     Each chapter narration → MP3 + measured duration via `ffprobe`.
 
 2. **ffmpeg concat** — chapter MP3s glued with 0.4s `anullsrc` silence
    between them → single audio track.
@@ -85,15 +85,15 @@ ffmpeg -y -i .artifacts/walkthrough/tour.mp4 -ss 95 -frames:v 1 \
 
 Useful timestamps for the current 16-chapter tour:
 
-| Time   | Chapter             | What you see                          |
-| ------ | ------------------- | ------------------------------------- |
-| ~25s   | 02 Регистрация      | Signup form filled                    |
-| ~80s   | 07 Дашборд (transition) | 4 cards: Шахматка / Дебиторка / Налог / Уведомления |
-| ~95s   | 07/08 Шахматка      | Populated grid + booking dialog       |
-| ~110s  | 09 Заезд            | Black "В прожи…" band, toast          |
-| ~135s  | 11 Платёж           | Folio page, 5000₽ payment, balance 0  |
-| ~155s  | 13 Дебиторка        | KPI + aging                           |
-| ~175s  | 14 Налог            | Tax KPI + monthly breakdown           |
+| Time  | Chapter                 | What you see                                        |
+| ----- | ----------------------- | --------------------------------------------------- |
+| ~25s  | 02 Регистрация          | Signup form filled                                  |
+| ~80s  | 07 Дашборд (transition) | 4 cards: Шахматка / Дебиторка / Налог / Уведомления |
+| ~95s  | 07/08 Шахматка          | Populated grid + booking dialog                     |
+| ~110s | 09 Заезд                | Black "В прожи…" band, toast                        |
+| ~135s | 11 Платёж               | Folio page, 5000₽ payment, balance 0                |
+| ~155s | 13 Дебиторка            | KPI + aging                                         |
+| ~175s | 14 Налог                | Tax KPI + monthly breakdown                         |
 
 ## Adding a chapter
 
@@ -123,20 +123,24 @@ later. **Capturing too early gives invalid ID** — the folio API regex
 `/^book_[26]$/` rejects it with 400 ZodError.
 
 Always filter by prefix:
+
 ```ts
 const band = page.locator(`[data-booking-id^="book_"][aria-label*="${date} —"]`).first()
 await band.waitFor({ timeout: 10_000 })
 ```
+
 NOT `[data-booking-id]` alone. (Findings #1.)
 
 ### Wizard inputs don't auto-clear after submit
 
 After clicking "Добавить номер" with field "101", the input still contains
 "101". `pressSequentially("102")` appends → "101102" → invalid. Always:
+
 ```ts
 await field.fill('')
 await field.pressSequentially('102', { delay: 80 })
 ```
+
 (Findings #4.)
 
 ### CDC backlog under burst load
@@ -166,6 +170,7 @@ When `YC_API_KEY + YC_FOLDER_ID` arrive in `.env`:
    code changes needed.
 
 Voice options to consider beyond `alyss` (Алиса):
+
 - `alena` — neural female, "корпоративный" tone (default in Stripe-style demos)
 - `jane` — neural female, softer
 - `filipp` — neural male
@@ -178,6 +183,7 @@ issue → add an entry. Don't fix in walkthrough session — work around (like
 `book_*` prefix), record in FINDINGS, fix in a separate branch.
 
 Currently 13 findings logged, including:
+
 - **P0?** Tax page possibly displays amounts ~10 000× off (kopeck/ruble
   double-convert).
 - **P1** Optimistic-band ID leak (covered above).

@@ -103,7 +103,9 @@ export function MarkPaidSheet({
 
 	// Pre-fill amount with current balance formatted as RU money input string.
 	// Operator can edit; on submit Zod converts back to bigint kopecks.
-	const initialAmount = formatMoney(currentBalanceMinor).replace(/ ₽$/, '').trim()
+	const initialAmount = formatMoney(currentBalanceMinor)
+		.replace(/ ₽$/, '')
+		.trim()
 
 	const defaultValues: MarkPaidFormValues = {
 		amount: initialAmount,

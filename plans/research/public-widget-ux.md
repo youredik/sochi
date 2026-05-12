@@ -19,20 +19,24 @@
 ## 1. Канонические шаги виджета (3-screen flow)
 
 **Screen 1 — Search & Pick (объединяет Apaleo "step 1+2")**:
+
 - Левая колонка / mobile top: даты + гости + промокод
 - Правая колонка / mobile main: список тарифов с фильтром по категории номера
 - Sticky summary справа (desktop) или внизу (mobile)
 
 **Screen 2 — Extras (addons)**:
+
 - Inline cards: завтрак / парковка / late check-out / трансфер / детская кроватка / спа
 - Skip-кнопка ("Continue without extras") — обязательна
 
 **Screen 3 — Guest details + Payment**:
+
 - В 2026 канон — **single page with payment** (Apaleo, Mews, Cloudbeds).
 - Отдельный step "Payment" — legacy. Лишний клик режет 2-4% conversion.
 - Embedded YooKassa Elements, НЕ redirect.
 
 **Screen 4 — Confirmation**:
+
 - Booking reference большой, copy-button.
 - "Add to calendar" (.ics).
 - Email отправлен в фоне через outbox.
@@ -138,6 +142,7 @@ Card структура:
 ```
 
 Required badges:
+
 - **Refundable / 1-night-cap** (РФ-2026 — НЕ "Non-refundable", это запрещено ПП №1912).
 - **Breakfast included** — иконка + text.
 - **Free cancellation deadline** — exact date + time, не "free cancellation".
@@ -151,6 +156,7 @@ Required badges:
 Причина дрейфа: cognitive load + регулятор не любит "включаемых через checkbox" услуг внутри rate card (РФ ЗоЗПП).
 
 Категории для Сочи:
+
 - **Завтрак** — per night, per person с picker quantity.
 - **Парковка** — flat per stay или per night.
 - **Late check-out** — flat fee, до какого времени.
@@ -165,6 +171,7 @@ Required badges:
 ### 2.5 Guest form
 
 **Минимум обязательные** (canon 2026):
+
 - First name, Last name (раздельные — для МВД-передачи и matching с паспортом).
 - Email.
 - Phone (международный с country picker, default +7).
@@ -172,6 +179,7 @@ Required badges:
 - Citizenship — отдельно от country of residence (для МВД-уведомления).
 
 **Опциональные**:
+
 - Special requests (textarea, max 500).
 - ETA — picker по часам.
 - Purpose of stay (leisure / business).
@@ -179,6 +187,7 @@ Required badges:
 - Marketing consent (**unchecked by default** — 152-ФЗ требует opt-in).
 
 **152-ФЗ specific**:
+
 - Чекбокс "Согласие на обработку персональных данных" с ссылкой — **обязательно unchecked**, button disabled до клика.
 - Это НЕ обычный T&C, а отдельное юридическое согласие.
 
@@ -187,12 +196,14 @@ Required badges:
 **Канон 2026**: **embedded inline**, на той же странице что guest form. Redirect — legacy.
 
 Для РФ:
+
 - ЮKassa Embedded Widget или Tokenization API.
 - CloudPayments виджет.
 - T-Bank Acquiring (бывш. Тинькофф) — Embedded Form.
 - **СБП QR обязательно** — conversion +5-7% для mobile RU users.
 
 Sticky "your booking" panel:
+
 - Hotel name + photo thumbnail.
 - Check-in/out dates + times.
 - Nights count, room name, guests.
@@ -206,6 +217,7 @@ Sticky "your booking" panel:
 ### 2.7 Confirmation screen + email
 
 **Screen**:
+
 - Большой success icon (НЕ зелёная галка низкого контраста).
 - Booking reference (большой, monospace, copy button).
 - Summary: dates, room, rate, total.
@@ -216,6 +228,7 @@ Sticky "your booking" panel:
 - "Manage your booking" link.
 
 **Email voucher** (HTML + text fallback):
+
 - Hotel logo.
 - Booking reference (большой).
 - "Hello {first_name}".
@@ -285,6 +298,7 @@ Send via Postbox (M7.fix.2 wired). Subject: `Бронирование подтв
 ### 4.1 Single-page vs multi-step
 
 **Канон 2026 — 3 screens with progress indicator**, не single-page и не 5-step.
+
 - Single-page (Stripe-style) overwhelms на mobile (>3000px scroll).
 - 5-step имеет cliff abandonment между steps.
 - 3 — sweet spot (Baymard 2024).
@@ -345,10 +359,12 @@ Send via Postbox (M7.fix.2 wired). Subject: `Бронирование подтв
 **TravelLine**: hybrid — iframe + JS SDK для height auto-resize.
 
 **Apaleo Booking Engine** (canonical 2026): **script injection с Shadow DOM**.
+
 ```html
 <div id="apaleo-booking-engine"></div>
 <script src="https://booking.apaleo.com/v2/embed.js" data-property-id="..."></script>
 ```
+
 Создаёт Shadow DOM, изолирован от parent CSS, но в SEO/a11y попадает (light DOM ssr fallback).
 
 **Mews Distributor**: full-page redirect или iframe.
@@ -356,6 +372,7 @@ Send via Postbox (M7.fix.2 wired). Subject: `Бронирование подтв
 **Cloudbeds**: iframe + JS SDK.
 
 **Канон для нас 2026**:
+
 1. **Primary**: hosted full-page виджет на нашем `book.{hotel}.ru` или `widget.sochi.app/{tenant}` с кастомизацией. Лучшая UX, full SEO, full a11y.
 2. **Secondary**: script-injection с Shadow DOM — для отелей которые хотят embed.
 3. **Tertiary**: iframe — last resort для legacy CMS интеграций.
@@ -447,14 +464,14 @@ Send via Postbox (M7.fix.2 wired). Subject: `Бронирование подтв
 
 ## 8. Конкретные UX-references 2026
 
-| Engine | Тип | Strength | Weakness | Use as |
-|---|---|---|---|---|
-| **Bnovo** | Iframe-based 4-step | Широкая RU интеграция, channel manager | UX датированный, slow load | RU compliance reference |
-| **TravelLine** | Iframe + JS SDK 4-step | Strong RU compliance (152-ФЗ, чеки, реестр КСР) | UX 2020-era | RU compliance reference |
-| **Apaleo Booking Engine** | Modern script-injection + Shadow DOM, 3-screen | Лидер UX 2024-2026, открытый API, modern stack | Not RU-localized, no РФ payment OOB | **UX reference**, не integration |
-| **Mews Distributor** | Full-page hosted, 3-screen с sticky summary | Design quality, clean | Меньше customization чем Apaleo | UX reference |
-| **Cloudbeds** | Iframe + JS SDK 3-step | Wide international coverage | UI density высокая | UX reference |
-| **Booking.com / Ostrovok** | Industrial benchmark | Filter/sort/photo galleries patterns | Dark patterns (false urgency, hidden fees) — изучать **что НЕ делать** | Photo galleries, mobile bottom-sheet patterns |
+| Engine                     | Тип                                            | Strength                                        | Weakness                                                               | Use as                                        |
+| -------------------------- | ---------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------- |
+| **Bnovo**                  | Iframe-based 4-step                            | Широкая RU интеграция, channel manager          | UX датированный, slow load                                             | RU compliance reference                       |
+| **TravelLine**             | Iframe + JS SDK 4-step                         | Strong RU compliance (152-ФЗ, чеки, реестр КСР) | UX 2020-era                                                            | RU compliance reference                       |
+| **Apaleo Booking Engine**  | Modern script-injection + Shadow DOM, 3-screen | Лидер UX 2024-2026, открытый API, modern stack  | Not RU-localized, no РФ payment OOB                                    | **UX reference**, не integration              |
+| **Mews Distributor**       | Full-page hosted, 3-screen с sticky summary    | Design quality, clean                           | Меньше customization чем Apaleo                                        | UX reference                                  |
+| **Cloudbeds**              | Iframe + JS SDK 3-step                         | Wide international coverage                     | UI density высокая                                                     | UX reference                                  |
+| **Booking.com / Ostrovok** | Industrial benchmark                           | Filter/sort/photo galleries patterns            | Dark patterns (false urgency, hidden fees) — изучать **что НЕ делать** | Photo galleries, mobile bottom-sheet patterns |
 
 ---
 

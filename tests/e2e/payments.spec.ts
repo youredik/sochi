@@ -122,27 +122,24 @@ async function seedFolioFixture(
 	// 3. Create booking (1-night, walkIn channel — no OTA gate).
 	const checkIn = futureIso(opts.futureDays)
 	const checkOut = futureIso(opts.futureDays + 1)
-	const bookingRes = await page.request.post(
-		`${API_BASE}/properties/${propertyId}/bookings`,
-		{
-			data: {
-				roomTypeId,
-				ratePlanId,
-				checkIn,
-				checkOut,
-				guestsCount: 1,
-				primaryGuestId: guestId,
-				guestSnapshot: {
-					firstName,
-					lastName,
-					citizenship: 'RU',
-					documentType: 'passport',
-					documentNumber,
-				},
-				channelCode: 'walkIn',
+	const bookingRes = await page.request.post(`${API_BASE}/properties/${propertyId}/bookings`, {
+		data: {
+			roomTypeId,
+			ratePlanId,
+			checkIn,
+			checkOut,
+			guestsCount: 1,
+			primaryGuestId: guestId,
+			guestSnapshot: {
+				firstName,
+				lastName,
+				citizenship: 'RU',
+				documentType: 'passport',
+				documentNumber,
 			},
+			channelCode: 'walkIn',
 		},
-	)
+	})
 	if (!bookingRes.ok()) {
 		throw new Error(`booking.create HTTP ${bookingRes.status()}: ${await bookingRes.text()}`)
 	}
@@ -245,7 +242,10 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 		await page.goto(`/o/${seed.orgSlug}/bookings/${seed.bookingId}/folios/${seed.folioId}`)
 		await expect(page.getByRole('heading', { name: /Фолио/ })).toBeVisible()
 
-		await page.getByRole('button', { name: /Принять оплату/, exact: false }).first().click()
+		await page
+			.getByRole('button', { name: /Принять оплату/, exact: false })
+			.first()
+			.click()
 		const dialog = page.getByRole('dialog', { name: /Принять оплату/ })
 		await expect(dialog).toBeVisible()
 		// Wait for submit button to be enabled to avoid phantom contrast violation
@@ -287,7 +287,11 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 		await expect(page.getByRole('heading', { name: /Фолио/ })).toBeVisible()
 
 		// Scope to table row (NOT balance-card "Возврат" which only switches tab).
-		await page.getByRole('row').filter({ hasText: 'Проведён' }).getByRole('button', { name: 'Возврат' }).click()
+		await page
+			.getByRole('row')
+			.filter({ hasText: 'Проведён' })
+			.getByRole('button', { name: 'Возврат' })
+			.click()
 		const dialog = page.getByRole('dialog', { name: /Возврат платежа/ })
 		await expect(dialog).toBeVisible()
 		await expect(dialog.getByText(/Доступно к возврату/)).toBeVisible()
@@ -301,17 +305,16 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 		// when refundsQuery.isLoading flips false) so axe captures the steady
 		// state, not a mid-transition frame. Default Tailwind transition is
 		// ≤150ms; we poll for empty getAnimations() instead of fixed waits.
-		await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+		await page.waitForFunction(() =>
+			document.getAnimations().every((a) => a.playState !== 'running'),
+		)
 
 		const results = await new AxeBuilder({ page })
 			.include('[role="dialog"]')
 			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
 			.analyze()
 		if (results.violations.length > 0) {
-			console.error(
-				'axe violations (refund step 1):',
-				JSON.stringify(results.violations, null, 2),
-			)
+			console.error('axe violations (refund step 1):', JSON.stringify(results.violations, null, 2))
 		}
 		expect(results.violations).toEqual([])
 	})
@@ -328,7 +331,11 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 			`/o/${seed.orgSlug}/bookings/${seed.bookingId}/folios/${seed.folioId}?tab=payments`,
 		)
 		// Scope to table row (NOT balance-card "Возврат" which only switches tab).
-		await page.getByRole('row').filter({ hasText: 'Проведён' }).getByRole('button', { name: 'Возврат' }).click()
+		await page
+			.getByRole('row')
+			.filter({ hasText: 'Проведён' })
+			.getByRole('button', { name: 'Возврат' })
+			.click()
 		// Dialog title changes between steps ('Возврат платежа' → 'Подтвердите
 		// возврат'), so use generic dialog locator without name filter.
 		const dialog = page.getByRole('dialog')
@@ -337,9 +344,7 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 		await dialog.getByLabel('Причина возврата').fill('Тест a11y — Step 2')
 		await dialog.getByRole('button', { name: 'Далее' }).click()
 		await expect(dialog.getByRole('heading', { name: /Подтвердите возврат/ })).toBeVisible()
-		await expect(
-			dialog.getByRole('button', { name: /Подтвердить возврат/ }),
-		).toBeEnabled()
+		await expect(dialog.getByRole('button', { name: /Подтвердить возврат/ })).toBeEnabled()
 		// Step transition animations (slide-in-from-right) must settle to avoid
 		// transient opacity sampled by axe — same canon as Step 1 + Mark Paid.
 		await page.waitForFunction(() =>
@@ -351,10 +356,7 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
 			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
 			.analyze()
 		if (results.violations.length > 0) {
-			console.error(
-				'axe violations (refund step 2):',
-				JSON.stringify(results.violations, null, 2),
-			)
+			console.error('axe violations (refund step 2):', JSON.stringify(results.violations, null, 2))
 		}
 		expect(results.violations).toEqual([])
 	})
@@ -371,7 +373,10 @@ test.describe('M6.8: a11y on opened payment Sheets — WCAG 2.2 AA', () => {
  * Production использует pre-fill в 99% (operator paying full balance).
  */
 async function markPaidViaUiHappyPath(page: Page) {
-	await page.getByRole('button', { name: /Принять оплату/, exact: false }).first().click()
+	await page
+		.getByRole('button', { name: /Принять оплату/, exact: false })
+		.first()
+		.click()
 	const sheet = page.getByRole('dialog', { name: /Принять оплату/ })
 	await expect(sheet).toBeVisible()
 
@@ -393,9 +398,7 @@ test.describe('M6.8: full-flow E2E (post-bigint-fix regression gate)', () => {
 			docSuffix: 'flowmp',
 		})
 
-		await page.goto(
-			`/o/${seed.orgSlug}/bookings/${seed.bookingId}/folios/${seed.folioId}`,
-		)
+		await page.goto(`/o/${seed.orgSlug}/bookings/${seed.bookingId}/folios/${seed.folioId}`)
 		await expect(page.getByRole('heading', { name: /Фолио/ })).toBeVisible()
 
 		await markPaidViaUiHappyPath(page)
@@ -403,7 +406,10 @@ test.describe('M6.8: full-flow E2E (post-bigint-fix regression gate)', () => {
 		// Switch to Payments tab — exactly 1 row, "Возврат" button enabled.
 		await page.getByRole('tab', { name: /Платежи/ }).click()
 		await expect(
-			page.getByRole('row').filter({ hasText: 'Проведён' }).getByRole('button', { name: 'Возврат' }),
+			page
+				.getByRole('row')
+				.filter({ hasText: 'Проведён' })
+				.getByRole('button', { name: 'Возврат' }),
 		).toHaveCount(1)
 	})
 
@@ -436,9 +442,7 @@ test.describe('M6.8: full-flow E2E (post-bigint-fix regression gate)', () => {
 		)
 		await dialog.getByRole('button', { name: /Подтвердить возврат/ }).click()
 		const refundResponse = await refundResponsePromise
-		expect(refundResponse.status(), `refund POST failed: ${await refundResponse.text()}`).toBe(
-			201,
-		)
+		expect(refundResponse.status(), `refund POST failed: ${await refundResponse.text()}`).toBe(201)
 		await expect(dialog).not.toBeVisible()
 	})
 })
@@ -455,9 +459,7 @@ test.describe('M6.8: Idempotency-Key per-Sheet-mount regression (post-bigint-fix
 			docSuffix: 'idem',
 		})
 
-		await page.goto(
-			`/o/${seed.orgSlug}/bookings/${seed.bookingId}/folios/${seed.folioId}`,
-		)
+		await page.goto(`/o/${seed.orgSlug}/bookings/${seed.bookingId}/folios/${seed.folioId}`)
 		await expect(page.getByRole('heading', { name: /Фолио/ })).toBeVisible()
 
 		// 1st mark-paid: full balance
@@ -502,8 +504,6 @@ test.describe('M6.8: Idempotency-Key per-Sheet-mount regression (post-bigint-fix
 
 		// Side-effect proof: 2 payment rows on Payments tab.
 		await page.getByRole('tab', { name: /Платежи/ }).click()
-		await expect(
-			page.getByRole('row').filter({ hasText: 'Проведён' }),
-		).toHaveCount(2)
+		await expect(page.getByRole('row').filter({ hasText: 'Проведён' })).toHaveCount(2)
 	})
 })

@@ -59,10 +59,7 @@ module.exports = {
 					'error',
 					{ maxNumericValue: 200, aggregationMethod: 'pessimistic' },
 				],
-				'speed-index': [
-					'warn',
-					{ maxNumericValue: 3400, aggregationMethod: 'median-run' },
-				],
+				'speed-index': ['warn', { maxNumericValue: 3400, aggregationMethod: 'median-run' }],
 				'first-contentful-paint': [
 					'warn',
 					{ maxNumericValue: 1800, aggregationMethod: 'median-run' },

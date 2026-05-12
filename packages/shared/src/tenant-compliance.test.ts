@@ -49,25 +49,27 @@ describe('checkGuestHouseInvariant', () => {
 		expect(err).toMatch(/гостевых домов.*ФЗ-127/)
 	})
 
-	it.each(
-		ksrCategoryValues.filter((v) => v !== 'guest_house'),
-	)('rejects ksrCategory=%s with guestHouseFz127Registered=true (only guest_house may set this)', (category) => {
-		const err = checkGuestHouseInvariant({
-			ksrCategory: category,
-			guestHouseFz127Registered: true,
-		})
-		expect(err).toMatch(/применимо только к категории guest_house/)
-	})
+	it.each(ksrCategoryValues.filter((v) => v !== 'guest_house'))(
+		'rejects ksrCategory=%s with guestHouseFz127Registered=true (only guest_house may set this)',
+		(category) => {
+			const err = checkGuestHouseInvariant({
+				ksrCategory: category,
+				guestHouseFz127Registered: true,
+			})
+			expect(err).toMatch(/применимо только к категории guest_house/)
+		},
+	)
 
-	it.each(
-		ksrCategoryValues.filter((v) => v !== 'guest_house'),
-	)('rejects ksrCategory=%s with guestHouseFz127Registered=false (same constraint)', (category) => {
-		const err = checkGuestHouseInvariant({
-			ksrCategory: category,
-			guestHouseFz127Registered: false,
-		})
-		expect(err).toMatch(/применимо только к категории guest_house/)
-	})
+	it.each(ksrCategoryValues.filter((v) => v !== 'guest_house'))(
+		'rejects ksrCategory=%s with guestHouseFz127Registered=false (same constraint)',
+		(category) => {
+			const err = checkGuestHouseInvariant({
+				ksrCategory: category,
+				guestHouseFz127Registered: false,
+			})
+			expect(err).toMatch(/применимо только к категории guest_house/)
+		},
+	)
 
 	it('passes when both fields are null (deferred onboarding step)', () => {
 		expect(
@@ -96,12 +98,13 @@ describe('checkTaxRegimeInvariant', () => {
 		expect(err).toMatch(/Самозанятый.*NPD/)
 	})
 
-	it.each(
-		legalEntityTypeValues.filter((v) => v !== 'npd'),
-	)('rejects legalEntityType=%s + taxRegime=NPD (NPD only for self-employed)', (legalType) => {
-		const err = checkTaxRegimeInvariant({ legalEntityType: legalType, taxRegime: 'NPD' })
-		expect(err).toMatch(/NPD.*только для legalEntityType=npd/)
-	})
+	it.each(legalEntityTypeValues.filter((v) => v !== 'npd'))(
+		'rejects legalEntityType=%s + taxRegime=NPD (NPD only for self-employed)',
+		(legalType) => {
+			const err = checkTaxRegimeInvariant({ legalEntityType: legalType, taxRegime: 'NPD' })
+			expect(err).toMatch(/NPD.*только для legalEntityType=npd/)
+		},
+	)
 
 	it('rejects legalEntityType=ip + taxRegime=AUSN_DOHODY_RASHODY', () => {
 		const err = checkTaxRegimeInvariant({

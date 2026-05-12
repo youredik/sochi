@@ -74,7 +74,13 @@ export class SochiBookingFlow extends LitElement {
 			isolation: isolate;
 			contain: layout paint;
 			container-type: inline-size;
-			font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+			font-family:
+				system-ui,
+				-apple-system,
+				'Segoe UI',
+				Roboto,
+				'Helvetica Neue',
+				Arial,
 				sans-serif;
 			color: #0a0a0a;
 			line-height: 1.45;
@@ -227,9 +233,7 @@ export class SochiBookingFlow extends LitElement {
 				</p>`
 			case 'ready':
 				return this.property
-					? html`<p class="flow-status" data-testid="flow-property-name">
-								${this.property.name}
-							</p>
+					? html`<p class="flow-status" data-testid="flow-property-name">${this.property.name}</p>
 							<button
 								type="button"
 								class="submit"

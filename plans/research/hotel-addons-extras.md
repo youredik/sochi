@@ -41,10 +41,10 @@ Property (отель)
 
 ### 1.2 Charge types (Apaleo `pricingUnit`)
 
-| pricingUnit | Семантика | Пример |
-|---|---|---|
-| `Room` | per-stay-per-room | airport transfer 2500₽ |
-| `Person` | per-stay-per-person | spa-pass 1500₽ × 2 = 3000₽ |
+| pricingUnit     | Семантика            | Пример                                    |
+| --------------- | -------------------- | ----------------------------------------- |
+| `Room`          | per-stay-per-room    | airport transfer 2500₽                    |
+| `Person`        | per-stay-per-person  | spa-pass 1500₽ × 2 = 3000₽                |
 | `RoomPerPerson` | per-night-per-person | breakfast 800₽ × 2 ppl × 3 nights = 4800₽ |
 
 **Per-night моделируется не флагом, а массивом `dates[]`** в ReservationService. Каждый день — отдельный ServiceDate с собственным amount. Variativное ценообразование (weekend vs weekday).
@@ -52,6 +52,7 @@ Property (отель)
 ### 1.3 Inclusion в rate plan vs separate purchase
 
 `RatePlan.includedServices[]` — массив serviceId, автоматически добавляются как `bookedAsExtra: false`. Отделение от `bookedAsExtra: true` нужно для:
+
 - Refund-логики
 - Финансовой отчётности
 - Channel manager (включённые передаются в составе rate plan)
@@ -151,28 +152,28 @@ ENUM addon_category {
 
 ### 5.1 Pricing units (canonical 5+1)
 
-| unit | формула | пример |
-|---|---|---|
-| `PER_STAY` | price × 1 | трансфер 2500₽ |
-| `PER_PERSON` | price × pax | spa-pass 1500₽ × 2 |
-| `PER_NIGHT` | price × nights | parking 500₽ × 3 |
-| `PER_NIGHT_PER_PERSON` | price × nights × pax | breakfast 800₽ × 2 × 3 |
-| `PER_HOUR` | price × hours | late checkout 600₽/ч × 4 |
-| `PERCENT_OF_ROOM_RATE` (опц.) | % × room subtotal | resort fee 5% |
+| unit                          | формула              | пример                   |
+| ----------------------------- | -------------------- | ------------------------ |
+| `PER_STAY`                    | price × 1            | трансфер 2500₽           |
+| `PER_PERSON`                  | price × pax          | spa-pass 1500₽ × 2       |
+| `PER_NIGHT`                   | price × nights       | parking 500₽ × 3         |
+| `PER_NIGHT_PER_PERSON`        | price × nights × pax | breakfast 800₽ × 2 × 3   |
+| `PER_HOUR`                    | price × hours        | late checkout 600₽/ч × 4 |
+| `PERCENT_OF_ROOM_RATE` (опц.) | % × room subtotal    | resort fee 5%            |
 
 ### 5.2 НДС в РФ 2026
 
-| Addon category | НДС | Примечание |
-|---|---|---|
-| `FOOD_AND_BEVERAGES` | 22% (или 0% если общепит-льгота) | Льгота 149.1 НК — для общепита с выручкой ≤2 млрд ₽/год И ≥70% выручки от общепита |
-| `TRANSFER` | 22% | Если своим автопарком |
-| `PARKING` | 22% | |
-| `WELLNESS` (массаж с лиц.) | 0% (мед. лицензия) | НЕ-мед. spa — 22% |
-| `ACTIVITIES` (ski-pass перепродажа) | 0%/22% — комиссия vs выручка | |
-| `EARLY_CHECK_IN` / `LATE_CHECK_OUT` | 0% (как accommodation, льгота 149.1.18) | Если льгота применяется к проживанию |
-| `CLEANING` | 22% | |
-| `EQUIPMENT` | 22% | |
-| `PET_FEE` | 22% | |
+| Addon category                      | НДС                                     | Примечание                                                                         |
+| ----------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------- |
+| `FOOD_AND_BEVERAGES`                | 22% (или 0% если общепит-льгота)        | Льгота 149.1 НК — для общепита с выручкой ≤2 млрд ₽/год И ≥70% выручки от общепита |
+| `TRANSFER`                          | 22%                                     | Если своим автопарком                                                              |
+| `PARKING`                           | 22%                                     |                                                                                    |
+| `WELLNESS` (массаж с лиц.)          | 0% (мед. лицензия)                      | НЕ-мед. spa — 22%                                                                  |
+| `ACTIVITIES` (ski-pass перепродажа) | 0%/22% — комиссия vs выручка            |                                                                                    |
+| `EARLY_CHECK_IN` / `LATE_CHECK_OUT` | 0% (как accommodation, льгота 149.1.18) | Если льгота применяется к проживанию                                               |
+| `CLEANING`                          | 22%                                     |                                                                                    |
+| `EQUIPMENT`                         | 22%                                     |                                                                                    |
+| `PET_FEE`                           | 22%                                     |                                                                                    |
 
 **Confidence — 60%.** Перед production — обязательная консультация налогового юриста.
 
@@ -239,6 +240,7 @@ Channel manager export: package превращается в standalone rate plan
 ### 7.3 Display в widget
 
 **Канон 2026**:
+
 - Step 1: даты + occupancy.
 - Step 2: room type + rate plan (с inclusions visible как badges "Завтрак включён").
 - **Step 3: extras (chunked by category, accordion).** Default-expanded для top-3 категорий по conversion (F&B, Parking, Transfer).
@@ -252,15 +254,15 @@ Channel manager export: package превращается в standalone rate plan
 
 ### 8.1 Что поддерживают каналы (2026)
 
-| Канал | Native addons API | Workaround |
-|---|---|---|
-| Booking.com | НЕТ (есть `extras`, в free-text; не tracked inventory) | Composed rate plans + description |
-| Expedia | Частично (через "Optional Extras") | Composed rate plans |
-| Airbnb | Через `extra_charges` (cleaning, pet) | Custom fees only |
-| Я.Путешествия | НЕТ публичного API на addons | Composed rate plans |
-| Ostrovok.ru | Только rate plan inclusions | Composed rate plans |
-| TravelLine | Native services API | Direct passthrough |
-| Bnovo | Native | Direct passthrough |
+| Канал         | Native addons API                                      | Workaround                        |
+| ------------- | ------------------------------------------------------ | --------------------------------- |
+| Booking.com   | НЕТ (есть `extras`, в free-text; не tracked inventory) | Composed rate plans + description |
+| Expedia       | Частично (через "Optional Extras")                     | Composed rate plans               |
+| Airbnb        | Через `extra_charges` (cleaning, pet)                  | Custom fees only                  |
+| Я.Путешествия | НЕТ публичного API на addons                           | Composed rate plans               |
+| Ostrovok.ru   | Только rate plan inclusions                            | Composed rate plans               |
+| TravelLine    | Native services API                                    | Direct passthrough                |
+| Bnovo         | Native                                                 | Direct passthrough                |
 
 **Реальность 2026**: 80% каналов НЕ поддерживают addons как first-class.
 
@@ -286,24 +288,24 @@ Cartesian product до threshold (≤8 rate plans):
 
 ### 9.1 Когда charge посчитан
 
-| Event | What | When |
-|---|---|---|
-| `booking_confirmed` | Reservation создан | Posted as **pending** charge |
-| `check_in` | Гость заехал | Все non-postNextDay addons posted as actual |
-| Day-of-service | Daily addons (parking, breakfast) | `post_next_day` posted morning of day+1 |
-| `check_out` | Гость выехал | Final reconciliation |
+| Event               | What                              | When                                        |
+| ------------------- | --------------------------------- | ------------------------------------------- |
+| `booking_confirmed` | Reservation создан                | Posted as **pending** charge                |
+| `check_in`          | Гость заехал                      | Все non-postNextDay addons posted as actual |
+| Day-of-service      | Daily addons (parking, breakfast) | `post_next_day` posted morning of day+1     |
+| `check_out`         | Гость выехал                      | Final reconciliation                        |
 
 **Канон**: pending vs posted distinction. До check-in — pending. После check-in — posted.
 
 ### 9.2 Cancellation
 
-| Сценарий | Refund |
-|---|---|
-| Cancel до cancellation deadline | Full refund all addons |
-| Cancel после deadline | Per-addon cancellation policy |
+| Сценарий                             | Refund                                    |
+| ------------------------------------ | ----------------------------------------- |
+| Cancel до cancellation deadline      | Full refund all addons                    |
+| Cancel после deadline                | Per-addon cancellation policy             |
 | Cancel конкретного addon до check-in | Free, если `cancellable_until` не пройден |
-| Cancel addon после check-in | Posted → rebate (manual approval) |
-| No-show | Apply no-show policy |
+| Cancel addon после check-in          | Posted → rebate (manual approval)         |
+| No-show                              | Apply no-show policy                      |
 
 ### 9.3 Modification (date change)
 
@@ -315,16 +317,16 @@ Cartesian product до threshold (≤8 rate plans):
 
 ## 10. Edge cases
 
-| Кейс | Канон |
-|---|---|
-| Гость купил parking, приехал без машины | Posted = no automatic refund. Manual goodwill rebate возможен. |
-| Late checkout booked, гость уехал рано | Posted = no automatic refund (booked = reserved capacity). |
-| F&B coupon: продали завтрак, гость не пришёл | Posted = full charge (capacity reserved). Аналог "no-show fee". |
-| Spa booked, гость опоздал на 30 min | Slot consumed. Rebooking = новый charge. |
-| Снизили цену addon — old reservations? | Price snapshot at booking time. Old reservations НЕ пересчитываются. `price_at_booking` field на ReservationService. |
-| Inventory race | YDB tx с serializable isolation на `addon_inventory_consumption`. First commit wins. |
-| Refund partial — fiscal чек | Возврат прихода через 54-ФЗ, отдельный фискальный документ. |
-| Free addon (комплимент VIP) | `price = 0` row для аудит-trail, НЕ omitting line. |
+| Кейс                                         | Канон                                                                                                                |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Гость купил parking, приехал без машины      | Posted = no automatic refund. Manual goodwill rebate возможен.                                                       |
+| Late checkout booked, гость уехал рано       | Posted = no automatic refund (booked = reserved capacity).                                                           |
+| F&B coupon: продали завтрак, гость не пришёл | Posted = full charge (capacity reserved). Аналог "no-show fee".                                                      |
+| Spa booked, гость опоздал на 30 min          | Slot consumed. Rebooking = новый charge.                                                                             |
+| Снизили цену addon — old reservations?       | Price snapshot at booking time. Old reservations НЕ пересчитываются. `price_at_booking` field на ReservationService. |
+| Inventory race                               | YDB tx с serializable isolation на `addon_inventory_consumption`. First commit wins.                                 |
+| Refund partial — fiscal чек                  | Возврат прихода через 54-ФЗ, отдельный фискальный документ.                                                          |
+| Free addon (комплимент VIP)                  | `price = 0` row для аудит-trail, НЕ omitting line.                                                                   |
 
 ---
 
@@ -335,6 +337,7 @@ Cartesian product до threshold (≤8 rate plans):
 **Канон**: каждый addon — **отдельная позиция** на чеке. Совмещать в один tax-row нельзя из-за разных НДС-ставок.
 
 Пример чек-структуры (ФФД 1.2):
+
 ```
 1. Проживание DLX 3 ночи            18000.00  НДС 0% льгота
 2. Завтрак (3 ночи × 2 гостя)        4800.00  НДС 22%

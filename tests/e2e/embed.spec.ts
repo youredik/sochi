@@ -36,9 +36,7 @@ test.describe('embed iframe wrapper — axe AA + visual smoke', () => {
 		expect(response?.headers()['content-type']).toContain('text/html')
 		// Custom element registers on bundle eval; CTA button is the canonical
 		// rendered surface для idle state.
-		await page.waitForFunction(() =>
-			Boolean(customElements.get('sochi-booking-widget-v1')),
-		)
+		await page.waitForFunction(() => Boolean(customElements.get('sochi-booking-widget-v1')))
 		await expect(page.getByTestId('widget-cta')).toBeVisible({ timeout: 10_000 })
 		await expect(page.getByTestId('widget-cta')).toHaveText('Забронировать')
 	})
@@ -46,9 +44,7 @@ test.describe('embed iframe wrapper — axe AA + visual smoke', () => {
 	test('[EMB2] axe-pass desktop 1440', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 })
 		await page.goto(IFRAME_URL)
-		await page.waitForFunction(() =>
-			Boolean(customElements.get('sochi-booking-widget-v1')),
-		)
+		await page.waitForFunction(() => Boolean(customElements.get('sochi-booking-widget-v1')))
 		await expect(page.getByTestId('widget-cta')).toBeVisible()
 		const results = await new AxeBuilder({ page }).withTags([...WCAG_TAGS]).analyze()
 		if (results.violations.length > 0) {
@@ -60,9 +56,7 @@ test.describe('embed iframe wrapper — axe AA + visual smoke', () => {
 	test('[EMB3] axe-pass mobile 360×740', async ({ page }) => {
 		await page.setViewportSize({ width: 360, height: 740 })
 		await page.goto(IFRAME_URL)
-		await page.waitForFunction(() =>
-			Boolean(customElements.get('sochi-booking-widget-v1')),
-		)
+		await page.waitForFunction(() => Boolean(customElements.get('sochi-booking-widget-v1')))
 		await expect(page.getByTestId('widget-cta')).toBeVisible()
 		const results = await new AxeBuilder({ page }).withTags([...WCAG_TAGS]).analyze()
 		expect(results.violations).toEqual([])
@@ -71,9 +65,7 @@ test.describe('embed iframe wrapper — axe AA + visual smoke', () => {
 	test('[EMB4] axe-pass forced-colors (high-contrast)', async ({ page }) => {
 		await page.emulateMedia({ forcedColors: 'active' })
 		await page.goto(IFRAME_URL)
-		await page.waitForFunction(() =>
-			Boolean(customElements.get('sochi-booking-widget-v1')),
-		)
+		await page.waitForFunction(() => Boolean(customElements.get('sochi-booking-widget-v1')))
 		await expect(page.getByTestId('widget-cta')).toBeVisible()
 		const results = await new AxeBuilder({ page }).withTags([...WCAG_TAGS]).analyze()
 		expect(results.violations).toEqual([])
@@ -82,9 +74,7 @@ test.describe('embed iframe wrapper — axe AA + visual smoke', () => {
 	test('[EMB5] visual smoke @ 320 (small mobile)', async ({ page }) => {
 		await page.setViewportSize({ width: 320, height: 568 })
 		await page.goto(IFRAME_URL)
-		await page.waitForFunction(() =>
-			Boolean(customElements.get('sochi-booking-widget-v1')),
-		)
+		await page.waitForFunction(() => Boolean(customElements.get('sochi-booking-widget-v1')))
 		await expect(page.getByTestId('widget-cta')).toBeVisible()
 		// Snapshot (Playwright generates baseline on first run; CI compares).
 		await expect(page).toHaveScreenshot('embed-iframe-320.png', { maxDiffPixelRatio: 0.05 })
@@ -93,9 +83,7 @@ test.describe('embed iframe wrapper — axe AA + visual smoke', () => {
 	test('[EMB6] visual smoke @ 768 (tablet)', async ({ page }) => {
 		await page.setViewportSize({ width: 768, height: 1024 })
 		await page.goto(IFRAME_URL)
-		await page.waitForFunction(() =>
-			Boolean(customElements.get('sochi-booking-widget-v1')),
-		)
+		await page.waitForFunction(() => Boolean(customElements.get('sochi-booking-widget-v1')))
 		await expect(page.getByTestId('widget-cta')).toBeVisible()
 		await expect(page).toHaveScreenshot('embed-iframe-768.png', { maxDiffPixelRatio: 0.05 })
 	})
@@ -103,9 +91,7 @@ test.describe('embed iframe wrapper — axe AA + visual smoke', () => {
 	test('[EMB7] visual smoke @ 1024 (small desktop)', async ({ page }) => {
 		await page.setViewportSize({ width: 1024, height: 768 })
 		await page.goto(IFRAME_URL)
-		await page.waitForFunction(() =>
-			Boolean(customElements.get('sochi-booking-widget-v1')),
-		)
+		await page.waitForFunction(() => Boolean(customElements.get('sochi-booking-widget-v1')))
 		await expect(page.getByTestId('widget-cta')).toBeVisible()
 		await expect(page).toHaveScreenshot('embed-iframe-1024.png', { maxDiffPixelRatio: 0.05 })
 	})
@@ -113,9 +99,7 @@ test.describe('embed iframe wrapper — axe AA + visual smoke', () => {
 	test('[EMB8] visual smoke @ 1440 (desktop)', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 })
 		await page.goto(IFRAME_URL)
-		await page.waitForFunction(() =>
-			Boolean(customElements.get('sochi-booking-widget-v1')),
-		)
+		await page.waitForFunction(() => Boolean(customElements.get('sochi-booking-widget-v1')))
 		await expect(page.getByTestId('widget-cta')).toBeVisible()
 		await expect(page).toHaveScreenshot('embed-iframe-1440.png', { maxDiffPixelRatio: 0.05 })
 	})

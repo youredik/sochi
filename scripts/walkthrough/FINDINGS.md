@@ -8,6 +8,7 @@
 быть либо тикетом, либо явно отвергнута с обоснованием.
 
 **Формат:**
+
 - `[severity] [area]` Title
 - Repro / контекст
 - Impact (кого затрагивает)
@@ -34,6 +35,7 @@ Severity: **P0** = блокирует прод, **P1** = важный UX-баг,
 (`expect(pendingBands).toHaveCount(0)`), но она была введена ad-hoc.
 
 **Suggested fix:**
+
 - Optimistic placeholder ставить под отдельным атрибутом `data-pending="true"`,
   а `data-booking-id` ставить ТОЛЬКО когда вернулся real `book_*` ID.
 - Альтернатива: документировать паттерн `data-booking-id^="book_"` в публичном
@@ -69,6 +71,7 @@ folios появятся с задержкой, и UI покажет "нет фо
 PMS-интеграция, ожидающие folio после `bookingCreated`, упрутся в гонку.
 
 **Suggested fix:**
+
 - Параллелизм: folio-creator должен иметь N=4-8 worker'ов или batch-обработку
   CDC events.
 - Backpressure surface: `/folios?status=creating` или CDC offset в API, чтобы
@@ -180,6 +183,7 @@ right-side controls на время видимости toast.
 до того, как поймёт «не работает».
 
 **Suggested fix:**
+
 - Liveness probe: `/health` endpoint (уже есть, но надо в Cloud Logging).
 - Frontend: глобальный handler API-ошибок 5xx → fallback UI «сервис временно
   недоступен» вместо вечного suspense.

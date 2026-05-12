@@ -1,32 +1,32 @@
 {
-  "_doc": "Ratchet baseline — these metrics may ONLY decrease (or stay equal). Pre-push gate fails when a metric regresses past these caps. To improve: ship the improvement + lower the value here in the same commit, explicit reasoning in commit message. Adapted from stankoff-v2 canonical pattern (`fix(test): vitest 4 isolate:false` lineage 2026-05-08).",
-  "_updated": "2026-05-12",
-  "_updated_by_commit": "chore(tsgo): Phase 9 — Oxlint+tsgolint adoption + protobufjs@^8.2.0 override (CVE chain re-zeroed after upstream advisory db update) + 2 new ratchet metrics oxlint_type_aware_{errors,warnings}",
+	"_doc": "Ratchet baseline — these metrics may ONLY decrease (or stay equal). Pre-push gate fails when a metric regresses past these caps. To improve: ship the improvement + lower the value here in the same commit, explicit reasoning in commit message. Adapted from stankoff-v2 canonical pattern (`fix(test): vitest 4 isolate:false` lineage 2026-05-08).",
+	"_updated": "2026-05-12",
+	"_updated_by_commit": "chore(tsgo): Phase 9 — Oxlint+tsgolint adoption + protobufjs@^8.2.0 override (CVE chain re-zeroed after upstream advisory db update) + 2 new ratchet metrics oxlint_type_aware_{errors,warnings}",
 
-  "depcruise_violations_max": 0,
-  "knip_unused_max": 0,
-  "audit_high_critical_max": 0,
-  "ts_strict_errors_max": 0,
-  "biome_errors_max": 0,
-  "weak_assertions_max": 234,
-  "multi_line_biome_ignore_max": 0,
-  "oxlint_type_aware_errors_max": 90,
-  "oxlint_type_aware_warnings_max": 350,
+	"depcruise_violations_max": 0,
+	"knip_unused_max": 0,
+	"audit_high_critical_max": 0,
+	"ts_strict_errors_max": 0,
+	"biome_errors_max": 0,
+	"weak_assertions_max": 234,
+	"multi_line_biome_ignore_max": 0,
+	"oxlint_type_aware_errors_max": 90,
+	"oxlint_type_aware_warnings_max": 350,
 
-  "_depcruise_baseline_note": "0 (clean across 790 modules / 2313 deps). Any new circular / banned import → fail.",
-  "_knip_baseline_note": "0 — clean. New unused export / file / dep → fail.",
-  "_audit_baseline_note": "**0 high CVEs** after A.bis.5 senior self-audit close 2026-05-12. Journey: A.bis.2.fix introduced ratchet at 7 PRE-EXISTING; cc90f62 dropped к 6; f879d25 latest-stable dep bump cascade dropped к 1; this commit applies `pnpm overrides`: `serialize-javascript@^7.0.5` (force resolves transitive via vite-plugin-pwa>workbox-build>@rollup/plugin-terser) → 0. Only 2 LOW severity advisories remain (`tmp` package via @lhci/cli devDep — not counted by ratchet high_critical_max). Any NEW high+critical → fail.",
-  "_ts_strict_baseline_note": "0 (4 workspaces strict, EXIT=0). Any TS error → fail.",
-  "_biome_baseline_note": "0 errors (28 → 6 → 0 после A.bis.2 fix-up cleanup). Warnings tracked separately, не gate. New error → fail.",
-  "_weak_assertions_baseline_note": "234 — initial measurement 2026-05-12. PRE-EXISTING from prior milestones. NOT a regression from A.bis.2; locked here as starting point. Ratchet down each milestone closure (per `feedback_strict_tests.md` canon — exact-value asserts > existence-only). New `.toBeDefined()/.toBeTruthy()/.toBeFalsy()/.toBeInstanceOf(Array)` → count > 234 → fail.",
-  "_multi_line_biome_ignore_baseline_note": "0 after A.bis.2.fix collapsed 10 PRE-EXISTING M10 multi-line biome-ignore comments. New multi-line `// biome-ignore` → suppression doesn't reach the violation → fail. Move comment directly above the violating line OR use `biome-ignore-start/end` block syntax.",
-  "_oxlint_type_aware_errors_note": "90 ceiling at baseline 2026-05-12 Phase 11 (was 340; clean-run count 84 + 6 safety margin for oxlint non-determinism). Phase 11 dropped 320 → 84 errors (−74%) via canon-backed rule relax: `require-await: off` (typescript-eslint own issue #11731: «should NOT be recommended — async without await is best practice safeguarding API surface», Hono's own ESLint config also disables it; verified -249 errors from RUM/handler/test patterns) + `await-thenable: warn` (8 cases all defensive YDB `await driver.close()` patterns — lib types may say sync but await is correct forward-compat insurance). Current ERROR breakdown (84): 68 no-unnecessary-type-assertion (CAREFUL — manual fix only; oxlint --fix damaged 4 files removing necessary HTMLElement→HTMLButtonElement assertions, see feedback_oxlint_fix_unsafe), 7 unbound-method, 7 no-redundant-type-constituents, 5 no-useless-default-assignment, 4 no-meaningless-void-operator. Current WARN breakdown (~343): 96 no-unsafe-assignment, 79 no-unsafe-member-access, 45 no-unsafe-call, 40 no-base-to-string (some real `[object Object]` log bugs in cdc-handlers/folios), 15 prefer-nullish-coalescing, 12 no-unsafe-return, 10 prefer-optional-chain, 8 await-thenable, 2 no-unsafe-argument. Per-rule next-fix priorities for further ratchet-down: 4 no-meaningless-void-operator (trivial mechanical), 5 no-useless-default-assignment (trivial), 7 no-redundant-type-constituents (trivial), 68 no-unnecessary-type-assertion (MANUAL only — verify each removal doesn't break HTMLElement narrowing). Enforced via `scripts/oxlint-ratchet-check.sh` in post-push.yml (BLOCKING).",
-  "_oxlint_type_aware_warnings_note": "335 warnings at initial measurement 2026-05-12. Lower priority: prefer-nullish-coalescing (15), prefer-optional-chain (10), no-unsafe-{return,argument} (14 combined). Hygiene track but counted in ratchet to prevent silent regression.",
+	"_depcruise_baseline_note": "0 (clean across 790 modules / 2313 deps). Any new circular / banned import → fail.",
+	"_knip_baseline_note": "0 — clean. New unused export / file / dep → fail.",
+	"_audit_baseline_note": "**0 high CVEs** after A.bis.5 senior self-audit close 2026-05-12. Journey: A.bis.2.fix introduced ratchet at 7 PRE-EXISTING; cc90f62 dropped к 6; f879d25 latest-stable dep bump cascade dropped к 1; this commit applies `pnpm overrides`: `serialize-javascript@^7.0.5` (force resolves transitive via vite-plugin-pwa>workbox-build>@rollup/plugin-terser) → 0. Only 2 LOW severity advisories remain (`tmp` package via @lhci/cli devDep — not counted by ratchet high_critical_max). Any NEW high+critical → fail.",
+	"_ts_strict_baseline_note": "0 (4 workspaces strict, EXIT=0). Any TS error → fail.",
+	"_biome_baseline_note": "0 errors (28 → 6 → 0 после A.bis.2 fix-up cleanup). Warnings tracked separately, не gate. New error → fail.",
+	"_weak_assertions_baseline_note": "234 — initial measurement 2026-05-12. PRE-EXISTING from prior milestones. NOT a regression from A.bis.2; locked here as starting point. Ratchet down each milestone closure (per `feedback_strict_tests.md` canon — exact-value asserts > existence-only). New `.toBeDefined()/.toBeTruthy()/.toBeFalsy()/.toBeInstanceOf(Array)` → count > 234 → fail.",
+	"_multi_line_biome_ignore_baseline_note": "0 after A.bis.2.fix collapsed 10 PRE-EXISTING M10 multi-line biome-ignore comments. New multi-line `// biome-ignore` → suppression doesn't reach the violation → fail. Move comment directly above the violating line OR use `biome-ignore-start/end` block syntax.",
+	"_oxlint_type_aware_errors_note": "90 ceiling at baseline 2026-05-12 Phase 11 (was 340; clean-run count 84 + 6 safety margin for oxlint non-determinism). Phase 11 dropped 320 → 84 errors (−74%) via canon-backed rule relax: `require-await: off` (typescript-eslint own issue #11731: «should NOT be recommended — async without await is best practice safeguarding API surface», Hono's own ESLint config also disables it; verified -249 errors from RUM/handler/test patterns) + `await-thenable: warn` (8 cases all defensive YDB `await driver.close()` patterns — lib types may say sync but await is correct forward-compat insurance). Current ERROR breakdown (84): 68 no-unnecessary-type-assertion (CAREFUL — manual fix only; oxlint --fix damaged 4 files removing necessary HTMLElement→HTMLButtonElement assertions, see feedback_oxlint_fix_unsafe), 7 unbound-method, 7 no-redundant-type-constituents, 5 no-useless-default-assignment, 4 no-meaningless-void-operator. Current WARN breakdown (~343): 96 no-unsafe-assignment, 79 no-unsafe-member-access, 45 no-unsafe-call, 40 no-base-to-string (some real `[object Object]` log bugs in cdc-handlers/folios), 15 prefer-nullish-coalescing, 12 no-unsafe-return, 10 prefer-optional-chain, 8 await-thenable, 2 no-unsafe-argument. Per-rule next-fix priorities for further ratchet-down: 4 no-meaningless-void-operator (trivial mechanical), 5 no-useless-default-assignment (trivial), 7 no-redundant-type-constituents (trivial), 68 no-unnecessary-type-assertion (MANUAL only — verify each removal doesn't break HTMLElement narrowing). Enforced via `scripts/oxlint-ratchet-check.sh` in post-push.yml (BLOCKING).",
+	"_oxlint_type_aware_warnings_note": "335 warnings at initial measurement 2026-05-12. Lower priority: prefer-nullish-coalescing (15), prefer-optional-chain (10), no-unsafe-{return,argument} (14 combined). Hygiene track but counted in ratchet to prevent silent regression.",
 
-  "_excluded": {
-    "test_leaks": "Vitest 4 detect-async-leaks reports false positives on Promise.race losing branches per stankoff research 2026-04-25. Structural noise, не prod threat.",
-    "mutation_score": "Stryker 9.6.1 too slow для per-PR ratchet (20+ min). Tracked separately on-demand per `project_coverage_mutation_gates.md`.",
-    "biome_warnings": "Hygiene track, не regression gate. Currently 0 after cleanup; if rises, address per priority (not blocked).",
-    "missing_tests": "Sochi monorepo doesn't follow service/repo file convention strictly (mixed factory/service patterns per domain). Re-introduce когда patterns stabilize."
-  }
+	"_excluded": {
+		"test_leaks": "Vitest 4 detect-async-leaks reports false positives on Promise.race losing branches per stankoff research 2026-04-25. Structural noise, не prod threat.",
+		"mutation_score": "Stryker 9.6.1 too slow для per-PR ratchet (20+ min). Tracked separately on-demand per `project_coverage_mutation_gates.md`.",
+		"biome_warnings": "Hygiene track, не regression gate. Currently 0 after cleanup; if rises, address per priority (not blocked).",
+		"missing_tests": "Sochi monorepo doesn't follow service/repo file convention strictly (mixed factory/service patterns per domain). Re-introduce когда patterns stabilize."
+	}
 }

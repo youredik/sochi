@@ -81,19 +81,15 @@ describe('processMediaUpload — variant matrix', () => {
 		expect(result.exifStripped).toBe(true)
 	})
 
-	it.each([
-		'thumb',
-		'card',
-		'medium',
-		'large',
-		'xl',
-		'original',
-	] as const)('%s variant present', (variant) => {
-		const hits = result.variants.filter((v) => v.variant === variant)
-		// AVIF + WebP for sized variants; only 1 (source format) for original
-		const expected = variant === 'original' ? 1 : 2
-		expect(hits).toHaveLength(expected)
-	})
+	it.each(['thumb', 'card', 'medium', 'large', 'xl', 'original'] as const)(
+		'%s variant present',
+		(variant) => {
+			const hits = result.variants.filter((v) => v.variant === variant)
+			// AVIF + WebP for sized variants; only 1 (source format) for original
+			const expected = variant === 'original' ? 1 : 2
+			expect(hits).toHaveLength(expected)
+		},
+	)
 
 	it('every variant has positive bytes (no empty buffers)', () => {
 		for (const v of result.variants) {

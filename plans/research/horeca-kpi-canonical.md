@@ -24,6 +24,7 @@
 ### 1.1 Occupancy (Загрузка)
 
 **Формула**:
+
 ```
 Occupancy = Rooms Sold / Rooms Available
 ```
@@ -32,11 +33,11 @@ Occupancy = Rooms Sold / Rooms Available
 
 **OOO/OOS — ключевая развилка 2026**:
 
-| Подход | OOO в Available? | Кто использует |
-|---|---|---|
-| **STR canon** (бенчмарк) | **ДА, OOO/OOS считаются Available** | STR, HotStats, отчёты для инвесторов |
-| **Operational view** | НЕТ, OOO/OOS вычитаются | Apaleo "Operational Occupancy", Mews "Available Rooms (excl. out of order)" |
-| **USALI 11th Rev (2024)** | Рекомендует ПОКАЗЫВАТЬ ОБА | Финансовая отчётность |
+| Подход                    | OOO в Available?                    | Кто использует                                                              |
+| ------------------------- | ----------------------------------- | --------------------------------------------------------------------------- |
+| **STR canon** (бенчмарк)  | **ДА, OOO/OOS считаются Available** | STR, HotStats, отчёты для инвесторов                                        |
+| **Operational view**      | НЕТ, OOO/OOS вычитаются             | Apaleo "Operational Occupancy", Mews "Available Rooms (excl. out of order)" |
+| **USALI 11th Rev (2024)** | Рекомендует ПОКАЗЫВАТЬ ОБА          | Финансовая отчётность                                                       |
 
 **Решение для нашего KPI-движка**: считать **обе версии**, default UI — Operational (excl. OOO), при бенчмарк-сравнении переключать на STR-style.
 
@@ -45,39 +46,42 @@ Occupancy = Rooms Sold / Rooms Available
 ### 1.2 ADR (Average Daily Rate)
 
 **Формула**:
+
 ```
 ADR = Room Revenue / Rooms Sold
 ```
 
 **Что входит в Room Revenue (USALI 11th Rev 2026 canon)**:
 
-| Компонент | В Room Revenue для ADR? | Источник |
-|---|---|---|
-| Чистая стоимость номера (за вычетом скидок) | **ДА** | USALI, STR |
-| НДС / VAT | **НЕТ** (всегда **net of taxes**) | USALI canon |
-| Туристический налог 2% Сочи | **НЕТ** (отдельная "pass-through") | USALI, STR |
-| Resort fee / mandatory service fee | **ДА** (если non-optional) | **USALI 11th Rev — теперь явно включается** |
-| Завтрак (BB included) | **ЗАВИСИТ от package allocation**: если single-rate package — ВЫЧИТАЕТСЯ из Room Revenue по internal transfer rate | USALI Package Breakdown |
-| Завтрак отдельно | НЕТ (F&B Revenue) | USALI |
-| Парковка | НЕТ (Other Operated Departments) | USALI |
-| Трансфер | НЕТ | USALI |
-| **Cancellation fees** | **НЕТ → "Miscellaneous Income"** | **USALI 11th Rev — явно вынесена** |
-| **No-show fees** | **НЕТ → "No-Show Revenue"** | **USALI 11th Rev** |
-| Early departure fee | НЕТ (Miscellaneous) | USALI |
-| Late checkout fee | НЕТ если отдельный charge; ДА если продолжение тарифа | USALI |
-| Комиссии OTA (Booking 17%, Я.П 17%) | Отображается **GROSS**, комиссия — отдельная **expense** | STR, USALI |
+| Компонент                                   | В Room Revenue для ADR?                                                                                            | Источник                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| Чистая стоимость номера (за вычетом скидок) | **ДА**                                                                                                             | USALI, STR                                  |
+| НДС / VAT                                   | **НЕТ** (всегда **net of taxes**)                                                                                  | USALI canon                                 |
+| Туристический налог 2% Сочи                 | **НЕТ** (отдельная "pass-through")                                                                                 | USALI, STR                                  |
+| Resort fee / mandatory service fee          | **ДА** (если non-optional)                                                                                         | **USALI 11th Rev — теперь явно включается** |
+| Завтрак (BB included)                       | **ЗАВИСИТ от package allocation**: если single-rate package — ВЫЧИТАЕТСЯ из Room Revenue по internal transfer rate | USALI Package Breakdown                     |
+| Завтрак отдельно                            | НЕТ (F&B Revenue)                                                                                                  | USALI                                       |
+| Парковка                                    | НЕТ (Other Operated Departments)                                                                                   | USALI                                       |
+| Трансфер                                    | НЕТ                                                                                                                | USALI                                       |
+| **Cancellation fees**                       | **НЕТ → "Miscellaneous Income"**                                                                                   | **USALI 11th Rev — явно вынесена**          |
+| **No-show fees**                            | **НЕТ → "No-Show Revenue"**                                                                                        | **USALI 11th Rev**                          |
+| Early departure fee                         | НЕТ (Miscellaneous)                                                                                                | USALI                                       |
+| Late checkout fee                           | НЕТ если отдельный charge; ДА если продолжение тарифа                                                              | USALI                                       |
+| Комиссии OTA (Booking 17%, Я.П 17%)         | Отображается **GROSS**, комиссия — отдельная **expense**                                                           | STR, USALI                                  |
 
 **Net ADR** (после OTA-комиссии) — supplementary метрика, не замена ADR.
 
 ### 1.3 RevPAR (Revenue Per Available Room)
 
 **Две эквивалентные формулы**:
+
 ```
 RevPAR = Room Revenue / Rooms Available
 RevPAR = Occupancy × ADR
 ```
 
 **В 2026 индустриальный канон — первая формула** (revenue/available):
+
 - Не зависит от round-off в Occupancy/ADR.
 - Apaleo, Mews, Cloudbeds считают именно так.
 - При Rooms Sold = 0, ADR undefined, но RevPAR корректно = 0 через первую формулу.
@@ -87,16 +91,19 @@ RevPAR = Occupancy × ADR
 ### 1.4 GOPPAR (Gross Operating Profit Per Available Room)
 
 **Формула**:
+
 ```
 GOPPAR = (Total Revenue − Departmental Expenses − Undistributed Operating Expenses) / Rooms Available
        = Gross Operating Profit / Rooms Available
 ```
 
 **Вычитаем (USALI 11th Rev)**:
+
 - **Departmental Expenses**: rooms (housekeeping labor, supplies, laundry), F&B (food cost, beverage cost).
 - **Undistributed Operating**: Administrative & General, Information & Telecommunications, Sales & Marketing, Property Operations & Maintenance, Utilities.
 
 **НЕ вычитаем**:
+
 - Management fees
 - Property taxes / insurance / rent
 - Depreciation / amortization
@@ -123,6 +130,7 @@ CPOR = Total Operating Costs / Rooms Sold
 ```
 
 или узко:
+
 ```
 Rooms CPOR = Rooms Department Expenses / Rooms Sold
 ```
@@ -134,6 +142,7 @@ Rooms CPOR = Rooms Department Expenses / Rooms Sold
 ### 2.1 Daily vs Running Totals
 
 **Канон**:
+
 - **Daily KPI** — за конкретную ночь.
 - **MTD / YTD / Trailing 30/90/365** — running totals, агрегируются как `sum(Revenue) / sum(Available)`, **НЕ как `avg(daily_RevPAR)`**.
 
@@ -148,12 +157,14 @@ Rooms CPOR = Rooms Department Expenses / Rooms Sold
 ### 2.3 Per-Room-Type
 
 Apaleo и Mews считают KPI **per Unit Group / Room Category**:
+
 - Available = inventory этого типа.
 - Sold = bookings в этот тип.
 
 ### 2.4 Time-window сравнения
 
 STR-стандарт:
+
 - **MPI (Market Penetration Index)** = (Hotel Occ / Comp Set Occ) × 100
 - **ARI (Average Rate Index)** = (Hotel ADR / Comp Set ADR) × 100
 - **RGI (RevPAR Index)** = (Hotel RevPAR / Comp Set RevPAR) × 100
@@ -161,6 +172,7 @@ STR-стандарт:
 100 = fair share; >100 = outperform.
 
 Self-comparison:
+
 - **YoY** — same calendar period prior year (с учётом дня недели, не just "29 апреля 2025").
 - **STLY (Same Time Last Year)** — pace metric.
 
@@ -168,21 +180,21 @@ Self-comparison:
 
 ## 3. Edge Cases — однозначные правила
 
-| Сценарий | Правило |
-|---|---|
-| Occupancy = 0 | ADR = `null`, RevPAR = 0 |
-| Нет revenue, есть occupied (только comp) | ADR = 0 (если comp в Sold) или null |
-| OOO/OOS rooms | Default operational (excl). Toggle на STR-mode |
-| Group blocks (не подтверждённые) | НЕ Sold пока не превратились в reservations |
-| Comp rooms (бесплатные апгрейды) | **В Rooms Sold (Occ ↑), НО НЕ в Room Revenue (ADR ↓)**. STR canon. UI: "Paid Occupancy" + "Total Occupancy" |
-| Day-use (без overnight) | НЕ занимает room-night; revenue → "Other Room Revenue"; **НЕ влияет на ADR/RevPAR** |
-| Multi-night booking | Revenue allocated **per night equally** (или per-night actual если rate plan варьирует) |
-| No-show | **НЕ занимает room-night**, no-show fee → Miscellaneous |
-| Walk-in | С момента check-in, не ретроактивно |
-| Early checkout | Already-consumed nights остаются Sold; refunded — НЕ Sold |
-| Stay-over crossing month | Каждая ночь → к своему месяцу |
-| House use rooms | Apaleo/Mews — отдельный bucket, не в Available |
-| Posting after the fact | Идёт в day когда service consumed, не posted (accrual basis) |
+| Сценарий                                 | Правило                                                                                                     |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Occupancy = 0                            | ADR = `null`, RevPAR = 0                                                                                    |
+| Нет revenue, есть occupied (только comp) | ADR = 0 (если comp в Sold) или null                                                                         |
+| OOO/OOS rooms                            | Default operational (excl). Toggle на STR-mode                                                              |
+| Group blocks (не подтверждённые)         | НЕ Sold пока не превратились в reservations                                                                 |
+| Comp rooms (бесплатные апгрейды)         | **В Rooms Sold (Occ ↑), НО НЕ в Room Revenue (ADR ↓)**. STR canon. UI: "Paid Occupancy" + "Total Occupancy" |
+| Day-use (без overnight)                  | НЕ занимает room-night; revenue → "Other Room Revenue"; **НЕ влияет на ADR/RevPAR**                         |
+| Multi-night booking                      | Revenue allocated **per night equally** (или per-night actual если rate plan варьирует)                     |
+| No-show                                  | **НЕ занимает room-night**, no-show fee → Miscellaneous                                                     |
+| Walk-in                                  | С момента check-in, не ретроактивно                                                                         |
+| Early checkout                           | Already-consumed nights остаются Sold; refunded — НЕ Sold                                                   |
+| Stay-over crossing month                 | Каждая ночь → к своему месяцу                                                                               |
+| House use rooms                          | Apaleo/Mews — отдельный bucket, не в Available                                                              |
+| Posting after the fact                   | Идёт в day когда service consumed, не posted (accrual basis)                                                |
 
 ---
 
@@ -215,14 +227,14 @@ Self-comparison:
 
 ### 4.4 Сводка различий
 
-| Aspect | Apaleo | Mews | Cloudbeds | STR canon |
-|---|---|---|---|---|
-| OOO в Available | excl (default) | оба | excl | **incl** |
-| ADR net of VAT | да | да | toggle | да |
-| Cancel fee в Room Rev | нет | нет | нет | нет (USALI 11) |
-| Resort fee в Room Rev | да если mandatory | да | да | да |
-| Day-use в Occupancy | нет | нет | toggle | нет |
-| Comp в Sold | toggle | toggle | да | да |
+| Aspect                | Apaleo            | Mews   | Cloudbeds | STR canon      |
+| --------------------- | ----------------- | ------ | --------- | -------------- |
+| OOO в Available       | excl (default)    | оба    | excl      | **incl**       |
+| ADR net of VAT        | да                | да     | toggle    | да             |
+| Cancel fee в Room Rev | нет               | нет    | нет       | нет (USALI 11) |
+| Resort fee в Room Rev | да если mandatory | да     | да        | да             |
+| Day-use в Occupancy   | нет               | нет    | toggle    | нет            |
+| Comp в Sold           | toggle            | toggle | да        | да             |
 
 **Решение для нашего движка**: следовать **Apaleo-style canon** + давать toggle на STR-mode для OOO.
 
@@ -268,25 +280,26 @@ Self-comparison:
 
 ## 7. Дополнительные метрики
 
-| Метрика | Формула | Назначение |
-|---|---|---|
-| **Booking Pace** | Reservations per day по arrival window (0-7d, 8-30d, 31-90d, 90+) | Тренд набора будущих дат |
-| **Lead Time** | avg(arrival_date − created_date) | Насколько вперёд бронируют |
-| **Length of Stay** (ALOS) | sum(nights) / count(reservations) | Поведение гостей |
-| **Cancellation Rate** | cancelled / (cancelled + arrived + active) на cohort created-date | Качество прогноза |
-| **No-Show Rate** | no_show / arrived | Discipline guarantee policy |
-| **Channel Mix** | room_nights_by_channel / total × 100% | Зависимость от OTA |
-| **Direct vs OTA Revenue** | direct_revenue / total_revenue | Доля без комиссий |
-| **Repeat Guest Rate** | unique_guests_with_2+_stays / unique_guests | Лояльность |
-| **Conversion Rate** | confirmed / inquiries | Sales funnel |
-| **Cancel-to-Book Ratio** | cancellations / new_bookings | Operational pressure |
-| **OOO Days** | sum of nights × OOO units | Maintenance impact |
-| **Arrivals/Departures count** | по календарю | Operational planning |
-| **Forward Occupancy / On-the-Books** | sold_for_future_date / available_for_future_date | Pace KPI |
-| **Pace Curve** | cumulative bookings vs days-to-arrival | Распределение pickup |
-| **Wash Factor** | actual_arrived / on-the-books_at_-7d | Reliability of pace |
+| Метрика                              | Формула                                                           | Назначение                  |
+| ------------------------------------ | ----------------------------------------------------------------- | --------------------------- |
+| **Booking Pace**                     | Reservations per day по arrival window (0-7d, 8-30d, 31-90d, 90+) | Тренд набора будущих дат    |
+| **Lead Time**                        | avg(arrival_date − created_date)                                  | Насколько вперёд бронируют  |
+| **Length of Stay** (ALOS)            | sum(nights) / count(reservations)                                 | Поведение гостей            |
+| **Cancellation Rate**                | cancelled / (cancelled + arrived + active) на cohort created-date | Качество прогноза           |
+| **No-Show Rate**                     | no_show / arrived                                                 | Discipline guarantee policy |
+| **Channel Mix**                      | room_nights_by_channel / total × 100%                             | Зависимость от OTA          |
+| **Direct vs OTA Revenue**            | direct_revenue / total_revenue                                    | Доля без комиссий           |
+| **Repeat Guest Rate**                | unique_guests_with_2+\_stays / unique_guests                      | Лояльность                  |
+| **Conversion Rate**                  | confirmed / inquiries                                             | Sales funnel                |
+| **Cancel-to-Book Ratio**             | cancellations / new_bookings                                      | Operational pressure        |
+| **OOO Days**                         | sum of nights × OOO units                                         | Maintenance impact          |
+| **Arrivals/Departures count**        | по календарю                                                      | Operational planning        |
+| **Forward Occupancy / On-the-Books** | sold_for_future_date / available_for_future_date                  | Pace KPI                    |
+| **Pace Curve**                       | cumulative bookings vs days-to-arrival                            | Распределение pickup        |
+| **Wash Factor**                      | actual*arrived / on-the-books_at*-7d                              | Reliability of pace         |
 
 **Российский фокус для Сочи**:
+
 - **Booking pace** — сезонность жёсткая (mai-октябрь vs январь-апрель).
 - **Channel mix** — Я.Путешествия + Ostrovok доминируют.
 - **Lead time** — российский гость бронирует ближе к дате чем западный.
@@ -389,6 +402,7 @@ periodOccupancy = avg(dailyOccupancy)
 ## 11. Источники
 
 **Первичные канонические:**
+
 - USALI 11th Revised Edition (2024), Hotel Association of New York City + AHLA
 - STR Glossary 2026 (str.com/glossary)
 - Apaleo Reports API documentation (apaleo.dev)
@@ -396,11 +410,13 @@ periodOccupancy = avg(dailyOccupancy)
 - Cloudbeds Insights — Reports Dictionary
 
 **Вторичные:**
+
 - HotStats blog — KPI definitions 2025
 - Hospitality Net articles
 - Hotel Tech Report — KPI guides
 
 **РФ:**
+
 - 425-ФЗ от 2024-12-12 (туристический налог)
 - НДС 22% — НК РФ изменения 2026
 - Bnovo Knowledge Base

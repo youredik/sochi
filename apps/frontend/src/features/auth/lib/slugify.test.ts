@@ -89,17 +89,14 @@ describe('slugify', () => {
 	})
 
 	describe('output invariants (universal)', () => {
-		it.each([
-			'Гостиница',
-			'Mixed123 слов',
-			"admin'; drop--",
-			'foo---bar',
-			'  leading trailing  ',
-		])('%s → output matches /^[a-z0-9-]*$/ and has no leading/trailing hyphens', (input) => {
-			const out = slugify(input)
-			expect(out).toMatch(/^[a-z0-9-]*$/)
-			expect(out).not.toMatch(/^-/)
-			expect(out).not.toMatch(/-$/)
-		})
+		it.each(['Гостиница', 'Mixed123 слов', "admin'; drop--", 'foo---bar', '  leading trailing  '])(
+			'%s → output matches /^[a-z0-9-]*$/ and has no leading/trailing hyphens',
+			(input) => {
+				const out = slugify(input)
+				expect(out).toMatch(/^[a-z0-9-]*$/)
+				expect(out).not.toMatch(/^-/)
+				expect(out).not.toMatch(/-$/)
+			},
+		)
 	})
 })

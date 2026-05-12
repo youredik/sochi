@@ -35,10 +35,7 @@ function futureIso(daysFromToday: number): string {
  * aria-label embeds the checkIn date (`"<status>, YYYY-MM-DD — …"`);
  * we narrow down via substring match on "{date} —".
  */
-async function createConfirmedBooking(
-	page: import('@playwright/test').Page,
-	dayOffset: number,
-) {
+async function createConfirmedBooking(page: import('@playwright/test').Page, dayOffset: number) {
 	await page.goto('/')
 	await page.locator('[data-section-id="grid"]').first().click()
 	const targetDate = futureIso(dayOffset)
@@ -101,9 +98,7 @@ test.describe('booking-edit dialog', () => {
 		await expect(submit).toBeEnabled()
 	})
 
-	test('cancel happy → band flips to cancelled palette (strikethrough, grey)', async ({
-		page,
-	}) => {
+	test('cancel happy → band flips to cancelled palette (strikethrough, grey)', async ({ page }) => {
 		const { band } = await createConfirmedBooking(page, 13)
 
 		await band.click()
@@ -299,13 +294,9 @@ test.describe('booking-edit dialog', () => {
 			expect(body.error?.code).toBe('NOT_FOUND')
 		})
 
-		test('GET /bookings/:id on well-formed non-existent id → 404 NOT_FOUND', async ({
-			page,
-		}) => {
+		test('GET /bookings/:id on well-formed non-existent id → 404 NOT_FOUND', async ({ page }) => {
 			// Also probe the read path (edit dialog opens via this endpoint).
-			const res = await page.request.get(
-				`http://localhost:8787/api/v1/bookings/${BOGUS_ID}`,
-			)
+			const res = await page.request.get(`http://localhost:8787/api/v1/bookings/${BOGUS_ID}`)
 			expect(res.status()).toBe(404)
 			const body = (await res.json()) as { error?: { code?: string } }
 			expect(body.error?.code).toBe('NOT_FOUND')

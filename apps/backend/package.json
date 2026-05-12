@@ -2,6 +2,10 @@
 	"name": "@horeca/backend",
 	"version": "0.0.1",
 	"private": true,
+	"files": [
+		"src",
+		"package.json"
+	],
 	"type": "module",
 	"exports": {
 		"./app": {
@@ -13,10 +17,6 @@
 			"default": "./src/auth.ts"
 		}
 	},
-	"files": [
-		"src",
-		"package.json"
-	],
 	"scripts": {
 		"dev": "node --watch --watch-preserve-output --env-file-if-exists=../../.env src/index.ts",
 		"start": "node src/index.ts"

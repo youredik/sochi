@@ -198,7 +198,9 @@ async function main(): Promise<void> {
 		metadata: { script: 'verify-yookassa-empirical', purpose: 'receipt-shape' },
 	})
 	console.log(`   HTTP ${receipt.status}, latency ${receipt.latencyMs}ms`)
-	console.log(`   status=${receipt.response.status}, receipt_registration=${receipt.response.receipt_registration}`)
+	console.log(
+		`   status=${receipt.response.status}, receipt_registration=${receipt.response.receipt_registration}`,
+	)
 	saveEvidence('real-yookassa-payment-receipt.json', receipt)
 
 	// ─── Diff report ───────────────────────────────────────────────────
@@ -208,7 +210,9 @@ async function main(): Promise<void> {
 	// Status enum check
 	const validStatuses = ['pending', 'waiting_for_capture', 'succeeded', 'canceled']
 	if (minimalResp.status && !validStatuses.includes(minimalResp.status)) {
-		console.log(`⚠️  status='${minimalResp.status}' NOT in canon enum [${validStatuses.join(', ')}]`)
+		console.log(
+			`⚠️  status='${minimalResp.status}' NOT in canon enum [${validStatuses.join(', ')}]`,
+		)
 	} else {
 		console.log(`✅ status='${minimalResp.status}' matches canon enum`)
 	}
@@ -222,7 +226,9 @@ async function main(): Promise<void> {
 
 	// confirmation_url shape
 	if (minimalResp.confirmation?.type === 'redirect' && minimalResp.confirmation.confirmation_url) {
-		console.log(`✅ confirmation.confirmation_url present: ${minimalResp.confirmation.confirmation_url}`)
+		console.log(
+			`✅ confirmation.confirmation_url present: ${minimalResp.confirmation.confirmation_url}`,
+		)
 	} else {
 		console.log('⚠️  confirmation.confirmation_url missing or wrong type')
 	}

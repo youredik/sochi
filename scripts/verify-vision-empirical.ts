@@ -57,10 +57,7 @@ import { fileURLToPath } from 'node:url'
 import { createMockVisionOcr } from '../apps/backend/src/domains/epgu/vision/mock-vision.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const EVIDENCE_DIR = resolve(
-	__dirname,
-	'../apps/backend/src/domains/epgu/vision/_evidence',
-)
+const EVIDENCE_DIR = resolve(__dirname, '../apps/backend/src/domains/epgu/vision/_evidence')
 
 // Canonical Yandex AI Studio OCR endpoint 2026 — verified independently
 // 2x: research-cache `plans/research/yandex-vision-passport.md` (2026-04-27)
@@ -149,7 +146,9 @@ function diffShape(
 	const realKeys = new Set(Object.keys(real))
 	for (const key of mockKeys) {
 		if (!realKeys.has(key)) {
-			gaps.push(`Mock has '${pathPrefix}${key}', real does NOT — Mock claims field that doesn't exist`)
+			gaps.push(
+				`Mock has '${pathPrefix}${key}', real does NOT — Mock claims field that doesn't exist`,
+			)
 		}
 	}
 	for (const key of realKeys) {
@@ -162,9 +161,7 @@ function diffShape(
 			const mockType = typeof mock[key]
 			const realType = typeof real[key]
 			if (mockType !== realType) {
-				gaps.push(
-					`Type mismatch '${pathPrefix}${key}': Mock=${mockType}, Real=${realType}`,
-				)
+				gaps.push(`Type mismatch '${pathPrefix}${key}': Mock=${mockType}, Real=${realType}`)
 			}
 		}
 	}

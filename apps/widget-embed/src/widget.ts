@@ -95,7 +95,13 @@ export class SochiBookingWidget extends LitElement {
 			isolation: isolate;
 			contain: layout paint;
 			container-type: inline-size;
-			font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+			font-family:
+				system-ui,
+				-apple-system,
+				'Segoe UI',
+				Roboto,
+				'Helvetica Neue',
+				Arial,
 				sans-serif;
 			color: #0a0a0a;
 			line-height: 1.4;

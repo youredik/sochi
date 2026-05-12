@@ -85,11 +85,7 @@ test.describe('Dashboard — composition + content', () => {
 		const slugMatch = url.match(/\/o\/([^/]+)/)
 		expect(slugMatch?.[1]).toBeTruthy()
 		const slug = slugMatch![1]
-		const navHrefs = [
-			`/o/${slug}/grid`,
-			`/o/${slug}/receivables`,
-			`/o/${slug}/admin/tax`,
-		]
+		const navHrefs = [`/o/${slug}/grid`, `/o/${slug}/receivables`, `/o/${slug}/admin/tax`]
 		for (const href of navHrefs) {
 			await expect(main.locator(`a[href="${href}"]`)).toHaveCount(0)
 		}

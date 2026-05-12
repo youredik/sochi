@@ -43,11 +43,11 @@ DI-контейнеры (`tsyringe`, `inversify`) уместны для круп
 
 ### 1.3 Configuration: 3 уровня
 
-| Уровень | Источник | Пример | Refresh |
-|---------|----------|--------|---------|
-| **Boot-time** | env vars | `POSTBOX_ENDPOINT`, `YDB_ENDPOINT` | restart |
-| **Tenant config** | DB row | `organization.payment_provider_code = 'yookassa'` | per-request |
-| **Operational toggle** | OpenFeature/Flagd | `feature.epgu.enabled` | seconds (poll/SSE) |
+| Уровень                | Источник          | Пример                                            | Refresh            |
+| ---------------------- | ----------------- | ------------------------------------------------- | ------------------ |
+| **Boot-time**          | env vars          | `POSTBOX_ENDPOINT`, `YDB_ENDPOINT`                | restart            |
+| **Tenant config**      | DB row            | `organization.payment_provider_code = 'yookassa'` | per-request        |
+| **Operational toggle** | OpenFeature/Flagd | `feature.epgu.enabled`                            | seconds (poll/SSE) |
 
 **OpenFeature как vendor-agnostic стандарт 2026**: пишете против `OpenFeature.getClient()`, провайдером может быть JSON-файл (Flagd) в dev, Unleash в staging, LaunchDarkly в prod — без изменения кода.
 
@@ -64,15 +64,15 @@ DI-контейнеры (`tsyringe`, `inversify`) уместны для круп
 ```ts
 // env.ts — startup assertion
 if (env.NODE_ENV === 'production') {
-  const forbidden = ['PAYMENT_PROVIDER=stub', 'CAPTCHA_PROVIDER=stub']
-  for (const f of forbidden) {
-    const [k, v] = f.split('=')
-    if (env[k] === v) throw new Error(`refusing to start: ${f} in production`)
-  }
+	const forbidden = ['PAYMENT_PROVIDER=stub', 'CAPTCHA_PROVIDER=stub']
+	for (const f of forbidden) {
+		const [k, v] = f.split('=')
+		if (env[k] === v) throw new Error(`refusing to start: ${f} in production`)
+	}
 }
 ```
 
-1. **Startup assertion**: при `NODE_ENV=production` fail-fast если *_PROVIDER=stub.
+1. **Startup assertion**: при `NODE_ENV=production` fail-fast если \*\_PROVIDER=stub.
 2. **CI lint**: pre-merge check, что `production.env.example` не содержит `=stub`.
 3. **Runtime telemetry**: каждый adapter эмитит `adapter.mode={stub|sandbox|live}` в первый span. Алерт в Monium когда `provider=epgu, mode=stub, tenant.is_production=true`.
 
@@ -99,10 +99,10 @@ if (env.NODE_ENV === 'production') {
 ```ts
 import { Policy } from 'cockatiel'
 const epguResilience = Policy.wrap(
-  Policy.timeout(10_000),
-  Policy.handleAll().retry().attempts(3).exponential(),
-  Policy.handleAll().circuitBreaker(60_000, new ConsecutiveBreaker(5)),
-  Policy.bulkhead(10, 100), // 10 concurrent, 100 queued
+	Policy.timeout(10_000),
+	Policy.handleAll().retry().attempts(3).exponential(),
+	Policy.handleAll().circuitBreaker(60_000, new ConsecutiveBreaker(5)),
+	Policy.bulkhead(10, 100), // 10 concurrent, 100 queued
 )
 const result = await epguResilience.execute(() => client.submit(payload))
 ```
@@ -167,6 +167,7 @@ export function createPaymentProvider(env, deps): PaymentProvider {
 - **Optimistic** (version + check on write) — выбирают современные booking systems. Реагируют на конфликт через retry.
 
 **YDB-specific**: YDB **по умолчанию Serializable + OCC**:
+
 - Reads ставят optimistic locks на observed ranges.
 - На commit — проверка locks; если конфликт → `transaction locks invalidated`, transaction rolls back.
 - "Транзакция, которая закончилась первой — выигрывает".
@@ -180,6 +181,7 @@ export function createPaymentProvider(env, deps): PaymentProvider {
 **YDB Coordination Service** — semaphore-based leader election, нужен для cron-singleton, **НЕ для booking lock**.
 
 **Recommendation**: используйте YDB native serializable transaction:
+
 1. `SELECT availability WHERE room_type_id=$rt AND date BETWEEN $from AND $to` — read locks.
 2. `INSERT INTO booking ...` + `UPDATE availability SET booked = booked + N WHERE ...` — write locks.
 3. На commit либо успех, либо `TransactionLocksInvalidated` → retry.
@@ -221,6 +223,7 @@ room_type_availability(
 - **Manual override** — front desk решает.
 
 **В коде**:
+
 1. Detection: при confirm обнаружен conflict (`booked_qty > total_qty`) → emit `OverbookingDetected` event в outbox.
 2. Workflow trigger: alert в notification-domain для admin + UI flag в Шахматке.
 3. **НЕ автоматически отменяйте booking** — это бизнес-решение.
@@ -242,6 +245,7 @@ room_type_availability(
 **Polymorphic** = одна таблица `outbox_event(event_id, aggregate_type, aggregate_id, event_type, payload, created_at, processed_at)` для всех доменов.
 
 **Pros**:
+
 - Один CDC consumer вместо N.
 - Cross-domain ordering trivial — единый `created_at`.
 - Cleanup один cron.
@@ -262,6 +266,7 @@ room_type_availability(
 4. Идемпотентный handler помечает `processed_at` + audit.
 
 **YDB-specific advantages**:
+
 - `ADD CHANGEFEED` — встроенный CDC, не нужно Debezium.
 - Topics — нативный consumer-offset tracking (как Kafka).
 - Serializable transaction = atomic outbox write.
@@ -271,6 +276,7 @@ room_type_availability(
 ### 3.3 Idempotency keys
 
 **Two-tier дедупликация**:
+
 1. **Hot tier — Redis SET NX** с TTL 24h. Fast claim.
 2. **Cold tier — DB unique index** `idempotency_key`. Source of truth, не expires.
 
@@ -278,37 +284,40 @@ room_type_availability(
 
 ```ts
 async function handleEvent(evt: OutboxEvent) {
-  const key = `${evt.aggregate_type}:${evt.event_id}`
-  try {
-    await sql`INSERT INTO event_processed(key, processed_at) VALUES (${key}, ${now()})`
-  } catch (e) {
-    if (isUniqueViolation(e)) return // already processed
-    throw e
-  }
-  // proceed with handler
+	const key = `${evt.aggregate_type}:${evt.event_id}`
+	try {
+		await sql`INSERT INTO event_processed(key, processed_at) VALUES (${key}, ${now()})`
+	} catch (e) {
+		if (isUniqueViolation(e)) return // already processed
+		throw e
+	}
+	// proceed with handler
 }
 ```
 
 ### 3.4 Event sourcing — НЕ нужен
 
 Event sourcing (rebuild state from events) оправдан когда:
+
 - История изменений = первичный артефакт (banking).
 - Нужны time-travel queries.
 - Domain экспертам естественно мыслить в событиях.
 
 Для HoReCa (cancellation/refund history через activity log) — current-state модель + immutable event log **достаточно**. Event sourcing добавит:
+
 - Snapshot management.
 - Schema migration ад при event versioning.
 - Сложность query'ев (CQRS с read models).
 
 ### 3.5 Saga: choreography vs orchestration
 
-| Тип | Когда использовать |
-|-----|-------------------|
-| Choreography | Простые linear flows (≤3 шага), domain events natural |
+| Тип           | Когда использовать                                      |
+| ------------- | ------------------------------------------------------- |
+| Choreography  | Простые linear flows (≤3 шага), domain events natural   |
 | Orchestration | Complex workflow, видимость нужна, conditional branches |
 
 **Для booking confirmed → ЕПГУ + notification + KPI**:
+
 - Это **choreography** — каждый handler reacts независимо.
 - НЕТ ordering между ними.
 - НЕТ compensation flow.
@@ -341,6 +350,7 @@ outbox_event_dlq(
 ```
 
 **Принципы**:
+
 1. **НЕ auto-replay из DLQ** — создаёт loop'ы.
 2. **Алертинг** — admin notification при первом DLQ entry per event_type per day.
 3. **Manual classify+replay UI** — admin читает DLQ → fix root cause → mark for replay.
@@ -359,6 +369,7 @@ outbox_event_dlq(
 ### 3.9 OpenTelemetry semconv
 
 OTel attribute names для messaging spans:
+
 - `messaging.system` = `"ydb_topics"`.
 - `messaging.operation.type` = `"publish"|"receive"|"process"`.
 - `messaging.destination.name` = topic name.
@@ -366,13 +377,13 @@ OTel attribute names для messaging spans:
 
 ```ts
 const span = tracer.startSpan('outbox.publish', {
-  attributes: {
-    'messaging.system': 'ydb_outbox',
-    'messaging.operation.type': 'publish',
-    'messaging.message.id': eventId,
-    'outbox.event_type': evt.type,
-    'outbox.aggregate_type': evt.aggregateType,
-  },
+	attributes: {
+		'messaging.system': 'ydb_outbox',
+		'messaging.operation.type': 'publish',
+		'messaging.message.id': eventId,
+		'outbox.event_type': evt.type,
+		'outbox.aggregate_type': evt.aggregateType,
+	},
 })
 ```
 
@@ -380,16 +391,16 @@ const span = tracer.startSpan('outbox.publish', {
 
 ## 4. Конкретные библиотеки 2026
 
-| Need | Choice | Почти: | Avoid |
-|------|--------|---------|-------|
-| Provider pattern | interface + factory function | tsyringe (если 10+) | inversify (heavy) |
-| Circuit breaker | **Cockatiel** | Opossum | hand-rolled |
-| Retry general HTTP | **Cockatiel** + jitter | p-retry | manual loop |
-| Retry YDB | `@ydbjs/retry` | — | Cockatiel (YDB-specific уже есть) |
-| Feature flags | **OpenFeature** + Flagd dev / Unleash prod | Vercel Flags SDK | LaunchDarkly direct |
-| Contract test | nock cassettes | Pact (overkill) | manual mocks |
-| Schema validation | zod | yup | ajv |
-| OTel semconv | semantic-conventions ≥1.40.0 | older | custom names |
+| Need               | Choice                                     | Почти:              | Avoid                             |
+| ------------------ | ------------------------------------------ | ------------------- | --------------------------------- |
+| Provider pattern   | interface + factory function               | tsyringe (если 10+) | inversify (heavy)                 |
+| Circuit breaker    | **Cockatiel**                              | Opossum             | hand-rolled                       |
+| Retry general HTTP | **Cockatiel** + jitter                     | p-retry             | manual loop                       |
+| Retry YDB          | `@ydbjs/retry`                             | —                   | Cockatiel (YDB-specific уже есть) |
+| Feature flags      | **OpenFeature** + Flagd dev / Unleash prod | Vercel Flags SDK    | LaunchDarkly direct               |
+| Contract test      | nock cassettes                             | Pact (overkill)     | manual mocks                      |
+| Schema validation  | zod                                        | yup                 | ajv                               |
+| OTel semconv       | semantic-conventions ≥1.40.0               | older               | custom names                      |
 
 ---
 
@@ -408,6 +419,7 @@ NOTIFICATION_PROVIDER=postbox
 ```
 
 **Staging**:
+
 ```
 NODE_ENV=production  # код видит prod build
 PAYMENT_PROVIDER=yookassa  # sandbox keys
@@ -445,6 +457,7 @@ ADAPTER_MODE_OVERRIDE=staging
 ### 6.3 Channel manager rate limit
 
 **Backpressure pattern**:
+
 1. **Bulkhead** — max 10 concurrent push per provider.
 2. **Token bucket** — `p-throttle` или Cockatiel rate-limit policy.
 3. Если queue filled — events stay в outbox, retry на следующем tick.
@@ -453,6 +466,7 @@ ADAPTER_MODE_OVERRIDE=staging
 ### 6.4 Cascading failures
 
 **Защита**:
+
 1. **Timeout per operation** — Cockatiel `timeout(10_000)`.
 2. **Circuit breaker** — после 5 fails открывается на 60s.
 3. **Bulkhead** — концурентность лимитирована per adapter.
@@ -473,31 +487,38 @@ ADAPTER_MODE_OVERRIDE=staging
 ## 8. Источники
 
 **Адаптеры/Stripe/AWS:**
+
 - [Stripe sandboxes](https://docs.stripe.com/sandboxes), [API keys](https://docs.stripe.com/keys), [Stripe go-live](https://docs.stripe.com/get-started/checklist/go-live)
 - [Apaleo overbooking help](https://apaleo.zendesk.com/hc/en-us/articles/360009197699-How-Do-I-Prevent-Overbookings)
 - [Mews Connectivity feedback](https://feedback.mews.com/forums/955688-connectivity)
 
 **Booking.com / Channels:**
+
 - [Booking.com ARI overview](https://developers.booking.com/connectivity/docs/ari)
 - [Booking.com implementation](https://portal.connectivity.booking.com/s/article/How-can-I-implement-the-Rates-Availability-API-and-Reservations-API)
 
 **YDB:**
+
 - [YDB transactions](https://ydb.tech/docs/en/concepts/transactions?version=v25.2)
 - [YDB CDC concepts](https://ydb.tech/docs/en/concepts/cdc)
 - [YDB distributed lock recipe](https://ydb.tech/docs/en/recipes/ydb-sdk/distributed-lock)
 
 **Outbox/CDC:**
+
 - [microservices.io transactional outbox](https://microservices.io/patterns/data/transactional-outbox.html)
 - [Confluent CDC patterns](https://www.confluent.io/blog/how-change-data-capture-works-patterns-solutions-implementation/)
 - [eShopOnContainers](https://github.com/dotnet-architecture/eshoponcontainers/wiki/Architecture)
 
 **Resilience:**
+
 - [Cockatiel npm](https://www.npmjs.com/package/cockatiel)
 - [APIScout 2026 resilience](https://apiscout.dev/blog/api-resilience-circuit-breakers-retries-bulkheads-2026)
 
 **Feature flags:**
+
 - [OpenFeature 2026 guide](https://1xapi.com/blog/feature-flags-nodejs-openfeature-2026-guide)
 
 **OTel:**
+
 - [OTel semconv 1.40.0](https://opentelemetry.io/docs/specs/semconv/)
 - [OTel messaging](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/)

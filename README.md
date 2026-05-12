@@ -4,11 +4,11 @@
 
 ## Что поднимается
 
-| Сервис | Назначение | Dev | Prod |
-|---|---|---|---|
-| YDB | Основная БД | `ydbplatform/local-ydb:25.3.1.25` (single-node, in-memory) | Yandex Managed Service for YDB (Serverless) |
-| MinIO | S3-совместимое хранилище | `minio/minio` | Yandex Object Storage |
-| Mailpit | SMTP-перехватчик для писем | `axllent/mailpit` | Yandex Postbox (SESv2) |
+| Сервис  | Назначение                 | Dev                                                        | Prod                                        |
+| ------- | -------------------------- | ---------------------------------------------------------- | ------------------------------------------- |
+| YDB     | Основная БД                | `ydbplatform/local-ydb:25.3.1.25` (single-node, in-memory) | Yandex Managed Service for YDB (Serverless) |
+| MinIO   | S3-совместимое хранилище   | `minio/minio`                                              | Yandex Object Storage                       |
+| Mailpit | SMTP-перехватчик для писем | `axllent/mailpit`                                          | Yandex Postbox (SESv2)                      |
 
 ## Требования
 
@@ -87,6 +87,7 @@ docker compose up -d && ./scripts/apply-schema.sh
 отдельно разбивать не нужно, коммит / push сам их вызовет.
 
 **pre-commit** (быстрые, без DB):
+
 - `pnpm biome check` — форматирование + линтинг
 - `pnpm sherif` — monorepo version consistency
 - `pnpm typecheck` — TS strict (3 проекта)
@@ -94,6 +95,7 @@ docker compose up -d && ./scripts/apply-schema.sh
 - `pnpm depcruise` — архитектурные правила (no-cross-domain, routes→service→repo DAG)
 
 **pre-push** (полные, требуют локального YDB + Chromium):
+
 - `pnpm test` — vitest full suite (unit + integration vs real YDB, 294+ tests)
 - `pnpm build` — production bundle (shared tsc + frontend vite)
 - `pnpm smoke` — **comprehensive E2E smoke** через `scripts/smoke.ts`
@@ -124,14 +126,15 @@ Exit 0 только если все 20+ assertions прошли. Скрипт в
 ### `pnpm smoke:fresh` — regression from absolute zero
 
 `pnpm smoke:fresh` = `infra:reset` (docker compose down -v + up + migrate)
-+ `smoke`. Проверяет, что весь стек поднимается с пустого места:
 
-- wipe YDB volume
-- fresh YDB container
-- все 5 миграций применяются (включая CDC changefeed + consumer
+- `smoke`. Проверяет, что весь стек поднимается с пустого места:
+
+* wipe YDB volume
+* fresh YDB container
+* все 5 миграций применяются (включая CDC changefeed + consumer
   `activity_writer` в migration 0005)
-- CDC consumer регистрируется и читает топик
-- 21 assertions smoke проходят end-to-end
+* CDC consumer регистрируется и читает топик
+* 21 assertions smoke проходят end-to-end
 
 Запускайте **перед каждым крупным PR** если трогали migrations, schema,
 или CDC wiring. Полная проверка ≈ 30 секунд на локальной машине.
@@ -154,6 +157,7 @@ Exit 0 только если все 20+ assertions прошли. Скрипт в
 ## Что дальше
 
 Следующие шаги (см. memory):
+
 1. ~~Локальная инфра~~ — готово.
 2. Terraform-скелет для prod-инфры в Yandex Cloud (12 ресурсов).
 3. Каркас приложения: `apps/backend` (Hono + `@ydbjs/*` + better-auth) и `apps/frontend` (Vite + React 19 + TanStack).

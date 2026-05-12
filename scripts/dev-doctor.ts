@@ -117,9 +117,7 @@ async function main(): Promise<number> {
 	console.log(info.join('\n'))
 	if (issues.length > 0) {
 		console.error(`\n${issues.join('\n\n')}`)
-		console.error(
-			'\nSee `feedback_no_disrupt_other_dev.md` (sochi backend=8787, frontend=5273).',
-		)
+		console.error('\nSee `feedback_no_disrupt_other_dev.md` (sochi backend=8787, frontend=5273).')
 		return 1
 	}
 	console.log('\n✓ dev-doctor: all clear')

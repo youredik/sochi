@@ -289,11 +289,12 @@ describe('pluralNights — Russian morphology', () => {
 			expect(pluralNights(n)).toBe('ночей')
 		})
 
-		it.each([
-			11, 12, 13, 14, 111, 112, 113, 114, 211, 212, 213, 214,
-		])('teens-exception: %d → ночей (NOT ночь/ночи)', (n) => {
-			expect(pluralNights(n)).toBe('ночей')
-		})
+		it.each([11, 12, 13, 14, 111, 112, 113, 114, 211, 212, 213, 214])(
+			'teens-exception: %d → ночей (NOT ночь/ночи)',
+			(n) => {
+				expect(pluralNights(n)).toBe('ночей')
+			},
+		)
 	})
 })
 

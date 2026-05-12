@@ -147,9 +147,7 @@ test.describe('a11y matrix — surfaces × themes × viewports (D16 tuple-allowl
 
 						await expect(page.locator(surface.readyLocator)).toBeVisible({ timeout: 10_000 })
 
-						const results = await new AxeBuilder({ page })
-							.withTags([...WCAG_AA_TAGS])
-							.analyze()
+						const results = await new AxeBuilder({ page }).withTags([...WCAG_AA_TAGS]).analyze()
 						const filtered = filterKnownNoise(results.violations)
 						if (filtered.length > 0) {
 							// eslint-disable-next-line no-console

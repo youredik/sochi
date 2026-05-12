@@ -35,6 +35,7 @@
 ### 1.2 Multi-tenant SaaS connection patterns
 
 Канон:
+
 - **Public DataLens** (`datalens.yandex.cloud/public`) — без авторизации, для маркетинговых dashboard, **не для tenant-данных**.
 - **Private embed (Business tariff)** — JWT (PS256) per-dashboard embed-key, max 10 час token TTL. URL: `https://datalens.ru/embeds/dash#dl_embed_token=<jwt>`. Параметры делятся на **signed** (внутри JWT-payload, immutable) и **unsigned** (URL query). `postMessage` поддерживается для динамической ротации токена.
 - **DataLens API** — позволяет создавать workbook'и и connections programmatically через service account с ролью `datalens.creator`.
@@ -42,6 +43,7 @@
 **Row-Level Security (RLS) в DataLens**: настраивается на уровне dataset либо source. Поддерживается переменная `userid:userid`, но это **внутренний DataLens user ID**, не внешний embed-subject. Для SaaS-сценария «один dataset на всех tenant'ов» канон 2026 — **переносить RLS на сторону источника** (фильтр в YDB по orgId), либо использовать signed embed-параметр `org_id` в JWT.
 
 **Каноничный SaaS-паттерн (recommendation)**:
+
 1. Один shared workbook на все tenants.
 2. Один dataset на YDB-view (`v_kpi_*`), агрегирующую все tenants с колонкой `org_id`.
 3. Embed-key + JWT с signed-параметром `org_id`.
@@ -53,6 +55,7 @@
 YDB — OLTP, не OLAP. Прямые запросы DataLens к raw-таблицам `bookings/folio_*` будут летать на маленьких объёмах (десятки отелей, тысячи бронирований/день), но не масштабируются.
 
 **Канон**:
+
 - **Materialized rollup-таблицы** в YDB:
   - `kpi_occupancy_daily(org_id, property_id, date, room_count, occupied_count, occupancy_pct)`
   - `kpi_revenue_daily(org_id, property_id, date, room_revenue, adr, revpar)`
@@ -71,6 +74,7 @@ YDB — OLTP, не OLAP. Прямые запросы DataLens к raw-табли�
 ### 1.5 Cost economics 2026
 
 Биллинг **по seats** (DataLens-пользователи), не per-query:
+
 - **Free**: один individual user, 30 дней trial team-collab.
 - **Standard**: per-seat × количество seats.
 - Hard cap **2 000 queries / seat / month** для private embed.
@@ -98,20 +102,21 @@ YDB — OLTP, не OLAP. Прямые запросы DataLens к raw-табли�
 
 ### 2.1 Сравнение
 
-| Library | Bundle (gzip) | React 19 | a11y | shadcn fit | Verdict |
-|---|---|---|---|---|---|
-| **Recharts v3.x** | ~94 KB | yes | `accessibilityLayer` default true в v3, SVG ARIA | **Native (shadcn `Chart` использует Recharts)** | **WINNER** |
-| visx | ~15 KB per-package | yes | manual | требует кастомных wrappers | для bespoke |
-| Apache ECharts | ~250+ KB | через wrapper | weak (canvas) | плохо | overkill |
-| Chart.js | ~120 KB | yes | weak (canvas) | не нативно | legacy |
-| Tremor | ~150 KB | yes (Vercel-acquired 2025) | хорошо | overlap с shadcn | дублирует |
-| Nivo | per-chart 50-100 KB | yes | хорошо | конфликтует с shadcn tokens | избыточно |
+| Library           | Bundle (gzip)       | React 19                   | a11y                                             | shadcn fit                                      | Verdict     |
+| ----------------- | ------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------- | ----------- |
+| **Recharts v3.x** | ~94 KB              | yes                        | `accessibilityLayer` default true в v3, SVG ARIA | **Native (shadcn `Chart` использует Recharts)** | **WINNER**  |
+| visx              | ~15 KB per-package  | yes                        | manual                                           | требует кастомных wrappers                      | для bespoke |
+| Apache ECharts    | ~250+ KB            | через wrapper              | weak (canvas)                                    | плохо                                           | overkill    |
+| Chart.js          | ~120 KB             | yes                        | weak (canvas)                                    | не нативно                                      | legacy      |
+| Tremor            | ~150 KB             | yes (Vercel-acquired 2025) | хорошо                                           | overlap с shadcn                                | дублирует   |
+| Nivo              | per-chart 50-100 KB | yes                        | хорошо                                           | конфликтует с shadcn tokens                     | избыточно   |
 
 ### 2.2 Best practice 2026
 
 Companies shipping internal analytics dashboards **универсально выбирают Recharts** в 2026.
 
 Recharts v3 включает:
+
 - `accessibilityLayer` по умолчанию (keyboard-controls + ARIA).
 - SVG output совместим с `aria-label`/`role`/`tabIndex` — критично для axe gate.
 
@@ -122,6 +127,7 @@ Recharts v3 включает:
 **Recharts v3 через shadcn `Chart`.**
 
 Concrete plan для KPI dashboard:
+
 - Occupancy → `<LineChart>` с y-domain [0, 100], custom tick formatter `${v}%` (через `format-ru.ts`).
 - ADR → `<BarChart>` с currency tick formatter.
 - RevPAR → `<LineChart>` + reference line MTD-average.
@@ -144,6 +150,7 @@ Bundle delta: ~95 KB gzip, оплачено единожды. Lazy-loaded тол
 ### 3.2 UX patterns
 
 Pattern stack:
+
 1. **Live capture viewport** (react-webcam + `videoConstraints: { facingMode: 'environment', width: 1920, height: 1080 }`).
 2. **File upload fallback** (`<input type="file" accept="image/*" capture="environment">`).
 3. **Document edge detection client-side** через **jscanify** (built on OpenCV.js, supports React 19).
@@ -181,6 +188,7 @@ Pattern stack:
 ### 4.1 Direct browser → Yandex Object Storage
 
 **Canonical pattern:**
+
 1. Frontend → backend `POST /api/uploads/presign` с `{ contentType, size, kind }`.
 2. Backend (Hono) генерит pre-signed PUT URL через AWS Signature V4. TTL ≤ 1 час.
 3. Frontend → S3 PUT с file blob + tracked progress.
@@ -210,11 +218,13 @@ Avoids backend bandwidth.
 ### 4.5 Validation
 
 Client-side (UX):
+
 - File type: `image/jpeg, image/png, image/webp, image/heic, image/heif`.
 - Size: max 20 MB до compression, 1 MB после.
 - Dimensions: min 800×600, max 8192×8192.
 
 Server-side (security):
+
 - **MIME sniffing** (read magic-numbers, не trust client header) — `file-type` lib.
 - **EXIF strip** для PII/GPS-tags.
 - **Size re-check** в Object-Storage post-PUT.
@@ -278,20 +288,20 @@ Server-side (security):
 
 ## 6. Сводка решений
 
-| Вопрос | Решение | Когда |
-|---|---|---|
-| KPI dashboard primary | Native shadcn+Recharts | Phase 1 (now) |
-| DataLens role | Embedded private (JWT PS256) для self-service | Phase 2 (post-deploy) |
-| KPI data prep | Materialized rollup-tables в YDB, CDC-driven worker + hourly cron | Phase 1 |
-| Charting library | **Recharts v3** через shadcn `Chart` | Phase 1 |
-| Camera capture | **react-webcam + jscanify** + `playsInline` + 152-ФЗ consent gate | Function 1.2 |
-| OCR | **Yandex Vision OCR (passport model) server-side** | Function 1.2 |
-| HEIC | **heic2any client** + sharp/libheif server fallback | Property photos |
-| Image compression | **browser-image-compression** quality 85 | Property photos |
-| Image crop | **react-easy-crop** 16:9 | Property photos |
-| Upload pattern | Pre-signed PUT direct → Object Storage | Property photos |
-| RLS DataLens | Signed JWT param `org_id` + dataset filter | Phase 2 |
-| Multi-tenant DataLens | Один shared workbook + RLS, **не** per-tenant workspace | Phase 2 |
+| Вопрос                | Решение                                                           | Когда                 |
+| --------------------- | ----------------------------------------------------------------- | --------------------- |
+| KPI dashboard primary | Native shadcn+Recharts                                            | Phase 1 (now)         |
+| DataLens role         | Embedded private (JWT PS256) для self-service                     | Phase 2 (post-deploy) |
+| KPI data prep         | Materialized rollup-tables в YDB, CDC-driven worker + hourly cron | Phase 1               |
+| Charting library      | **Recharts v3** через shadcn `Chart`                              | Phase 1               |
+| Camera capture        | **react-webcam + jscanify** + `playsInline` + 152-ФЗ consent gate | Function 1.2          |
+| OCR                   | **Yandex Vision OCR (passport model) server-side**                | Function 1.2          |
+| HEIC                  | **heic2any client** + sharp/libheif server fallback               | Property photos       |
+| Image compression     | **browser-image-compression** quality 85                          | Property photos       |
+| Image crop            | **react-easy-crop** 16:9                                          | Property photos       |
+| Upload pattern        | Pre-signed PUT direct → Object Storage                            | Property photos       |
+| RLS DataLens          | Signed JWT param `org_id` + dataset filter                        | Phase 2               |
+| Multi-tenant DataLens | Один shared workbook + RLS, **не** per-tenant workspace           | Phase 2               |
 
 ---
 

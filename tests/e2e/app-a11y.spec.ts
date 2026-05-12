@@ -152,9 +152,7 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		// Post-A.bis.3: notification access via sidebar row (not dashboard tile).
 		await page.locator('[data-section-id="notifications"]').click()
 		await expect(page).toHaveURL(/\/admin\/notifications(\?.*)?$/)
-		await expect(
-			page.getByRole('heading', { name: /^Уведомления$/, level: 1 }),
-		).toBeVisible()
+		await expect(page.getByRole('heading', { name: /^Уведомления$/, level: 1 })).toBeVisible()
 		await expect(page.getByRole('region', { name: 'Фильтры' })).toBeVisible()
 		await expect(page.getByRole('region', { name: 'История уведомлений' })).toBeVisible()
 		await runAxe(page, 'admin-notifications')

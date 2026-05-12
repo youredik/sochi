@@ -99,7 +99,13 @@ export class SochiIframeFallback extends LitElement {
 			isolation: isolate;
 			contain: layout paint;
 			container-type: inline-size;
-			font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+			font-family:
+				system-ui,
+				-apple-system,
+				'Segoe UI',
+				Roboto,
+				'Helvetica Neue',
+				Arial,
 				sans-serif;
 		}
 		:host([hidden]) {
@@ -167,13 +173,11 @@ export class SochiIframeFallback extends LitElement {
 				title="Виджет бронирования"
 				style="height: ${this.height}px"
 			></iframe>
-			${
-				this.status === 'error'
-					? html`<p class="sochi-status" data-testid="sochi-iframe-error" role="alert">
+			${this.status === 'error'
+				? html`<p class="sochi-status" data-testid="sochi-iframe-error" role="alert">
 						Не удалось загрузить виджет.
 					</p>`
-					: null
-			}`
+				: null}`
 	}
 
 	#wireParentListener(): void {

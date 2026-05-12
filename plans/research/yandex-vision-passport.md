@@ -24,10 +24,10 @@
 
 ### 1.1 Endpoints
 
-| Режим | Метод | URL |
-|---|---|---|
-| Synchronous | POST | `https://ocr.api.cloud.yandex.net/ocr/v1/recognizeText` |
-| Asynchronous | POST | `https://ocr.api.cloud.yandex.net/ocr/v1/recognizeTextAsync` |
+| Режим        | Метод | URL                                                          |
+| ------------ | ----- | ------------------------------------------------------------ |
+| Synchronous  | POST  | `https://ocr.api.cloud.yandex.net/ocr/v1/recognizeText`      |
+| Asynchronous | POST  | `https://ocr.api.cloud.yandex.net/ocr/v1/recognizeTextAsync` |
 
 API единая — `v1`. gRPC доступен параллельно REST. Async возвращает `operation_id`, далее polling.
 
@@ -37,22 +37,22 @@ API единая — `v1`. gRPC доступен параллельно REST. As
 
 ```jsonc
 {
-  "mimeType": "image/jpeg",          // image/jpeg | image/png | application/pdf
-  "languageCodes": ["ru", "en"],     // ["*"] = автоопределение
-  "model": "passport",                // см. список ниже
-  "content": "<base64-encoded image>" // без data: префикса
+	"mimeType": "image/jpeg", // image/jpeg | image/png | application/pdf
+	"languageCodes": ["ru", "en"], // ["*"] = автоопределение
+	"model": "passport", // см. список ниже
+	"content": "<base64-encoded image>", // без data: префикса
 }
 ```
 
 ### 1.3 Ограничения по входу
 
-| Параметр | Sync | Async |
-|---|---|---|
-| Max file size | **10 MB** (≈7.5 MB raw после base64) | 10 MB |
-| Max image dimensions | **20 MP** | 20 MP |
-| PDF страниц | **1** | до **200** |
-| MIME types | `image/jpeg`, `image/png`, `application/pdf` | те же |
-| Языки | 48 поддерживаемых | те же |
+| Параметр             | Sync                                         | Async      |
+| -------------------- | -------------------------------------------- | ---------- |
+| Max file size        | **10 MB** (≈7.5 MB raw после base64)         | 10 MB      |
+| Max image dimensions | **20 MP**                                    | 20 MP      |
+| PDF страниц          | **1**                                        | до **200** |
+| MIME types           | `image/jpeg`, `image/png`, `application/pdf` | те же      |
+| Языки                | 48 поддерживаемых                            | те же      |
 
 **HEIC напрямую НЕ поддерживается** — критично для iOS-кейса гостя. Нужен конвертор HEIC→JPEG (на клиенте `heic2any` или на бэке `sharp` libheif).
 
@@ -68,17 +68,17 @@ API единая — `v1`. gRPC доступен параллельно REST. As
 
 ### 1.5 Поддерживаемые модели
 
-| Модель | Что распознаёт |
-|---|---|
-| `text` | Свободный текст |
-| `page` | Текст на структурированной странице |
-| `table` | Таблицы (только ru+en) |
-| `handwritten` | Рукопись (ru+en) |
-| `line` | Одна строка |
-| **`passport`** | Паспорта 20 стран |
-| `driver-license-front/back` | Водительские удостоверения |
-| `vehicle-registration-front/back` | СТС / ПТС |
-| `license-plates` | Госномера |
+| Модель                            | Что распознаёт                      |
+| --------------------------------- | ----------------------------------- |
+| `text`                            | Свободный текст                     |
+| `page`                            | Текст на структурированной странице |
+| `table`                           | Таблицы (только ru+en)              |
+| `handwritten`                     | Рукопись (ru+en)                    |
+| `line`                            | Одна строка                         |
+| **`passport`**                    | Паспорта 20 стран                   |
+| `driver-license-front/back`       | Водительские удостоверения          |
+| `vehicle-registration-front/back` | СТС / ПТС                           |
+| `license-plates`                  | Госномера                           |
 
 **СНИЛС, ИНН, визы, миграционные карты — отдельных моделей НЕТ.** Через `text`/`page` + парсинг fullText regex.
 
@@ -154,6 +154,7 @@ API единая — `v1`. gRPC доступен параллельно REST. As
 ### 2.3 Распознаваемые поля
 
 Для `passport`:
+
 - `name`, `middle_name`, `surname`, `gender` (`male`/`female`)
 - `citizenship` (ISO-3: `rus`, `blr`, `kaz`)
 - `birth_date` (`DD.MM.YYYY`), `birth_place`
@@ -179,6 +180,7 @@ API единая — `v1`. gRPC доступен параллельно REST. As
 ### 4.1 Errors
 
 Yandex Cloud gRPC error model:
+
 - `400 INVALID_ARGUMENT` — некорректный base64, неподдерживаемый MIME, превышен размер.
 - `401 UNAUTHENTICATED` — IAM token истёк.
 - `403 PERMISSION_DENIED` — у SA нет роли `ai.vision.user`.
@@ -191,6 +193,7 @@ Yandex Cloud gRPC error model:
 ### 4.2 Latency
 
 В публичной документации **отсутствует**. Эмпирические репорты:
+
 - Sync recognize паспорта: 1–3 сек на изображение ≤ 2 MB, P95 до 5 сек.
 - Async PDF: ~10–30 сек на 10-страничный документ.
 
@@ -205,6 +208,7 @@ Yandex Cloud gRPC error model:
 ### 5.1 Apaleo
 
 OCR не нативный — через partner apps в Apaleo Store:
+
 - **Abitari Kiosk** — Pro-план; «ID/Passport Scan» (требует hardware: PC/iPad-киоск + scanner).
 - **Straiv** — guest-experience партнёр.
 - **Roommatik** — kiosk для Испании.
@@ -214,15 +218,18 @@ Apaleo workflow: hotel регистрирует webhook на `reservation.create
 ### 5.2 Mews
 
 Встроенный Passport Scanner в Mews Kiosk:
+
 - Web-камера.
 - MRZ-zone parsing (читает 2-3 строки в нижней части паспорта/ID-карты).
 
 **Подтверждённые ограничения:**
+
 - Европейские водительские права не распознаются (нет MRZ).
 - Camera focus периодически отказывает → fallback на manual entry.
 - При неуспешном чтении документа сканер иногда **перезаписывает имя гостя пустым значением** (баг).
 
 **Уроки для нас:**
+
 1. Fallback на ручной ввод обязателен.
 2. **Никогда не перезаписываем поля гостя пустыми значениями** — нужен явный assertion `if (entity.text && entity.text.length > 0)`.
 3. MRZ-only OCR не покроет внутренний паспорт РФ — Yandex Vision `passport` модель ценна тем, что читает шаблон, не только MRZ.
@@ -237,12 +244,12 @@ Apaleo workflow: hotel регистрирует webhook на `reservation.create
 
 ## 6. Альтернативы (нарушают canon Yandex Cloud only)
 
-| Решение | Подход | Подходит? |
-|---|---|---|
-| **Yandex Vision OCR (passport)** | Cloud API, 0,1 ₽/документ, 20 стран | ✅ Канон |
-| Smart Engines (Smart PassportReader) | On-premise SDK, до 55 паспортов/сек | ❌ нарушает canon; полезно знать для enterprise on-prem-фазы |
-| Dbrain.io | Cloud OCR, ребрендинг 2024-2025, статус для РФ неясен | ❌ |
-| ABBYY FlexiCapture | Enterprise SDK, после ухода ABBYY 2022 — через партнёров | ❌ санкционная неопределённость |
+| Решение                              | Подход                                                   | Подходит?                                                    |
+| ------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------ |
+| **Yandex Vision OCR (passport)**     | Cloud API, 0,1 ₽/документ, 20 стран                      | ✅ Канон                                                     |
+| Smart Engines (Smart PassportReader) | On-premise SDK, до 55 паспортов/сек                      | ❌ нарушает canon; полезно знать для enterprise on-prem-фазы |
+| Dbrain.io                            | Cloud OCR, ребрендинг 2024-2025, статус для РФ неясен    | ❌                                                           |
+| ABBYY FlexiCapture                   | Enterprise SDK, после ухода ABBYY 2022 — через партнёров | ❌ санкционная неопределённость                              |
 
 **Решение:** Yandex Vision passport — единственный соответствующий canon вариант. Smart Engines зафиксировать как fallback на enterprise-фазу (memory note).
 
@@ -273,6 +280,7 @@ Apaleo workflow: hotel регистрирует webhook на `reservation.create
 - Для миграционных уведомлений — собственный срок по 109-ФЗ.
 
 **Реализация для фото паспорта в Object Storage:**
+
 - TTL = 3 года after `booking.checkOutDate` (или дата отзыва согласия + 30 дней — что наступит раньше).
 - Через S3 Lifecycle Rule на Yandex Object Storage (`Days: 1095`).
 - **Лучшая практика:** после успешной отправки в ЕПГУ + N дней (90) — фото удаляется, остаются только структурированные поля.
@@ -308,6 +316,7 @@ Apaleo workflow: hotel регистрирует webhook на `reservation.create
 ### 8.2 Тестовые паспорта
 
 Hardcoded набор 5-10 «тестовых» паспортов:
+
 - Российский внутренний (Петров Иван Иванович, серия 4608 № 123456).
 - Российский загран (биометрический).
 - Узбекистан (для иностранного use-case + ЕПГУ flow).
@@ -334,6 +343,7 @@ Hardcoded набор 5-10 «тестовых» паспортов:
 ## 10. Источники (URL + дата 27.04.2026)
 
 **Yandex AI Studio (новая локация):**
+
 - [Vision OCR — концепции](https://aistudio.yandex.ru/docs/ru/vision/concepts/ocr/index.html)
 - [Vision OCR Pricing](https://aistudio.yandex.ru/docs/ru/vision/pricing.html)
 - [TextRecognition.Recognize API](https://aistudio.yandex.ru/docs/en/vision/ocr/api-ref/TextRecognition/recognize.html)
@@ -342,9 +352,11 @@ Hardcoded набор 5-10 «тестовых» паспортов:
 - [Yandex Cloud цены 1 мая 2026 (AI Studio исключён)](https://iiii-tech.com/about/media/news/yandex-cloud-izmenit-tseny-na-chast-servisov-s-1-maya-2026-goda/)
 
 **OSS примеры:**
+
 - [yandex-cloud-examples/yc-vision-ocr-recognizer](https://github.com/yandex-cloud-examples/yc-vision-ocr-recognizer)
 
 **Hospitality-конкуренты:**
+
 - [Контур.Отель — распознавание паспорта](https://support.kontur.ru/hotel/52155-raspoznavanie)
 - [Контур.Отель — заселение по загранпаспорту/правам с 2026](https://kontur.ru/hotel/spravka/83502-zaselenie_po_zagranpasportu_i_voditelskim_pravam)
 - [TravelLine — онлайн-регистрация](https://www.travelline.ru/support/knowledge-base/kak-rabotaet-onlayn-registratsiya-ili-onlayn-chekin/)
@@ -352,12 +364,15 @@ Hardcoded набор 5-10 «тестовых» паспортов:
 - [Mews community — Passport scanning](https://community.mews.com/mews-beta-program-43/how-do-you-scan-id-passport-in-mews-pms-900)
 
 **Альтернативы:**
+
 - [Smart Engines — Smart PassportReader](https://smartengines.ru/smart-passportreader/)
 
 **Опыт интеграторов:**
+
 - [fuse8 — Yandex Vision: распознавание (100 ₽/1000, 80% accuracy на нешаблонных)](https://fuse8.ru/articles/yandex-vision-experience)
 
 **152-ФЗ:**
+
 - [152-ФЗ ред. 24.06.2025](https://normativ.kontur.ru/document?moduleId=1&documentId=501173)
 - [152-ФЗ ст. 11 — биометрические ПД (КонсультантПлюс)](https://www.consultant.ru/document/cons_doc_LAW_61801/7336c78762a98b5f4f698b8c3800dca1111acc16/)
 - [Согласие на обработку ПД с 1 сентября 2025 — штрафы 700к (Гарант.ру)](https://www.garant.ru/article/1862510/)

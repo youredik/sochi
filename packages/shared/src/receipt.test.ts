@@ -60,15 +60,12 @@ const validBase = () =>
 	}) satisfies Record<string, unknown>
 
 describe('receiptKindSchema (5 enum values FULL)', () => {
-	it.each([
-		'advance',
-		'prepayment_full',
-		'final',
-		'refund',
-		'correction',
-	] as const)('accepts %s', (v) => {
-		expect(receiptKindSchema.safeParse(v).success).toBe(true)
-	})
+	it.each(['advance', 'prepayment_full', 'final', 'refund', 'correction'] as const)(
+		'accepts %s',
+		(v) => {
+			expect(receiptKindSchema.safeParse(v).success).toBe(true)
+		},
+	)
 
 	it('rejects unknown kind', () => {
 		expect(receiptKindSchema.safeParse('invoice').success).toBe(false)

@@ -34,15 +34,12 @@ const validOpen = () =>
 	}) satisfies Record<string, unknown>
 
 describe('disputeStatusSchema (5 enum values FULL)', () => {
-	it.each([
-		'opened',
-		'evidence_submitted',
-		'won',
-		'lost',
-		'expired',
-	] as const)('accepts %s', (v) => {
-		expect(disputeStatusSchema.safeParse(v).success).toBe(true)
-	})
+	it.each(['opened', 'evidence_submitted', 'won', 'lost', 'expired'] as const)(
+		'accepts %s',
+		(v) => {
+			expect(disputeStatusSchema.safeParse(v).success).toBe(true)
+		},
+	)
 
 	it('rejects unknown status', () => {
 		expect(disputeStatusSchema.safeParse('disputed').success).toBe(false)
@@ -66,15 +63,12 @@ describe('disputeOpenInput', () => {
 		expect(disputeOpenInput.safeParse(validOpen()).success).toBe(true)
 	})
 
-	it.each([
-		'stub',
-		'yookassa',
-		'tkassa',
-		'sbp',
-		'digital_ruble',
-	] as const)('accepts providerCode = %s (FULL enum coverage)', (code) => {
-		expect(disputeOpenInput.safeParse({ ...validOpen(), providerCode: code }).success).toBe(true)
-	})
+	it.each(['stub', 'yookassa', 'tkassa', 'sbp', 'digital_ruble'] as const)(
+		'accepts providerCode = %s (FULL enum coverage)',
+		(code) => {
+			expect(disputeOpenInput.safeParse({ ...validOpen(), providerCode: code }).success).toBe(true)
+		},
+	)
 
 	it('rejects unknown providerCode', () => {
 		expect(disputeOpenInput.safeParse({ ...validOpen(), providerCode: 'paypal' }).success).toBe(
@@ -128,23 +122,19 @@ describe('disputeOpenInput', () => {
 		)
 	})
 
-	it.each([
-		'2026-05-15T12:00:00.000Z',
-		'2026-05-15T12:00:00Z',
-		'2026-05-15T12:00:00.000+03:00',
-	])('dueAt accepts ISO datetime: %s', (v) => {
-		expect(disputeOpenInput.safeParse({ ...validOpen(), dueAt: v }).success).toBe(true)
-	})
+	it.each(['2026-05-15T12:00:00.000Z', '2026-05-15T12:00:00Z', '2026-05-15T12:00:00.000+03:00'])(
+		'dueAt accepts ISO datetime: %s',
+		(v) => {
+			expect(disputeOpenInput.safeParse({ ...validOpen(), dueAt: v }).success).toBe(true)
+		},
+	)
 
-	it.each([
-		'2026-05-15',
-		'not-a-date',
-		'15/05/2026',
-		'',
-		'2026-13-45T99:99:99Z',
-	])('dueAt rejects non-ISO: %s', (v) => {
-		expect(disputeOpenInput.safeParse({ ...validOpen(), dueAt: v }).success).toBe(false)
-	})
+	it.each(['2026-05-15', 'not-a-date', '15/05/2026', '', '2026-13-45T99:99:99Z'])(
+		'dueAt rejects non-ISO: %s',
+		(v) => {
+			expect(disputeOpenInput.safeParse({ ...validOpen(), dueAt: v }).success).toBe(false)
+		},
+	)
 
 	it('providerDisputeId accepts null', () => {
 		expect(disputeOpenInput.safeParse({ ...validOpen(), providerDisputeId: null }).success).toBe(
@@ -186,12 +176,12 @@ describe('disputeResolveInput', () => {
 		expect(disputeResolveInput.safeParse({ outcomeStatus: s, outcome: 'foo' }).success).toBe(true)
 	})
 
-	it.each([
-		'opened',
-		'evidence_submitted',
-	] as const)('rejects outcomeStatus = %s (non-terminal — only resolves to terminal)', (s) => {
-		expect(disputeResolveInput.safeParse({ outcomeStatus: s }).success).toBe(false)
-	})
+	it.each(['opened', 'evidence_submitted'] as const)(
+		'rejects outcomeStatus = %s (non-terminal — only resolves to terminal)',
+		(s) => {
+			expect(disputeResolveInput.safeParse({ outcomeStatus: s }).success).toBe(false)
+		},
+	)
 
 	it('outcome = null is allowed (no provider message)', () => {
 		expect(disputeResolveInput.safeParse({ outcomeStatus: 'won', outcome: null }).success).toBe(

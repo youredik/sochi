@@ -31,9 +31,7 @@ async function settle(page: Page) {
 	await page.evaluate(
 		() =>
 			new Promise<void>((resolve) => {
-				requestAnimationFrame(() =>
-					requestAnimationFrame(() => setTimeout(() => resolve(), 400)),
-				)
+				requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => resolve(), 400)))
 			}),
 	)
 }
@@ -215,15 +213,15 @@ test.describe('M9.5 Phase A — live-user visual smoke', () => {
 		}
 
 		// Filter passkey/WebAuthn errors — Conditional Mediation UI auto-fires
-	// `NotAllowedError` без real authenticator; expected в test env.
-	const fatal = consoleErrors.filter(
-		(e) =>
-			!e.toLowerCase().includes('webauthn') &&
-			!e.toLowerCase().includes('passkey') &&
-			!e.toLowerCase().includes('notallowed') &&
-			!e.toLowerCase().includes('transition was skipped'),
-	)
-	expect(fatal, `unexpected console errors: ${fatal.join('\n')}`).toEqual([])
+		// `NotAllowedError` без real authenticator; expected в test env.
+		const fatal = consoleErrors.filter(
+			(e) =>
+				!e.toLowerCase().includes('webauthn') &&
+				!e.toLowerCase().includes('passkey') &&
+				!e.toLowerCase().includes('notallowed') &&
+				!e.toLowerCase().includes('transition was skipped'),
+		)
+		expect(fatal, `unexpected console errors: ${fatal.join('\n')}`).toEqual([])
 	})
 })
 
@@ -253,14 +251,14 @@ test.describe('M9.5 Phase A — anonymous surfaces', () => {
 		await page.screenshot({ path: `${OUT}/18-login-mobile.png`, fullPage: true })
 
 		// Filter passkey/WebAuthn errors — Conditional Mediation UI auto-fires
-	// `NotAllowedError` без real authenticator; expected в test env.
-	const fatal = consoleErrors.filter(
-		(e) =>
-			!e.toLowerCase().includes('webauthn') &&
-			!e.toLowerCase().includes('passkey') &&
-			!e.toLowerCase().includes('notallowed') &&
-			!e.toLowerCase().includes('transition was skipped'),
-	)
-	expect(fatal, `unexpected console errors: ${fatal.join('\n')}`).toEqual([])
+		// `NotAllowedError` без real authenticator; expected в test env.
+		const fatal = consoleErrors.filter(
+			(e) =>
+				!e.toLowerCase().includes('webauthn') &&
+				!e.toLowerCase().includes('passkey') &&
+				!e.toLowerCase().includes('notallowed') &&
+				!e.toLowerCase().includes('transition was skipped'),
+		)
+		expect(fatal, `unexpected console errors: ${fatal.join('\n')}`).toEqual([])
 	})
 })

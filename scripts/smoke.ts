@@ -207,7 +207,9 @@ function addDays(baseYmd: string, days: number): string {
 	return d.toISOString().slice(0, 10)
 }
 
-async function seedDomainChain(t: Ctx['tenantA']): Promise<Omit<Ctx, 'tenantA' | 'tenantB' | 'bookingIds'>> {
+async function seedDomainChain(
+	t: Ctx['tenantA'],
+): Promise<Omit<Ctx, 'tenantA' | 'tenantB' | 'bookingIds'>> {
 	// Property (Sochi, 200 bps tourism tax).
 	const prop = await request<{ data: { id: string } }>('/api/v1/properties', {
 		method: 'POST',
@@ -285,7 +287,13 @@ async function seedDomainChain(t: Ctx['tenantA']): Promise<Omit<Ctx, 'tenantA' |
 	return { propertyId, roomTypeId, ratePlanId, dates }
 }
 
-function bookingBody(ctx: { roomTypeId: string; ratePlanId: string; checkIn: string; checkOut: string; citizenship?: string }) {
+function bookingBody(ctx: {
+	roomTypeId: string
+	ratePlanId: string
+	checkIn: string
+	checkOut: string
+	citizenship?: string
+}) {
 	return {
 		roomTypeId: ctx.roomTypeId,
 		ratePlanId: ctx.ratePlanId,
@@ -298,7 +306,9 @@ function bookingBody(ctx: { roomTypeId: string; ratePlanId: string; checkIn: str
 			lastName: 'Tester',
 			citizenship: ctx.citizenship ?? 'RU',
 			documentType: 'ruPassport',
-			documentNumber: `4510${Math.floor(Math.random() * 1000000).toString().padStart(6, '0')}`,
+			documentNumber: `4510${Math.floor(Math.random() * 1000000)
+				.toString()
+				.padStart(6, '0')}`,
 		},
 		channelCode: 'direct',
 	}
@@ -352,7 +362,11 @@ async function main() {
 
 	const health = await request<{ status: string }>('/health/db')
 	assert.equal(health.status, 200, 'health/db must be 200')
-	assert.equal((health.body as { ydb?: { connected?: boolean } }).ydb?.connected, true, 'ydb connected')
+	assert.equal(
+		(health.body as { ydb?: { connected?: boolean } }).ydb?.connected,
+		true,
+		'ydb connected',
+	)
 	ok('health/db 200 + ydb connected')
 
 	const tenantA = await signUpAndCreateOrg('A')
@@ -392,7 +406,11 @@ async function main() {
 		ctx.bookingIds.push(bookingId1)
 		assert.equal(r1.body.data.status, 'confirmed', 'new booking status=confirmed')
 		// 2 nights × 5000₽ = 10_000_000_000 micros × 2% = 200_000_000 micros.
-		assert.equal(r1.body.data.tourismTaxMicros, '200000000', 'tourism tax = 200_000_000 micros (Sochi 2% × 2×5000₽)')
+		assert.equal(
+			r1.body.data.tourismTaxMicros,
+			'200000000',
+			'tourism tax = 200_000_000 micros (Sochi 2% × 2×5000₽)',
+		)
 		ok('[S1] POST /bookings 201 + confirmed + tourism tax correct')
 
 		// Scenario 2 — replay same key + same body → cached response (handler not re-run).
@@ -501,7 +519,12 @@ async function main() {
 		ctx.bookingIds.push(noShowId)
 		const r7b = await request<{ data: { status: string; noShowAt: string } }>(
 			`/api/v1/bookings/${noShowId}/no-show`,
-			{ method: 'PATCH', jar: ctx.tenantA.jar, body: { reason: 'guest did not arrive' }, expect: 200 },
+			{
+				method: 'PATCH',
+				jar: ctx.tenantA.jar,
+				body: { reason: 'guest did not arrive' },
+				expect: 200,
+			},
 		)
 		assert.equal(r7b.body.data.status, 'no_show')
 		assert.ok(r7b.body.data.noShowAt)
@@ -557,7 +580,10 @@ async function main() {
 		const createdEvents = acts.filter((a) => a.activityType === 'created')
 		const statusChanges = acts.filter((a) => a.activityType === 'statusChange')
 		assert.ok(createdEvents.length >= 1, `≥1 'created' activity (got ${createdEvents.length})`)
-		assert.ok(statusChanges.length >= 2, `≥2 'statusChange' activities (got ${statusChanges.length})`)
+		assert.ok(
+			statusChanges.length >= 2,
+			`≥2 'statusChange' activities (got ${statusChanges.length})`,
+		)
 		ok(`[C1] activity: ${createdEvents.length} created + ${statusChanges.length} statusChange`)
 
 		section('Phase 6 · tourism-tax quarterly report')
@@ -571,12 +597,13 @@ async function main() {
 		//   + [S7] no_show (included). [S6] cancel excluded.
 		// So bookingsCount = 3. Each is 1-2 nights × 5000₽ with 2% tax OR floor.
 		// We assert count + that tax > 0.
-		assert.equal(report.body.data.bookingsCount, 3, `report bookingsCount = 3 (got ${report.body.data.bookingsCount})`)
-		assert.ok(BigInt(report.body.data.tourismTaxMicros) > 0n, 'tourismTaxMicros > 0')
-		assert.ok(
-			BigInt(report.body.data.accommodationBaseMicros) > 0n,
-			'accommodationBaseMicros > 0',
+		assert.equal(
+			report.body.data.bookingsCount,
+			3,
+			`report bookingsCount = 3 (got ${report.body.data.bookingsCount})`,
 		)
+		assert.ok(BigInt(report.body.data.tourismTaxMicros) > 0n, 'tourismTaxMicros > 0')
+		assert.ok(BigInt(report.body.data.accommodationBaseMicros) > 0n, 'accommodationBaseMicros > 0')
 		ok(`[R1] tourism-tax report: 3 bookings, ${report.body.data.tourismTaxMicros} micros tax`)
 
 		section('Phase 7 · overbooking race (atomic inventory)')
@@ -608,11 +635,13 @@ async function main() {
 			}),
 		])
 		const winners = [raceA, raceB].filter((r) => r.status === 'fulfilled' && r.value.status === 201)
-		const losers = [raceA, raceB].filter(
-			(r) => r.status === 'fulfilled' && r.value.status === 409,
-		)
+		const losers = [raceA, raceB].filter((r) => r.status === 'fulfilled' && r.value.status === 409)
 		assert.equal(winners.length, 1, `exactly 1 concurrent booking wins (got ${winners.length})`)
-		assert.equal(losers.length, 1, `exactly 1 concurrent booking loses with 409 (got ${losers.length})`)
+		assert.equal(
+			losers.length,
+			1,
+			`exactly 1 concurrent booking loses with 409 (got ${losers.length})`,
+		)
 		if (winners[0]?.status === 'fulfilled') {
 			const w = winners[0].value as ReqResult<{ data: { id: string } }>
 			ctx.bookingIds.push(w.body.data.id)

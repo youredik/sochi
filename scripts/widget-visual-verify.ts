@@ -75,7 +75,9 @@ async function main(): Promise<void> {
 		await page.getByRole('heading', { level: 1 }).waitFor({ timeout: 10_000 })
 		const path = `${OUT_DIR}/widget-screen1-${view.name}.png`
 		await page.screenshot({ path, fullPage: true })
-		console.log(`  ✅ screen1-${view.name}: ${path} (${view.viewport.width}×${view.viewport.height})`)
+		console.log(
+			`  ✅ screen1-${view.name}: ${path} (${view.viewport.width}×${view.viewport.height})`,
+		)
 		await context.close()
 	}
 	// Not-found state

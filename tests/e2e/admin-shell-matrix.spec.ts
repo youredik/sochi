@@ -83,9 +83,7 @@ async function settle(page: Page) {
 		)
 		.toBe(true)
 	await page.evaluate(() => document.fonts.ready)
-	await page.waitForFunction(() =>
-		document.getAnimations().every((a) => a.playState !== 'running'),
-	)
+	await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
 }
 
 /**
@@ -198,10 +196,7 @@ test.describe('admin-shell axe — explicit state variants', () => {
 			const filtered = filterKnownNoise(results.violations)
 			if (filtered.length > 0) {
 				// eslint-disable-next-line no-console
-				console.error(
-					'axe violations [mobile-offcanvas-OPEN]:',
-					JSON.stringify(filtered, null, 2),
-				)
+				console.error('axe violations [mobile-offcanvas-OPEN]:', JSON.stringify(filtered, null, 2))
 			}
 			expect(filtered).toEqual([])
 		} finally {
@@ -234,10 +229,7 @@ test.describe('admin-shell axe — explicit state variants', () => {
 			const filtered = filterKnownNoise(results.violations)
 			if (filtered.length > 0) {
 				// eslint-disable-next-line no-console
-				console.error(
-					'axe violations [desktop-collapsed-icon]:',
-					JSON.stringify(filtered, null, 2),
-				)
+				console.error('axe violations [desktop-collapsed-icon]:', JSON.stringify(filtered, null, 2))
 			}
 			expect(filtered).toEqual([])
 		} finally {

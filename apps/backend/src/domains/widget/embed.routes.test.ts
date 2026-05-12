@@ -34,13 +34,12 @@ import { toJson, toTs } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 
 // Mock auth.ts BEFORE importing embed.routes — vi.mock is hoisted.
-const mockGetSession =
-	vi.fn<
-		(input: { headers: Headers }) => Promise<{
-			user: { id: string }
-			session: { activeOrganizationId: string | null }
-		} | null>
-	>()
+const mockGetSession = vi.fn<
+	(input: { headers: Headers }) => Promise<{
+		user: { id: string }
+		session: { activeOrganizationId: string | null }
+	} | null>
+>()
 vi.mock('../../auth.ts', () => ({
 	auth: {
 		api: {

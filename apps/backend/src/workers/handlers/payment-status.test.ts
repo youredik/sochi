@@ -565,75 +565,79 @@ describe('payment_status_writer — cross-tenant isolation', { tags: ['db'] }, (
 	})
 })
 
-describe('payment_status_writer — field preservation on derived transition', {
-	tags: ['db'],
-}, () => {
-	test('[I1-I4] all immutables preserved; refundedAt set; updatedBy=writer; version+1', async () => {
-		const tenantId = newId('organization')
-		const propertyId = newId('property')
-		const bookingId = newId('booking')
-		const paymentId = newId('payment')
-		const refundId = newId('refund')
+describe(
+	'payment_status_writer — field preservation on derived transition',
+	{
+		tags: ['db'],
+	},
+	() => {
+		test('[I1-I4] all immutables preserved; refundedAt set; updatedBy=writer; version+1', async () => {
+			const tenantId = newId('organization')
+			const propertyId = newId('property')
+			const bookingId = newId('booking')
+			const paymentId = newId('payment')
+			const refundId = newId('refund')
 
-		await seedPayment({
-			tenantId,
-			propertyId,
-			bookingId,
-			paymentId,
-			capturedMinor: 5000n,
-			status: 'succeeded',
-		})
-		await seedRefund({
-			tenantId,
-			paymentId,
-			refundId,
-			amountMinor: 5000n,
-			status: 'succeeded',
-		})
-		await runHandler(
-			buildRefundEvent({
+			await seedPayment({
+				tenantId,
+				propertyId,
+				bookingId,
+				paymentId,
+				capturedMinor: 5000n,
+				status: 'succeeded',
+			})
+			await seedRefund({
 				tenantId,
 				paymentId,
 				refundId,
-				oldStatus: 'pending',
-				newStatus: 'succeeded',
-			}),
-		)
+				amountMinor: 5000n,
+				status: 'succeeded',
+			})
+			await runHandler(
+				buildRefundEvent({
+					tenantId,
+					paymentId,
+					refundId,
+					oldStatus: 'pending',
+					newStatus: 'succeeded',
+				}),
+			)
 
-		const sql = getTestSql()
-		const [rows = []] = await sql<
-			{
-				status: string
-				version: number | bigint
-				updatedBy: string
-				createdBy: string
-				amountMinor: number | bigint
-				authorizedMinor: number | bigint
-				capturedMinor: number | bigint
-				idempotencyKey: string
-				providerCode: string
-				refundedAt: Date | null
-			}[]
-		>`
+			const sql = getTestSql()
+			const [rows = []] = await sql<
+				{
+					status: string
+					version: number | bigint
+					updatedBy: string
+					createdBy: string
+					amountMinor: number | bigint
+					authorizedMinor: number | bigint
+					capturedMinor: number | bigint
+					idempotencyKey: string
+					providerCode: string
+					refundedAt: Date | null
+				}[]
+			>`
 			SELECT status, version, updatedBy, createdBy, amountMinor, authorizedMinor,
 				capturedMinor, idempotencyKey, providerCode, refundedAt
 			FROM payment
 			WHERE tenantId = ${tenantId} AND id = ${paymentId}
 		`
-			.isolation('snapshotReadOnly')
-			.idempotent(true)
-		const row = rows[0]
-		if (!row) throw new Error('expected payment row')
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const row = rows[0]
+			if (!row) throw new Error('expected payment row')
 
-		expect(row.status).toBe('refunded')
-		expect(Number(row.version)).toBe(2)
-		expect(row.updatedBy).toBe('system:payment_status_writer')
-		expect(row.createdBy).toBe('test-actor') // immutable
-		expect(BigInt(row.amountMinor).toString()).toBe('5000')
-		expect(BigInt(row.authorizedMinor).toString()).toBe('5000')
-		expect(BigInt(row.capturedMinor).toString()).toBe('5000')
-		expect(row.idempotencyKey).toBe(`idemp-${paymentId}`)
-		expect(row.providerCode).toBe('stub')
-		expect(row.refundedAt).toBeInstanceOf(Date)
-	})
-})
+			expect(row.status).toBe('refunded')
+			expect(Number(row.version)).toBe(2)
+			expect(row.updatedBy).toBe('system:payment_status_writer')
+			expect(row.createdBy).toBe('test-actor') // immutable
+			expect(BigInt(row.amountMinor).toString()).toBe('5000')
+			expect(BigInt(row.authorizedMinor).toString()).toBe('5000')
+			expect(BigInt(row.capturedMinor).toString()).toBe('5000')
+			expect(row.idempotencyKey).toBe(`idemp-${paymentId}`)
+			expect(row.providerCode).toBe('stub')
+			expect(row.refundedAt).toBeInstanceOf(Date)
+		})
+	},
+)

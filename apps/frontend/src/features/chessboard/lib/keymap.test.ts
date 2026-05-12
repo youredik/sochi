@@ -96,18 +96,14 @@ describe('keyToAction — APG spec mapping', () => {
 	})
 
 	describe('adversarial: modifiers on non-Ctrl-compatible keys reject', () => {
-		it.each([
-			'ArrowLeft',
-			'ArrowRight',
-			'ArrowUp',
-			'ArrowDown',
-			'PageUp',
-			'PageDown',
-		] as const)('Ctrl+%s → null (browser word-jump / tab-switch)', (key) => {
-			expect(
-				keyToAction({ key, ctrlKey: true, metaKey: false, shiftKey: false, altKey: false }),
-			).toBeNull()
-		})
+		it.each(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'] as const)(
+			'Ctrl+%s → null (browser word-jump / tab-switch)',
+			(key) => {
+				expect(
+					keyToAction({ key, ctrlKey: true, metaKey: false, shiftKey: false, altKey: false }),
+				).toBeNull()
+			},
+		)
 
 		it.each([
 			'ArrowLeft',
@@ -124,33 +120,24 @@ describe('keyToAction — APG spec mapping', () => {
 			).toBeNull()
 		})
 
-		it.each([
-			'ArrowLeft',
-			'ArrowRight',
-			'ArrowUp',
-			'ArrowDown',
-			'Home',
-			'End',
-		] as const)('Alt+%s → null (OS shortcut)', (key) => {
-			expect(
-				keyToAction({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: true }),
-			).toBeNull()
-		})
+		it.each(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'] as const)(
+			'Alt+%s → null (OS shortcut)',
+			(key) => {
+				expect(
+					keyToAction({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: true }),
+				).toBeNull()
+			},
+		)
 	})
 
-	it.each([
-		'Enter',
-		' ',
-		'Escape',
-		'Tab',
-		'F2',
-		'a',
-		'1',
-	] as const)('non-nav key %s → null (cell-level handler responsibility)', (key) => {
-		expect(
-			keyToAction({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false }),
-		).toBeNull()
-	})
+	it.each(['Enter', ' ', 'Escape', 'Tab', 'F2', 'a', '1'] as const)(
+		'non-nav key %s → null (cell-level handler responsibility)',
+		(key) => {
+			expect(
+				keyToAction({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false }),
+			).toBeNull()
+		},
+	)
 })
 
 // ---------- nextFocusPosition: baseline (no bands) ----------

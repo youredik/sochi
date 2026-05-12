@@ -451,9 +451,8 @@ describe('widget booking-create routes — HTTP', { tags: ['db'], timeout: 90_00
  */
 describe('widget booking-create routes — 429 anti-abuse', { timeout: 30_000 }, () => {
 	test('[BCR15] Burst limit exhausted → 429 + RateLimit headers', async () => {
-		const { makeTestRateLimiter, noopRateLimiter } = await import(
-			'../../middleware/widget-rate-limit.ts'
-		)
+		const { makeTestRateLimiter, noopRateLimiter } =
+			await import('../../middleware/widget-rate-limit.ts')
 		const lowCapBurst = makeTestRateLimiter({ limit: 2, windowMs: 60_000 })
 
 		// Build minimal route — service / idempotency не reachable до 429 fires.
@@ -503,9 +502,8 @@ describe('widget booking-create routes — 429 anti-abuse', { timeout: 30_000 },
 	})
 
 	test('[BCR16] Different IPs do NOT share rate-limit bucket', async () => {
-		const { makeTestRateLimiter, noopRateLimiter } = await import(
-			'../../middleware/widget-rate-limit.ts'
-		)
+		const { makeTestRateLimiter, noopRateLimiter } =
+			await import('../../middleware/widget-rate-limit.ts')
 		const lowCapBurst = makeTestRateLimiter({ limit: 1, windowMs: 60_000 })
 		const app = new Hono<AppEnv>().route(
 			'/api/public/widget',
@@ -536,9 +534,8 @@ describe('widget booking-create routes — 429 anti-abuse', { timeout: 30_000 },
 	})
 
 	test('[BCR17] Different slugs (same IP) do NOT share rate-limit bucket', async () => {
-		const { makeTestRateLimiter, noopRateLimiter } = await import(
-			'../../middleware/widget-rate-limit.ts'
-		)
+		const { makeTestRateLimiter, noopRateLimiter } =
+			await import('../../middleware/widget-rate-limit.ts')
 		const lowCapBurst = makeTestRateLimiter({ limit: 1, windowMs: 60_000 })
 		const app = new Hono<AppEnv>().route(
 			'/api/public/widget',

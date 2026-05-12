@@ -20,9 +20,7 @@
 		"apps/frontend": {
 			"entry": ["lingui.config.ts"],
 			"project": ["src/**/*.{ts,tsx}", "*.ts"],
-			"ignore": [
-				"src/components/ui/**"
-			]
+			"ignore": ["src/components/ui/**"]
 		},
 		".": {
 			"entry": ["tests/e2e/*.ts"],

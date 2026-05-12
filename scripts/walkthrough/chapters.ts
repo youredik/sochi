@@ -155,7 +155,8 @@ export const chapters: Chapter[] = [
 		async run(page, state) {
 			// Capture property + roomType + ratePlan IDs (also reused by later chapters).
 			const propsRes = await page.request.get(`${API}/properties`)
-			state.propertyId = ((await propsRes.json()) as { data: Array<{ id: string }> }).data[0]?.id ?? null
+			state.propertyId =
+				((await propsRes.json()) as { data: Array<{ id: string }> }).data[0]?.id ?? null
 			if (!state.propertyId) throw new Error('07-grid: no property in tenant')
 
 			const [rtRes, rpRes] = await Promise.all([
@@ -191,7 +192,9 @@ export const chapters: Chapter[] = [
 					},
 				})
 				if (!guestRes.ok()) {
-					throw new Error(`07-grid: guest.create HTTP ${guestRes.status()}: ${await guestRes.text()}`)
+					throw new Error(
+						`07-grid: guest.create HTTP ${guestRes.status()}: ${await guestRes.text()}`,
+					)
 				}
 				const guestId = ((await guestRes.json()) as { data: { id: string } }).data.id
 
@@ -255,9 +258,7 @@ export const chapters: Chapter[] = [
 			// `pending_*` optimistic placeholder before server-truth replaces it. Folio
 			// API regex is `/^book_[26]$/`, so capturing `pending_xyz` → 400 ZodError
 			// downstream in chapter 10.
-			const band = page
-				.locator(`[data-booking-id^="book_"][aria-label*="${date} —"]`)
-				.first()
+			const band = page.locator(`[data-booking-id^="book_"][aria-label*="${date} —"]`).first()
 			await band.waitFor({ timeout: 10_000 })
 			state.bookingId = await band.getAttribute('data-booking-id')
 			await page.waitForTimeout(800)
@@ -380,9 +381,7 @@ export const chapters: Chapter[] = [
 			const sheet = page.getByRole('dialog', { name: /Принять оплату/ })
 			await sheet.waitFor()
 			await page.waitForTimeout(1200)
-			await sheet
-				.getByRole('button', { name: /^Принять$/ })
-				.waitFor({ state: 'visible' })
+			await sheet.getByRole('button', { name: /^Принять$/ }).waitFor({ state: 'visible' })
 			await sheet.getByRole('button', { name: /^Принять$/ }).click()
 			await page.waitForTimeout(2000)
 		},

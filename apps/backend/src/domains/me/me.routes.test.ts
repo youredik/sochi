@@ -104,18 +104,17 @@ describe('GET /me — response shape (mirror of me.routes.ts handler)', () => {
 		expect(body.data.mode).toBe('production')
 	})
 
-	test.each([
-		'owner',
-		'manager',
-		'staff',
-	] as const)('[W3] role=%s — same shape, different role value', async (role) => {
-		const app = buildApp(role)
-		const res = await app.request('/me')
-		expect(res.status).toBe(200)
-		const body = (await res.json()) as { data: { role: MemberRole; mode: TenantMode } }
-		expect(body.data.role).toBe(role)
-		expect(body.data.mode).toBe('production')
-	})
+	test.each(['owner', 'manager', 'staff'] as const)(
+		'[W3] role=%s — same shape, different role value',
+		async (role) => {
+			const app = buildApp(role)
+			const res = await app.request('/me')
+			expect(res.status).toBe(200)
+			const body = (await res.json()) as { data: { role: MemberRole; mode: TenantMode } }
+			expect(body.data.role).toBe(role)
+			expect(body.data.mode).toBe('production')
+		},
+	)
 
 	test('[W4] mode=production default when loader returns production', async () => {
 		const app = buildApp('owner', async () => 'production')

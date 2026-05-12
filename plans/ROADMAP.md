@@ -12,6 +12,7 @@
 **Track A.bis ✅ DONE 2026-05-12** — Hotelier Admin App-Shell Sidebar (6 sub-phases + senior bug-hunt + dep-freshness bump + senior self-audit). Plan canon: [`plans/track-a-bis-canonical.md`](track-a-bis-canonical.md). Consolidated memory: [`project_a_bis_done.md`](../.claude/projects/-Users-ed-dev-sochi/memory/project_a_bis_done.md). R1+R2+R3+R4 empirical-verify ≥2026-05-12 — 22+ corrections + per-sub-phase POST-AUDIT **C32-C46** (15 new process corrections captured). **7 active sidebar destinations** + dashboard refactored к 4 tactical operator KPIs + Recent activity + Alerts. **Vaul → Base UI 1.4.1 GA Drawer** migration done. **shadcn sidebar primitive** in-repo с 6 local patches (D12-D16 + **PATCH-BH1** input-focus guard). **~260 strict tests + 30 e2e** across A.bis.0-5 (target was ~102, overdelivered 2.5×). Domain breakpoint `md:` (768px) для front-desk tablets.
 
 **Sub-phase commits (6/6 DONE — 5 commits unpushed awaiting batched push):**
+
 - ✅ **A.bis.0** (`150f3e5` + `4adf37a` fix-up + `6b667fe` closure) — Vaul → Base UI Drawer migration. 18 strict + 43 widget e2e. C34: transparent migration claim требует real-browser e2e proof.
 - ✅ **A.bis.1** (`4d6da48`) — shadcn sidebar primitive `ui/sidebar.tsx` (438 LOC direct write) + 5 patches D12-D16 + **35 strict** (1.75× over plan). C35: gh API ground-truth для GitHub state.
 - ✅ **A.bis.2** (`4934bb5` + `6a6f60c` fix-up + `88422f7` plan docs) — App-shell integration: SidebarProvider+AdminSidebar+SidebarInset + 7 RBAC sections + DemoModeBadge (C36 backend `/me` mode enrichment). DELETE 7 mobile-nav files. **67 strict**. A.bis.2.fix recovered 22/23 e2e + adopted stankoff canon (ratchet + global-mocks). C37: Layer 4+5 mandatory per sub-phase.
@@ -20,6 +21,7 @@
 - ✅ **A.bis.5** (`aa0ac24` closure docs + `f879d25` dep bump + `eb83da8` senior self-audit) — Track closure: ROADMAP ✅, consolidated memory, Lingui v6 drift fix, plan §10 prose drift, **latest-stable dep bump** (`react-day-picker` 9→10 major + ~30 minor/patch + Playwright 1.60), **coverage floor ratchet 60/60/55/60 → 65/63/60/64**, **CVE ratchet 7→6→1→0** (`pnpm.overrides: serialize-javascript@^7.0.5`). Senior self-audit поймал **1 REAL production BUG-BH8** (`_app.tsx` peer-tab logout без `reloadDocument: true` → multi-tab logout silently fails в prod) + 3 my-commit bugs + 4 halfmeasures.
 
 **Track A.bis final state (after all 5 commits):**
+
 - **~260 strict tests + 30 e2e + 12-cell axe matrix + 4 fullpage visual baselines**
 - **ZERO high CVEs** (`pnpm audit --prod` clean; ratchet `audit_high_critical_max=0`; orig baseline was 7 PRE-EXISTING)
 - **Coverage floor ratcheted** 60/60/55/60 → **65/63/60/64** (measured 65.69/63.91/61.05/64.48)
@@ -42,6 +44,7 @@
 **Track A3 — M9.widget.5 Confirmation** ✅ committed 2026-04-30 → 2026-05-01 (10 commits pushed origin/main; A3.4 minimum-viable + carry-forwards — confirmation screen + find-by-ref-email + 12 E2E pending separate session).
 
 **Sub-phase progress (4 unpushed commits локально):**
+
 - ✅ A3.1.a `3db4725` — magic-link service core + .ics generator + 91 strict tests
 - ✅ A3.1.b `7ff69c5` — consume routes (two-step) + guest-session middleware + factory wire + 36 strict tests
 - ✅ A3.1.c `a5fa3cf` — booking-find route (timing-safe + tuple rate-limit) + email template + 19 strict tests + empirical curl 829ms ≥ 800ms canon ✓
@@ -55,6 +58,7 @@
 **Track A4 — M9.widget.6 Embed Web Component** ✅ **DONE 2026-05-04**. Plan canon: [`plans/m9_widget_6_canonical.md`](m9_widget_6_canonical.md). Memory: `project_m9_widget_6_done.md` (final summary; in-progress canonical reference в `project_m9_widget_6_canonical.md`). Plan §4 grew D1-D29 → D1-D35 after per-sub-phase R1+R2 ≥2026-05-04 freshness checks at each sub-phase boundary surfaced 6 new security corrections (CVE-2026-5903 sandbox / nonce-bound MessageChannel handshake / Cross-Origin-Opener-Policy popup hardening / child-ready handshake gate / Storage Access top-level redirect fallback / visible-rect heartbeat). **117 strict tests + 8 e2e (axe AA × 4 viewports + visual smoke 320/768/1024/1440 + forced-colors AAA overlay).** test:serial 4591/4593 (1 skip + 1 known environmental flake U4 payment UNIQUE-race per `feedback_test_serial_for_pre_push.md`).
 
 **A4 Sub-phase progress (3 unpushed commits pending):**
+
 - ✅ A4.1 — `apps/widget-embed/` scaffold + Vite IIFE + Terser + bundle CI gate + 5 BLD tests (commit `d74ce5c`)
 - ✅ A4.1.fix — 15 R1+R2 corrections fresh-research 2026-05-04: D13-D20 added (commit `2b1c64f`). Bundle 9.39 KiB gzip / 15 KiB facade.
 - ✅ A4.2 — Lit Web Component facade + lazy `booking-flow.js` chunk + IntersectionObserver+requestIdleCallback prefetch + ElementInternals ARIA + IO v2 visibility gate + AbortController canon + container queries + `@starting-style` + CustomEvent emission + 11 unit/build tests + 10 W browser tests via Vitest Browser Mode + Playwright real Chromium. **Facade 11.12 KiB / 15 KiB = 3.88 KiB headroom; lazy 9.87 KiB / 80 KiB = 70.13 KiB headroom.**
@@ -74,18 +78,21 @@
 **Cumulative tests landed**: 156 strict (74 + 36 + 19 + 27 template/notification expansions) + empirical curl smoke ✓
 
 **M9.widget.4 (A2 Guest+Pay) DONE 2026-04-30** — `project_m9_widget_4_done.md`. Final origin/main HEAD: **`456a591`**. Sub-phase + post-push infrastructure epic landed (12 commits). Включая:
+
 - 65 unit + integration tests + 10 E2E + axe 4-theme matrix
 - Backend port 3000→8787, frontend 5173→5273 (coexist с stankoff-v2)
 - Pre-push gate 250s → ~5s (vitest fully delegated к async self-hosted runner)
 - 5 new memory canons (no_disrupt_other_dev / foreground_runs / pre_push_strategy / inter_project_port_allocation + cross-links)
 
 **A3 scope** (per Track A row + `m9_widget_canonical.md` §M9.widget.5):
+
 - magic-link service (jose 6.2.3, HS256, 24h TTL)
 - email voucher template (Postbox/Mailpit factory)
 - .ics calendar invite (RFC 5545)
 - guest portal (passport completion для D9 placeholder из widget.4)
 
 **Anchor commits (origin/main):**
+
 - `6ccae91` — M8.A done (миграционный учёт МВД closed)
 - `e5fb3d3` — M9 done (theming/adaptive/PWA/passkey/visual)
 - `fb0c0b1` — M9.widget.2 senior-pass v3 (Screen 1 Search & Pick closed)
@@ -117,15 +124,15 @@
 
 ## Track A — Demo Surface Completion (critical path)
 
-| # | Фаза | Закрывает | Key deliverable | Strict tests | Plan canon |
-|---|---|---|---|---|---|
-| **A1** ✅ | M9.widget.3 — Extras / Addons | Боль 2.3 (continuing) | Screen 2 inline addon cards + Skip CTA + axe AA | **107 strict + 13 E2E** (target was ~25; expanded после Round 2 compliance findings) | `m9_widget_canonical.md` §3 |
-| **A2** ✅ | M9.widget.4 — Guest + Pay | Боль 2.3 (continuing) | TanStack Form + 152-ФЗ + 38-ФЗ consents + Stub canonical interface + rate-limit + migration 0045 (consentLog) — closed `456a591` | **65 unit + integration + 10 E2E + 4-theme axe** | §4 + done memory |
-| **A3** | M9.widget.5 — Confirmation | Боль 2.3 (continuing) | magic-link service (jose 6.2.3, HS256) + email voucher (Postbox/Mailpit) + .ics + guest portal | ~45 | §5 |
-| **A4** | M9.widget.6 — Embed Web Component | Боль 2.3 (closure) | `apps/widget-embed` Vite build → Lit 3.3.2 + Declarative Shadow DOM SSR + iframe fallback ≤30 kB gzip | ~30 | §6 |
-| **A5** ✅ | M9.widget.7 — Perf + a11y gate | Quality canon | Lighthouse CI 0.15.1 + size-limit 12 + RUM 152-ФЗ pipeline (web-vitals 5 attribution + YC Monitoring HTTP exporter) + axe matrix 48 cells (4 surfaces × 3 themes × 4 viewports) + forced-colors Cyrillic visual smoke + Speculation Rules + Sec-Purpose middleware + noscript fallback — closed `8446695` | **130 strict + 65 e2e** (target ~62 — overdelivered 2.1×) | done memory `project_m9_widget_7_done.md` |
-| **A6** ✅ | M9.widget.8 — Demo polish | Acquisition surface | Schema.org Hotel JSON-LD (XSS-escape D7 + RU compliance) + 24h Croner cron (idempotent UPSERT + cold-start startup-check) + 24 rooms (8+16) + 30 bookings (deterministic distribution) + 5 photos (Picsum) + native HTML Popover API tour overlay (driver.js REJECTED per «современно или в топку») — closed `5cdc1f9` | **39 strict** (target ~25, overdelivered 1.6×) | done memory `project_m9_widget_8_done.md` |
-| **A7** ✅ | M10 — Channel Manager Mock | Боль 2.2 (closure) | TravelLine + Я.Путешествия + Ostrovok behaviour-faithful Mock'и + canonical adapter interface + двусторонняя sync визуально на demo | 237 (target ~102, +2.3×) | `plans/m10_canonical.md` + `project_m10_done.md` — 7 commits pushed origin/main `68a675f` |
+| #         | Фаза                              | Закрывает             | Key deliverable                                                                                                                                                                                                                                                                                                        | Strict tests                                                                         | Plan canon                                                                                |
+| --------- | --------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| **A1** ✅ | M9.widget.3 — Extras / Addons     | Боль 2.3 (continuing) | Screen 2 inline addon cards + Skip CTA + axe AA                                                                                                                                                                                                                                                                        | **107 strict + 13 E2E** (target was ~25; expanded после Round 2 compliance findings) | `m9_widget_canonical.md` §3                                                               |
+| **A2** ✅ | M9.widget.4 — Guest + Pay         | Боль 2.3 (continuing) | TanStack Form + 152-ФЗ + 38-ФЗ consents + Stub canonical interface + rate-limit + migration 0045 (consentLog) — closed `456a591`                                                                                                                                                                                       | **65 unit + integration + 10 E2E + 4-theme axe**                                     | §4 + done memory                                                                          |
+| **A3**    | M9.widget.5 — Confirmation        | Боль 2.3 (continuing) | magic-link service (jose 6.2.3, HS256) + email voucher (Postbox/Mailpit) + .ics + guest portal                                                                                                                                                                                                                         | ~45                                                                                  | §5                                                                                        |
+| **A4**    | M9.widget.6 — Embed Web Component | Боль 2.3 (closure)    | `apps/widget-embed` Vite build → Lit 3.3.2 + Declarative Shadow DOM SSR + iframe fallback ≤30 kB gzip                                                                                                                                                                                                                  | ~30                                                                                  | §6                                                                                        |
+| **A5** ✅ | M9.widget.7 — Perf + a11y gate    | Quality canon         | Lighthouse CI 0.15.1 + size-limit 12 + RUM 152-ФЗ pipeline (web-vitals 5 attribution + YC Monitoring HTTP exporter) + axe matrix 48 cells (4 surfaces × 3 themes × 4 viewports) + forced-colors Cyrillic visual smoke + Speculation Rules + Sec-Purpose middleware + noscript fallback — closed `8446695`              | **130 strict + 65 e2e** (target ~62 — overdelivered 2.1×)                            | done memory `project_m9_widget_7_done.md`                                                 |
+| **A6** ✅ | M9.widget.8 — Demo polish         | Acquisition surface   | Schema.org Hotel JSON-LD (XSS-escape D7 + RU compliance) + 24h Croner cron (idempotent UPSERT + cold-start startup-check) + 24 rooms (8+16) + 30 bookings (deterministic distribution) + 5 photos (Picsum) + native HTML Popover API tour overlay (driver.js REJECTED per «современно или в топку») — closed `5cdc1f9` | **39 strict** (target ~25, overdelivered 1.6×)                                       | done memory `project_m9_widget_8_done.md`                                                 |
+| **A7** ✅ | M10 — Channel Manager Mock        | Боль 2.2 (closure)    | TravelLine + Я.Путешествия + Ostrovok behaviour-faithful Mock'и + canonical adapter interface + двусторонняя sync визуально на demo                                                                                                                                                                                    | 237 (target ~102, +2.3×)                                                             | `plans/m10_canonical.md` + `project_m10_done.md` — 7 commits pushed origin/main `68a675f` |
 
 ### Track A DoD
 
@@ -141,20 +148,21 @@
 ## Track A.bis — Hotelier Admin App-Shell Sidebar (2026-05-12 inserted)
 
 **Rationale:** После 6 раундов finальной session-audit 2026-05-12 (Сочи PMS frontend coverage) — Track A закрыл 6/7 функций end-to-end **на бэкенде**, но hotelier desktop admin UX имеет 3 P0:
+
 1. Rate / Availability daily calendar (нет UI для post-setup управления)
 2. Inventory CRUD после setup (нельзя add roomType/ratePlan)
 3. Channels недискаверабельны на desktop (страница есть, но не в nav)
 
 A.bis = архитектурный foundation для всех 3 через **proper app-shell sidebar** (Linear/Vercel/Cloudbeds canon + domain-specific md: tablet override). Без A.bis каждая будущая admin-страница повторяет channels-discoverability gap.
 
-| # | Sub-phase | Scope | Strict tests target | Plan canon |
-|---|---|---|---|---|
-| **A.bis.0** | Vaul migration prep | DROP vaul + ADD @base-ui/react 1.4.1 GA + 4 Radix primitives + bump tailwind/lucide. Create `ui/sheet.tsx` + `ui/widget-drawer.tsx`. Migrate 5 Vaul consumers (sidebar-drawer DELETE / migration-detail / refund-sheet / sticky-summary / consent-block). Split `ui/responsive-sheet.tsx` admin vs widget. | ~25 | `track-a-bis-canonical.md` §7 |
-| **A.bis.1** | shadcn sidebar primitive | CLI add → `ui/sidebar.tsx`. Apply 5 patches (D12-D16: dismiss button #6761 / uncontrolled prop #8176 / aria-label Cyrillic / forced-colors / single-provider). | ~20 + a11y | §4 |
-| **A.bis.2** | App-shell integration | `<SidebarProvider>` в `_app.tsx`. `admin-sidebar.tsx` + `sidebar-sections.ts` + `demo-mode-badge.tsx`. RBAC × 7 sections × 3 roles = 21 visibility assertions. Delete mobile-nav/sidebar-drawer/mobile-nav-button/mobile-nav-state. | ~30 | §4 |
-| **A.bis.3** | Dashboard refactor | `index.tsx` tiles → KPI cards внутри content. Главная = реальный dashboard (Occupancy/ADR/RevPAR placeholders + Recent activity + Alerts). | ~15 | §4 |
-| **A.bis.4** | E2E + axe matrix + visual | Playwright spec discoverability + Cmd+B + nested-route active + offcanvas mobile. axe matrix 12 cells (3 themes × 4 viewports) WCAG 2.2 AA. Visual smoke 4 viewports. forced-colors spec. | 12 e2e | §8 |
-| **A.bis.5** | Closure + memory | ROADMAP A.bis row ✅ + `project_a_bis_done.md` + memory updates (locked versions + architecture decisions + Lingui v5→v6 drift fix) + `pnpm outdated` audit + final 9-gate green | n/a | §7 |
+| #           | Sub-phase                 | Scope                                                                                                                                                                                                                                                                                                      | Strict tests target | Plan canon                    |
+| ----------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ----------------------------- |
+| **A.bis.0** | Vaul migration prep       | DROP vaul + ADD @base-ui/react 1.4.1 GA + 4 Radix primitives + bump tailwind/lucide. Create `ui/sheet.tsx` + `ui/widget-drawer.tsx`. Migrate 5 Vaul consumers (sidebar-drawer DELETE / migration-detail / refund-sheet / sticky-summary / consent-block). Split `ui/responsive-sheet.tsx` admin vs widget. | ~25                 | `track-a-bis-canonical.md` §7 |
+| **A.bis.1** | shadcn sidebar primitive  | CLI add → `ui/sidebar.tsx`. Apply 5 patches (D12-D16: dismiss button #6761 / uncontrolled prop #8176 / aria-label Cyrillic / forced-colors / single-provider).                                                                                                                                             | ~20 + a11y          | §4                            |
+| **A.bis.2** | App-shell integration     | `<SidebarProvider>` в `_app.tsx`. `admin-sidebar.tsx` + `sidebar-sections.ts` + `demo-mode-badge.tsx`. RBAC × 7 sections × 3 roles = 21 visibility assertions. Delete mobile-nav/sidebar-drawer/mobile-nav-button/mobile-nav-state.                                                                        | ~30                 | §4                            |
+| **A.bis.3** | Dashboard refactor        | `index.tsx` tiles → KPI cards внутри content. Главная = реальный dashboard (Occupancy/ADR/RevPAR placeholders + Recent activity + Alerts).                                                                                                                                                                 | ~15                 | §4                            |
+| **A.bis.4** | E2E + axe matrix + visual | Playwright spec discoverability + Cmd+B + nested-route active + offcanvas mobile. axe matrix 12 cells (3 themes × 4 viewports) WCAG 2.2 AA. Visual smoke 4 viewports. forced-colors spec.                                                                                                                  | 12 e2e              | §8                            |
+| **A.bis.5** | Closure + memory          | ROADMAP A.bis row ✅ + `project_a_bis_done.md` + memory updates (locked versions + architecture decisions + Lingui v5→v6 drift fix) + `pnpm outdated` audit + final 9-gate green                                                                                                                           | n/a                 | §7                            |
 
 ### Track A.bis DoD
 
@@ -173,15 +181,15 @@ A.bis = архитектурный foundation для всех 3 через **pro
 
 ## Track B — Deploy Infra (после Track A.bis)
 
-| # | Фаза | Deliverable | Reference |
-|---|---|---|---|
-| **B1** | SourceCraft + GitHub mirror | OIDC Service Connection, lift-and-adapt `.sourcecraft/ci.yaml` от stankoff-v2 | `project_deferred_deploy_plan.md` §SourceCraft |
-| **B2** | Terraform infra | 11 файлов lift-and-adapt от stankoff-v2 (drop CDC + postbox + smartcaptcha defer) + 0-3 sochi-specific | `project_deferred_deploy_plan.md` §TF |
-| **B3** | Yandex Cloud topology | Object Storage SPA + CDN + API Gateway + Serverless Container `min_instances=0` + LE cert + Lockbox secrets | `project_deferred_deploy_plan.md` §topology |
-| **B4** | PWA enable | vite-plugin-pwa 1.2.0 injectManifest + Workbox NetworkFirst grid + BackgroundSync mutations | `project_deferred_deploy_plan.md` §PWA |
-| **B5** | Public domain + ENV | RU domain `.ru` (Reg.ru/Beget) + `APP_MODE=production` + `APP_MODE_PERMITTED_MOCK_ADAPTERS` whitelist (canonical для demo-тенантов) | — |
-| **B6** | Demo refresh cron в проде | Cloud Scheduler → Cloud Function → call demo-seeder-reset endpoint каждые 6h | `project_demo_strategy.md` §refresh |
-| **B7** | 152-ФЗ baseline для prospect'ов | privacy-policy.md page + cookie consent + согласие на обработку для public widget | M9.widget.4 carry-forward |
+| #      | Фаза                            | Deliverable                                                                                                                         | Reference                                      |
+| ------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **B1** | SourceCraft + GitHub mirror     | OIDC Service Connection, lift-and-adapt `.sourcecraft/ci.yaml` от stankoff-v2                                                       | `project_deferred_deploy_plan.md` §SourceCraft |
+| **B2** | Terraform infra                 | 11 файлов lift-and-adapt от stankoff-v2 (drop CDC + postbox + smartcaptcha defer) + 0-3 sochi-specific                              | `project_deferred_deploy_plan.md` §TF          |
+| **B3** | Yandex Cloud topology           | Object Storage SPA + CDN + API Gateway + Serverless Container `min_instances=0` + LE cert + Lockbox secrets                         | `project_deferred_deploy_plan.md` §topology    |
+| **B4** | PWA enable                      | vite-plugin-pwa 1.2.0 injectManifest + Workbox NetworkFirst grid + BackgroundSync mutations                                         | `project_deferred_deploy_plan.md` §PWA         |
+| **B5** | Public domain + ENV             | RU domain `.ru` (Reg.ru/Beget) + `APP_MODE=production` + `APP_MODE_PERMITTED_MOCK_ADAPTERS` whitelist (canonical для demo-тенантов) | —                                              |
+| **B6** | Demo refresh cron в проде       | Cloud Scheduler → Cloud Function → call demo-seeder-reset endpoint каждые 6h                                                        | `project_demo_strategy.md` §refresh            |
+| **B7** | 152-ФЗ baseline для prospect'ов | privacy-policy.md page + cookie consent + согласие на обработку для public widget                                                   | M9.widget.4 carry-forward                      |
 
 ### Track B DoD
 
@@ -199,13 +207,13 @@ A.bis = архитектурный foundation для всех 3 через **pro
 
 **НЕ блокер для Track A/B.** Делается когда creds естественным путём появляются (юр-лицо открыто, integration agreements подписаны, prospect готов конвертироваться).
 
-| # | Сервис | Pre-condition | Empirical-curl + alignment |
-|---|---|---|---|
-| **C1** | Yandex Vision live | YC_API_KEY (SA с `ai.vision.user` role) + folder ID | `scripts/verify-vision-empirical.ts` ready; resolve 9-vs-12 entity divergence |
-| **C2** | ЮKassa live | Test shop_id + sandbox secret (24h registration в ЛК ЮKassa); ngrok для webhook | `POST /v3/payments` + 54-ФЗ Чеки с `vat_code=11` НДС 22% + IP allowlist webhook verify |
-| **C3** | Postbox live | YC SA `postbox.sender` role + `.ru` sender domain + DKIM CNAME/TXT verify + production-access ticket | `SendEmail` через `@aws-sdk/client-sesv2` + DKIM mailheader inspection |
-| **C4** | Channel Manager live | Per-channel partner agreements (TravelLine/Я.Путешествия/Ostrovok dev-account) | M10-aligned per-channel |
-| **C5** | **M8.B — Скала-ЕПГУ + КриптоПро** | (a) ИП/ООО открыто, (b) КриптоПро CSP commercial license + JaCarta token (~2500 ₽/tenant), (c) МВД ОВМ onboarding agreement (multi-week process) | Делается **только под конкретного первого production-tenant'a** |
+| #      | Сервис                            | Pre-condition                                                                                                                                    | Empirical-curl + alignment                                                             |
+| ------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| **C1** | Yandex Vision live                | YC_API_KEY (SA с `ai.vision.user` role) + folder ID                                                                                              | `scripts/verify-vision-empirical.ts` ready; resolve 9-vs-12 entity divergence          |
+| **C2** | ЮKassa live                       | Test shop_id + sandbox secret (24h registration в ЛК ЮKassa); ngrok для webhook                                                                  | `POST /v3/payments` + 54-ФЗ Чеки с `vat_code=11` НДС 22% + IP allowlist webhook verify |
+| **C3** | Postbox live                      | YC SA `postbox.sender` role + `.ru` sender domain + DKIM CNAME/TXT verify + production-access ticket                                             | `SendEmail` через `@aws-sdk/client-sesv2` + DKIM mailheader inspection                 |
+| **C4** | Channel Manager live              | Per-channel partner agreements (TravelLine/Я.Путешествия/Ostrovok dev-account)                                                                   | M10-aligned per-channel                                                                |
+| **C5** | **M8.B — Скала-ЕПГУ + КриптоПро** | (a) ИП/ООО открыто, (b) КриптоПро CSP commercial license + JaCarta token (~2500 ₽/tenant), (c) МВД ОВМ onboarding agreement (multi-week process) | Делается **только под конкретного первого production-tenant'a**                        |
 
 ### Track C DoD (per-adapter)
 

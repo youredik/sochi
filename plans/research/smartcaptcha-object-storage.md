@@ -95,6 +95,7 @@ Three friction points в funnel:
 - Config: `region: 'ru-central1'`, `endpoint: 'https://storage.yandexcloud.net'`, `forcePathStyle: false` (virtual-hosted style).
 
 **Caveats vs raw AWS S3:**
+
 - ⚠️ **No SSE-C** (customer-provided keys) — только `aws:kms` SSE supported. Любой код с `x-amz-server-side-encryption-customer-*` headers fail.
 - No S3 Object Lambda, no S3 Select-on-Glacier, no Replication-time-control, no Bucket Notifications via SNS (use Yandex Audit Trails / Cloud Logging).
 - Lifecycle supported, но **cron runs once daily at 00:00 UTC** — propagation can take hours.
@@ -102,6 +103,7 @@ Three friction points в funnel:
 ### 2.2 Lifecycle policies — TTL fit для passport photos
 
 Supported actions:
+
 1. **Expiration / deletion** (objects + non-current versions).
 2. **Storage-class transition** (Standard → Cold → Ice).
 3. **AbortIncompleteMultipartUpload**.
@@ -154,6 +156,7 @@ Supported actions:
 ⚠️ **Starting 2026-05-01 a price increase announced** (covered by `_includes/pricing-increase-2026-05.md` в docs repo) — точные figures re-check на provision day.
 
 Structure (стабильная, RUB, indicative values 2026-Q1):
+
 - **Standard:** ~1.96 ₽/GB-month после first GB.
 - **Cold:** ~0.86 ₽/GB-month, retrieval surcharge.
 - **Ice:** ~0.54 ₽/GB-month, **min billable 12 months** — early delete = full 12-month charge.
@@ -190,49 +193,51 @@ Structure (стабильная, RUB, indicative values 2026-Q1):
 // На booking submission step
 import { InvisibleSmartCaptcha } from '@yandex/smart-captcha'
 
-const captchaRef = useRef<{execute: () => Promise<string>}>()
+const captchaRef = useRef<{ execute: () => Promise<string> }>()
 
 async function handleBookingSubmit(formData) {
-  const token = await captchaRef.current.execute()
-  const result = await fetch('/api/public/booking-intent', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...formData, captchaToken: token })
-  })
-  if (result.status === 401) {
-    // captcha failed на бэке — reset и retry
-    setCaptchaResetKey(k => k + 1)
-  }
+	const token = await captchaRef.current.execute()
+	const result = await fetch('/api/public/booking-intent', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ ...formData, captchaToken: token }),
+	})
+	if (result.status === 401) {
+		// captcha failed на бэке — reset и retry
+		setCaptchaResetKey((k) => k + 1)
+	}
 }
 
-return <InvisibleSmartCaptcha
-  ref={captchaRef}
-  sitekey={import.meta.env.VITE_SMARTCAPTCHA_SITEKEY}
-  language="ru"
-  key={captchaResetKey}
-/>
+return (
+	<InvisibleSmartCaptcha
+		ref={captchaRef}
+		sitekey={import.meta.env.VITE_SMARTCAPTCHA_SITEKEY}
+		language="ru"
+		key={captchaResetKey}
+	/>
+)
 ```
 
 ```ts
 // Backend: middleware verify
 async function verifyCaptcha(token: string, ip: string) {
-  const params = new URLSearchParams({
-    secret: env.SMARTCAPTCHA_SERVER_KEY,
-    token,
-    ip,
-  })
-  const res = await fetch('https://smartcaptcha.yandexcloud.net/validate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params,
-  })
-  // ⚠️ Yandex рекомендует treat non-200 as ok
-  if (!res.ok) {
-    log.warn('SmartCaptcha unavailable, allowing through', { status: res.status })
-    return true
-  }
-  const data = await res.json()
-  return data.status === 'ok'
+	const params = new URLSearchParams({
+		secret: env.SMARTCAPTCHA_SERVER_KEY,
+		token,
+		ip,
+	})
+	const res = await fetch('https://smartcaptcha.yandexcloud.net/validate', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+		body: params,
+	})
+	// ⚠️ Yandex рекомендует treat non-200 as ok
+	if (!res.ok) {
+		log.warn('SmartCaptcha unavailable, allowing through', { status: res.status })
+		return true
+	}
+	const data = await res.json()
+	return data.status === 'ok'
 }
 ```
 
@@ -262,10 +267,12 @@ async function verifyCaptcha(token: string, ip: string) {
 ### 4.4 Retention / TTL policy
 
 Two competing pressures:
+
 - **152-ФЗ:** process PII только as long as needed. После check-in completes (или регистрация в МВД/ЕПГУ confirmed), фото больше не нужно.
 - **Compliance audit / dispute window:** keep evidence до 1 year.
 
 **Recommended layered TTL:**
+
 - **Bucket lifecycle rule:** delete after 180 days (safety net).
 - **Workflow worker:** explicitly delete photo within 24h успешного МВД/ЕПГУ acknowledgement OR 24h booking cancellation (whichever sooner).
 - **Cancellation policy:** если booking cancelled до check-in, delete immediately — purpose dissolved.
@@ -299,6 +306,7 @@ Two competing pressures:
 ## 7. Источники (URL + дата 27.04.2026)
 
 **SmartCaptcha:**
+
 - [Concepts/react](https://yandex.cloud/en/docs/smartcaptcha/concepts/react)
 - [Concepts/invisible-captcha](https://yandex.cloud/en/docs/smartcaptcha/concepts/invisible-captcha)
 - [Concepts/validation](https://yandex.cloud/en/docs/smartcaptcha/concepts/validation)
@@ -310,6 +318,7 @@ Two competing pressures:
 - [GitHub source](https://github.com/yandex-cloud/docs/tree/master/ru/smartcaptcha)
 
 **Object Storage:**
+
 - [Concepts/lifecycles](https://yandex.cloud/en/docs/storage/concepts/lifecycles)
 - [Concepts/encryption](https://yandex.cloud/en/docs/storage/concepts/encryption)
 - [Concepts/pre-signed-urls](https://yandex.cloud/en/docs/storage/concepts/pre-signed-urls)
@@ -321,5 +330,6 @@ Two competing pressures:
 - [Pricing increase 2026-05](https://raw.githubusercontent.com/yandex-cloud/docs/master/ru/_includes/pricing-increase-2026-05.md)
 
 **MinIO compatibility:**
+
 - [Object Lifecycle Management](https://docs.min.io/enterprise/aistor-object-store/administration/object-lifecycle-management/)
 - [SSE-KMS](https://min.io/docs/minio/linux/administration/server-side-encryption/server-side-encryption-sse-kms.html)

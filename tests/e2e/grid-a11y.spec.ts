@@ -178,4 +178,3 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		expect(results.violations).toEqual([])
 	})
 })
-

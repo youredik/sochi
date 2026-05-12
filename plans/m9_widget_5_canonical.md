@@ -11,10 +11,12 @@
 ## §1. North-star alignment
 
 **Demo surface canon**: один codebase обслуживает demo + production. Live-flip = factory binding swap, **ZERO domain changes**. Same backend code:
+
 - **Demo тенант** (`mode='demo'`): Mailpit catches email + .ics displays in dev UI; magic-link clickable but не leaves dev environment
 - **Production тенант** (`mode='production'`): Postbox sends real email через verified sender domain (defer'ed M10/M11 на real DKIM); same magic-link flow
 
 **Что строится в M9.widget.5 (Track A3):**
+
 - Real magic-link service (jose 6.2.3 HS256 per-tenant, two-step GET→POST consume для prefetch DoS защита)
 - Real email voucher (react-email 6.0.5 templates, RU-strict transactional, NO cross-sell)
 - Real .ics calendar attachment (ical-generator 10.2.0 + Europe/Moscow VTIMEZONE)
@@ -23,6 +25,7 @@
 - Real audit trail (`magicLinkLog` + `consentLog` cross-link для GDPR/152-ФЗ)
 
 **Что defer'ится (carry-forward):**
+
 - Postbox real DKIM/sender-domain verification → Track B6 / M11
 - @react-pdf/renderer voucher PDF off-hot-path (memory leak issue #3051) → defer download until guest portal click; render in worker process с recycle. M9.widget.5 ship voucher info as HTML + .ics только; PDF download → guest portal action with async render.
 - Live ЮKassa webhook на payment.succeeded triggering email send → already wired через `notification-dispatcher` CDC consumer (per `project_payment_domain_canonical.md`)
@@ -33,18 +36,19 @@
 
 ## §2. Integration map — что widget hooks (NO modifications к existing services)
 
-| Existing service | Used by widget.5 |
-|---|---|
-| `domains/booking/booking.service.ts` | `getById()` для confirmation + `cancel()` для guest portal action |
-| `domains/payment/payment.service.ts` | `getStatus()` для confirmation page polling |
-| `domains/widget/booking-create.service.ts` | already returns `bookingId` + `paymentId` in commit response (per A2.2 wire shape) |
-| `notification-dispatcher` (CDC consumer) | already wired — fires on `booking.created` event; will dispatch confirmation email через нашу new template |
-| `lib/email/factory.ts` (Postbox/Mailpit/Stub) | already wired через M7.fix.2; we add new template type `booking-confirmation` |
-| `tenant-resolver.ts` | per-tenant magic-link secret + per-tenant sender email |
+| Existing service                              | Used by widget.5                                                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `domains/booking/booking.service.ts`          | `getById()` для confirmation + `cancel()` для guest portal action                                          |
+| `domains/payment/payment.service.ts`          | `getStatus()` для confirmation page polling                                                                |
+| `domains/widget/booking-create.service.ts`    | already returns `bookingId` + `paymentId` in commit response (per A2.2 wire shape)                         |
+| `notification-dispatcher` (CDC consumer)      | already wired — fires on `booking.created` event; will dispatch confirmation email через нашу new template |
+| `lib/email/factory.ts` (Postbox/Mailpit/Stub) | already wired через M7.fix.2; we add new template type `booking-confirmation`                              |
+| `tenant-resolver.ts`                          | per-tenant magic-link secret + per-tenant sender email                                                     |
 
 **Я НЕ создаю**: payment status polling (existing), CDC consumer for email dispatch (already triggers), guest data (existing schema), booking cancel logic (booking.service.cancel exists per `project_payment_domain_canonical.md`).
 
 **Я создаю**:
+
 - New table `magicLinkToken` (per-tenant, single-use canonical)
 - New service `magic-link.service.ts` (issue + verify + consume)
 - New routes `widget/booking-find.routes.ts` + `widget/magic-link-consume.routes.ts` + `booking/guest-portal.routes.ts`
@@ -61,77 +65,78 @@
 
 ### Backend (8 new files + 1 migration)
 
-| File | Purpose |
-|---|---|
-| `db/migrations/0046_magic_link_token.sql` | NEW table — per-tenant magic-link tokens с `consumed_at` для атомарной single-use enforcement |
-| `lib/magic-link/secret.ts` | per-tenant HS256 secret resolver (Phase 1: column в `organizationProfile.magicLinkSecret` с lazy back-fill для existing tenants; Phase 2: Lockbox carry-forward) |
-| `lib/magic-link/jwt.ts` | jose 6.2.3 thin wrapper — `signMagicLinkJwt()` + `verifyMagicLinkJwt()` с `crypto.timingSafeEqual` for HMAC inside jose |
-| `domains/widget/magic-link.service.ts` | `issue(claims, scope, ttl)` / `verify(jwt)` (read-only, returns claims) / `consume(jti)` (atomic UPDATE WHERE consumed_at IS NULL → 410 Gone if zero rows) |
-| `domains/widget/booking-find.routes.ts` | POST `/api/public/widget/{slug}/booking/find` (timing-safe — always 200 OK + Promise.allSettled padding) — issues magic-link + dispatches email |
+| File                                          | Purpose                                                                                                                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `db/migrations/0046_magic_link_token.sql`     | NEW table — per-tenant magic-link tokens с `consumed_at` для атомарной single-use enforcement                                                                                        |
+| `lib/magic-link/secret.ts`                    | per-tenant HS256 secret resolver (Phase 1: column в `organizationProfile.magicLinkSecret` с lazy back-fill для existing tenants; Phase 2: Lockbox carry-forward)                     |
+| `lib/magic-link/jwt.ts`                       | jose 6.2.3 thin wrapper — `signMagicLinkJwt()` + `verifyMagicLinkJwt()` с `crypto.timingSafeEqual` for HMAC inside jose                                                              |
+| `domains/widget/magic-link.service.ts`        | `issue(claims, scope, ttl)` / `verify(jwt)` (read-only, returns claims) / `consume(jti)` (atomic UPDATE WHERE consumed_at IS NULL → 410 Gone if zero rows)                           |
+| `domains/widget/booking-find.routes.ts`       | POST `/api/public/widget/{slug}/booking/find` (timing-safe — always 200 OK + Promise.allSettled padding) — issues magic-link + dispatches email                                      |
 | `domains/widget/magic-link-consume.routes.ts` | GET `/api/public/booking/jwt/:jwt/render` (renders confirm-button page WITHOUT consuming) + POST `/api/public/booking/jwt/:jwt/consume` (atomic consume + Set-Cookie + 302 redirect) |
-| `domains/booking/guest-portal.routes.ts` | `_authenticated` group: GET `/booking/guest-portal/:bookingId` (view) + POST `/booking/guest-portal/:bookingId/cancel` (cancel action with ПП-1912 enforcement) |
-| `lib/email/booking-confirmation.tsx` | react-email 6.0.5 template — HTML + plain-text fallback + .ics attachment integration |
-| `lib/email/render.ts` | wraps `@react-email/render` для unified send flow через email factory |
-| `lib/ics-generator.ts` | ical-generator 10.2.0 thin wrapper — `generateBookingIcs(booking)` returns `{ filename, content, contentType }` для SES v2 attachment |
-| `middleware/guest-session.ts` | Hono middleware — `getSignedCookie('__Host-guest_session')` → set `c.var.guestSession = { bookingId, scope, exp }` или 401 |
-| `middleware/widget-rate-limit-find.ts` | Tuple-key rate-limit `(email_normalized, booking_ref)` — extends existing `widget-rate-limit.ts` для find-flow |
+| `domains/booking/guest-portal.routes.ts`      | `_authenticated` group: GET `/booking/guest-portal/:bookingId` (view) + POST `/booking/guest-portal/:bookingId/cancel` (cancel action with ПП-1912 enforcement)                      |
+| `lib/email/booking-confirmation.tsx`          | react-email 6.0.5 template — HTML + plain-text fallback + .ics attachment integration                                                                                                |
+| `lib/email/render.ts`                         | wraps `@react-email/render` для unified send flow через email factory                                                                                                                |
+| `lib/ics-generator.ts`                        | ical-generator 10.2.0 thin wrapper — `generateBookingIcs(booking)` returns `{ filename, content, contentType }` для SES v2 attachment                                                |
+| `middleware/guest-session.ts`                 | Hono middleware — `getSignedCookie('__Host-guest_session')` → set `c.var.guestSession = { bookingId, scope, exp }` или 401                                                           |
+| `middleware/widget-rate-limit-find.ts`        | Tuple-key rate-limit `(email_normalized, booking_ref)` — extends existing `widget-rate-limit.ts` для find-flow                                                                       |
 
 ### Frontend (5 new files)
 
-| File | Purpose |
-|---|---|
-| `screens/confirmation.tsx` | Screen 4 orchestration: booking summary + .ics download + Add-to-calendar buttons + email-sent confirmation + magic-link explanation |
-| `components/booking-summary.tsx` | shared между confirmation + guest-portal — dates, guests, room, payment status, total с tabular-nums, ПП-1912 cancellation copy |
-| `components/calendar-add.tsx` | Google Calendar URL + Apple webcal:// + Outlook URL + .ics download. Yandex Calendar: ics-only (no public URL pattern verified 2026-04-30) |
-| `routes/widget.$tenantSlug_.$propertyId_.confirmation.tsx` | TanStack flat sub-route с validateSearch (bookingId + paymentId from A2 commit response) |
-| `routes/booking.$jwt.tsx` | Magic-link landing — fetches `/render` → shows confirm-button → POSTs to `/consume` → on 200 receives Set-Cookie + redirects к guest portal |
-| `routes/booking._authenticated.guest-portal.tsx` | Layout route (TanStack `_authenticated` canon) с `beforeLoad` → проверяет cookie via `/api/public/guest-session/whoami` → if no session redirect к `/booking/find-by-ref-email` |
-| `routes/booking.guest-portal.$bookingId.tsx` | Guest portal view + Cancel button с ПП-1912 disclosure copy |
-| `routes/booking.find-by-ref-email.tsx` | Form: reference + email → POST `/booking/find` (always 200 OK) + UI shows «Если данные верны, мы отправили письмо» |
-| `hooks/use-guest-session.ts` | TanStack Query — `whoami()` returns `{ bookingId, scope }` или null |
+| File                                                       | Purpose                                                                                                                                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `screens/confirmation.tsx`                                 | Screen 4 orchestration: booking summary + .ics download + Add-to-calendar buttons + email-sent confirmation + magic-link explanation                                            |
+| `components/booking-summary.tsx`                           | shared между confirmation + guest-portal — dates, guests, room, payment status, total с tabular-nums, ПП-1912 cancellation copy                                                 |
+| `components/calendar-add.tsx`                              | Google Calendar URL + Apple webcal:// + Outlook URL + .ics download. Yandex Calendar: ics-only (no public URL pattern verified 2026-04-30)                                      |
+| `routes/widget.$tenantSlug_.$propertyId_.confirmation.tsx` | TanStack flat sub-route с validateSearch (bookingId + paymentId from A2 commit response)                                                                                        |
+| `routes/booking.$jwt.tsx`                                  | Magic-link landing — fetches `/render` → shows confirm-button → POSTs to `/consume` → on 200 receives Set-Cookie + redirects к guest portal                                     |
+| `routes/booking._authenticated.guest-portal.tsx`           | Layout route (TanStack `_authenticated` canon) с `beforeLoad` → проверяет cookie via `/api/public/guest-session/whoami` → if no session redirect к `/booking/find-by-ref-email` |
+| `routes/booking.guest-portal.$bookingId.tsx`               | Guest portal view + Cancel button с ПП-1912 disclosure copy                                                                                                                     |
+| `routes/booking.find-by-ref-email.tsx`                     | Form: reference + email → POST `/booking/find` (always 200 OK) + UI shows «Если данные верны, мы отправили письмо»                                                              |
+| `hooks/use-guest-session.ts`                               | TanStack Query — `whoami()` returns `{ bookingId, scope }` или null                                                                                                             |
 
 ---
 
 ## §4. 9 Decisions (final, post R1+R2+R3)
 
-| # | Decision | Choice | Rationale |
-|---|---|---|---|
-| **D1** | Magic-link single-use enforcement | **Two-step GET-render → POST-consume** для mutate (cancel) + `allowedAttempts: 5` для view-only voucher download | etodd.io 2026-03-22 + R3 verified: industry canon non-uniform (Stytch=device intel, Clerk=same-device, BetterAuth=`allowedAttempts`). У нас нет device-intel infra → two-step + multi-attempt safest. POST never prefetched by Apple MPP / Slack unfurl / Outlook SafeLinks. |
-| **D2** | JWT TTL | **mutate (cancel)=15min** + **view (voucher)=24h** + cookie session = 7 days | Industry consensus 2026-04: 10-15min mutate; 24h view = trade-off (longer = email scanner replay window, но guest UX > security за view-only data). NEVER 7d JWT. |
-| **D3** | Cookie scheme | **`__Host-guest_session`** — Path=/, Secure, HttpOnly, **SameSite=Lax on first set → Strict-on-next-request** rotation | R3 verified: Strict drops cookie на cross-site magic-link click (email→browser nav). Lax-then-Strict pattern: set Lax in /consume response, on next authenticated request rotate к Strict. `__Host-` prefix forbids `Domain=` → per-host isolation, defends subdomain XSS bypass. |
-| **D4** | Hono version pin | **`hono ^4.12.16` (caret accepted)** | R3 verified: 5 cookie/jsx/bodyLimit GHSAs April 2026 (GHSA-9vqf 2026-04-30 + GHSA-69xw 2026-04-30 + GHSA-458j 2026-04-15 + GHSA-r5rp 2026-04-07 + GHSA-26pp 2026-04-07). Caret `^4.12.16` is functionally equivalent для security purposes (≥4.12.16 < 5.0.0 — все patches present). Originally drafted as EXACT pin — caret accepted post-install для consistency с rest of project. Currently installed 4.12.15 → bump same commit (4.12.16). |
-| **D5** | Token in URL | `?token=<jwt>` на GET render → 302 → POST consume → Set-Cookie + 302 → `/booking/guest-portal/{id}` | OWASP risk mitigated by: (a) `Cache-Control: no-store` на render endpoint, (b) `Referrer-Policy: no-referrer` на consume redirect, (c) NGINX/YC ALB log scrubber strips `?token=*` (mark in `nginx.conf` carry-forward; M9.widget.5 ship clean code path) |
-| **D6** | Timing-safe find-by-ref-email | `Promise.allSettled([dbQuery, sleep(800)]) + Math.max(0, 800-elapsed) padding` + always 200 OK + same body shape | Cloudflare Workers canon + Laravel timeboxing pattern. YDB query latency varies (cold tablet 200ms / warm 5ms) — fixed setTimeout не constant-time. |
-| **D7** | Rate-limit key | `(emailNormalized, bookingRef)` tuple — 5 req/15min — extends existing `widget-rate-limit.ts` | Mobile NAT (МТС/Билайн) = 1000+ subscribers за 1 IP → IP-only blocking false-positives legitimate guests. Tuple key requires attacker to know valid (email, ref) combo. |
-| **D8** | .ics library | **`ical-generator@10.2.0`** + `@touch4it/ical-timezones` для VTIMEZONE | ics@3.12.0 NO native VTIMEZONE → Outlook strict-mode break. ical-generator native Europe/Moscow + Luxon-friendly + 2026-04-17 release active. |
-| **D9** | Email template engine | **`react-email@^6.0.5`** unified package + `@react-email/render@2.0.8` `toPlainText()` separate utility | Latest 2026-04-28 (5 patches in 13 days = active). Tailwind v4 + dark-mode + React 19.2. Deprecates `@react-email/components` v0.x. **Critical R3 correction (2026-04-30)**: `render(component, { plainText: true })` is **DEPRECATED** since `@react-email/render@1.2.0` (Aug 2025); canonical 2026 = separate `toPlainText(component)` utility. |
-| **D10** | PDF voucher rendering | **Defer M11+** | `@react-pdf/renderer` persistent memory leak issues #2217 #3051 unresolved 2026-04-30. M9.widget.5 ships voucher as HTML email body + .ics attachment ONLY. Guest portal «Download voucher» button → М11 async-worker pattern. |
-| **D11** | RU compliance — voucher email content | **Strict transactional** — NO cross-sell, NO marketing footer, NO tracking pixel, NO unsubscribe link | 38-ФЗ ст. 18 (ред. 2025-10-27): cross-sell («Часто берут также») = реклама → требует prior consent. Pure transactional carve-out: bookingRef + dates + guest + sum + magic-link button + property contacts + legal footer (ИНН/ОГРН тенанта). |
-| **D12** | ПП РФ 1912 cancel boundary | `now < endOfDay(checkInDate, 'Europe/Moscow')` → 100% refund; else (no-show / day-of cancel) → max 1-night charge | Verbatim п. 16: «до дня заезда» = до 23:59 предыдущих суток (calendar boundary). NOT 18:00 hotel-policy time, NOT check-in 14:00 time. |
-| **D13** | 152-ФЗ data deletion conflict с 109-ФЗ | UI shows «Удалить мои данные» с pre-confirmation modal disclosing retention overrides (миграционные = 1 year post-checkout / чеки 5 years / accounting 5 years). Soft-delete + hold для legitimate retention. SLA UI promise = «До 10 рабочих дней (закон)», internal target ≤72h. | 152-ФЗ ст. 14 ч. 2 + ст. 21 ч. 3 (10 раб.дней) BUT 152-ФЗ ст. 6 ч. 1 п. 2 — legal-basis override (compliance с другим законом). |
+| #       | Decision                               | Choice                                                                                                                                                                                                                                                                             | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D1**  | Magic-link single-use enforcement      | **Two-step GET-render → POST-consume** для mutate (cancel) + `allowedAttempts: 5` для view-only voucher download                                                                                                                                                                   | etodd.io 2026-03-22 + R3 verified: industry canon non-uniform (Stytch=device intel, Clerk=same-device, BetterAuth=`allowedAttempts`). У нас нет device-intel infra → two-step + multi-attempt safest. POST never prefetched by Apple MPP / Slack unfurl / Outlook SafeLinks.                                                                                                                                                                    |
+| **D2**  | JWT TTL                                | **mutate (cancel)=15min** + **view (voucher)=24h** + cookie session = 7 days                                                                                                                                                                                                       | Industry consensus 2026-04: 10-15min mutate; 24h view = trade-off (longer = email scanner replay window, но guest UX > security за view-only data). NEVER 7d JWT.                                                                                                                                                                                                                                                                               |
+| **D3**  | Cookie scheme                          | **`__Host-guest_session`** — Path=/, Secure, HttpOnly, **SameSite=Lax on first set → Strict-on-next-request** rotation                                                                                                                                                             | R3 verified: Strict drops cookie на cross-site magic-link click (email→browser nav). Lax-then-Strict pattern: set Lax in /consume response, on next authenticated request rotate к Strict. `__Host-` prefix forbids `Domain=` → per-host isolation, defends subdomain XSS bypass.                                                                                                                                                               |
+| **D4**  | Hono version pin                       | **`hono ^4.12.16` (caret accepted)**                                                                                                                                                                                                                                               | R3 verified: 5 cookie/jsx/bodyLimit GHSAs April 2026 (GHSA-9vqf 2026-04-30 + GHSA-69xw 2026-04-30 + GHSA-458j 2026-04-15 + GHSA-r5rp 2026-04-07 + GHSA-26pp 2026-04-07). Caret `^4.12.16` is functionally equivalent для security purposes (≥4.12.16 < 5.0.0 — все patches present). Originally drafted as EXACT pin — caret accepted post-install для consistency с rest of project. Currently installed 4.12.15 → bump same commit (4.12.16). |
+| **D5**  | Token in URL                           | `?token=<jwt>` на GET render → 302 → POST consume → Set-Cookie + 302 → `/booking/guest-portal/{id}`                                                                                                                                                                                | OWASP risk mitigated by: (a) `Cache-Control: no-store` на render endpoint, (b) `Referrer-Policy: no-referrer` на consume redirect, (c) NGINX/YC ALB log scrubber strips `?token=*` (mark in `nginx.conf` carry-forward; M9.widget.5 ship clean code path)                                                                                                                                                                                       |
+| **D6**  | Timing-safe find-by-ref-email          | `Promise.allSettled([dbQuery, sleep(800)]) + Math.max(0, 800-elapsed) padding` + always 200 OK + same body shape                                                                                                                                                                   | Cloudflare Workers canon + Laravel timeboxing pattern. YDB query latency varies (cold tablet 200ms / warm 5ms) — fixed setTimeout не constant-time.                                                                                                                                                                                                                                                                                             |
+| **D7**  | Rate-limit key                         | `(emailNormalized, bookingRef)` tuple — 5 req/15min — extends existing `widget-rate-limit.ts`                                                                                                                                                                                      | Mobile NAT (МТС/Билайн) = 1000+ subscribers за 1 IP → IP-only blocking false-positives legitimate guests. Tuple key requires attacker to know valid (email, ref) combo.                                                                                                                                                                                                                                                                         |
+| **D8**  | .ics library                           | **`ical-generator@10.2.0`** + `@touch4it/ical-timezones` для VTIMEZONE                                                                                                                                                                                                             | ics@3.12.0 NO native VTIMEZONE → Outlook strict-mode break. ical-generator native Europe/Moscow + Luxon-friendly + 2026-04-17 release active.                                                                                                                                                                                                                                                                                                   |
+| **D9**  | Email template engine                  | **`react-email@^6.0.5`** unified package + `@react-email/render@2.0.8` `toPlainText()` separate utility                                                                                                                                                                            | Latest 2026-04-28 (5 patches in 13 days = active). Tailwind v4 + dark-mode + React 19.2. Deprecates `@react-email/components` v0.x. **Critical R3 correction (2026-04-30)**: `render(component, { plainText: true })` is **DEPRECATED** since `@react-email/render@1.2.0` (Aug 2025); canonical 2026 = separate `toPlainText(component)` utility.                                                                                               |
+| **D10** | PDF voucher rendering                  | **Defer M11+**                                                                                                                                                                                                                                                                     | `@react-pdf/renderer` persistent memory leak issues #2217 #3051 unresolved 2026-04-30. M9.widget.5 ships voucher as HTML email body + .ics attachment ONLY. Guest portal «Download voucher» button → М11 async-worker pattern.                                                                                                                                                                                                                  |
+| **D11** | RU compliance — voucher email content  | **Strict transactional** — NO cross-sell, NO marketing footer, NO tracking pixel, NO unsubscribe link                                                                                                                                                                              | 38-ФЗ ст. 18 (ред. 2025-10-27): cross-sell («Часто берут также») = реклама → требует prior consent. Pure transactional carve-out: bookingRef + dates + guest + sum + magic-link button + property contacts + legal footer (ИНН/ОГРН тенанта).                                                                                                                                                                                                   |
+| **D12** | ПП РФ 1912 cancel boundary             | `now < endOfDay(checkInDate, 'Europe/Moscow')` → 100% refund; else (no-show / day-of cancel) → max 1-night charge                                                                                                                                                                  | Verbatim п. 16: «до дня заезда» = до 23:59 предыдущих суток (calendar boundary). NOT 18:00 hotel-policy time, NOT check-in 14:00 time.                                                                                                                                                                                                                                                                                                          |
+| **D13** | 152-ФЗ data deletion conflict с 109-ФЗ | UI shows «Удалить мои данные» с pre-confirmation modal disclosing retention overrides (миграционные = 1 year post-checkout / чеки 5 years / accounting 5 years). Soft-delete + hold для legitimate retention. SLA UI promise = «До 10 рабочих дней (закон)», internal target ≤72h. | 152-ФЗ ст. 14 ч. 2 + ст. 21 ч. 3 (10 раб.дней) BUT 152-ФЗ ст. 6 ч. 1 п. 2 — legal-basis override (compliance с другим законом).                                                                                                                                                                                                                                                                                                                 |
 
 ---
 
 ## §5. Library canon (Apr 30 2026 verified empirically `npm view`)
 
-| Library | Version | Last publish | Verdict | Reason |
-|---|---|---|---|---|
-| `jose` | **6.2.3** | 2026-04-27 | ✅ pin | HS256 + crypto.timingSafeEqual internal |
-| `hono` | **>=4.12.16 EXACT** | 2026-04-30 | ⚠️ BUMP from 4.12.15 | 5 GHSAs Apr 2026 inc. cookie + bodyLimit + jsx |
-| `ical-generator` | **10.2.0** | 2026-04-17 | ✅ adopt | native VTIMEZONE Europe/Moscow + Luxon-friendly |
-| ~~`@touch4it/ical-timezones`~~ | 1.9.0 | 2025-10-22 (npm); code frozen 2023-01 | ❌ REJECT — STALE 2.5 years (R3 verified 2026-04-30) | tzdb code stale; no fresher commits since 2023 |
-| `timezones-ical-library` | **2.2.0** | 2026-04-29 | ✅ adopt — companion для ical-generator VTIMEZONE | active maintainer (add2cal — Add to Calendar Button ecosystem); PR #94 merged 2026-04-29 |
-| `node-ical` | **0.26.0** | 2026-04-03 | ✅ devDep | round-trip parser CI tests |
-| `react-email` | **^6.0.5** | 2026-04-28 | ✅ adopt (unified package, deprecates `@react-email/components` v0.x) | |
-| `@aws-sdk/client-sesv2` | **3.1040.0** | 2026-04-30 | ✅ bump from 3.1039.0 (already in project) | SES v2 native Attachments API (gained 2025-04-04) |
-| `@react-pdf/renderer` | 4.5.1 | 2026-04 | ❌ defer M11+ | persistent memory leak issues #2217 #3051 |
-| `hono-rate-limiter` | 0.5.3 | 2025-12-29 | ⚠️ stale 4mo BUT canonical baseline | no v0.6 exists; carry-forward if ships before M10 |
-| `@tanstack/react-router` | 1.169.0 | 2026-04-30 | ✅ verified | `_authenticated` layout-route + `beforeLoad` canon |
-| `@tanstack/react-query` | 5.100.6 | 2026-04-28 | ✅ keep | |
-| `zod` | ^4.4.1 | 2026-04-29 | ✅ keep | |
-| `better-auth` | ^1.6.9 | 2026-04-24 | ✅ keep | NOT used for guest magic-link (separate flow per §6 borrow plan) |
+| Library                        | Version             | Last publish                          | Verdict                                                               | Reason                                                                                   |
+| ------------------------------ | ------------------- | ------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `jose`                         | **6.2.3**           | 2026-04-27                            | ✅ pin                                                                | HS256 + crypto.timingSafeEqual internal                                                  |
+| `hono`                         | **>=4.12.16 EXACT** | 2026-04-30                            | ⚠️ BUMP from 4.12.15                                                  | 5 GHSAs Apr 2026 inc. cookie + bodyLimit + jsx                                           |
+| `ical-generator`               | **10.2.0**          | 2026-04-17                            | ✅ adopt                                                              | native VTIMEZONE Europe/Moscow + Luxon-friendly                                          |
+| ~~`@touch4it/ical-timezones`~~ | 1.9.0               | 2025-10-22 (npm); code frozen 2023-01 | ❌ REJECT — STALE 2.5 years (R3 verified 2026-04-30)                  | tzdb code stale; no fresher commits since 2023                                           |
+| `timezones-ical-library`       | **2.2.0**           | 2026-04-29                            | ✅ adopt — companion для ical-generator VTIMEZONE                     | active maintainer (add2cal — Add to Calendar Button ecosystem); PR #94 merged 2026-04-29 |
+| `node-ical`                    | **0.26.0**          | 2026-04-03                            | ✅ devDep                                                             | round-trip parser CI tests                                                               |
+| `react-email`                  | **^6.0.5**          | 2026-04-28                            | ✅ adopt (unified package, deprecates `@react-email/components` v0.x) |                                                                                          |
+| `@aws-sdk/client-sesv2`        | **3.1040.0**        | 2026-04-30                            | ✅ bump from 3.1039.0 (already in project)                            | SES v2 native Attachments API (gained 2025-04-04)                                        |
+| `@react-pdf/renderer`          | 4.5.1               | 2026-04                               | ❌ defer M11+                                                         | persistent memory leak issues #2217 #3051                                                |
+| `hono-rate-limiter`            | 0.5.3               | 2025-12-29                            | ⚠️ stale 4mo BUT canonical baseline                                   | no v0.6 exists; carry-forward if ships before M10                                        |
+| `@tanstack/react-router`       | 1.169.0             | 2026-04-30                            | ✅ verified                                                           | `_authenticated` layout-route + `beforeLoad` canon                                       |
+| `@tanstack/react-query`        | 5.100.6             | 2026-04-28                            | ✅ keep                                                               |                                                                                          |
+| `zod`                          | ^4.4.1              | 2026-04-29                            | ✅ keep                                                               |                                                                                          |
+| `better-auth`                  | ^1.6.9              | 2026-04-24                            | ✅ keep                                                               | NOT used for guest magic-link (separate flow per §6 borrow plan)                         |
 
 REJECTED:
+
 - `ics@3.12.0` — no native VTIMEZONE (Outlook strict-mode break)
 - `puppeteer-core` / `pdf-lib` для PDF — defer; React-PDF leak issues
 - `nodemailer` — мы используем AWS SDK v3 SESv2Client (Postbox-compatible)
@@ -140,16 +145,16 @@ REJECTED:
 
 ## §6. Stankoff-v2 borrow plan (cross-check 2026-04-30)
 
-| Pattern | Stankoff source | Verdict |
-|---|---|---|
-| **Better Auth `magicLink()` plugin (employee auth)** | `apps/backend/src/auth.ts:379-404` | **NOT BORROWED** — BA tied to user account creation. Widget guests ≠ user records. We build parallel custom magic-link flow на jose 6.2.3 (NOT BA plugin). |
-| **AWS SES v2 against Yandex Postbox** | `apps/backend/src/services/email/email.ts:26-106` | **BORROW PATTERN** — already в нашем проекте `lib/email/factory.ts`. Verify SDK v3 SES v2 Attachments API still matches stankoff usage. |
-| **`crypto.timingSafeEqual` + Buffer-byte compare** | `apps/backend/src/middleware/integration-api-key.ts:56-58` | **BORROW AS-IS** — same length-check gate + Buffer conversion canon. Apply в `magic-link.service.verify()` для secret compare. |
-| **Better Auth native rate-limit** | `apps/backend/src/auth.ts:102-122` | **NOT BORROWED** — мы используем `hono-rate-limiter` 0.5.3 для guest flow (canonical в M9.widget.4). Tuple-key extension в M9.widget.5. |
-| **TanStack Router `beforeLoad` auth gate** | `apps/frontend/src/routes/_app.tsx:11-31` + `require-org-admin.ts:24-30` | **BORROW WITH MODS** — pattern same; replace `requireOrgAdmin` semantic с `requireGuestSession` (cookie-based, single-resource scope vs full account auth). |
-| **`.ics` calendar attachment** | NOT FOUND | **GREENFIELD** — ical-generator 10.2.0 + Europe/Moscow VTIMEZONE |
-| **PDF generation** | NOT FOUND | **GREENFIELD (deferred M11)** |
-| **Voucher / invoice email template** | NOT FOUND (stankoff has `templates.ts` для auth emails — invitation/verification/magic-link/password-reset, NO voucher) | **GREENFIELD** — react-email 6.0.5 |
+| Pattern                                              | Stankoff source                                                                                                         | Verdict                                                                                                                                                     |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Better Auth `magicLink()` plugin (employee auth)** | `apps/backend/src/auth.ts:379-404`                                                                                      | **NOT BORROWED** — BA tied to user account creation. Widget guests ≠ user records. We build parallel custom magic-link flow на jose 6.2.3 (NOT BA plugin).  |
+| **AWS SES v2 against Yandex Postbox**                | `apps/backend/src/services/email/email.ts:26-106`                                                                       | **BORROW PATTERN** — already в нашем проекте `lib/email/factory.ts`. Verify SDK v3 SES v2 Attachments API still matches stankoff usage.                     |
+| **`crypto.timingSafeEqual` + Buffer-byte compare**   | `apps/backend/src/middleware/integration-api-key.ts:56-58`                                                              | **BORROW AS-IS** — same length-check gate + Buffer conversion canon. Apply в `magic-link.service.verify()` для secret compare.                              |
+| **Better Auth native rate-limit**                    | `apps/backend/src/auth.ts:102-122`                                                                                      | **NOT BORROWED** — мы используем `hono-rate-limiter` 0.5.3 для guest flow (canonical в M9.widget.4). Tuple-key extension в M9.widget.5.                     |
+| **TanStack Router `beforeLoad` auth gate**           | `apps/frontend/src/routes/_app.tsx:11-31` + `require-org-admin.ts:24-30`                                                | **BORROW WITH MODS** — pattern same; replace `requireOrgAdmin` semantic с `requireGuestSession` (cookie-based, single-resource scope vs full account auth). |
+| **`.ics` calendar attachment**                       | NOT FOUND                                                                                                               | **GREENFIELD** — ical-generator 10.2.0 + Europe/Moscow VTIMEZONE                                                                                            |
+| **PDF generation**                                   | NOT FOUND                                                                                                               | **GREENFIELD (deferred M11)**                                                                                                                               |
+| **Voucher / invoice email template**                 | NOT FOUND (stankoff has `templates.ts` для auth emails — invitation/verification/magic-link/password-reset, NO voucher) | **GREENFIELD** — react-email 6.0.5                                                                                                                          |
 
 ---
 
@@ -188,6 +193,7 @@ ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 ```
 
 **Bootstrap для existing tenants** (`organizationProfile.magicLinkSecret = NULL` after migration apply):
+
 - `lib/magic-link/secret.ts` resolver pattern: `if (profile.magicLinkSecret == null) { generate + UPDATE; return generated; }` — lazy back-fill on first read
 - `afterCreateOrganization` hook (existing pattern в `auth.ts`) extends to populate column on new tenant create
 - Idempotent: concurrent first-read race resolved через `UPDATE WHERE magicLinkSecret IS NULL` semantic (loser overwrite OK — value entropy identical)
@@ -214,6 +220,7 @@ ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 ### Backend (~35 strict + ~5 integration)
 
 `magic-link/jwt.test.ts` (~6):
+
 - Sign+verify roundtrip with HS256 per-tenant secret
 - Wrong-tenant secret → reject
 - Expired (TTL elapsed) → reject
@@ -222,6 +229,7 @@ ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 - Both `view` and `mutate` scope claims preserved
 
 `magic-link.service.test.ts` (~10):
+
 - `issue(claims, scope='view')` writes magicLinkToken row + returns JWT
 - `verify(jwt)` returns claims без consume
 - `consume(jti)` atomic UPDATE WHERE consumedAt IS NULL — first call succeeds, second returns null
@@ -234,6 +242,7 @@ ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 - Issue-from-different-IP than consume → admin-alert metadata flagged (just info, не block)
 
 `booking-find.routes.test.ts` (~7):
+
 - Always 200 OK regardless of (ref, email) match (timing-safe canon)
 - Response body shape identical for: valid match / invalid ref / invalid email / both invalid
 - Response delay padding ≥800ms even for sub-100ms DB hits (Promise.allSettled + Math.max canon)
@@ -243,6 +252,7 @@ ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 - E.164 phone normalization on email-format-only assertion (not phone)
 
 `magic-link-consume.routes.test.ts` (~7):
+
 - GET `/render` returns confirm-button page WITHOUT consuming token (verify in DB consumedAt still NULL)
 - GET `/render` rejects if token expired or invalid signature
 - GET `/render` rejects if `attemptsRemaining=0`
@@ -252,6 +262,7 @@ ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 - Redirect target = `/booking/guest-portal/{bookingId}`
 
 `guest-portal.routes.test.ts` (~5):
+
 - GET requires `__Host-guest_session` cookie
 - GET returns booking details for owning bookingId only
 - POST `/cancel` enforces ПП-1912 boundary: `now < endOfDay(checkInDate, 'Europe/Moscow')` → 100% refund path
@@ -261,6 +272,7 @@ ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 ### Email + .ics (~8 strict + 2 integration)
 
 `booking-confirmation.template.test.tsx` (~5):
+
 - Renders with full data — exact-text asserts for booking#, dates, sum, magic-link URL
 - Plain-text fallback identical structure (no markdown formatting drift)
 - NO cross-sell strings («часто берут также» / «купите ещё ночь») — строгая negative assertion via regex
@@ -268,6 +280,7 @@ ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 - Legal footer renders ИНН + ОГРН тенанта (for production tenants)
 
 `ics-generator.test.ts` (~5):
+
 - VEVENT generated с UID = `{bookingRef}@{tenantDomain}`
 - DTSTART/DTEND с `TZID=Europe/Moscow` (multi-day check-in 14:00 → check-out 12:00)
 - METHOD:PUBLISH
@@ -277,12 +290,14 @@ ALTER TABLE organizationProfile ADD COLUMN magicLinkSecret Utf8;
 - node-ical round-trip: parse generated ics → assert event.uid + start + end exact equal
 
 `booking-confirmation-integration.test.ts` (~2):
+
 - Full pipeline: booking.created CDC event → notification-dispatcher → email factory `send()` (Mailpit catches in dev) → email body includes magic-link + .ics attachment
 - Mailpit attachment Content-Type=`text/calendar; method=PUBLISH; charset=utf-8`
 
 ### Frontend (~15 strict + ~12 E2E)
 
 Frontend strict (~15):
+
 - `booking-summary.test.tsx` — exact-value assertions (4)
 - `calendar-add.test.tsx` — Google URL pattern + Apple webcal:// + Outlook URL + .ics download (4)
 - `confirmation.test.tsx` — orchestration after A2 commit (3)
@@ -290,6 +305,7 @@ Frontend strict (~15):
 - `routes/booking._authenticated.guest-portal.test.tsx` — beforeLoad gate (2)
 
 E2E (~12) — Playwright + axe-pass 4 themes:
+
 - [CN1-CN3] Confirmation page renders + .ics download + Google Calendar deep-link
 - [GP1-GP4] Find-by-ref-email form + always-200-OK + email arrives at Mailpit + magic-link clickable
 - [GP5-GP7] Click magic-link → render-page → POST consume → cookie set → guest portal opens
@@ -302,6 +318,7 @@ E2E (~12) — Playwright + axe-pass 4 themes:
 ## §10. Sub-phase split (golden middle)
 
 ### A3.1 Backend magic-link + .ics (~2 days, ~30 strict + 5 integration)
+
 1. Migration 0045 (magicLinkToken + organizationProfile.magicLinkSecret) + sql:up smoke
 2. `lib/magic-link/secret.ts` + tests
 3. `lib/magic-link/jwt.ts` + tests
@@ -312,18 +329,21 @@ E2E (~12) — Playwright + axe-pass 4 themes:
 8. Empirical curl: full flow `find → email arrives Mailpit → click → render → consume → cookie set`
 
 ### A3.2 Backend email template + voucher integration (~1 day, ~10 strict + 2 integration)
+
 9. `lib/email/booking-confirmation.tsx` (react-email 6.0.5) + tests
 10. `lib/email/render.ts` (wraps `@react-email/render`) + tests
 11. Wire через notification-dispatcher CDC consumer для booking.created event
 12. Empirical curl: book → CDC fires → email arrives с .ics attachment в Mailpit
 
 ### A3.3 Backend guest portal + cancel (~1 day, ~5 strict + 2 integration)
+
 13. `middleware/guest-session.ts` + tests
 14. `domains/booking/guest-portal.routes.ts` (view + cancel) + tests
 15. ПП-1912 boundary enforcement в booking.service.cancel (verify existing or extend)
 16. Empirical curl: guest-portal flow end-to-end
 
 ### A3.4 Frontend (~2 days, ~15 strict + 12 E2E)
+
 17. `screens/confirmation.tsx` + `components/booking-summary.tsx` + `components/calendar-add.tsx` + tests
 18. `routes/widget.$tenantSlug_.$propertyId_.confirmation.tsx` + tests
 19. `routes/booking.find-by-ref-email.tsx` + tests
@@ -429,15 +449,15 @@ Per user canon «при минимальном сомнении — самый �
 
 **Findings (verified `npm view <pkg> version` 2026-04-30):**
 
-| Package | Plan §5 | Actual latest | Action |
-|---|---|---|---|
-| `jose` | 6.2.3 | 6.2.3 (2026-04-27) | ✅ pin |
-| `hono` | >=4.12.16 EXACT | 4.12.16 (2026-04-30) | ⚠️ BUMP from installed 4.12.15 |
-| `ical-generator` | 10.2.0 | 10.2.0 (2026-04-17) | ✅ adopt |
-| `node-ical` | 0.26.0 | 0.26.0 (2026-04-03) | ✅ devDep |
-| `react-email` | ^6.0.5 | 6.0.5 (2026-04-28) | ✅ adopt |
-| `@aws-sdk/client-sesv2` | 3.1040.0 | 3.1040.0 (2026-04-30) | ⚠️ BUMP from 3.1039.0 |
-| `@touch4it/ical-timezones` | latest | TBD verify A3.1 | recheck before adopt |
+| Package                    | Plan §5         | Actual latest         | Action                         |
+| -------------------------- | --------------- | --------------------- | ------------------------------ |
+| `jose`                     | 6.2.3           | 6.2.3 (2026-04-27)    | ✅ pin                         |
+| `hono`                     | >=4.12.16 EXACT | 4.12.16 (2026-04-30)  | ⚠️ BUMP from installed 4.12.15 |
+| `ical-generator`           | 10.2.0          | 10.2.0 (2026-04-17)   | ✅ adopt                       |
+| `node-ical`                | 0.26.0          | 0.26.0 (2026-04-03)   | ✅ devDep                      |
+| `react-email`              | ^6.0.5          | 6.0.5 (2026-04-28)    | ✅ adopt                       |
+| `@aws-sdk/client-sesv2`    | 3.1040.0        | 3.1040.0 (2026-04-30) | ⚠️ BUMP from 3.1039.0          |
+| `@touch4it/ical-timezones` | latest          | TBD verify A3.1       | recheck before adopt           |
 
 **No breaking changes** в нашем surface. Plan §1-§14 stays unchanged.
 
@@ -446,6 +466,7 @@ Per user canon «при минимальном сомнении — самый �
 ## §16. Self-audit log
 
 ### Iteration 1 — R1 broad findings (4 agents 2026-04-30)
+
 - jose 6.x migration: HS256 OK для same-issuer-and-verifier; `crypto.timingSafeEqual` internal к jose
 - ical-generator 10.2.0 chosen over ics@3.12.0 (no native VTIMEZONE)
 - react-email 6.0.0 (later bumped к 6.0.5 in §15 freshness recheck) unified package
@@ -454,7 +475,9 @@ Per user canon «при минимальном сомнении — самый �
 - @react-pdf/renderer memory leak persistent → defer M11
 
 ### Iteration 2 — R2 adversarial (2 agents 2026-04-30)
+
 **Critical corrections к baseline:**
+
 1. **Apple MPP / Slack unfurl DoS** — single-use JWT consumed by mail proxy. Mitigation: two-step GET→POST (etodd.io 2026-03-22) + `allowedAttempts=5` для view scope.
 2. **Cookie scheme**: `__Host-` prefix + `SameSite=Lax-then-Strict` rotation (NOT `Domain=.sochi.app + Lax` per baseline plan §M9.widget.5).
 3. **Hono GHSA April 2026** — 5 advisories (cookie + bodyLimit + jsx); pin ≥4.12.16 EXACT.
@@ -467,6 +490,7 @@ Per user canon «при минимальном сомнении — самый �
 10. **Decoupled flow** — original tab polls; link opens new tab.
 
 ### Iteration 3 — R3 strict freshness (2026-04-15+)
+
 - **Two-step magic-link**: NOT uniform industry canon; competing patterns (Stytch device-intel, Clerk same-device, BetterAuth allowedAttempts). У нас нет device-intel infra → two-step + allowedAttempts=5 для view (§D1 final).
 - **`__Host-` + Strict**: drops cookie на cross-site nav. Lax-then-Strict rotation (set Lax, upgrade на next request).
 - **Hono advisories verified verbatim** (GHSA-9vqf-7f2p-gf9v + GHSA-69xw-7hcm-h432 — 2026-04-30; GHSA-458j — 2026-04-15; GHSA-r5rp + GHSA-26pp — 2026-04-07). All в 4.12.16 patched.
@@ -500,6 +524,7 @@ Per user canon «при минимальном сомнении — самый �
 10. **Confirmation page IA canon (R1.5)**: focus h1 + booking-ref large+tabular-nums + Radix Alert role=status email-sent banner + `<dl>` для details (NO `<p>` siblings — M9.widget.2 #12 carry-forward) + Add-to-Calendar disclosure dropdown (Google → Apple → Outlook → .ics → Yahoo; **Yandex Calendar fall-through к .ics download — no public deeplink URL exists 2026-04-30**). RU pluralization three-form ruPlural() для "взрослых". Tone «Вы / Ваш» formal canonical.
 
 ### Iteration 4 — stankoff-v2 cross-check
+
 - Better Auth `magicLink()` plugin NOT applicable (BA ties magic-link к user account creation; widget guests ≠ user records). Custom flow.
 - AWS SES v2 + Postbox pattern matches our existing factory.
 - `crypto.timingSafeEqual` Buffer-byte compare canon adopt.
@@ -507,6 +532,7 @@ Per user canon «при минимальном сомнении — самый �
 - `.ics`, PDF, voucher template — все greenfield в stankoff.
 
 ### Iteration 5 — npm empirical (2026-04-30)
+
 - Hono installed 4.12.15 → 4.12.16 BUMP mandatory (5 GHSAs)
 - @aws-sdk/client-sesv2 3.1039.0 → 3.1040.0 BUMP (2026-04-30)
 - All other deps already latest
@@ -514,6 +540,7 @@ Per user canon «при минимальном сомнении — самый �
 ### Cumulative honest hallucinations / process gaps log: 90+ (was 80+ in baseline, +10 caught in M9.widget.5 pre-flight)
 
 ### Carry-forward к A3 implementation
+
 - §15 freshness recheck — verify `@touch4it/ical-timezones` latest version + maintainer activity before A3.1
 - Empirical Postbox curl deferred Track C3 (creds pending)
 - Tenant.magicLinkSecret afterCreateOrganization hook generation pattern (extends existing organizationProfile auto-populate per `project_organization_profile_todo.md`)
@@ -529,16 +556,19 @@ Per user canon «при минимальном сомнении — самый �
 Backend magic-link service core + ics-generator + 91 strict tests.
 
 **Files committed:**
+
 - `db/migrations/0045_magic_link_token.sql` — magicLinkToken table + organizationProfile.magicLinkSecret column
 - `lib/magic-link/{secret,jwt}.ts` + tests — per-tenant HS256 secret resolver (lazy back-fill, race-safe) + jose 6.2.3 wrapper (signMagicLinkJwt + verifyMagicLinkJwt + extractTenantIdFromJwtUnsafe)
 - `domains/widget/magic-link.{repo,service}.ts` + tests — atomic single-use enforcement через sql.begin serializable tx + MagicLinkVerifyError taxonomy
 - `lib/ics-generator.ts` + tests — ical-generator 10.2.0 + timezones-ical-library 2.2.0 (Europe/Moscow VTIMEZONE, no DST since 2014)
 
 **Findings + bug-hunt:**
+
 1. **Race condition в repo.consume()** caught empirically [MLR17]: SELECT-then-UPDATE как 2 separate snapshots → 3 concurrent mutate consume calls all succeeded (strict single-use violated). Fix: wrap в `sql.begin({ idempotent: true }, async (tx) => ...)` per payment.repo M6.1 canon. Re-run: exactly 1 succeeds ✓.
 2. **chessboard-date-picker date-rollover** caught empirically: `selected` prop НЕ влияет на rdp v9 displayed month (defaults to today). Test passing на 2026-04-30 broke after roll к 2026-05-01. Fix: add `defaultMonth={selected}` (conditional spread per exactOptionalPropertyTypes canon).
 
 **Plan canon corrections (post-canon, pre-implementation):**
+
 - §7 migration number 0046 → 0045 (latest existing was 0044)
 - §6/§D3 tenant.magicLinkSecret → organizationProfile.magicLinkSecret
 - §5 @touch4it/ical-timezones REJECT (stale 2.5y) → timezones-ical-library 2.2.0
@@ -549,14 +579,16 @@ Backend magic-link service core + ics-generator + 91 strict tests.
 Magic-link consume routes (two-step) + guest-session middleware + factory wire. 36 strict tests.
 
 **Files committed:**
+
 - `domains/widget/magic-link.factory.ts` — composes secret resolver + repo
-- `domains/widget/magic-link-consume.routes.ts` + tests — GET render (no consume) + POST consume (atomic + Set-Cookie __Host-guest_session)
+- `domains/widget/magic-link-consume.routes.ts` + tests — GET render (no consume) + POST consume (atomic + Set-Cookie \_\_Host-guest_session)
 - `middleware/guest-session.ts` + tests — reads cookie, splits payload+HMAC, resolves per-tenant secret, validates HMAC, sets c.var.guestSession
 - `lib/magic-link/jwt.ts` — added extractTenantIdFromJwtUnsafe() helper для chicken-egg per-tenant secret resolution
 - `magic-link.repo.ts` — hardened consume() с YDB TLI race-loser fallback (catch isYdbRaceError → re-read canonical state)
 - `app.ts` — wire createMagicLinkFactory + createMagicLinkConsumeRoutes
 
 **Findings + bug-hunt:**
+
 1. **Cookie middleware Phase 1 bug** [GS1/GS2]: Hono `getCookie` returns whole signed value `<urldecoded(json)>.<base64url_hmac>` — JSON.parse failed на этой строке → 401 GUEST_SESSION_INVALID для всех valid cookies. Fix: split на last '.' first, parse JSON from before-dot part. Empirically verified.
 2. **YDB TLI race-loser fallback**: under heavy contention, sql.begin retry budget exhausts → throws YDB code 400140 «Transaction not found». Fix: catch isYdbRaceError() (codes 400140 / 400110 / 400120) → re-read canonical state in fresh tx → graceful race-loser semantic.
 3. **depcruise architecture violation**: guest-session.test.ts initial draft imported magic-link domain → `no-middleware-to-domains` violated. Fix: rewrite test to forge cookies через Hono setSignedCookie directly (no domain dependency).
@@ -566,6 +598,7 @@ Magic-link consume routes (two-step) + guest-session middleware + factory wire. 
 Booking-find route (timing-safe + tuple rate-limit) + magic-link email template. 19 strict tests.
 
 **Files committed:**
+
 - `domains/widget/booking-find.repo.ts` — DB layer per `no-routes-to-db` architecture canon (lookupBookingByReferenceAndEmail + insertMagicLinkOutbox)
 - `domains/widget/booking-find.routes.ts` + tests — POST timing-safe (Promise.allSettled + Math.max padding 800ms canon Cloudflare Workers + Laravel timeboxing) + tuple-key rate-limit (email, ref) 5/15min in-memory TupleKeyStore
 - `workers/lib/notification-templates.ts` — added BookingMagicLinkVars + renderBookingMagicLink (delegates к existing chrome для consistent 152-ФЗ disclosure footer)
@@ -574,11 +607,13 @@ Booking-find route (timing-safe + tuple rate-limit) + magic-link email template.
 - `app.ts` — wire createBookingFindRepo + createBookingFindRoutes
 
 **Findings + bug-hunt:**
+
 1. **TS exhaustiveness**: adding booking_magic_link к NotificationKind enum without TemplateVars + render case → typecheck failed in 3 places. Fix: complete canonical extension across all 3 exhaustive surfaces (template render, derive recipient, outbox-fields builder).
 2. **Initial dup**: создал lib/email/magic-link-template.ts dublicating notification-templates.ts canon. Senior consolidate: deleted dup, moved render к notification-templates.ts (single source of truth).
 3. **depcruise no-routes-to-db violation**: initial booking-find.routes.ts imported sql/ydb-helpers directly. Fix: extract booking-find.repo.ts (canonical pattern), routes consume через DI.
 
 **Empirical curl smoke verified end-to-end** (2026-05-01):
+
 - $ curl -X POST -d '{"reference":"book_NOT_EXIST","email":"x@y.z"}' http://localhost:8787/api/public/widget/demo-sirius/booking/find
 - → 200 OK + {"ok":true,"message":"Если бронирование найдено..."}
 - → response time 829ms (≥800ms FIXED_RESPONSE_MS canon ✓)
@@ -596,25 +631,28 @@ Plan §D9 originally specified `react-email 6.0.5` as canonical email engine. Em
 Senior reverse: react-email path REJECTED. Existing `notification-templates.ts` literal-template canon retained — extended `renderBookingConfirmed` с full voucher fields. Single source of truth, no React in backend, matches existing pattern для все 11 notification kinds.
 
 **Files committed:**
+
 - `workers/lib/notification-templates.ts` — extended `BookingConfirmedVars` с optional fields (nights, guestsCount, propertyAddress, propertyPhone, propertyEmail, magicLinkUrl) + extended `renderBookingConfirmed` с conditional rendering (CTA section only когда magicLinkUrl supplied; contact section only когда phone OR email supplied; backwards-compat — minimal mode renders tested)
 - Added `ruPluralRaw(n, one, few, many)` helper (CLDR three-form canon, pure-string version specific к notification-templates internal use)
 - Tabular-nums monospace styling для booking reference в HTML body
 - Privacy reminder («24 часа» + «не передавайте») + 152-ФЗ disclosure footer preserved
 - `workers/lib/notification-templates.test.ts` — 10 new tests BC-V1..10:
-   * All enhanced fields rendered when supplied / minimal mode backwards-compat
-   * CTA button conditional on magicLinkUrl presence
-   * RU pluralization three-form coverage (nights × 6 cases + guests × 5 cases)
-   * magicLinkUrl rendered в button + plain-text fallback (≥2 occurrences)
-   * Tabular-nums monospace booking reference styling
-   * propertyAddress + magicLinkUrl XSS escape (HTML)
-   * Privacy reminder «24 часа» + «не передавайте» обязательно когда magicLinkUrl supplied (152-ФЗ)
+  - All enhanced fields rendered when supplied / minimal mode backwards-compat
+  - CTA button conditional on magicLinkUrl presence
+  - RU pluralization three-form coverage (nights × 6 cases + guests × 5 cases)
+  - magicLinkUrl rendered в button + plain-text fallback (≥2 occurrences)
+  - Tabular-nums monospace booking reference styling
+  - propertyAddress + magicLinkUrl XSS escape (HTML)
+  - Privacy reminder «24 часа» + «не передавайте» обязательно когда magicLinkUrl supplied (152-ФЗ)
 
 **Real bug-hunt + findings:**
+
 1. **react-email backend canon conflict**: Plan §D9 specified react-email 6.0.5 engine. Implementation hit `biome.json noRestrictedImports` blocking `react` + `react-dom`. Multiple workarounds attempted (createElement без JSX, biome rule check) — все led к non-canonical paths. Senior reverse: drop react-email, enhance existing literal-template canon. Plan §D9 correction documented honestly.
 2. **JSX vs erasableSyntaxOnly**: backend tsconfig `erasableSyntaxOnly: true` blocks JSX (encountered when react-email path attempted). createElement без JSX works syntactically but doesn't help since project canon forbids React entirely.
 3. **toPlainText API**: would have needed `toPlainText(html: string)` sync (NOT React element). Verified empirically через @react-email/render 2.0.8 .d.mts — relevant если react-email retried в future.
 
 **Carry-forwards к A3.2.b** (separate commit):
+
 - Schema: add `attachmentsJson Utf8` column к notificationOutbox (or encode attachments в payloadJson) → migration 0046
 - email-adapter.ts (postbox + mailpit + stub) — extend `send()` interface to accept `attachments[]`
 - dispatcher: pre-render bodyText at write-time через `renderTemplate('booking_confirmed', vars)` с full enhanced fields + .ics attachment generation
@@ -625,25 +663,28 @@ Senior reverse: react-email path REJECTED. Existing `notification-templates.ts` 
 Migration 0046 + email-adapter attachments support across all 3 adapters + dispatcher reads attachmentsJson. 3 new adapter tests (ATT-S1, ATT-P1, ATT-P2). 14/14 dispatcher tests pass (no regression).
 
 **Files committed:**
+
 - `db/migrations/0046_notification_outbox_attachments.sql` — `attachmentsJson Json` column added к notificationOutbox (nullable, existing rows skip)
 - `workers/lib/postbox-adapter.ts`:
-   * `EmailAttachment` interface exported (`{ filename, content, contentType }`)
-   * `SendEmailInput.attachments?: ReadonlyArray<EmailAttachment>` added
-   * PostboxAdapter — SES v2 `Content.Simple.Attachments[]` shape (verified AWS SDK 2026-04 API)
-   * MailpitAdapter — MIME `multipart/mixed` boundary с `multipart/alternative` nested (RFC 2046 canonical)
-   * StubAdapter — records attachments в `sent[]` для test assertions
+  - `EmailAttachment` interface exported (`{ filename, content, contentType }`)
+  - `SendEmailInput.attachments?: ReadonlyArray<EmailAttachment>` added
+  - PostboxAdapter — SES v2 `Content.Simple.Attachments[]` shape (verified AWS SDK 2026-04 API)
+  - MailpitAdapter — MIME `multipart/mixed` boundary с `multipart/alternative` nested (RFC 2046 canonical)
+  - StubAdapter — records attachments в `sent[]` для test assertions
 - `workers/notification-dispatcher.ts`:
-   * `attachmentsJson` column added к PendingRow + SELECT
-   * `parseAttachments(raw, log, ...)` defensive parser — malformed JSON / wrong shape → null + warn (no crash)
-   * `EmailAttachment` import from postbox-adapter
-   * Conditional spread `...(attachments && attachments.length > 0 && { attachments })` per exactOptionalPropertyTypes canon
+  - `attachmentsJson` column added к PendingRow + SELECT
+  - `parseAttachments(raw, log, ...)` defensive parser — malformed JSON / wrong shape → null + warn (no crash)
+  - `EmailAttachment` import from postbox-adapter
+  - Conditional spread `...(attachments && attachments.length > 0 && { attachments })` per exactOptionalPropertyTypes canon
 
 **Tests (3 new):**
+
 - [ATT-S1] StubAdapter records attachments в sent[]
 - [ATT-P1] PostboxAdapter passes attachments → SES Content.Simple.Attachments[]
 - [ATT-P2] PostboxAdapter без attachments → Content.Simple.Attachments undefined
 
 **Real bug-hunt:**
+
 1. **TS Constructor parameter typing**: initial `Parameters<typeof PostboxAdapter>['1']` — wrong indexing для constructor. Fix: `ConstructorParameters<typeof PostboxAdapter>[1]` (canonical TS for class constructor params).
 
 ### A3.2.c (commit pending — dispatcher lazy-render booking_confirmed + .ics)
@@ -653,18 +694,20 @@ guest + property + org + profile) at send-time, renders rich HTML voucher чер
 renderTemplate, generates .ics calendar invite, attaches к send.
 
 **Files committed:**
+
 - `workers/notification-dispatcher.ts`:
-   * Imported `generateBookingIcs` + `renderTemplate` + `BookingConfirmedVars`
-   * Added `renderBookingConfirmedLazy(sql, tenantId, bookingId, recipientEmail, log)`
-     helper — multi-query var resolver (booking + guest + property + org + profile)
-     + .ics generation. Returns null on missing rows OR errors → caller falls
-     back к existing escape-wrap rendering (defensive, no crash).
-   * Added `formatRuDate(date)` — RU month-name canonical formatter
-   * `dispatchOne` extended: when `kind === 'booking_confirmed' && sourceObjectType === 'booking'`,
-     calls lazy-render → if success, uses rich subject + html + text + .ics.
-   * Existing escape-wrap fallback preserved для other kinds + lazy failures.
+  - Imported `generateBookingIcs` + `renderTemplate` + `BookingConfirmedVars`
+  - Added `renderBookingConfirmedLazy(sql, tenantId, bookingId, recipientEmail, log)`
+    helper — multi-query var resolver (booking + guest + property + org + profile)
+    - .ics generation. Returns null on missing rows OR errors → caller falls
+      back к existing escape-wrap rendering (defensive, no crash).
+  - Added `formatRuDate(date)` — RU month-name canonical formatter
+  - `dispatchOne` extended: when `kind === 'booking_confirmed' && sourceObjectType === 'booking'`,
+    calls lazy-render → if success, uses rich subject + html + text + .ics.
+  - Existing escape-wrap fallback preserved для other kinds + lazy failures.
 
 **Empirical verification carry-forward к A3 closure:**
+
 - Full-booking integration test (seed organization + property + roomType +
   ratePlan + availability + rates → POST widget/booking → CDC fires →
   dispatcher polls → email arrives Mailpit с .ics) — requires substantial
@@ -677,13 +720,14 @@ Guest portal routes — view + cancel с cookie-auth + ПП РФ № 1912 п. 16
 canon. 8 strict tests (GP-CB1..8) для timezone-correct boundary computation.
 
 **Files committed:**
+
 - `domains/booking/guest-portal.repo.ts` — read-only repo `viewBooking(tenantId, bookingId)` resolves booking + property + total formatted
 - `domains/booking/guest-portal.routes.ts`:
-   * GET `/api/public/booking/guest-portal/:bookingId` — view booking + cancel policy disclosure
-   * POST `/api/public/booking/guest-portal/:bookingId/cancel` — cancel с ПП-1912 boundary
-   * `computeCancelBoundary(checkIn, now)` — pure function (Europe/Moscow, no DST since 2014). `pre_checkin` (now < endOfDay(checkIn) Moscow) → 100% refund; `day_of_or_later` → max 1-night charge
-   * Scope check: GET accepts both 'view'+'mutate'; POST cancel REQUIRES 'mutate'
-   * BookingId mismatch (cookie vs URL param) → 403
+  - GET `/api/public/booking/guest-portal/:bookingId` — view booking + cancel policy disclosure
+  - POST `/api/public/booking/guest-portal/:bookingId/cancel` — cancel с ПП-1912 boundary
+  - `computeCancelBoundary(checkIn, now)` — pure function (Europe/Moscow, no DST since 2014). `pre_checkin` (now < endOfDay(checkIn) Moscow) → 100% refund; `day_of_or_later` → max 1-night charge
+  - Scope check: GET accepts both 'view'+'mutate'; POST cancel REQUIRES 'mutate'
+  - BookingId mismatch (cookie vs URL param) → 403
 - `domains/booking/guest-portal.test.ts` — 8 strict (GP-CB1..8): pre_checkin × 4 cases (day before / 00:00 / 14:00 / 23:59) + day_of_or_later × 2 + edge cases (checkIn 23:00 UTC = next-day Moscow / 00:00 UTC = 03:00 Moscow same day)
 - `app.ts` wire `createGuestPortalRoutes` под `/api/public`
 
@@ -694,11 +738,13 @@ Confirmation screen + sub-route + find-by-ref-email + 12 E2E = explicit
 carry-forward к next session (substantial UX/screenshot scope).
 
 **Files committed:**
+
 - `features/public-widget/lib/booking-portal-api.ts` — fetch helpers (renderMagicLink + consumeMagicLink + getGuestPortal + cancelBooking) + typed result unions, `credentials: 'include'` for cookie roundtrip
 - `routes/booking.$jwt.tsx` — magic-link landing: GET /render → button «Открыть бронирование» → POST /consume → navigate к /booking/guest-portal/:bookingId. Apple MPP defense via two-step (GET non-consuming, button → POST consume).
 - `routes/booking.guest-portal.$bookingId.tsx` — view + cancel UI: `<dl>` booking details + cancel section с ПП-1912 disclosure copy. Cancel button enabled когда scope='mutate' + status not terminal. Reason input required (max 500 chars).
 
 **Carry-forwards к A3 closure / future session:**
+
 - `screens/confirmation.tsx` (Screen 4 post-payment confirmation)
 - `routes/widget.$tenantSlug_.$propertyId_.confirmation.tsx` (sub-route с validateSearch)
 - `routes/booking.find-by-ref-email.tsx` (recovery flow для lost magic-link)

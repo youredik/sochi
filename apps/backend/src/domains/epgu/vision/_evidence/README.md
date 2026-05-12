@@ -12,11 +12,11 @@ empirical curl-verification is REQUIRED before claiming Mock 100% совпада
 
 ## Files (populated after script run)
 
-  - `real-vision-response.json` — captured response от настоящего Yandex
-    Vision passport endpoint (per script output)
-  - `mock-vision-response.json` — same input → MockVisionOcr response
-    (для diff comparison)
-  - `real-vision-error.json` — error path output (404/401/429/5xx)
+- `real-vision-response.json` — captured response от настоящего Yandex
+  Vision passport endpoint (per script output)
+- `mock-vision-response.json` — same input → MockVisionOcr response
+  (для diff comparison)
+- `real-vision-error.json` — error path output (404/401/429/5xx)
 
 ## Next action
 

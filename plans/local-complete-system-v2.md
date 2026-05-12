@@ -28,6 +28,7 @@
 ### 0.2 Research-файлы по доменам
 
 **Внешние интеграции:**
+
 - [epgu-rkl.md](research/epgu-rkl.md) — ЕПГУ Скала + РКЛ
 - [yandex-vision-passport.md](research/yandex-vision-passport.md) — OCR (переехал в AI Studio)
 - [yookassa-54fz.md](research/yookassa-54fz.md) — payments + 54-ФЗ
@@ -35,6 +36,7 @@
 - [smartcaptcha-object-storage.md](research/smartcaptcha-object-storage.md) — anti-bot + storage
 
 **Domain canon:**
+
 - [horeca-kpi-canonical.md](research/horeca-kpi-canonical.md) — USALI 11th Rev
 - [public-widget-ux.md](research/public-widget-ux.md) — 3-screen flow
 - [hotel-content-amenities-media.md](research/hotel-content-amenities-media.md) — OTA codelists + ПП-1951
@@ -42,12 +44,14 @@
 - [cancellation-refund-flows.md](research/cancellation-refund-flows.md) — ПП №1912
 
 **Архитектура:**
+
 - [architecture-patterns.md](research/architecture-patterns.md) — adapter factory + booking lock + outbox
 - [ru-compliance-2026.md](research/ru-compliance-2026.md) — полный compliance overview
 - [notifications-references.md](research/notifications-references.md) — 7 templates + reference number
 - [datalens-frontend-stack.md](research/datalens-frontend-stack.md) — DataLens + frontend
 
 **Свежесть Q1-Q2 2026 + 2027:**
+
 - [wave4-q1q2-2026-freshness.md](research/wave4-q1q2-2026-freshness.md) — критические правки Q1-Q2 2026
 - [wave4-pms-vendors-datalens-2026.md](research/wave4-pms-vendors-datalens-2026.md) — Apaleo Copilot + DataLens Public API
 - [wave4-payments-april-2026.md](research/wave4-payments-april-2026.md) — YooKassa апрель + Yandex Pay + T-Bank
@@ -60,56 +64,56 @@
 
 ### 1.1 Структурные изменения
 
-| v1 | v2 |
-|---|---|
-| 7 подфаз M8.A — M8.G | **8 подфаз M8.0 — M8.G** (добавлен **M8.0 prep + M8.E MCP-сервер**) |
+| v1                                  | v2                                                                   |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| 7 подфаз M8.A — M8.G                | **8 подфаз M8.0 — M8.G** (добавлен **M8.0 prep + M8.E MCP-сервер**)  |
 | M8.E (sandbox gate) — после A/B/C/D | **M8.0 prep — перед A/B/C/D** (factory + APP_MODE до того как нужны) |
-| MCP в M9 | **MCP в M8.E** (Apaleo + Hospitable релизнули март-апрель 2026) |
-| 10-13 недель | **14-18 недель** (добавлен ресерч + новые подфазы) |
+| MCP в M9                            | **MCP в M8.E** (Apaleo + Hospitable релизнули март-апрель 2026)      |
+| 10-13 недель                        | **14-18 недель** (добавлен ресерч + новые подфазы)                   |
 
 ### 1.2 Critical правки domain (от ресерча)
 
-| Тема | v1 | v2 |
-|---|---|---|
-| BAR-NR | rate plan тип | **запрещён в РФ** (ПП №1912) → `BAR-PROMO-1N` (1-night cap) |
-| Cancellation cap | произвольный | **1 night cap для B2C** (ПП №1912 с 01.03.2026) |
-| Reference number | TypeID | **`<TENANT_SLUG>-<NANOID9>`** Crockford-base32 |
-| Notification recipient | user only | **user / guest / system / channel** |
-| Booking lock | distributed | **YDB native serializable + OCC** (не Redis) |
-| Outbox | per-domain | **polymorphic + schema-discriminated** (canon) |
-| Charting | TBD | **Recharts v3 через shadcn Chart** |
-| OCR | client-side | **server-side через Yandex Vision** |
-| Image pipeline | Cloudinary-like | **Object Storage + Cloud Functions + sharp** |
-| Feature flags | Unleash/LaunchDarkly | **env vars + DB-config + Flagd self-host** (Yandex Cloud only) |
-| KPI revenue | inclusive cancel/no-show | **USALI 11th Rev: cancel/no-show OUT** |
-| Channel inventory | TBD | **pooled + monotonic version** |
-| Channel sync | polling-only | **hybrid: push outbound + webhook+polling reconciliation** |
-| ЮKassa Чеки | optional | **canonical с 21.04.2026 (yoo_receipt)** |
-| СБП recurring | uncertain | **GA 2026 (200+ банков)** |
-| Tax rates | hardcoded | **`system_constants` year-versioned** |
-| ЕПГУ flow | single-stage | **2-фазный: reserveOrderId → push/chunked → polling** |
-| ЕПГУ transport | direct | **interface: GostTLS + SVOKS + Proxy-via-partner** |
-| Identity verification | OCR only | **open enum: passport_paper / passport_zagran / driver_license / ebs / digital_id_max** |
-| Confidence для OCR | API-based | **наша heuristic** (Vision возвращает 0.0) |
+| Тема                   | v1                       | v2                                                                                      |
+| ---------------------- | ------------------------ | --------------------------------------------------------------------------------------- |
+| BAR-NR                 | rate plan тип            | **запрещён в РФ** (ПП №1912) → `BAR-PROMO-1N` (1-night cap)                             |
+| Cancellation cap       | произвольный             | **1 night cap для B2C** (ПП №1912 с 01.03.2026)                                         |
+| Reference number       | TypeID                   | **`<TENANT_SLUG>-<NANOID9>`** Crockford-base32                                          |
+| Notification recipient | user only                | **user / guest / system / channel**                                                     |
+| Booking lock           | distributed              | **YDB native serializable + OCC** (не Redis)                                            |
+| Outbox                 | per-domain               | **polymorphic + schema-discriminated** (canon)                                          |
+| Charting               | TBD                      | **Recharts v3 через shadcn Chart**                                                      |
+| OCR                    | client-side              | **server-side через Yandex Vision**                                                     |
+| Image pipeline         | Cloudinary-like          | **Object Storage + Cloud Functions + sharp**                                            |
+| Feature flags          | Unleash/LaunchDarkly     | **env vars + DB-config + Flagd self-host** (Yandex Cloud only)                          |
+| KPI revenue            | inclusive cancel/no-show | **USALI 11th Rev: cancel/no-show OUT**                                                  |
+| Channel inventory      | TBD                      | **pooled + monotonic version**                                                          |
+| Channel sync           | polling-only             | **hybrid: push outbound + webhook+polling reconciliation**                              |
+| ЮKassa Чеки            | optional                 | **canonical с 21.04.2026 (yoo_receipt)**                                                |
+| СБП recurring          | uncertain                | **GA 2026 (200+ банков)**                                                               |
+| Tax rates              | hardcoded                | **`system_constants` year-versioned**                                                   |
+| ЕПГУ flow              | single-stage             | **2-фазный: reserveOrderId → push/chunked → polling**                                   |
+| ЕПГУ transport         | direct                   | **interface: GostTLS + SVOKS + Proxy-via-partner**                                      |
+| Identity verification  | OCR only                 | **open enum: passport_paper / passport_zagran / driver_license / ebs / digital_id_max** |
+| Confidence для OCR     | API-based                | **наша heuristic** (Vision возвращает 0.0)                                              |
 
 ### 1.3 Critical правки compliance (от волны 4)
 
-| Что было | Что должно быть |
-|---|---|
-| 0% НДС accommodation до 31.12.2030 | **до 30.06.2027** (продление до 2030 — анонс, не закон) |
-| НПД лимит 2.4 млн ₽ | **3.8 млн (2026), 4.0 (2027), 4.2 (2028)** |
-| ФЗ-93 гостевые дома | **ФЗ-127 от 07.06.2025 + ПП №1345 от 30.08.2025** |
-| ПП-1853 действует | **утратило силу с 01.03.2026** |
-| Не упомянуто | **ПП-174 от 21.02.2026** — биометрия + загранпаспорт + водительское |
-| Не упомянуто | **МАХ цифровой ID** — пилот в Сочи (Sochi Park, Mantera Supreme) |
-| Не упомянуто | **Универсальный QR НСПК с 01.09.2026** (закон №248-ФЗ) |
-| Не упомянуто | **Цифровой рубль с 01.09.2026** для tenants >120 млн ₽ |
-| Не упомянуто | **СБП ИНН в payload с 01.07.2026** |
-| Я.Путешествия 17% | **10% (extranet)** (правка) |
-| ФФД 1.3 anticipated | **НЕ объявлен** (убрать) |
-| СВОКС mandate 2027 | **NON-CONFIRMED** (закладываем interface) |
-| ЕБС mandate hospitality | **NON-CONFIRMED** (open enum identity) |
-| УСН порог НДС | **60 млн ₽ (376-ФЗ)**, не 20/15/10 (требует WebFetch на 2027) |
+| Что было                           | Что должно быть                                                     |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| 0% НДС accommodation до 31.12.2030 | **до 30.06.2027** (продление до 2030 — анонс, не закон)             |
+| НПД лимит 2.4 млн ₽                | **3.8 млн (2026), 4.0 (2027), 4.2 (2028)**                          |
+| ФЗ-93 гостевые дома                | **ФЗ-127 от 07.06.2025 + ПП №1345 от 30.08.2025**                   |
+| ПП-1853 действует                  | **утратило силу с 01.03.2026**                                      |
+| Не упомянуто                       | **ПП-174 от 21.02.2026** — биометрия + загранпаспорт + водительское |
+| Не упомянуто                       | **МАХ цифровой ID** — пилот в Сочи (Sochi Park, Mantera Supreme)    |
+| Не упомянуто                       | **Универсальный QR НСПК с 01.09.2026** (закон №248-ФЗ)              |
+| Не упомянуто                       | **Цифровой рубль с 01.09.2026** для tenants >120 млн ₽              |
+| Не упомянуто                       | **СБП ИНН в payload с 01.07.2026**                                  |
+| Я.Путешествия 17%                  | **10% (extranet)** (правка)                                         |
+| ФФД 1.3 anticipated                | **НЕ объявлен** (убрать)                                            |
+| СВОКС mandate 2027                 | **NON-CONFIRMED** (закладываем interface)                           |
+| ЕБС mandate hospitality            | **NON-CONFIRMED** (open enum identity)                              |
+| УСН порог НДС                      | **60 млн ₽ (376-ФЗ)**, не 20/15/10 (требует WebFetch на 2027)       |
 
 ---
 
@@ -118,6 +122,7 @@
 ### 2.1 Native стек (Yandex Cloud only)
 
 **Обязательные**:
+
 - **Backend**: Hono + YDB + Better Auth (без изменений).
 - **Email**: Yandex Postbox (M7.fix.2 wired).
 - **Storage**: Yandex Object Storage (S3-compat).
@@ -135,6 +140,7 @@
 - **Frontend**: React 19 + Vite 8 + shadcn 4.5 + Recharts v3 + Lucide-react + Lingui v6.
 
 **Запрещены** (нарушают canon):
+
 - AWS S3, AWS SES, Cloudflare Turnstile, GA4, Sentry SaaS, Datadog, Cloudinary, Imgix.
 - Unleash, LaunchDarkly (Phase 1: env vars; Phase 3: Flagd self-host).
 - OpenAI API direct (только через MCP-server).
@@ -144,6 +150,7 @@
 См. [research/architecture-patterns.md](research/architecture-patterns.md) §1.
 
 Каждый mock-адаптер обязан воспроизводить:
+
 - **Формат** до уровня поля, типа, обязательности.
 - **Коды ошибок** реального API.
 - **Тайминги** с jitter.
@@ -173,6 +180,7 @@ domains/{domain}/adapter/
 См. [research/architecture-patterns.md](research/architecture-patterns.md) §1.7.
 
 Для каждой внешней зависимости — все 4:
+
 - Timeout (никогда не ждать вечно).
 - Retry с exp backoff + jitter.
 - Circuit breaker (после N consecutive fails).
@@ -195,6 +203,7 @@ domains/{domain}/adapter/
 ### 2.8 Strict tests (расширено)
 
 [feedback_strict_tests.md](/Users/ed/.claude/projects/-Users-ed-dev-sochi/memory/feedback_strict_tests.md) + новое:
+
 - Тесты должны **проверять поведенческую достоверность мока против реального API documentation**.
 - Если документация говорит «возвращает 422 при дубле» — мок обязан возвращать 422 при дубле, и тест это проверяет.
 
@@ -210,16 +219,16 @@ domains/{domain}/adapter/
 
 ## 3. Текущий фактический статус (по коду на 2026-04-27)
 
-| # | Функция | Backend | Frontend | End-to-end |
-|---|---|---|---|---|
-| 1.1 | Госуслуги (Скала-ЕПГУ) | ❌ | ❌ | ❌ |
-| 1.2 | AI-сканер паспортов | ❌ | ❌ ручной ввод | ❌ |
-| 2.1 | Шахматка | ✅ M3-M4 | ✅ M5 | ✅ |
-| 2.2 | Channel Manager | ❌ | ❌ | ❌ |
-| 2.3 | Public widget + платежи | 🟡 M6 stub-provider | ❌ | ❌ |
-| 3.1 | KPI Dashboard | ❌ | ❌ | ❌ |
-| 3.2 | Email/SMS уведомления | ✅ M7.A+B | ✅ M7.fix.3.d | ✅ |
-| Бонус | Туристический налог 2% | ✅ M7.A.3 | ✅ M7.fix.3.b | ✅ |
+| #     | Функция                 | Backend             | Frontend       | End-to-end |
+| ----- | ----------------------- | ------------------- | -------------- | ---------- |
+| 1.1   | Госуслуги (Скала-ЕПГУ)  | ❌                  | ❌             | ❌         |
+| 1.2   | AI-сканер паспортов     | ❌                  | ❌ ручной ввод | ❌         |
+| 2.1   | Шахматка                | ✅ M3-M4            | ✅ M5          | ✅         |
+| 2.2   | Channel Manager         | ❌                  | ❌             | ❌         |
+| 2.3   | Public widget + платежи | 🟡 M6 stub-provider | ❌             | ❌         |
+| 3.1   | KPI Dashboard           | ❌                  | ❌             | ❌         |
+| 3.2   | Email/SMS уведомления   | ✅ M7.A+B           | ✅ M7.fix.3.d  | ✅         |
+| Бонус | Туристический налог 2%  | ✅ M7.A.3           | ✅ M7.fix.3.b  | ✅         |
 
 **Итог**: 2 из 7 функций закрыты. 0 из 3 болей закрыты end-to-end.
 
@@ -229,42 +238,42 @@ domains/{domain}/adapter/
 
 ### v1 решения (подтверждены)
 
-| # | Вопрос | Решение |
-|---|---|---|
-| Q1 | KPI dashboard | **A** — KPI-домен + native UI + DataLens-готовность |
-| Q2 | Channel Manager | **3 канала сразу** (TravelLine + Я.Путешествия + Ostrovok) |
-| Q3 | Public widget | **Роуты в существующем frontend** |
-| Q4 | Платежный provider | **Только YooKassa** primary (фабрика готова к T-Bank Phase 2) |
-| Q5 | MCP-сервер | **M8.E** (изменено: было M9; релиз Apaleo+Hospitable 2026-Q1 заставляет двигать) |
-| Q6 | Сидеры | **Фиксированные команды** `pnpm seed:*` |
-| Q7 | Custom Object Engine | **Отложен в M11+** |
+| #   | Вопрос               | Решение                                                                          |
+| --- | -------------------- | -------------------------------------------------------------------------------- |
+| Q1  | KPI dashboard        | **A** — KPI-домен + native UI + DataLens-готовность                              |
+| Q2  | Channel Manager      | **3 канала сразу** (TravelLine + Я.Путешествия + Ostrovok)                       |
+| Q3  | Public widget        | **Роуты в существующем frontend**                                                |
+| Q4  | Платежный provider   | **Только YooKassa** primary (фабрика готова к T-Bank Phase 2)                    |
+| Q5  | MCP-сервер           | **M8.E** (изменено: было M9; релиз Apaleo+Hospitable 2026-Q1 заставляет двигать) |
+| Q6  | Сидеры               | **Фиксированные команды** `pnpm seed:*`                                          |
+| Q7  | Custom Object Engine | **Отложен в M11+**                                                               |
 
 ### v2 новые решения (от ресерча)
 
-| # | Вопрос | Решение |
-|---|---|---|
-| Q8 | Booking lock | **YDB native serializable + OCC**, version-based last-write-wins |
-| Q9 | Inventory model | **Pooled per-room-type** (industry consensus 2026) |
-| Q10 | Channel sync | **Hybrid: push outbound + webhook+polling reconciliation** |
+| #   | Вопрос           | Решение                                                                |
+| --- | ---------------- | ---------------------------------------------------------------------- |
+| Q8  | Booking lock     | **YDB native serializable + OCC**, version-based last-write-wins       |
+| Q9  | Inventory model  | **Pooled per-room-type** (industry consensus 2026)                     |
+| Q10 | Channel sync     | **Hybrid: push outbound + webhook+polling reconciliation**             |
 | Q11 | Reference number | **`<TENANT_SLUG>-<NANOID9>`** (Crockford-base32, no vowels/lookalikes) |
-| Q12 | Charting | **Recharts v3 через shadcn Chart** |
+| Q12 | Charting         | **Recharts v3 через shadcn Chart**                                     |
 
 ---
 
 ## 5. Roadmap фазы (8 подфаз M8.0 — M8.G)
 
-| Подфаза | Что закрывает | Время |
-|---|---|---|
-| **M8.0** | **PREP**: adapter factory + APP_MODE gate + system_constants table + EpguTransport interface | 1 неделя |
-| **M8.A.0** | **Property content**: media + amenities + descriptions + addons + tenant onboarding (КСР, ФЗ-127) + notification расширение для guests | 2 недели |
-| **M8.A** | ЕПГУ адаптер + AI passport + РКЛ + миграционный учёт UI | 3 недели |
-| **M8.B** | Public widget + YooKassa + 54-ФЗ + СБП + SmartCaptcha + ICS + Refund flows | 3 недели |
-| **M8.C** | Channel Manager × 3 + composed rate plans + reconciliation | 3-4 недели |
-| **M8.D** | KPI domain + Recharts UI + DataLens-готовность (Public API provisioning) | 1.5 недели |
-| **M8.E** | **NEW**: MCP-сервер v1 (read-only) + admin AI assistant (YandexGPT) | 2 недели |
-| **M8.F** | Документация + сидеры + видео-walkthroughs | 1 неделя |
-| **M8.G** | Финальный кросс-функциональный аудит готовности к M9 (real integrations) | 0.5-1 неделя |
-| **Итого** | **6 функций мандата + 2 закрыты** + sandbox-инфра + MCP differentiator | **17-18.5 недель** |
+| Подфаза    | Что закрывает                                                                                                                          | Время              |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| **M8.0**   | **PREP**: adapter factory + APP_MODE gate + system_constants table + EpguTransport interface                                           | 1 неделя           |
+| **M8.A.0** | **Property content**: media + amenities + descriptions + addons + tenant onboarding (КСР, ФЗ-127) + notification расширение для guests | 2 недели           |
+| **M8.A**   | ЕПГУ адаптер + AI passport + РКЛ + миграционный учёт UI                                                                                | 3 недели           |
+| **M8.B**   | Public widget + YooKassa + 54-ФЗ + СБП + SmartCaptcha + ICS + Refund flows                                                             | 3 недели           |
+| **M8.C**   | Channel Manager × 3 + composed rate plans + reconciliation                                                                             | 3-4 недели         |
+| **M8.D**   | KPI domain + Recharts UI + DataLens-готовность (Public API provisioning)                                                               | 1.5 недели         |
+| **M8.E**   | **NEW**: MCP-сервер v1 (read-only) + admin AI assistant (YandexGPT)                                                                    | 2 недели           |
+| **M8.F**   | Документация + сидеры + видео-walkthroughs                                                                                             | 1 неделя           |
+| **M8.G**   | Финальный кросс-функциональный аудит готовности к M9 (real integrations)                                                               | 0.5-1 неделя       |
+| **Итого**  | **6 функций мандата + 2 закрыты** + sandbox-инфра + MCP differentiator                                                                 | **17-18.5 недель** |
 
 ---
 
@@ -363,6 +372,7 @@ system_constants (
 См. [research/hotel-content-amenities-media.md](research/hotel-content-amenities-media.md) §§5-8.
 
 Новые миграции:
+
 - `0021_property_content.sql` — descriptions, sections, SEO, Schema.org.
 - `0022_media_objects.sql` — original + variants + EXIF-stripped flag.
 - `0023_amenities.sql` — internal enum + OTA mapping.
@@ -398,6 +408,7 @@ system_constants (
 ### 8.1 Что делаем
 
 **ЕПГУ:**
+
 - 2-фазный submit: `reserveOrderId` → `pushArchive` (multipart) → `orderId`.
 - Polling-only (no webhooks): 1 мин первые 10 мин, 5 мин до часа, экспоненциально.
 - Lifecycle: статус 17 → 21 → 1 → 2 → 3 (final) или 4 (final).
@@ -408,6 +419,7 @@ system_constants (
 - `EpguTransport` interface (GostTLS impl сейчас, SVOKS позже).
 
 **AI Passport (Yandex Vision, переехал в AI Studio):**
+
 - Endpoint: `https://ocr.api.cloud.yandex.net/ocr/v1/recognizeText` (тот же).
 - Format: JSON + base64 (НЕ multipart).
 - Confidence quirk: API возвращает `0.0` часто → **наша heuristic** (regex на серию/номер, sanity на дату, age check).
@@ -417,6 +429,7 @@ system_constants (
 - Object Storage TTL: 180 days lifecycle + workflow worker удаляет через 24h после ЕПГУ confirmed.
 
 **РКЛ:**
+
 - Mock через Контур.ФМС API схему (CSV-snapshot).
 - 99% clean / 0.5% match / 0.5% inconclusive.
 - Latency 50-300 мс.
@@ -428,6 +441,7 @@ system_constants (
 См. [research/epgu-rkl.md](research/epgu-rkl.md) §8 + [research/yandex-vision-passport.md](research/yandex-vision-passport.md) §8.
 
 Новые миграции:
+
 - `0027_guest_documents.sql` — guest_document table с identity_method enum.
 - `0028_migration_registration.sql` — ЕПГУ submission + status + attempts + outbox.
 - `0029_rkl_history.sql` — RKL check history per guest+document.
@@ -464,12 +478,14 @@ system_constants (
 ### 9.1 Что делаем
 
 **Widget (3-screen flow):**
+
 - Screen 1: Search & Pick (даты + гости + tariff selection inline) с sticky summary.
 - Screen 2: Extras (addons accordion).
 - Screen 3: Guest details + Embedded Payment (без redirect).
 - Screen 4: Confirmation (booking ref + ICS + magic-link + Yandex Maps).
 
 **Payment (YooKassa primary):**
+
 - API v3 base, Idempotence-Key (≤64 chars), 24h scope.
 - 3DS via redirect (canon 2026).
 - Two-stage capture (`capture: false`).
@@ -481,6 +497,7 @@ system_constants (
 - Settlement T+1.
 
 **СБП (через YooKassa):**
+
 - `payment_method_data.type: sbp`, capture: true обязательно.
 - Recurring 2026 GA — 200+ банков.
 - ИНН в payload с 01.07.2026 (schema-impact).
@@ -488,11 +505,13 @@ system_constants (
 **Универсальный QR НСПК с 01.09.2026** (закон №248-ФЗ) — verify YooKassa support.
 
 **Captcha:**
+
 - Yandex SmartCaptcha invisible, npm `@yandex/smart-captcha@2.9.1`.
 - Token TTL 5 минут, single-use.
 - Backend verify: non-200 → treat as ok (UX rescue).
 
 **Refund flows (4 источника):**
+
 - Admin operator (full control + waiver).
 - Public guest (self-service via magic-link).
 - Channel pull (Booking VCC / Я.Travel / Ostrovok).
@@ -500,10 +519,12 @@ system_constants (
 - Walked guest (overbooking — обязательная relocation per ПП №1912).
 
 **Cancellation policies (canonical):**
+
 - BAR-FLEX, BAR-MOD, BAR-STR, **BAR-PROMO-1N** (заменяет BAR-NR), PAY-ON-ARRIVAL, PAY-NOW, GROUP, CORPORATE, EVENT-PEAK.
 - 1-night cap для B2C per ПП №1912.
 
 **Reference number:**
+
 - Format: `<TENANT_SLUG>-<NANOID9>` (Crockford-base32 без vowels/lookalikes).
 - Magic-link с signed JWT (TTL 30d view, 15min mutation).
 - Brute-force protection: rate-limit + captcha + send-new-link-on-find.
@@ -513,6 +534,7 @@ system_constants (
 См. [research/cancellation-refund-flows.md](research/cancellation-refund-flows.md) §15.
 
 Новые миграции:
+
 - `0031_public_booking_intent.sql` — pre-confirm intent с TTL 15 min.
 - `0032_rate_plan_cancellation.sql` — discriminated union policy (BAR-NR заменён на BAR-PROMO-1N).
 - `0033_walked_guest.sql` — booking status `walked` + relocation_booking_id.
@@ -556,17 +578,20 @@ system_constants (
 ### 10.1 Что делаем
 
 **Pooled inventory (consensus 2026):**
+
 - `room_type_availability(org_id, room_type_id, date, total_qty, booked_qty, version)`.
 - Monotonic version per (room_type, date).
 - YDB native serializable + OCC (НЕ Redis Redlock).
 
 **Hybrid sync model:**
+
 - Outbound (we → channel): push (CDC-outbox → dispatcher → channel adapter).
 - Inbound (channel → us): webhook primary + polling reconciliation (каждый час full pull последних 24h).
 
 **3 channel mocks** (all behaviour-faithful):
 
 **TravelLineMockImpl** (high confidence 8/10):
+
 - OAuth2 token TTL 15 min, JWT.
 - 5 API products: Content, Search, Read Reservation, PMS Universal, Reviews.
 - Hash-checksum валидация на book.
@@ -574,6 +599,7 @@ system_constants (
 - Rate-limit 3/s, 15/min, 300/h + 429 retry-after.
 
 **OstrovokMockImpl (ETG distribution)** (medium-high 7/10):
+
 - ⚠️ **Distribution API**, не supplier — mock = distribution flow.
 - search → hotelpage → prebook → book pipeline.
 - prebook required (без него book → 422).
@@ -581,6 +607,7 @@ system_constants (
 - Webhook subscription для booking status.
 
 **YandexTravelMockImpl** (medium-low 5/10):
+
 - ⚠️ **Supplier API closed (NDA)** — реверс из Bnovo/Контур.Отель wiki.
 - 20+8 beds limit на категорию.
 - Mandatory cancellation policy.
@@ -589,10 +616,12 @@ system_constants (
 - Idempotency-Key UUID v4.
 
 **Composed rate plans для каналов** (80% не поддерживают addons как first-class):
+
 - Cartesian product до threshold N=8.
 - BAR / BAR+breakfast / BAR+breakfast+parking / BAR+halfboard.
 
 **Conflict resolution** (если overbooking):
+
 - Apaleo/Mews-style: возможен, gate UI-уровня.
 - `OverbookingDetected` event → admin alert + flag в Шахматке.
 - Walk-policy от operator decision.
@@ -623,6 +652,7 @@ system_constants (
 ### 11.1 Что делаем
 
 **KPI domain (USALI 11th Rev canon):**
+
 - **Room Revenue** (для ADR/RevPAR) = `accommodation_charges` − VAT − tourist_tax − cancellation_fees − no_show_fees − addons. Resort fee mandatory IN.
 - **Available Rooms** = active inventory − OOO − OOS (operational), toggle на STR-mode.
 - **ADR** = null при Sold = 0; **RevPAR** = 0 при Revenue = 0.
@@ -631,17 +661,20 @@ system_constants (
 - **Per-property + per-room-type** breakdowns primary.
 
 **Schema:**
+
 - `kpi_occupancy_daily` (occupancyOperationalPercent + occupancyStrPercent + paidOccupancyPercent).
 - `kpi_revenue_daily` (room/cancel_fee/noShow_fee/F&B/addon, ADR, RevPAR, TRevPAR — все micros).
 - `kpi_pace_snapshot` (booking pace 0-7d/8-30d/31-90d/91+).
 
 **Frontend (Recharts v3 через shadcn Chart):**
+
 - 3 graphs: Occupancy line, ADR bar, RevPAR line.
 - Range picker, property filter.
 - KPI cards с YoY comparison (day-of-week aligned).
 - Export CSV/XLSX (write-excel-file).
 
 **DataLens-готовность (Phase 2):**
+
 - DataLens Public API (запущен январь 2026) — `https://api.datalens.tech` с IAM-tokens.
 - DataLens v2.8.0 OSS — YDB connector + VIEW support.
 - YDB VIEW для dataset (cross-tenant с org_id column).
@@ -682,11 +715,13 @@ Apaleo Copilot 26.03.2026 + Hospitable MCP 03.04.2026 + Aven Q2 2026 — **«202
 - Streamable HTTP transport, stateless.
 
 **Auth:**
+
 - OAuth 2.1 PKCE через Better Auth.
 - Discovery: `GET /.well-known/oauth-protected-resource`.
 - Resource Indicator: `https://api.<our-domain>/api/v1/mcp`.
 
 **Tools (10 read-only):**
+
 - `bookings.list`, `bookings.get`
 - `rooms.list`, `roomTypes.list`, `ratePlans.list`
 - `availability.check` (voice-booking ready)
@@ -695,11 +730,13 @@ Apaleo Copilot 26.03.2026 + Hospitable MCP 03.04.2026 + Aven Q2 2026 — **«202
 - `kpi.summary`
 
 **Resources:**
+
 - `property://current` (JSON org-spec)
 - `room-types://list`
 - `housekeeping-sop://standard` (text/markdown)
 
 **Prompts:**
+
 - `morning-briefing`, `weekend-occupancy-forecast`, `late-checkout-template`
 
 **Tracing:** OTEL spans `mcp.tool.name / mcp.tenant.id / mcp.duration_ms` + activity-log row.
@@ -840,6 +877,7 @@ COMPLIANCE
 ### 15.1 Test partitioning
 
 К существующим test:serial / test / test:unit добавляем:
+
 - `test:integrations` — только integration-тесты.
 - `test:e2e` — только playwright.
 - `test:adversarial` — only теги adversarial.
@@ -848,6 +886,7 @@ COMPLIANCE
 ### 15.2 Feature flags
 
 В `apps/backend/src/config.ts` per integration:
+
 - `FEATURE_EPGU_ENABLED`, `FEATURE_PASSPORT_OCR_ENABLED`, `FEATURE_RKL_ENABLED`, `FEATURE_PUBLIC_WIDGET_ENABLED`, `FEATURE_CHANNEL_MANAGER_ENABLED`, `FEATURE_KPI_ENABLED`, `FEATURE_MCP_SERVER_ENABLED`.
 - DB-level overrides через `feature_flags` table per tenant.
 - **НЕ Unleash/LaunchDarkly** — env vars + DB. Phase 3 — Flagd self-host.
@@ -861,6 +900,7 @@ COMPLIANCE
 ### 15.4 Activity log canon
 
 Расширения в `packages/shared/src/activity.ts`:
+
 - `objectType`: `migration_registration | passport_scan | rkl_check | public_booking | channel_config | channel_booking | kpi_rollup | mcp_call | walked_guest`.
 - `actorType`: `user | guest | system | channel`.
 - `activityType`: extensive (см. research-files).
@@ -889,23 +929,23 @@ RU primary, EN secondary (Сочи specifics). Lingui v6.
 
 ## 16. Risks (обновлённый)
 
-| Риск | Вероятность | Воздействие | Mitigation |
-|---|---|---|---|
-| Мок недостаточно реалистичен | Средняя | Высокое | Behaviour-faithful canon. Sверка на M8.G. |
-| Sandbox → production случайно | Низкая | Критично | APP_MODE startup assertion + CI lint + telemetry. |
-| Channel Manager M8.C растягивается | Высокая | Высокое | Жёсткий cap 4 недели. Если не успеваем — урезать до 1 канала (TravelLine). |
-| Public widget overbooking race | Средняя | Высокое | YDB serializable + monotonic version. Adversarial тесты. |
-| 152-ФЗ нарушения | Низкая | Критично | TTL Object Storage + retention + согласие + DPA + breach 24h runbook. До 15 млн ₽ штраф. |
-| Mock OCR false positives | Низкая | Среднее | Heuristic confidence + manual confirmation step. |
-| Время до выручки растягивается | Высокая | Высокое (бизнес) | Открытое обсуждение с пользователем. Plan корректируется. |
-| Зависимости устаревают | Высокая | Среднее | npm-registry аудит после каждой подфазы. |
-| Pre-push gate деградирует | Средняя | Среднее | Test partitioning. Если test:serial > 5 min — split. |
-| **NEW:** ЕПГУ-договор регистрация | Высокая (срок) | Высокое | Mock работает full feature, реальная интеграция — отдельная фаза с lead-time 2-6 недель на ОВМ соглашение. |
-| **NEW:** Apaleo competition pressure | Высокая | Высокое | MCP в M8.E — обязательно. RU-specifics differentiator. |
-| **NEW:** Cost: ЭЦП ~3-5к/год + Yandex Vision биллинг + YooKassa комиссия + договоры с CM | Средняя | Среднее | Закладываем в business plan, не в M8 архитектуру. |
-| **NEW:** USN VAT threshold уточнение | Средняя | Среднее | system_constants table + WebFetch верификация перед launch. |
-| **NEW:** Универсальный QR с 01.09.2026 | Средняя | Высокое | Verify YooKassa support до июля 2026. |
-| **NEW:** СБП ИНН с 01.07.2026 | Средняя | Среднее | Schema готов (ИНН поля not nullable). |
+| Риск                                                                                     | Вероятность    | Воздействие      | Mitigation                                                                                                 |
+| ---------------------------------------------------------------------------------------- | -------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| Мок недостаточно реалистичен                                                             | Средняя        | Высокое          | Behaviour-faithful canon. Sверка на M8.G.                                                                  |
+| Sandbox → production случайно                                                            | Низкая         | Критично         | APP_MODE startup assertion + CI lint + telemetry.                                                          |
+| Channel Manager M8.C растягивается                                                       | Высокая        | Высокое          | Жёсткий cap 4 недели. Если не успеваем — урезать до 1 канала (TravelLine).                                 |
+| Public widget overbooking race                                                           | Средняя        | Высокое          | YDB serializable + monotonic version. Adversarial тесты.                                                   |
+| 152-ФЗ нарушения                                                                         | Низкая         | Критично         | TTL Object Storage + retention + согласие + DPA + breach 24h runbook. До 15 млн ₽ штраф.                   |
+| Mock OCR false positives                                                                 | Низкая         | Среднее          | Heuristic confidence + manual confirmation step.                                                           |
+| Время до выручки растягивается                                                           | Высокая        | Высокое (бизнес) | Открытое обсуждение с пользователем. Plan корректируется.                                                  |
+| Зависимости устаревают                                                                   | Высокая        | Среднее          | npm-registry аудит после каждой подфазы.                                                                   |
+| Pre-push gate деградирует                                                                | Средняя        | Среднее          | Test partitioning. Если test:serial > 5 min — split.                                                       |
+| **NEW:** ЕПГУ-договор регистрация                                                        | Высокая (срок) | Высокое          | Mock работает full feature, реальная интеграция — отдельная фаза с lead-time 2-6 недель на ОВМ соглашение. |
+| **NEW:** Apaleo competition pressure                                                     | Высокая        | Высокое          | MCP в M8.E — обязательно. RU-specifics differentiator.                                                     |
+| **NEW:** Cost: ЭЦП ~3-5к/год + Yandex Vision биллинг + YooKassa комиссия + договоры с CM | Средняя        | Среднее          | Закладываем в business plan, не в M8 архитектуру.                                                          |
+| **NEW:** USN VAT threshold уточнение                                                     | Средняя        | Среднее          | system_constants table + WebFetch верификация перед launch.                                                |
+| **NEW:** Универсальный QR с 01.09.2026                                                   | Средняя        | Высокое          | Verify YooKassa support до июля 2026.                                                                      |
+| **NEW:** СБП ИНН с 01.07.2026                                                            | Средняя        | Среднее          | Schema готов (ИНН поля not nullable).                                                                      |
 
 ---
 
@@ -958,20 +998,21 @@ RU primary, EN secondary (Сочи specifics). Lingui v6.
 
 С учётом ресерча уже выполненного (4 волны, 19 файлов) — оставшиеся фазы:
 
-| Подфаза | Чистая работа | + ресерч | + интеграция | + тесты + audit | Итого |
-|---|---|---|---|---|---|
-| M8.0 | 3-4 дня | 0 (готов) | 0 | 1 день | **5 дней** |
-| M8.A.0 | 8-10 дней | 0 (готов) | 0 | 2-3 дня | **2 недели** |
-| M8.A | 12-15 дней | 0 (готов) | mock | 3-4 дня | **3 недели** |
-| M8.B | 12-15 дней | 0 (готов) | mock + reference + magic-link | 3-4 дня | **3 недели** |
-| M8.C | 15-18 дней | 0 (готов) | 3 mocks | 3-4 дня | **3-4 недели** |
-| M8.D | 6-8 дней | 0 (готов) | DataLens prep | 1-2 дня | **1.5-2 недели** |
-| M8.E | 8-10 дней | 0 (готов) | MCP + AI assistant | 2 дня | **2 недели** |
-| M8.F | 4-5 дней | 0 | docs + видео | 1 день | **1 неделя** |
-| M8.G | 2-3 дня | 0 | audit | 1-2 дня | **0.5-1 неделя** |
-| **Итого** | | | | | **17-18.5 недель** |
+| Подфаза   | Чистая работа | + ресерч  | + интеграция                  | + тесты + audit | Итого              |
+| --------- | ------------- | --------- | ----------------------------- | --------------- | ------------------ |
+| M8.0      | 3-4 дня       | 0 (готов) | 0                             | 1 день          | **5 дней**         |
+| M8.A.0    | 8-10 дней     | 0 (готов) | 0                             | 2-3 дня         | **2 недели**       |
+| M8.A      | 12-15 дней    | 0 (готов) | mock                          | 3-4 дня         | **3 недели**       |
+| M8.B      | 12-15 дней    | 0 (готов) | mock + reference + magic-link | 3-4 дня         | **3 недели**       |
+| M8.C      | 15-18 дней    | 0 (готов) | 3 mocks                       | 3-4 дня         | **3-4 недели**     |
+| M8.D      | 6-8 дней      | 0 (готов) | DataLens prep                 | 1-2 дня         | **1.5-2 недели**   |
+| M8.E      | 8-10 дней     | 0 (готов) | MCP + AI assistant            | 2 дня           | **2 недели**       |
+| M8.F      | 4-5 дней      | 0         | docs + видео                  | 1 день          | **1 неделя**       |
+| M8.G      | 2-3 дня       | 0         | audit                         | 1-2 дня         | **0.5-1 неделя**   |
+| **Итого** |               |           |                               |                 | **17-18.5 недель** |
 
 Если требуется компрессия:
+
 - Срезать M8.C до 1 канала (TravelLine) — экономия 2 недели → **15-16 недель**.
 - Срезать M8.E.2 (admin AI assistant) → экономия 1 неделя → **14-15 недель**.
 

@@ -106,9 +106,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		expect(atEnd).toBe(16)
 
 		await page.keyboard.press('Home')
-		const atHome = await page.evaluate(() =>
-			document.activeElement?.getAttribute('aria-colindex'),
-		)
+		const atHome = await page.evaluate(() => document.activeElement?.getAttribute('aria-colindex'))
 		expect(atHome).toBe('2')
 	})
 
@@ -181,9 +179,7 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		await dialog.getByRole('button', { name: 'Отмена' }).click()
 	})
 
-	test('Shift+ArrowRight does NOT move grid focus (browser select preserved)', async ({
-		page,
-	}) => {
+	test('Shift+ArrowRight does NOT move grid focus (browser select preserved)', async ({ page }) => {
 		await page.goto('/')
 		await page.locator('[data-section-id="grid"]').first().click()
 

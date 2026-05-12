@@ -99,19 +99,16 @@ describe('paymentWebhookEventInsert', () => {
 		expect(result.success).toBe(false)
 	})
 
-	it.each([
-		'stub',
-		'yookassa',
-		'tkassa',
-		'sbp',
-		'digital_ruble',
-	] as const)('accepts providerCode = %s (FULL enum coverage)', (code) => {
-		const result = paymentWebhookEventInsert.safeParse({
-			...validBase,
-			providerCode: code,
-		})
-		expect(result.success).toBe(true)
-	})
+	it.each(['stub', 'yookassa', 'tkassa', 'sbp', 'digital_ruble'] as const)(
+		'accepts providerCode = %s (FULL enum coverage)',
+		(code) => {
+			const result = paymentWebhookEventInsert.safeParse({
+				...validBase,
+				providerCode: code,
+			})
+			expect(result.success).toBe(true)
+		},
+	)
 
 	it('rejects unknown providerCode', () => {
 		const result = paymentWebhookEventInsert.safeParse({

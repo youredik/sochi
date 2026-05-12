@@ -25,7 +25,7 @@ export async function seedBookingFixture(
 	const meRes = await page.request.get(`${apiBase}/auth/me`)
 	let orgSlug: string
 	if (meRes.ok()) {
-		const me = await meRes.json() as { activeOrganizationSlug?: string }
+		const me = (await meRes.json()) as { activeOrganizationSlug?: string }
 		orgSlug = me.activeOrganizationSlug ?? ''
 	} else {
 		// Fallback: parse current URL.
@@ -58,7 +58,8 @@ export async function seedBookingFixture(
 			documentNumber: `4510${docSuffix.padStart(6, '0')}`,
 		},
 	})
-	if (!guestRes.ok()) throw new Error(`guest.create HTTP ${guestRes.status()}: ${await guestRes.text()}`)
+	if (!guestRes.ok())
+		throw new Error(`guest.create HTTP ${guestRes.status()}: ${await guestRes.text()}`)
 	const guestId = ((await guestRes.json()) as { data: { id: string } }).data.id
 
 	const checkInIso = futureIso(futureDays)

@@ -122,31 +122,35 @@ describe('migrationRegistration.repo — create + getById', { tags: ['db'], time
 	})
 })
 
-describe('migrationRegistration.repo — enum coverage (epguChannel)', {
-	tags: ['db'],
-	timeout: 60_000,
-}, () => {
-	test('[E1] epguChannel = gost-tls roundtrip', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput({ epguChannel: 'gost-tls' })
-		const created = await repo.create(input)
-		expect(created.epguChannel).toBe('gost-tls')
-	})
+describe(
+	'migrationRegistration.repo — enum coverage (epguChannel)',
+	{
+		tags: ['db'],
+		timeout: 60_000,
+	},
+	() => {
+		test('[E1] epguChannel = gost-tls roundtrip', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput({ epguChannel: 'gost-tls' })
+			const created = await repo.create(input)
+			expect(created.epguChannel).toBe('gost-tls')
+		})
 
-	test('[E2] epguChannel = svoks roundtrip', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput({ epguChannel: 'svoks' })
-		const created = await repo.create(input)
-		expect(created.epguChannel).toBe('svoks')
-	})
+		test('[E2] epguChannel = svoks roundtrip', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput({ epguChannel: 'svoks' })
+			const created = await repo.create(input)
+			expect(created.epguChannel).toBe('svoks')
+		})
 
-	test('[E3] epguChannel = proxy-via-partner roundtrip', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput({ epguChannel: 'proxy-via-partner' })
-		const created = await repo.create(input)
-		expect(created.epguChannel).toBe('proxy-via-partner')
-	})
-})
+		test('[E3] epguChannel = proxy-via-partner roundtrip', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput({ epguChannel: 'proxy-via-partner' })
+			const created = await repo.create(input)
+			expect(created.epguChannel).toBe('proxy-via-partner')
+		})
+	},
+)
 
 describe('migrationRegistration.repo — listByBooking', { tags: ['db'], timeout: 60_000 }, () => {
 	test('[L1] listByBooking возвращает все rows одного bookingId, sorted DESC по createdAt', async () => {
@@ -306,336 +310,348 @@ describe('migrationRegistration.repo — listPendingPoll', { tags: ['db'], timeo
 	})
 })
 
-describe('migrationRegistration.repo — updateAfterReserve + updateAfterPoll', {
-	tags: ['db'],
-	timeout: 60_000,
-}, () => {
-	test('[U1] updateAfterReserve: epguOrderId + statusCode + submittedAt записаны', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		await repo.create(input)
-		const t = new Date('2026-05-01T10:00:00Z')
-		await repo.updateAfterReserve(TENANT_A, input.id, {
-			epguOrderId: 'order-XYZ',
-			statusCode: 17,
-			submittedAt: t,
-		})
-		const got = await repo.getById(TENANT_A, input.id)
-		expect(got?.epguOrderId).toBe('order-XYZ')
-		expect(got?.statusCode).toBe(17)
-		expect(got?.submittedAt).toBe(t.toISOString())
-	})
-
-	test('[U2] updateAfterPoll → final 3, reasonRefuse=null, errorCategory=null', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		await repo.create(input)
-		const t = new Date()
-		await repo.updateAfterReserve(TENANT_A, input.id, {
-			epguOrderId: 'order-final',
-			statusCode: 17,
-			submittedAt: t,
-		})
-		await repo.updateAfterPoll(TENANT_A, input.id, {
-			statusCode: 3,
-			isFinal: true,
-			reasonRefuse: null,
-			errorCategory: null,
-			retryCount: 5,
-			lastPolledAt: t,
-			nextPollAt: null,
-			finalizedAt: t,
-		})
-		const got = await repo.getById(TENANT_A, input.id)
-		expect(got?.statusCode).toBe(3)
-		expect(got?.isFinal).toBe(true)
-		expect(got?.reasonRefuse).toBeNull()
-		expect(got?.errorCategory).toBeNull()
-		expect(got?.retryCount).toBe(5)
-		expect(got?.finalizedAt).toBe(t.toISOString())
-		expect(got?.nextPollAt).toBeNull()
-	})
-
-	test('[U3] updateAfterPoll → refused 4 with all 8 errorCategory roundtrip', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const categories = [
-			'validation_format',
-			'signature_invalid',
-			'duplicate_notification',
-			'document_lost_or_invalid',
-			'rkl_match',
-			'region_mismatch',
-			'stay_period_exceeded',
-			'service_temporarily_unavailable',
-		] as const
-		const t = new Date()
-		for (const cat of categories) {
+describe(
+	'migrationRegistration.repo — updateAfterReserve + updateAfterPoll',
+	{
+		tags: ['db'],
+		timeout: 60_000,
+	},
+	() => {
+		test('[U1] updateAfterReserve: epguOrderId + statusCode + submittedAt записаны', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
 			const input = baseInput()
 			await repo.create(input)
+			const t = new Date('2026-05-01T10:00:00Z')
 			await repo.updateAfterReserve(TENANT_A, input.id, {
-				epguOrderId: `order-${cat}`,
+				epguOrderId: 'order-XYZ',
+				statusCode: 17,
+				submittedAt: t,
+			})
+			const got = await repo.getById(TENANT_A, input.id)
+			expect(got?.epguOrderId).toBe('order-XYZ')
+			expect(got?.statusCode).toBe(17)
+			expect(got?.submittedAt).toBe(t.toISOString())
+		})
+
+		test('[U2] updateAfterPoll → final 3, reasonRefuse=null, errorCategory=null', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			await repo.create(input)
+			const t = new Date()
+			await repo.updateAfterReserve(TENANT_A, input.id, {
+				epguOrderId: 'order-final',
 				statusCode: 17,
 				submittedAt: t,
 			})
 			await repo.updateAfterPoll(TENANT_A, input.id, {
-				statusCode: 4,
+				statusCode: 3,
 				isFinal: true,
-				reasonRefuse: `Test reason for ${cat}`,
-				errorCategory: cat,
-				retryCount: 1,
+				reasonRefuse: null,
+				errorCategory: null,
+				retryCount: 5,
 				lastPolledAt: t,
 				nextPollAt: null,
 				finalizedAt: t,
 			})
 			const got = await repo.getById(TENANT_A, input.id)
-			expect(got?.errorCategory).toBe(cat)
-			expect(got?.statusCode).toBe(4)
-			expect(got?.reasonRefuse).toBe(`Test reason for ${cat}`)
-		}
-	})
-
-	test('[U4] cross-tenant updateAfterReserve: tenant B не может изменить row tenant A', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput({ tenantId: TENANT_A })
-		await repo.create(input)
-		// Try to update from TENANT_B — should not affect TENANT_A row
-		await repo.updateAfterReserve(TENANT_B, input.id, {
-			epguOrderId: 'should-not-apply',
-			statusCode: 17,
-			submittedAt: new Date(),
+			expect(got?.statusCode).toBe(3)
+			expect(got?.isFinal).toBe(true)
+			expect(got?.reasonRefuse).toBeNull()
+			expect(got?.errorCategory).toBeNull()
+			expect(got?.retryCount).toBe(5)
+			expect(got?.finalizedAt).toBe(t.toISOString())
+			expect(got?.nextPollAt).toBeNull()
 		})
-		const got = await repo.getById(TENANT_A, input.id)
-		expect(got?.epguOrderId).toBeNull() // unchanged
-	})
 
-	test('[U6] cross-tenant updateAfterPoll: tenant B не может изменить row tenant A', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput({ tenantId: TENANT_A })
-		await repo.create(input)
-		const now = new Date()
-		await repo.updateAfterReserve(TENANT_A, input.id, {
-			epguOrderId: 'order-poll-leak',
-			statusCode: 17,
-			submittedAt: now,
+		test('[U3] updateAfterPoll → refused 4 with all 8 errorCategory roundtrip', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const categories = [
+				'validation_format',
+				'signature_invalid',
+				'duplicate_notification',
+				'document_lost_or_invalid',
+				'rkl_match',
+				'region_mismatch',
+				'stay_period_exceeded',
+				'service_temporarily_unavailable',
+			] as const
+			const t = new Date()
+			for (const cat of categories) {
+				const input = baseInput()
+				await repo.create(input)
+				await repo.updateAfterReserve(TENANT_A, input.id, {
+					epguOrderId: `order-${cat}`,
+					statusCode: 17,
+					submittedAt: t,
+				})
+				await repo.updateAfterPoll(TENANT_A, input.id, {
+					statusCode: 4,
+					isFinal: true,
+					reasonRefuse: `Test reason for ${cat}`,
+					errorCategory: cat,
+					retryCount: 1,
+					lastPolledAt: t,
+					nextPollAt: null,
+					finalizedAt: t,
+				})
+				const got = await repo.getById(TENANT_A, input.id)
+				expect(got?.errorCategory).toBe(cat)
+				expect(got?.statusCode).toBe(4)
+				expect(got?.reasonRefuse).toBe(`Test reason for ${cat}`)
+			}
 		})
-		// Capture state after legitimate update
-		const before = await repo.getById(TENANT_A, input.id)
-		expect(before?.statusCode).toBe(17)
-		// Try malicious cross-tenant write
-		await repo.updateAfterPoll(TENANT_B, input.id, {
-			statusCode: 4,
-			isFinal: true,
-			reasonRefuse: 'Attempted cross-tenant overwrite',
-			errorCategory: 'validation_format',
-			retryCount: 99,
-			lastPolledAt: now,
-			nextPollAt: null,
-			finalizedAt: now,
+
+		test('[U4] cross-tenant updateAfterReserve: tenant B не может изменить row tenant A', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput({ tenantId: TENANT_A })
+			await repo.create(input)
+			// Try to update from TENANT_B — should not affect TENANT_A row
+			await repo.updateAfterReserve(TENANT_B, input.id, {
+				epguOrderId: 'should-not-apply',
+				statusCode: 17,
+				submittedAt: new Date(),
+			})
+			const got = await repo.getById(TENANT_A, input.id)
+			expect(got?.epguOrderId).toBeNull() // unchanged
 		})
-		const after = await repo.getById(TENANT_A, input.id)
-		// All fields preserved (статус 17, не 4; isFinal остался false)
-		expect(after?.statusCode).toBe(17)
-		expect(after?.isFinal).toBe(false)
-		expect(after?.reasonRefuse).toBeNull()
-		expect(after?.errorCategory).toBeNull()
-		expect(after?.retryCount).toBe(0)
-	})
 
-	test('[U5] isFinal=false roundtrip (NOT truthy coercion to boolean)', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		await repo.create(input)
-		const t = new Date()
-		await repo.updateAfterReserve(TENANT_A, input.id, {
-			epguOrderId: 'order-iff',
-			statusCode: 17,
-			submittedAt: t,
+		test('[U6] cross-tenant updateAfterPoll: tenant B не может изменить row tenant A', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput({ tenantId: TENANT_A })
+			await repo.create(input)
+			const now = new Date()
+			await repo.updateAfterReserve(TENANT_A, input.id, {
+				epguOrderId: 'order-poll-leak',
+				statusCode: 17,
+				submittedAt: now,
+			})
+			// Capture state after legitimate update
+			const before = await repo.getById(TENANT_A, input.id)
+			expect(before?.statusCode).toBe(17)
+			// Try malicious cross-tenant write
+			await repo.updateAfterPoll(TENANT_B, input.id, {
+				statusCode: 4,
+				isFinal: true,
+				reasonRefuse: 'Attempted cross-tenant overwrite',
+				errorCategory: 'validation_format',
+				retryCount: 99,
+				lastPolledAt: now,
+				nextPollAt: null,
+				finalizedAt: now,
+			})
+			const after = await repo.getById(TENANT_A, input.id)
+			// All fields preserved (статус 17, не 4; isFinal остался false)
+			expect(after?.statusCode).toBe(17)
+			expect(after?.isFinal).toBe(false)
+			expect(after?.reasonRefuse).toBeNull()
+			expect(after?.errorCategory).toBeNull()
+			expect(after?.retryCount).toBe(0)
 		})
-		await repo.updateAfterPoll(TENANT_A, input.id, {
-			statusCode: 17,
-			isFinal: false,
-			reasonRefuse: null,
-			errorCategory: null,
-			retryCount: 0,
-			lastPolledAt: t,
-			nextPollAt: t,
-			finalizedAt: null,
+
+		test('[U5] isFinal=false roundtrip (NOT truthy coercion to boolean)', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			await repo.create(input)
+			const t = new Date()
+			await repo.updateAfterReserve(TENANT_A, input.id, {
+				epguOrderId: 'order-iff',
+				statusCode: 17,
+				submittedAt: t,
+			})
+			await repo.updateAfterPoll(TENANT_A, input.id, {
+				statusCode: 17,
+				isFinal: false,
+				reasonRefuse: null,
+				errorCategory: null,
+				retryCount: 0,
+				lastPolledAt: t,
+				nextPollAt: t,
+				finalizedAt: null,
+			})
+			const got = await repo.getById(TENANT_A, input.id)
+			expect(got?.isFinal).toBe(false)
+			expect(typeof got?.isFinal).toBe('boolean')
 		})
-		const got = await repo.getById(TENANT_A, input.id)
-		expect(got?.isFinal).toBe(false)
-		expect(typeof got?.isFinal).toBe('boolean')
-	})
-})
+	},
+)
 
-describe('migrationRegistration.repo — patch (three-state semantics)', {
-	tags: ['db'],
-	timeout: 60_000,
-}, () => {
-	test('[P1] empty patch → no-op, returns row', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		const created = await repo.create(input)
-		const result = await repo.patch(TENANT_A, input.id, {}, ACTOR)
-		expect(result?.id).toBe(input.id)
-		expect(result?.retryCount).toBe(created.retryCount)
-	})
-
-	test('[P2] patch retryCount=5 (defined) → applied', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		await repo.create(input)
-		const result = await repo.patch(TENANT_A, input.id, { retryCount: 5 }, ACTOR)
-		expect(result?.retryCount).toBe(5)
-	})
-
-	test('[P3] patch nextPollAt=null (clear) → DB column null', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		await repo.create(input)
-		// First set a nextPollAt
-		await repo.patch(TENANT_A, input.id, { nextPollAt: new Date() }, ACTOR)
-		// Now clear via null
-		const result = await repo.patch(TENANT_A, input.id, { nextPollAt: null }, ACTOR)
-		expect(result?.nextPollAt).toBeNull()
-	})
-
-	test('[P4] patch unknown id → returns null', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const result = await repo.patch(TENANT_A, 'never-existed', { retryCount: 99 }, ACTOR)
-		expect(result).toBeNull()
-	})
-
-	test('[P5] patch cross-tenant: tenant B patch row tenant A → no-op + null', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput({ tenantId: TENANT_A })
-		const created = await repo.create(input)
-		// TENANT_B пытается обновить row TENANT_A
-		const result = await repo.patch(TENANT_B, input.id, { retryCount: 999 }, ACTOR)
-		expect(result).toBeNull()
-		// row у TENANT_A осталась с retryCount=0
-		const got = await repo.getById(TENANT_A, input.id)
-		expect(got?.retryCount).toBe(created.retryCount)
-		expect(got?.retryCount).toBe(0)
-	})
-
-	test('[P6] patch undefined-preserve: nextPollAt absent → existing value сохраняется', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		await repo.create(input)
-		// Set initial nextPollAt
-		const t = new Date('2026-06-01T12:00:00Z')
-		const seeded = await repo.patch(TENANT_A, input.id, { nextPollAt: t }, ACTOR)
-		expect(seeded?.nextPollAt).toBe(t.toISOString())
-		// Now patch ONLY retryCount — nextPollAt should remain
-		const after = await repo.patch(TENANT_A, input.id, { retryCount: 3 }, ACTOR)
-		expect(after?.retryCount).toBe(3)
-		expect(after?.nextPollAt).toBe(t.toISOString())
-	})
-
-	// M8.A.5.note: operatorNote three-state semantic + immutability
-	test('[P7] patch operatorNote=value → row.operatorNote set', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		const created = await repo.create(input)
-		expect(created.operatorNote).toBeNull()
-		const note = 'Гость предоставил замену паспорта'
-		const after = await repo.patch(TENANT_A, input.id, { operatorNote: note }, ACTOR)
-		expect(after?.operatorNote).toBe(note)
-	})
-
-	test('[P8] patch operatorNote=null (clear) → DB column null', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		await repo.create(input)
-		await repo.patch(TENANT_A, input.id, { operatorNote: 'initial' }, ACTOR)
-		const after = await repo.patch(TENANT_A, input.id, { operatorNote: null }, ACTOR)
-		expect(after?.operatorNote).toBeNull()
-	})
-
-	test('[P9] patch operatorNote=undefined → existing value preserved', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		await repo.create(input)
-		await repo.patch(TENANT_A, input.id, { operatorNote: 'РКЛ false-positive resolved' }, ACTOR)
-		// patch only retryCount, leaving operatorNote absent → must preserve
-		const after = await repo.patch(TENANT_A, input.id, { retryCount: 1 }, ACTOR)
-		expect(after?.operatorNote).toBe('РКЛ false-positive resolved')
-		expect(after?.retryCount).toBe(1)
-	})
-
-	test('[P10] patch retryCount + operatorNote одновременно → оба applied', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		await repo.create(input)
-		const after = await repo.patch(
-			TENANT_A,
-			input.id,
-			{ retryCount: 7, operatorNote: 'Doc series translated from Korean' },
-			ACTOR,
-		)
-		expect(after?.retryCount).toBe(7)
-		expect(after?.operatorNote).toBe('Doc series translated from Korean')
-	})
-
-	test('[P11] full-row UPSERT preserves all immutable fields (id/tenantId/bookingId/createdAt/createdBy)', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		const created = await repo.create(input)
-		// Apply patch
-		await repo.patch(TENANT_A, input.id, { operatorNote: 'note' }, ACTOR)
-		const after = await repo.getById(TENANT_A, input.id)
-		// Immutables preserved verbatim
-		expect(after?.id).toBe(created.id)
-		expect(after?.tenantId).toBe(created.tenantId)
-		expect(after?.bookingId).toBe(created.bookingId)
-		expect(after?.guestId).toBe(created.guestId)
-		expect(after?.documentId).toBe(created.documentId)
-		expect(after?.createdAt).toBe(created.createdAt)
-		expect(after?.createdBy).toBe(created.createdBy)
-		// updatedBy moves to ACTOR
-		expect(after?.updatedBy).toBe(ACTOR)
-	})
-})
-
-describe('migrationRegistration.repo — updatedAt monotonic', {
-	tags: ['db'],
-	timeout: 60_000,
-}, () => {
-	test('[M1] updatedAt strictly monotonic across reserve → poll → patch', async () => {
-		const repo = createMigrationRegistrationRepo(getTestSql())
-		const input = baseInput()
-		const created = await repo.create(input)
-		const t0 = new Date(created.updatedAt).getTime()
-
-		await new Promise((resolve) => setTimeout(resolve, 5))
-		await repo.updateAfterReserve(TENANT_A, input.id, {
-			epguOrderId: 'order-mono',
-			statusCode: 17,
-			submittedAt: new Date(),
+describe(
+	'migrationRegistration.repo — patch (three-state semantics)',
+	{
+		tags: ['db'],
+		timeout: 60_000,
+	},
+	() => {
+		test('[P1] empty patch → no-op, returns row', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			const created = await repo.create(input)
+			const result = await repo.patch(TENANT_A, input.id, {}, ACTOR)
+			expect(result?.id).toBe(input.id)
+			expect(result?.retryCount).toBe(created.retryCount)
 		})
-		const r1 = await repo.getById(TENANT_A, input.id)
-		const t1 = new Date(r1?.updatedAt ?? '').getTime()
-		expect(t1).toBeGreaterThan(t0)
 
-		await new Promise((resolve) => setTimeout(resolve, 5))
-		await repo.updateAfterPoll(TENANT_A, input.id, {
-			statusCode: 17,
-			isFinal: false,
-			reasonRefuse: null,
-			errorCategory: null,
-			retryCount: 1,
-			lastPolledAt: new Date(),
-			nextPollAt: new Date(),
-			finalizedAt: null,
+		test('[P2] patch retryCount=5 (defined) → applied', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			await repo.create(input)
+			const result = await repo.patch(TENANT_A, input.id, { retryCount: 5 }, ACTOR)
+			expect(result?.retryCount).toBe(5)
 		})
-		const r2 = await repo.getById(TENANT_A, input.id)
-		const t2 = new Date(r2?.updatedAt ?? '').getTime()
-		expect(t2).toBeGreaterThan(t1)
 
-		await new Promise((resolve) => setTimeout(resolve, 5))
-		await repo.patch(TENANT_A, input.id, { retryCount: 5 }, ACTOR)
-		const r3 = await repo.getById(TENANT_A, input.id)
-		const t3 = new Date(r3?.updatedAt ?? '').getTime()
-		expect(t3).toBeGreaterThan(t2)
-	})
-})
+		test('[P3] patch nextPollAt=null (clear) → DB column null', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			await repo.create(input)
+			// First set a nextPollAt
+			await repo.patch(TENANT_A, input.id, { nextPollAt: new Date() }, ACTOR)
+			// Now clear via null
+			const result = await repo.patch(TENANT_A, input.id, { nextPollAt: null }, ACTOR)
+			expect(result?.nextPollAt).toBeNull()
+		})
+
+		test('[P4] patch unknown id → returns null', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const result = await repo.patch(TENANT_A, 'never-existed', { retryCount: 99 }, ACTOR)
+			expect(result).toBeNull()
+		})
+
+		test('[P5] patch cross-tenant: tenant B patch row tenant A → no-op + null', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput({ tenantId: TENANT_A })
+			const created = await repo.create(input)
+			// TENANT_B пытается обновить row TENANT_A
+			const result = await repo.patch(TENANT_B, input.id, { retryCount: 999 }, ACTOR)
+			expect(result).toBeNull()
+			// row у TENANT_A осталась с retryCount=0
+			const got = await repo.getById(TENANT_A, input.id)
+			expect(got?.retryCount).toBe(created.retryCount)
+			expect(got?.retryCount).toBe(0)
+		})
+
+		test('[P6] patch undefined-preserve: nextPollAt absent → existing value сохраняется', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			await repo.create(input)
+			// Set initial nextPollAt
+			const t = new Date('2026-06-01T12:00:00Z')
+			const seeded = await repo.patch(TENANT_A, input.id, { nextPollAt: t }, ACTOR)
+			expect(seeded?.nextPollAt).toBe(t.toISOString())
+			// Now patch ONLY retryCount — nextPollAt should remain
+			const after = await repo.patch(TENANT_A, input.id, { retryCount: 3 }, ACTOR)
+			expect(after?.retryCount).toBe(3)
+			expect(after?.nextPollAt).toBe(t.toISOString())
+		})
+
+		// M8.A.5.note: operatorNote three-state semantic + immutability
+		test('[P7] patch operatorNote=value → row.operatorNote set', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			const created = await repo.create(input)
+			expect(created.operatorNote).toBeNull()
+			const note = 'Гость предоставил замену паспорта'
+			const after = await repo.patch(TENANT_A, input.id, { operatorNote: note }, ACTOR)
+			expect(after?.operatorNote).toBe(note)
+		})
+
+		test('[P8] patch operatorNote=null (clear) → DB column null', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			await repo.create(input)
+			await repo.patch(TENANT_A, input.id, { operatorNote: 'initial' }, ACTOR)
+			const after = await repo.patch(TENANT_A, input.id, { operatorNote: null }, ACTOR)
+			expect(after?.operatorNote).toBeNull()
+		})
+
+		test('[P9] patch operatorNote=undefined → existing value preserved', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			await repo.create(input)
+			await repo.patch(TENANT_A, input.id, { operatorNote: 'РКЛ false-positive resolved' }, ACTOR)
+			// patch only retryCount, leaving operatorNote absent → must preserve
+			const after = await repo.patch(TENANT_A, input.id, { retryCount: 1 }, ACTOR)
+			expect(after?.operatorNote).toBe('РКЛ false-positive resolved')
+			expect(after?.retryCount).toBe(1)
+		})
+
+		test('[P10] patch retryCount + operatorNote одновременно → оба applied', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			await repo.create(input)
+			const after = await repo.patch(
+				TENANT_A,
+				input.id,
+				{ retryCount: 7, operatorNote: 'Doc series translated from Korean' },
+				ACTOR,
+			)
+			expect(after?.retryCount).toBe(7)
+			expect(after?.operatorNote).toBe('Doc series translated from Korean')
+		})
+
+		test('[P11] full-row UPSERT preserves all immutable fields (id/tenantId/bookingId/createdAt/createdBy)', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			const created = await repo.create(input)
+			// Apply patch
+			await repo.patch(TENANT_A, input.id, { operatorNote: 'note' }, ACTOR)
+			const after = await repo.getById(TENANT_A, input.id)
+			// Immutables preserved verbatim
+			expect(after?.id).toBe(created.id)
+			expect(after?.tenantId).toBe(created.tenantId)
+			expect(after?.bookingId).toBe(created.bookingId)
+			expect(after?.guestId).toBe(created.guestId)
+			expect(after?.documentId).toBe(created.documentId)
+			expect(after?.createdAt).toBe(created.createdAt)
+			expect(after?.createdBy).toBe(created.createdBy)
+			// updatedBy moves to ACTOR
+			expect(after?.updatedBy).toBe(ACTOR)
+		})
+	},
+)
+
+describe(
+	'migrationRegistration.repo — updatedAt monotonic',
+	{
+		tags: ['db'],
+		timeout: 60_000,
+	},
+	() => {
+		test('[M1] updatedAt strictly monotonic across reserve → poll → patch', async () => {
+			const repo = createMigrationRegistrationRepo(getTestSql())
+			const input = baseInput()
+			const created = await repo.create(input)
+			const t0 = new Date(created.updatedAt).getTime()
+
+			await new Promise((resolve) => setTimeout(resolve, 5))
+			await repo.updateAfterReserve(TENANT_A, input.id, {
+				epguOrderId: 'order-mono',
+				statusCode: 17,
+				submittedAt: new Date(),
+			})
+			const r1 = await repo.getById(TENANT_A, input.id)
+			const t1 = new Date(r1?.updatedAt ?? '').getTime()
+			expect(t1).toBeGreaterThan(t0)
+
+			await new Promise((resolve) => setTimeout(resolve, 5))
+			await repo.updateAfterPoll(TENANT_A, input.id, {
+				statusCode: 17,
+				isFinal: false,
+				reasonRefuse: null,
+				errorCategory: null,
+				retryCount: 1,
+				lastPolledAt: new Date(),
+				nextPollAt: new Date(),
+				finalizedAt: null,
+			})
+			const r2 = await repo.getById(TENANT_A, input.id)
+			const t2 = new Date(r2?.updatedAt ?? '').getTime()
+			expect(t2).toBeGreaterThan(t1)
+
+			await new Promise((resolve) => setTimeout(resolve, 5))
+			await repo.patch(TENANT_A, input.id, { retryCount: 5 }, ACTOR)
+			const r3 = await repo.getById(TENANT_A, input.id)
+			const t3 = new Date(r3?.updatedAt ?? '').getTime()
+			expect(t3).toBeGreaterThan(t2)
+		})
+	},
+)

@@ -63,13 +63,12 @@ describe('availableTransitions — exact-value per status', () => {
 		expect(availableTransitions('in_house')).toEqual(['checkOut', 'cancel'])
 	})
 
-	it.each([
-		'cancelled',
-		'checked_out',
-		'no_show',
-	] as const)('terminal %s → [] (no actions remain)', (s) => {
-		expect(availableTransitions(s)).toEqual([])
-	})
+	it.each(['cancelled', 'checked_out', 'no_show'] as const)(
+		'terminal %s → [] (no actions remain)',
+		(s) => {
+			expect(availableTransitions(s)).toEqual([])
+		},
+	)
 
 	it('adversarial: confirmed cannot checkOut (guest not in yet)', () => {
 		expect(availableTransitions('confirmed')).not.toContain('checkOut')

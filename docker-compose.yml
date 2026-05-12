@@ -38,7 +38,8 @@ services:
       # `project_deferred_deploy_plan.md`).
       - YDB_GRPC_ENABLE_TLS=false
     healthcheck:
-      test: ['CMD-SHELL', '/ydb -e grpc://localhost:2236 -d /local --no-discovery sql -s "SELECT 1"']
+      test:
+        ['CMD-SHELL', '/ydb -e grpc://localhost:2236 -d /local --no-discovery sql -s "SELECT 1"']
       interval: 10s
       start_period: 20s
       timeout: 5s

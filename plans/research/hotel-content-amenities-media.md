@@ -26,15 +26,15 @@ Booking.com **deprecates OTA endpoint Dec 2024 → full sunset 31 Dec 2026** в 
 
 Ключевые OTA codelists:
 
-| Codelist | Purpose | Scope |
-|---|---|---|
-| **HAC** | Hotel Amenity Codes | property-level |
-| **RMA** | Room Amenity Type | room-level |
-| **ITT** | Image Tag Type | media classification |
-| **PIC** | Picture Category Code | media coarse category |
-| **GRI** | Guest Room Info | room features |
-| **HOC** | Hotel Category | star rating type |
-| **MEAL** | Meal plans | rate plan attribute |
+| Codelist | Purpose               | Scope                 |
+| -------- | --------------------- | --------------------- |
+| **HAC**  | Hotel Amenity Codes   | property-level        |
+| **RMA**  | Room Amenity Type     | room-level            |
+| **ITT**  | Image Tag Type        | media classification  |
+| **PIC**  | Picture Category Code | media coarse category |
+| **GRI**  | Guest Room Info       | room features         |
+| **HOC**  | Hotel Category        | star rating type      |
+| **MEAL** | Meal plans            | rate plan attribute   |
 
 **Mapping internal taxonomy to OTA codelists is non-negotiable** для OTA distribution.
 
@@ -42,51 +42,53 @@ Booking.com **deprecates OTA endpoint Dec 2024 → full sunset 31 Dec 2026** в 
 
 Sample HAC (property-level):
 
-| HAC | Meaning |
-|---|---|
-| 1 | 24-hour front desk |
-| 5 | Air conditioning |
-| 35 / 5086 | Fitness centre |
-| 41 | Free airport shuttle |
-| 53 | Indoor parking |
-| 55 | Hot tub |
-| 76 | Restaurant |
-| 79 | Sauna |
-| 198 | Non-smoking rooms |
-| 5005 | Garden |
-| 5006 | Terrace |
-| 5041 | Family rooms |
-| 5044 | Spa & wellness centre |
-| 5054 | Kids' club |
-| 5154 | Swimming pool |
+| HAC       | Meaning               |
+| --------- | --------------------- |
+| 1         | 24-hour front desk    |
+| 5         | Air conditioning      |
+| 35 / 5086 | Fitness centre        |
+| 41        | Free airport shuttle  |
+| 53        | Indoor parking        |
+| 55        | Hot tub               |
+| 76        | Restaurant            |
+| 79        | Sauna                 |
+| 198       | Non-smoking rooms     |
+| 5005      | Garden                |
+| 5006      | Terrace               |
+| 5041      | Family rooms          |
+| 5044      | Spa & wellness centre |
+| 5054      | Kids' club            |
+| 5154      | Swimming pool         |
 
 **⚠️ Gap:** **нет canonical HAC/RMA для Wi-Fi** в публичном Booking.com codes-hac/codes-rma listing — Wi-Fi handled через **Internet Details API** с атрибутами (free/paid, in-room vs public, type=WiFi/wired, speed).
 
 Sample RMA (room-level):
 
-| RMA | Meaning |
-|---|---|
-| 2 | Air conditioning |
-| 50 | Hairdryer |
-| 59 | Kitchen |
-| 68 | Microwave |
-| 69 | Minibar |
-| 88 | Refrigerator |
-| 92 | Safe |
-| 251 | TV |
-| 223 | Mountain view |
-| 224 | Ocean view |
-| 5017 | Balcony |
-| 5037 | Patio |
-| 5109 | Lake view |
-| 5110 | Garden view |
-| 5121 | City view |
-| 5122 | River view |
+| RMA  | Meaning          |
+| ---- | ---------------- |
+| 2    | Air conditioning |
+| 50   | Hairdryer        |
+| 59   | Kitchen          |
+| 68   | Microwave        |
+| 69   | Minibar          |
+| 88   | Refrigerator     |
+| 92   | Safe             |
+| 251  | TV               |
+| 223  | Mountain view    |
+| 224  | Ocean view       |
+| 5017 | Balcony          |
+| 5037 | Patio            |
+| 5109 | Lake view        |
+| 5110 | Garden view      |
+| 5121 | City view        |
+| 5122 | River view       |
 
 ITT (Image Tag) sample:
+
 - 3 = Property building, 7 = Restaurant, 10 = Facade/entrance, 13 = Bed, 153 = Bathroom, 157 = Balcony/Terrace, 158 = Kitchen, 173 = Whole-room photo, 199 = Bedroom, 248-256 = Views.
 
 PIC (coarser):
+
 - 1 = Exterior, 2 = Lobby, 3 = Pool, 4 = Restaurant, 5 = Health club, 6 = Guestroom, 12 = Spa, 13 = Bar, 21 = Room amenity, 22 = Property amenity.
 
 ### 1.3 Expedia EQC / Product API
@@ -161,6 +163,7 @@ Pattern across all four (Apaleo/Mews/Cloudbeds/MyFidelio): **Property → RoomTy
 Заменил ПП-1860. Effective: 1 Jan 2025 → 1 Jan 2031.
 
 **Mandatory** для всех `средств размещения`:
+
 - Hotels, apart-hotels, sanatoria, hostels, camping, glamping, recreation bases.
 - Deadline для входа в **Единый реестр**: **1 Sep 2025**.
 - **Penalties с 6 Sep 2025**: officials 50-70k ₽, **legal entities 300-450k ₽**.
@@ -169,12 +172,14 @@ Pattern across all four (Apaleo/Mews/Cloudbeds/MyFidelio): **Property → RoomTy
 **Star rating drives mandatory amenities**; **Приложение № 5** (требования к номерам) и **Приложение № 6** (балльная оценка) — canonical lists.
 
 Highlights для RU integration:
+
 - New emphasis на **family rooms** и **mobility-impaired (МГН)** rooms — bonus points + minimum quotas (4*/5* с 50+ rooms must have ≥5% multi-room/connecting и ≥5% high-category rooms).
 - Multi-occupancy rooms capped at **8 persons** (был 12).
 - **Категории номеров:** 5 высших + 5 стандартных = 10 categories (junior_suite, suite, apartment, studio, family, accessible, standard_1room, standard_2room, ...).
 - Для Sochi (курортная категория): seasonal classification, anti-seismic requirements, tour operator registration. Sochi-specific: туристический налог 2% от 2026.
 
 **Schema impact:**
+
 ```ts
 classification {
   category: 1 | 2 | 3 | 4 | 5 | null  // 1-5 stars или null
@@ -199,6 +204,7 @@ area_m2: number  // обязательное per ПП-1951
 ### 4.3 Информационное сопровождение (152-ФЗ + ЗоЗПП)
 
 Property page must display:
+
 - Full legal name, ОГРН, адрес, contact info.
 - Услуги/цены, правила проживания.
 - Информация о классификации (категория + номер сертификата).
@@ -211,14 +217,14 @@ Property page must display:
 
 ### 5.1 Source dimensions
 
-| Channel/Use | Min | Recommended | Aspect |
-|---|---|---|---|
-| Booking.com | 2048×1080 | 4000×3000 (~12MP) | landscape, free-form |
-| Booking.com 360° | 1280×900 | 4000×2000 | exactly 2:1 |
-| Expedia | 1024×768 | 2880×1920 | 3:2 preferred |
-| Airbnb | 1024×683 | 2048×1365 | 3:2 |
-| Google Hotels (Maps) | 720p | 1920×1080 | 16:9 |
-| Our widget hero | — | 1920×1280 | 3:2 |
+| Channel/Use          | Min       | Recommended       | Aspect               |
+| -------------------- | --------- | ----------------- | -------------------- |
+| Booking.com          | 2048×1080 | 4000×3000 (~12MP) | landscape, free-form |
+| Booking.com 360°     | 1280×900  | 4000×2000         | exactly 2:1          |
+| Expedia              | 1024×768  | 2880×1920         | 3:2 preferred        |
+| Airbnb               | 1024×683  | 2048×1365         | 3:2                  |
+| Google Hotels (Maps) | 720p      | 1920×1080         | 16:9                 |
+| Our widget hero      | —         | 1920×1280         | 3:2                  |
 
 **Canonical store dimension: 4000×3000 original** (или 4032×3024 от modern phones). OTA-distributable master. Always store original; everything else derived.
 
@@ -226,13 +232,13 @@ Property page must display:
 
 Pre-render at upload time:
 
-| Variant | Width | Format | Use |
-|---|---|---|---|
-| `thumb` | 320 | AVIF + WebP | search-result card thumbnail |
-| `card` | 800 | AVIF + WebP | property card hero |
-| `medium` | 1280 | AVIF + WebP | room gallery card |
-| `large` | 1920 | AVIF + WebP | hero / lightbox |
-| `xl` | 2880 | AVIF + WebP | retina lightbox |
+| Variant    | Width  | Format                    | Use                          |
+| ---------- | ------ | ------------------------- | ---------------------------- |
+| `thumb`    | 320    | AVIF + WebP               | search-result card thumbnail |
+| `card`     | 800    | AVIF + WebP               | property card hero           |
+| `medium`   | 1280   | AVIF + WebP               | room gallery card            |
+| `large`    | 1920   | AVIF + WebP               | hero / lightbox              |
+| `xl`       | 2880   | AVIF + WebP               | retina lightbox              |
 | `original` | source | original (JPEG/HEIC→JPEG) | OTA distribution + downloads |
 
 `<picture>` с `srcset` + `sizes`. **AVIF gives 20-30% LCP win** над WebP-only на image-heavy pages — но keep WebP fallback для Safari < 16. Add `width`/`height` атрибуты для CLS prevention.
@@ -242,6 +248,7 @@ Pre-render at upload time:
 **Yandex Cloud НЕ предлагает** managed image-transformation как Cloudinary/Imgix на 2026.
 
 **Canonical pattern:**
+
 1. **Upload** → original в Object Storage `media-original/` (versioned, encrypted, private).
 2. **Cloud Function** trigger на `s3:ObjectCreated:*` → reads original, runs **`sharp` (Node.js)** или vips/imagemagick, генерирует 6 variants × 2 formats = 12 files, writes в `media-derived/`.
 3. **Yandex Cloud CDN** в front of `media-derived/` для global edge caching (Sochi → Moscow → Krasnodar PoPs).
@@ -442,10 +449,12 @@ Widget rendering canon: **always show explicit cutoff date/time** ("Беспла
 ## Sources
 
 **OTA / OpenTravel:**
+
 - [OTA_HotelDescriptiveContentNotifRQ XSD (GitHub)](https://github.com/ExM/XsdCoverage/blob/master/Ota/XsdShemas/OTA_HotelDescriptiveContentNotifRQ.xsd)
 - [OpenTravel Specs Download](https://opentravel.org/download-specs/)
 
 **Booking.com:**
+
 - [HAC Codes (OTA 2014B)](https://developers.booking.com/connectivity/docs/codes-hac)
 - [RMA Codes](https://developers.booking.com/connectivity/docs/codes-rma)
 - [ITT Image Tag Codes](https://developers.booking.com/connectivity/docs/codes-itt)
@@ -453,9 +462,11 @@ Widget rendering canon: **always show explicit cutoff date/time** ("Беспла
 - [Photo Requirements](https://partner.booking.com/en-us/help/property-page/photos-extranet/understanding-photo-requirements-your-property)
 
 **Expedia:**
+
 - [Amenity Resources](https://developers.expediagroup.com/supply/lodging/docs/property_mgmt_apis/product/reference/amenity_resources/)
 
 **Apaleo / Mews / Cloudbeds:**
+
 - [Apaleo Developer Documentation](https://apaleo.dev/)
 - [Apaleo API Endpoints](https://apaleo.dev/guides/api/endpoints.html)
 - [Apaleo Translations Discussion](https://github.com/apaleo/api/discussions/966)
@@ -463,17 +474,20 @@ Widget rendering canon: **always show explicit cutoff date/time** ("Беспла
 - [Cloudbeds API Docs](https://hotels.cloudbeds.com/api/v1.1/docs/)
 
 **РФ:**
+
 - [ПП РФ № 1951 от 27.12.2024 (КонсультантПлюс)](https://www.consultant.ru/document/cons_doc_LAW_495340/)
 - [ПП РФ № 1951 (ГАРАНТ)](https://www.garant.ru/hotlaw/federal/1778726/)
 - [ГОСТ Р 51185-2014 (отменён 2019)](https://internet-law.ru/gosts/gost/58791)
 - [Travelline: классификация 2025](https://www.travelline.ru/blog/klassifikatsii-gostinits-polozhenie-i-izmeneniya-s-1-yanvarya-2025-goda/)
 
 **Yandex Cloud:**
+
 - [Yandex Object Storage S3 docs](https://yandex.cloud/en/docs/storage/s3/)
 - [On-the-fly thumbnails (Matrosov)](https://nikolaymatrosov.medium.com/yandex-cloud-on-the-fly-thumbnails-46963af33e02)
 - [Yandex Maps JavaScript API](https://yandex.ru/maps-api/products/js-api)
 
 **Standards:**
+
 - [Schema.org Hotel](https://schema.org/Hotel)
 - [Schema.org LodgingBusiness](https://schema.org/docs/hotels.html)
 - [Hotel Schema Markup Guide 2026](https://getwaymarker.com/blog/hotel-schema-markup-complete-guide/)

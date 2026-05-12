@@ -78,8 +78,6 @@ test.describe('anonymous', () => {
 
 	test('/privacy is publicly accessible', async ({ page }) => {
 		await page.goto('/privacy')
-		await expect(
-			page.getByRole('heading', { name: /Политика конфиденциальности/ }),
-		).toBeVisible()
+		await expect(page.getByRole('heading', { name: /Политика конфиденциальности/ })).toBeVisible()
 	})
 })

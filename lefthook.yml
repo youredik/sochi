@@ -19,15 +19,28 @@
 pre-commit:
   parallel: true
   jobs:
-    - name: biome
-      glob: "*.{ts,tsx,js,jsx,json,css}"
-      run: pnpm biome check --staged --no-errors-on-unmatched {staged_files}
+    - name: oxfmt
+      glob: '*.{ts,tsx,js,jsx,json,css,md,html,yml,yaml}'
+      # Phase 12 (2026-05-12): oxfmt replaces biome formatter — 3× faster,
+      # 100% Prettier conformance, ecosystem alignment (Vue/Vercel/Sentry).
+      # Mass-format commit in .git-blame-ignore-revs.
+      run: pnpm exec oxfmt {staged_files}
+      stage_fixed: true
+
+    - name: biome-lint
+      glob: '*.{ts,tsx,js,jsx,json,css}'
+      # Biome retained as LINTER ONLY (formatter swapped to oxfmt).
+      # Heavy lift: per-package noRestrictedImports overrides + project-domain
+      # rules (noUnresolvedImports, noPrivateImports, noUndeclaredDependencies,
+      # noImportCycles, noFloatingPromises, noLeakedRender) — not trivially
+      # portable to oxlint.
+      run: pnpm biome lint --staged --no-errors-on-unmatched {staged_files}
 
     - name: sherif
       run: pnpm sherif
 
     - name: typecheck
-      glob: "*.{ts,tsx}"
+      glob: '*.{ts,tsx}'
       # `pnpm typecheck` is now canonical = tsgo parallel (Phase 4 full
       # 2026-05-12). `pnpm typecheck:fallback` = tsc parallel for triage.
       # Microsoft endorsement: TS 7 Beta «ready for CI pipelines today».
@@ -36,11 +49,11 @@ pre-commit:
       run: pnpm typecheck
 
     - name: knip
-      glob: "*.{ts,tsx,json}"
+      glob: '*.{ts,tsx,json}'
       run: pnpm knip
 
     - name: depcruise
-      glob: "*.{ts,tsx}"
+      glob: '*.{ts,tsx}'
       run: pnpm depcruise
 
 # Pre-push: minimal blocking gate (≤5s hard cap).

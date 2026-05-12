@@ -15,17 +15,17 @@
 
 ## 1. Канонические notification events (2026)
 
-| Event | Trigger | Когда | Email | SMS | Push | RU subject |
-|---|---|---|---|---|---|---|
-| `booking_confirmed` | Successful payment OR confirmed reservation | Instant (<60s) | yes | no | opt-in | «Бронирование № X — подтверждено» |
-| `payment_receipt` | Fiscal receipt issued (54-ФЗ) | Когда чек ОФД готов | yes | no | no | «Кассовый чек по бронированию № X» |
-| `pre_arrival` | T−3 days от check-in (Apaleo/Booking.com canon; Mews ставит T−2d/48h) | Cron, 10:00 локально | yes | no | yes | «Скоро ваш отдых: приезд через 3 дня» |
-| `arrival_day` | Day-of, T−4h до check-in time | Cron, ≥08:00 локально | yes | yes | yes | «Сегодня ждём вас в {{property_name}}» |
-| `post_stay_review` | T+24h от check-out (canon: 2h thank-you → 24h review) | Cron, 11:00 локально | yes | no | no | «Спасибо за визит! Поделитесь впечатлениями» |
-| `booking_cancelled` | Cancel SM | Instant | yes | yes (если ≤24h от check-in) | yes | «Бронирование № X отменено» |
-| `booking_modified` | Material change | Instant | yes | no | yes | «Изменения в бронировании № X» |
-| (опц.) `payment_refunded` | Refund posted | Instant after acquirer ACK | yes | no | no | «Возврат по бронированию № X» |
-| (опц.) `payment_failed` | Charge declined | Instant | yes | yes (high-priority) | yes | «Платёж по № X не прошёл» |
+| Event                     | Trigger                                                               | Когда                      | Email | SMS                         | Push   | RU subject                                   |
+| ------------------------- | --------------------------------------------------------------------- | -------------------------- | ----- | --------------------------- | ------ | -------------------------------------------- |
+| `booking_confirmed`       | Successful payment OR confirmed reservation                           | Instant (<60s)             | yes   | no                          | opt-in | «Бронирование № X — подтверждено»            |
+| `payment_receipt`         | Fiscal receipt issued (54-ФЗ)                                         | Когда чек ОФД готов        | yes   | no                          | no     | «Кассовый чек по бронированию № X»           |
+| `pre_arrival`             | T−3 days от check-in (Apaleo/Booking.com canon; Mews ставит T−2d/48h) | Cron, 10:00 локально       | yes   | no                          | yes    | «Скоро ваш отдых: приезд через 3 дня»        |
+| `arrival_day`             | Day-of, T−4h до check-in time                                         | Cron, ≥08:00 локально      | yes   | yes                         | yes    | «Сегодня ждём вас в {{property_name}}»       |
+| `post_stay_review`        | T+24h от check-out (canon: 2h thank-you → 24h review)                 | Cron, 11:00 локально       | yes   | no                          | no     | «Спасибо за визит! Поделитесь впечатлениями» |
+| `booking_cancelled`       | Cancel SM                                                             | Instant                    | yes   | yes (если ≤24h от check-in) | yes    | «Бронирование № X отменено»                  |
+| `booking_modified`        | Material change                                                       | Instant                    | yes   | no                          | yes    | «Изменения в бронировании № X»               |
+| (опц.) `payment_refunded` | Refund posted                                                         | Instant after acquirer ACK | yes   | no                          | no     | «Возврат по бронированию № X»                |
+| (опц.) `payment_failed`   | Charge declined                                                       | Instant                    | yes   | yes (high-priority)         | yes    | «Платёж по № X не прошёл»                    |
 
 ---
 
@@ -67,14 +67,14 @@
 
 ## 4. SMS templates RU
 
-| Параметр | Значение |
-|---|---|
-| Длина | **70 chars Cyrillic / 160 Latin** (multi-part: 67/153) |
-| Сценарии | `arrival_day`, `payment_failed`, опц. `booking_cancelled` (≤24h) |
-| Цена 2026 | **5,55–8,80 ₽/SMS Cyrillic** (sms.ru) |
-| Sender ID | Зарегистрированное alpha-имя (бренд) для транзакций |
-| Provider canonical | **SMS.ru** (entry, REST API, sender-name registration); SMSC.ru — backup |
-| Opt-out | Промо-SMS обязано иметь «Стоп{пробел}{слово}»; транзакции — best-practice |
+| Параметр           | Значение                                                                  |
+| ------------------ | ------------------------------------------------------------------------- |
+| Длина              | **70 chars Cyrillic / 160 Latin** (multi-part: 67/153)                    |
+| Сценарии           | `arrival_day`, `payment_failed`, опц. `booking_cancelled` (≤24h)          |
+| Цена 2026          | **5,55–8,80 ₽/SMS Cyrillic** (sms.ru)                                     |
+| Sender ID          | Зарегистрированное alpha-имя (бренд) для транзакций                       |
+| Provider canonical | **SMS.ru** (entry, REST API, sender-name registration); SMSC.ru — backup  |
+| Opt-out            | Промо-SMS обязано иметь «Стоп{пробел}{слово}»; транзакции — best-practice |
 
 ### 4.1 Шаблоны (≤70 cyrillic chars per segment)
 
@@ -318,46 +318,47 @@ Preheader: {{modification_summary}}
 
 ### 11.1 Канонические форматы (industry survey 2026)
 
-| PMS / OTA | Формат | Длина | Примеры |
-|---|---|---|---|
-| Apaleo | UPPERCASE alphanumeric | 8 chars | `KYKXKLWL` |
-| Mews | mixed alphanumeric | ~12 | по доке не публикует |
-| Booking.com | numeric | 10 digits | `1234567890` (+ separate PIN) |
-| Hilton/Marriott | LETTER+digits | 7-9 | `H1234567` |
-| Airline PNR | UPPERCASE alphanumeric | **6** | `A1B2C3` |
+| PMS / OTA       | Формат                 | Длина     | Примеры                       |
+| --------------- | ---------------------- | --------- | ----------------------------- |
+| Apaleo          | UPPERCASE alphanumeric | 8 chars   | `KYKXKLWL`                    |
+| Mews            | mixed alphanumeric     | ~12       | по доке не публикует          |
+| Booking.com     | numeric                | 10 digits | `1234567890` (+ separate PIN) |
+| Hilton/Marriott | LETTER+digits          | 7-9       | `H1234567`                    |
+| Airline PNR     | UPPERCASE alphanumeric | **6**     | `A1B2C3`                      |
 
 ### 11.2 Required properties
 
-| Property | Зачем | Наш выбор |
-|---|---|---|
-| Memorable | Гость диктует по телефону | да — no-lookalikes alphabet |
-| Unique | Collision-resistance | per-tenant unique, ~10^14 space |
-| Tenant-scoped | Tenant1 не видит ID Tenant2 | UNIQUE(tenant_id, reference) |
-| Sortable | Admin search by date | **нет** — leakуется PII (booking volume) |
-| URL-safe | В magic-link | да |
-| Brute-force resistant | Гость с ref+email manage | reference недостаточен; нужен JWT |
-| Spoken-friendly | Дикция по телефону | uppercase only, без vowels |
+| Property              | Зачем                       | Наш выбор                                |
+| --------------------- | --------------------------- | ---------------------------------------- |
+| Memorable             | Гость диктует по телефону   | да — no-lookalikes alphabet              |
+| Unique                | Collision-resistance        | per-tenant unique, ~10^14 space          |
+| Tenant-scoped         | Tenant1 не видит ID Tenant2 | UNIQUE(tenant_id, reference)             |
+| Sortable              | Admin search by date        | **нет** — leakуется PII (booking volume) |
+| URL-safe              | В magic-link                | да                                       |
+| Brute-force resistant | Гость с ref+email manage    | reference недостаточен; нужен JWT        |
+| Spoken-friendly       | Дикция по телефону          | uppercase only, без vowels               |
 
 ### 11.3 Recommendation
 
 ```ts
 // packages/shared/src/id/booking-reference.ts
-import { customAlphabet } from 'nanoid';
+import { customAlphabet } from 'nanoid'
 
 // 20 chars uppercase, no vowels (no obscene), no 0/1/O/I/L/S/Z/2/5/U/V/A/E
-const ALPHABET = '6789BCDFGHJKLMNPQRTW';
-const generateRefSuffix = customAlphabet(ALPHABET, 9);
+const ALPHABET = '6789BCDFGHJKLMNPQRTW'
+const generateRefSuffix = customAlphabet(ALPHABET, 9)
 
 export function generateBookingReference(tenantSlug: string): string {
-  // tenantSlug uppercase ASCII, max 8 chars (validated at tenant creation)
-  // suffix: 20^9 ≈ 5.12 × 10^11 ≈ 512 billion combos
-  return `${tenantSlug.toUpperCase()}-${generateRefSuffix()}`;
+	// tenantSlug uppercase ASCII, max 8 chars (validated at tenant creation)
+	// suffix: 20^9 ≈ 5.12 × 10^11 ≈ 512 billion combos
+	return `${tenantSlug.toUpperCase()}-${generateRefSuffix()}`
 }
 ```
 
 **Length = 9 + tenant slug**:
+
 - 9 random chars: birthday-paradox 1% collision на ~3M записей; UNIQUE check ловит остальное.
-- + slug = ~13–17 chars total. Spoken: «РИВЬЕРА — К-9-М-3-П-Х-Р-4-Т» (~10 sec).
+- - slug = ~13–17 chars total. Spoken: «РИВЬЕРА — К-9-М-3-П-Х-Р-4-Т» (~10 sec).
 
 **Tenant slug**: храним поле `tenant.public_slug` — обязательное, ASCII uppercase, 3–8 chars, regex `^[A-Z][A-Z0-9]{2,7}$`.
 
@@ -420,6 +421,7 @@ export function generateBookingReference(tenantSlug: string): string {
 ## 14. Источники
 
 **Notifications:**
+
 - [Yandex Cloud Postbox](https://yandex.cloud/en/services/postbox)
 - [Yandex Postbox quickstart docs](https://github.com/yandex-cloud/docs/blob/master/en/postbox/quickstart.md)
 - [38-ФЗ ст. 18 (КонсультантПлюс)](https://www.consultant.ru/document/cons_doc_LAW_58968/f892dec1383709792452f18d36e7043306e2be0a/)
@@ -430,6 +432,7 @@ export function generateBookingReference(tenantSlug: string): string {
 - [Litmus Apple MPP](https://www.litmus.com/blog/apple-mail-privacy-protection-for-marketers)
 
 **Reference number:**
+
 - [nanoid (npm 5.1.9)](https://github.com/ai/nanoid)
 - [nanoid-dictionary alphabets](https://github.com/CyberAP/nanoid-dictionary)
 - [Apaleo Booking API spec](https://api.apaleo.com/swagger/index.html?urls.primaryName=Booking+V1)
