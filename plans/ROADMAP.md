@@ -9,7 +9,9 @@
 
 ## Сейчас работаем над
 
-**Awaiting Track B kickoff** — Track A complete (A1-A7 ✅). Next milestone = Yandex Cloud deploy phase. Plan canon `plans/track-b-deploy-canonical.md` to be created (R1+R2+R3 ≥ today's date перед стартом). Cached research в `project_deferred_deploy_plan.md` (SourceCraft + Lockbox + ALB + monitoring + cron infra).
+**Track A.bis (pre-flight DONE 2026-05-12)** — Hotelier Admin App-Shell Sidebar. Plan canon: [`plans/track-a-bis-canonical.md`](track-a-bis-canonical.md). R1+R2+R3+R4 empirical-verify ≥2026-05-12 — 22+ corrections captured. **7 active sidebar destinations** (no vapor links per `feedback_no_halfway.md`). **Vaul → shadcn `<Sheet>` + Base UI 1.4.1 GA Drawer** migration (5 consumers — sidebar-drawer DELETE / migration-detail / refund-sheet / sticky-summary / consent-block). 6 sub-phases A.bis.0..A.bis.5. ~102 strict tests target. 5 shadcn sidebar known-issue patches (D12-D16: #6761 dismiss button / #8176 uncontrolled prop / #9335 single-provider / aria-label Cyrillic / forced-colors). Discovery breakpoint `md:` (768px) domain-specific для front-desk tablets (override generic R2 `lg:` canon). Закрывает 1 из 3 P0 (Channels недискаверабельны на desktop) + foundation для разблокировки rate-calendar / inventory-CRUD / settings sub-phases.
+
+**Awaiting Track B kickoff** (after A.bis lands) — Yandex Cloud deploy phase. Plan canon `plans/track-b-deploy-canonical.md` to be created (R1+R2+R3 ≥ today's date перед стартом). Cached research в `project_deferred_deploy_plan.md` (SourceCraft + Lockbox + ALB + monitoring + cron infra).
 
 **Track A7 — M10 Channel Manager Mock** ✅ DONE 2026-05-05 — see `project_m10_done.md`. 8+ commits pushed origin/main (`ace0ca6` pre-flight + revisions + `b4a30cd` Foundation + `56eecab` runtime fix + `0c18605` TravelLine + `0d10ce1` Yandex.Travel + `afe87c6` Ostrovok ETG + `68a675f` sync orchestrator + admin overlay + test loop canon + `a5172a9` closure docs + A7.5.fix demo seed + admin overlay mounted + dispatcher status updates + factory sanctions). **251 strict tests** (target ~114, overdelivered 2.2×). 9 migrations (0050-0059), 3 channel adapters behaviour-faithful (TL polling-not-webhook + YT Bnovo passthrough + ETG 5-stage SM), 5 repos, dispatcher worker (Hookdeck tiered) + onDispatchOutcome → connection.syncStatus, admin overlay UI mounted в `/o/:slug/admin/channels`, lru-cache@11.3.6 + msw@2.14.3 (published TODAY 2026-05-04). 9-gate green: backend test:fast 3974/0 + channel domain DB tests 35/35 isolated. Senior pivots: test loop canon (`pnpm test:fast` 47s default; `test:serial` only as final pre-push gate); factory-level sanctions HARD-DISABLE D16 defense-in-depth. **Боль 2.2 closure verified end-to-end**: `pnpm seed:demo` populates 3 channels → admin opens `/admin/channels` → bookings dispatch → connections update → overlay refreshes within 30s.
 
@@ -120,7 +122,40 @@
 
 ---
 
-## Track B — Deploy Infra (после Track A)
+## Track A.bis — Hotelier Admin App-Shell Sidebar (2026-05-12 inserted)
+
+**Rationale:** После 6 раундов finальной session-audit 2026-05-12 (Сочи PMS frontend coverage) — Track A закрыл 6/7 функций end-to-end **на бэкенде**, но hotelier desktop admin UX имеет 3 P0:
+1. Rate / Availability daily calendar (нет UI для post-setup управления)
+2. Inventory CRUD после setup (нельзя add roomType/ratePlan)
+3. Channels недискаверабельны на desktop (страница есть, но не в nav)
+
+A.bis = архитектурный foundation для всех 3 через **proper app-shell sidebar** (Linear/Vercel/Cloudbeds canon + domain-specific md: tablet override). Без A.bis каждая будущая admin-страница повторяет channels-discoverability gap.
+
+| # | Sub-phase | Scope | Strict tests target | Plan canon |
+|---|---|---|---|---|
+| **A.bis.0** | Vaul migration prep | DROP vaul + ADD @base-ui/react 1.4.1 GA + 4 Radix primitives + bump tailwind/lucide. Create `ui/sheet.tsx` + `ui/widget-drawer.tsx`. Migrate 5 Vaul consumers (sidebar-drawer DELETE / migration-detail / refund-sheet / sticky-summary / consent-block). Split `ui/responsive-sheet.tsx` admin vs widget. | ~25 | `track-a-bis-canonical.md` §7 |
+| **A.bis.1** | shadcn sidebar primitive | CLI add → `ui/sidebar.tsx`. Apply 5 patches (D12-D16: dismiss button #6761 / uncontrolled prop #8176 / aria-label Cyrillic / forced-colors / single-provider). | ~20 + a11y | §4 |
+| **A.bis.2** | App-shell integration | `<SidebarProvider>` в `_app.tsx`. `admin-sidebar.tsx` + `sidebar-sections.ts` + `demo-mode-badge.tsx`. RBAC × 7 sections × 3 roles = 21 visibility assertions. Delete mobile-nav/sidebar-drawer/mobile-nav-button/mobile-nav-state. | ~30 | §4 |
+| **A.bis.3** | Dashboard refactor | `index.tsx` tiles → KPI cards внутри content. Главная = реальный dashboard (Occupancy/ADR/RevPAR placeholders + Recent activity + Alerts). | ~15 | §4 |
+| **A.bis.4** | E2E + axe matrix + visual | Playwright spec discoverability + Cmd+B + nested-route active + offcanvas mobile. axe matrix 12 cells (3 themes × 4 viewports) WCAG 2.2 AA. Visual smoke 4 viewports. forced-colors spec. | 12 e2e | §8 |
+| **A.bis.5** | Closure + memory | ROADMAP A.bis row ✅ + `project_a_bis_done.md` + memory updates (locked versions + architecture decisions + Lingui v5→v6 drift fix) + `pnpm outdated` audit + final 9-gate green | n/a | §7 |
+
+### Track A.bis DoD
+
+- ☐ vaul удалён из `package.json` + lockfile; 5 consumers мигрированы
+- ☐ shadcn `<Sidebar>` primitive в `ui/sidebar.tsx` с 5 локальными patches (grep-able markers `// PATCH-Dxx`)
+- ☐ `<SidebarProvider>` в `_app.tsx` оборачивает Outlet; 7 active destinations с RBAC matrix
+- ☐ Каналы продаж + МВД discoverable through sidebar (NOT только URL) — Playwright spec verified
+- ☐ Dashboard refactor done (tiles → in-content KPI cards)
+- ☐ axe matrix 12 cells green — WCAG 2.2 AA
+- ☐ Playwright e2e 12 specs green; visual smoke 4 viewports ≤0.5% diff
+- ☐ 9-gate green: sherif + biome + depcruise + knip + typecheck + build + test:serial + smoke + e2e:smoke
+- ☐ Memory updated: `project_a_bis_done.md` + 3 updates (locked versions / architecture / Lingui)
+- ☐ Pre-done audit checklist в каждом sub-phase commit
+
+---
+
+## Track B — Deploy Infra (после Track A.bis)
 
 | # | Фаза | Deliverable | Reference |
 |---|---|---|---|
