@@ -1,0 +1,15 @@
+# Revisions of large-scale formatting/style changes excluded from `git blame`.
+#
+# GitHub: auto-applies this file when present in repo root (verified
+# docs.github.com 2026-05-12). Shows banner "Ignoring revisions in
+# .git-blame-ignore-revs" on blame view. No viewer setup needed.
+# Caveat: commit is only ignored if it INTRODUCED or MODIFIED lines —
+# last-to-modify-line attribution still surfaces the commit.
+#
+# Local CLI: `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
+#
+# Canonical pattern: biomejs/biome itself lists their own mass-format
+# commits ("switch from tabs to spaces" etc.) in their .git-blame-ignore-revs.
+
+# chore(tsgo): Phase 12 — Oxfmt adoption + mass-format (Biome → Oxfmt 2026-05-12)
+74113c6a94fa98fba868f3eeb4d7fbb9df41c60c
