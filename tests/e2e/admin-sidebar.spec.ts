@@ -37,6 +37,12 @@ test.describe('AdminSidebar — real-browser mount + RBAC visibility', () => {
 	test('every section row carries Cyrillic aria-label (D15 canon)', async ({ page }) => {
 		await page.goto('/')
 		await expect(page.locator('[data-slot="sidebar"]').first()).toBeVisible()
+		// admin-sidebar.tsx gates row rendering on BOTH `useCurrentRole()` and
+		// `propertiesQueryOptions` — the wrapper sidebar shell mounts before
+		// the query resolves, so we must wait until all 7 rows are in the DOM
+		// before `evaluateAll` (which doesn't auto-wait). Race surfaced after
+		// React 19.2.6 + TanStack Query 5.100.10 timing tightening 2026-05-12.
+		await expect(page.locator('[data-section-id]')).toHaveCount(7)
 		// Read all aria-labels off the rendered <a> rows.
 		const labels = await page.locator('[data-section-id]').evaluateAll((els) =>
 			els.map((el) => el.getAttribute('aria-label')),

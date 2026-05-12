@@ -1,11 +1,11 @@
 {
   "_doc": "Ratchet baseline — these metrics may ONLY decrease (or stay equal). Pre-push gate fails when a metric regresses past these caps. To improve: ship the improvement + lower the value here in the same commit, explicit reasoning in commit message. Adapted from stankoff-v2 canonical pattern (`fix(test): vitest 4 isolate:false` lineage 2026-05-08).",
   "_updated": "2026-05-12",
-  "_updated_by_commit": "fix(a-bis.4) — A.bis.5 senior bug-hunt — audit_high 7→6 (one transitive CVE auto-resolved in dep cascade)",
+  "_updated_by_commit": "fix(a-bis.5.deps) — batched latest-stable bump (react-day-picker 9→10 major + ~30 minor/patch) — audit_high 6→1 (5 more transitive CVEs auto-resolved by dep cascade)",
 
   "depcruise_violations_max": 0,
   "knip_unused_max": 0,
-  "audit_high_critical_max": 6,
+  "audit_high_critical_max": 1,
   "ts_strict_errors_max": 0,
   "biome_errors_max": 0,
   "weak_assertions_max": 234,
@@ -13,7 +13,7 @@
 
   "_depcruise_baseline_note": "0 (clean across 790 modules / 2313 deps). Any new circular / banned import → fail.",
   "_knip_baseline_note": "0 — clean. New unused export / file / dep → fail.",
-  "_audit_baseline_note": "7 PRE-EXISTING transitive CVEs surfaced 2026-05-12 by ratchet introduction: @tanstack/history malware (GHSA-rmmr-r34h-pfm5 — same stankoff suppressed «empirically not exposed»; transitive via @tanstack/router-plugin), serialize-javascript<=7.0.2 RCE (via vite-plugin-pwa>workbox-build>@rollup/plugin-terser), fast-xml-builder<=1.1.6 attribute bypass (via @aws-sdk/client-s3), fast-uri path-traversal, plus 3 more. Carry-forward to separate security sub-phase (`pnpm overrides` strategy + upstream bump tracking). Ratchet locked at 7 — any NEW high+critical → fail.",
+  "_audit_baseline_note": "1 remaining high CVE 2026-05-12 (после A.bis.5 dep cascade): serialize-javascript<=7.0.2 RCE via RegExp.flags + Date.prototype.toISOString — transitive via vite-plugin-pwa>workbox-build>@rollup/plugin-terser. Original baseline was 7 PRE-EXISTING transitive CVEs; 6 auto-resolved by A.bis.5 latest-stable bump cascade (react-day-picker 10 + Playwright 1.60 + TanStack updates + AWS SDK 3.1045 + Vite 8.0.12 + etc). Last 1 needs `pnpm overrides` strategy (workbox-build upstream pin) — separate security sub-phase. Ratchet locked at 1 — any NEW high+critical → fail.",
   "_ts_strict_baseline_note": "0 (4 workspaces strict, EXIT=0). Any TS error → fail.",
   "_biome_baseline_note": "0 errors (28 → 6 → 0 после A.bis.2 fix-up cleanup). Warnings tracked separately, не gate. New error → fail.",
   "_weak_assertions_baseline_note": "234 — initial measurement 2026-05-12. PRE-EXISTING from prior milestones. NOT a regression from A.bis.2; locked here as starting point. Ratchet down each milestone closure (per `feedback_strict_tests.md` canon — exact-value asserts > existence-only). New `.toBeDefined()/.toBeTruthy()/.toBeFalsy()/.toBeInstanceOf(Array)` → count > 234 → fail.",
