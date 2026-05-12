@@ -109,6 +109,23 @@ export const activityListParams = z.object({
 // ActivityListParams type re-materialized via `z.infer<typeof activityListParams>`
 // by the admin-UI route once wired — kept off the public surface until then.
 
+/**
+ * GET /api/v1/activity/recent?limit=N — tenant-wide reverse-chronological feed.
+ *
+ * Added for the operator dashboard (A.bis.3, plan §17). Returns the most
+ * recent activity rows across all objectTypes for the active tenant, ordered
+ * by `createdAt DESC, id DESC` (deterministic tie-break for activities sharing
+ * a ms-precision timestamp).
+ *
+ * Limit cap 50 chosen to match the dashboard "Recent activity" panel design:
+ * 10-20 visible without scroll, 50 head-room for client-side filtering /
+ * future infinite-scroll. Higher limits would scan more of the tenant's
+ * activity partition than is useful at the SMB volumes this dashboard targets.
+ */
+export const activityRecentParams = z.object({
+	limit: z.coerce.number().int().min(1).max(50).optional().default(20),
+})
+
 // `fieldChange` / `statusChange` diffJson payload is documented as
 // `{ field, oldValue, newValue }` — the runtime shape is enforced by the
 // CDC handler `buildActivitiesFromEvent`, not by a Zod schema. When an

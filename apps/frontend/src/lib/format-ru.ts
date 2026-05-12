@@ -147,6 +147,38 @@ export function formatRelative(d: Date | string): string {
 	return RTF.format(0, 'minute')
 }
 
+/* ============================================================ percentages */
+
+/**
+ * Format a 0-1 decimal as a Russian-locale percent string with NBSP before %.
+ *
+ * Added 2026-05-12 (A.bis.3 — operator dashboard Occupancy KPI). Uses
+ * `Intl.NumberFormat('ru-RU', { style: 'percent' })` which is the canon 2026
+ * way (no library needed — verified by R2 research). Output:
+ *
+ *   formatPercent(0)       → "0 %"      (NBSP+%, RU canonical spacing)
+ *   formatPercent(0.5)     → "50 %"
+ *   formatPercent(0.725, 1)→ "72,5 %"   (1 fraction digit, RU comma decimal)
+ *   formatPercent(1)       → "100 %"
+ *   formatPercent(1.5)     → "150 %"    (NOT clamped — caller's responsibility)
+ *
+ * Input is fractional (0-1). `fractionDigits=0` (default) for whole-number
+ * dashboard KPIs; pass `fractionDigits=1` when precision matters (occupancy
+ * trending within a single percentage point).
+ *
+ * NaN / Infinity propagate as the locale's "не число" / "∞" string from
+ * `Intl.NumberFormat` — callers MUST guard upstream (Loading/Empty/Error
+ * card state) before reaching this formatter.
+ */
+export function formatPercent(value: number, fractionDigits = 0): string {
+	const fmt = new Intl.NumberFormat('ru-RU', {
+		style: 'percent',
+		minimumFractionDigits: fractionDigits,
+		maximumFractionDigits: fractionDigits,
+	})
+	return fmt.format(value)
+}
+
 /* ===================================================== Zod money transform */
 
 /**

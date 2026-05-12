@@ -42,8 +42,10 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 	test('/o/{slug}/receivables passes WCAG 2.2 AA (M6.7.4)', async ({ page }) => {
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
-		// Click the dashboard tile linking to receivables.
-		await page.getByRole('link', { name: /Дебиторка/ }).click()
+		// Navigate via sidebar (A.bis.3: dashboard no longer carries nav tiles —
+		// nav lives in the sidebar with stable `[data-section-id]` selectors,
+		// same canon as A.bis.2.fix bulk e2e migration).
+		await page.locator('[data-section-id="receivables"]').click()
 		await expect(page).toHaveURL(/\/receivables$/)
 		// Heading + KPI region must be visible.
 		await expect(page.getByRole('heading', { name: /Дебиторская задолженность/ })).toBeVisible()
@@ -54,8 +56,10 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 	test('/o/{slug}/admin/tax passes WCAG 2.2 AA (M7.fix.3.b)', async ({ page }) => {
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
-		// Owner role grants `report:read`, so the dashboard tile is rendered.
-		await page.getByRole('link', { name: /Туристический налог/ }).click()
+		// Owner role grants `report:read`, so the sidebar row is rendered.
+		// Post-A.bis.3 the dashboard isn't a nav-хаб — navigate via the sidebar
+		// using the stable `[data-section-id]` selector.
+		await page.locator('[data-section-id="tax"]').click()
 		await expect(page).toHaveURL(/\/admin\/tax(\?.*)?$/)
 		// Heading + filter + KPI section visible — content settled.
 		await expect(page.getByRole('heading', { name: /Туристический налог/, level: 1 })).toBeVisible()
@@ -145,8 +149,8 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 	test('/o/{slug}/admin/notifications passes WCAG 2.2 AA (M7.fix.3.d)', async ({ page }) => {
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
-		// Dashboard tile: link contains both H2 "Уведомления" + description text.
-		await page.getByRole('link', { name: /Уведомления/ }).click()
+		// Post-A.bis.3: notification access via sidebar row (not dashboard tile).
+		await page.locator('[data-section-id="notifications"]').click()
 		await expect(page).toHaveURL(/\/admin\/notifications(\?.*)?$/)
 		await expect(
 			page.getByRole('heading', { name: /^Уведомления$/, level: 1 }),
@@ -163,12 +167,13 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		// (setup wizard ran in earlier seed). Dashboard tile leads to wizard.
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
-		// Tile is conditional on `firstProperty` from a TanStack Query — wait
-		// for the asynchronous render before clicking. Without this gate the
-		// click locator races the query and times out.
-		const tile = page.getByRole('link', { name: /Профиль гостиницы/ })
-		await expect(tile).toBeVisible()
-		await tile.click()
+		// Sidebar row is conditional on `firstProperty` from `propertiesQueryOptions`
+		// (admin-sidebar.tsx) — wait for the asynchronous render before clicking.
+		// Without this gate the click locator races the query and times out.
+		// Post-A.bis.3: dashboard isn't a nav-хаб; navigate via sidebar.
+		const profileRow = page.locator('[data-section-id="profile"]')
+		await expect(profileRow).toBeVisible()
+		await profileRow.click()
 		await expect(page).toHaveURL(/\/properties\/[^/]+\/content$/)
 
 		// Step 1 (compliance) — default landing

@@ -170,6 +170,34 @@ export function createActivityRepo(sql: SqlInstance) {
 				.idempotent(true)
 			return rows.map(rowToActivity)
 		},
+
+		/**
+		 * List the N most-recent activities for a tenant across ALL objectTypes.
+		 *
+		 * Added for the operator dashboard (A.bis.3 / plan §17). Tenant-scan
+		 * within the activity partition then `ORDER BY createdAt DESC, id DESC
+		 * LIMIT N`. PK is `(tenantId, objectType, recordId, createdAt, id)`,
+		 * so the engine prefix-scans the tenant slice rather than the whole
+		 * table — at SMB volume (≲ 15k activity rows/year/tenant) this is well
+		 * within YDB's per-query scan budget. `LIMIT 50` cap enforced by the
+		 * shared zod schema `activityRecentParams`.
+		 *
+		 * Tie-break is `id DESC` (lexicographic on `act_<ksuid>`-style ids)
+		 * so the order is deterministic when two activities share the same
+		 * ms-precision `createdAt` — same convention as `listForRecord`'s
+		 * `createdAt ASC, id ASC`, just reversed.
+		 */
+		async listRecent(tenantId: string, limit: number): Promise<Activity[]> {
+			const [rows = []] = await sql<ActivityRow[]>`
+				SELECT * FROM activity
+				WHERE tenantId = ${tenantId}
+				ORDER BY createdAt DESC, id DESC
+				LIMIT ${limit}
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map(rowToActivity)
+		},
 	}
 }
 

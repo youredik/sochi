@@ -586,6 +586,9 @@ export const SIDEBAR_SECTIONS = [
 | C35 | **New canon** `feedback_gh_api_ground_truth.md` — для GitHub issue/PR state ВСЕГДА `gh api` direct, не web-search. Web-search summaries paraphrase + lie. Caught 2026-05-12 (search said «PR addressed Issue», gh API: `merged: false, mergeable_state: dirty`). Saved A.bis.1 D12 patch. | A.bis.1 R1+R2 freshness | new memory `feedback_gh_api_ground_truth.md` + MEMORY.md pointer |
 | C36 | **POST-AUDIT C36 (A.bis.2)** — when plan canon spec'ит frontend hook reading server state (e.g. `useCurrentOrg().mode`), pre-flight recon MUST verify field is actually surfaced through API — не just exists in DB. A.bis plan §0 missed `/me` lacks `mode` field; caught at A.bis.2 implementation. POST-AUDIT correction = minimal backend enrichment of EXISTING endpoint (NOT new endpoint per §2 spirit). Pattern: dependency-injected loader allows test stubs without DB. | A.bis.2 recon gap caught | `me.routes.ts:createMeRoutes(loadTenantMode?)` enrichment + `useTenantMode()` frontend hook |
 | **C37** | **POST-AUDIT C37 (A.bis.2.fix)** — Layer 4+5 multi-layer (real-browser Playwright + axe) is NOT optional per «погнали» canon — каждое «done» claim проходит через ВСЕ слои. A.bis.2 main commit `4934bb5` shipped с typecheck + 1447 unit + 5 pre-commit gates green BUT skipped Layers 4-5. User pushed full e2e regression check; **23 chromium failures surfaced**. A.bis.0 had **the exact same lesson** (consent-block axe nested-interactive caught by widget e2e GP7); A.bis.2 forgot. Henceforth: e2e Layers 4-5 mandatory ВНУТРИ sub-phase scope, не carry-forward к closure sub-phase. | A.bis.2.fix recovery effort | new canon `feedback_layer_4_5_mandatory_per_subphase.md` + MEMORY.md pointer |
+| **C38** | **POST-AUDIT C38 (A.bis.3)** — plan §7 row 3 spec'д «Occupancy / ADR / RevPAR placeholders» but `project_dashboard_external.md` canon (zaфиксирован 2026-04-26 user directive) explicitly says **3.1 KPI Dashboard = Yandex DataLens external, NOT в нашем коде**. Plan v1 row 3 spec written before that memory was applied. **Replaced** placeholders with **4 tactical operator KPIs** (Заезды сегодня / В отеле / Открытый баланс / Письма со сбоем) + Recent activity (via NEW `/activity/recent` C36-pattern enrichment) + Alerts (notification outbox). R1 research 2026-05-12 confirms: Cloudbeds operator dashboard = tactical-today, NOT analytical (ADR/RevPAR живут в Manager's Report). Surfaced transparently before implementation; senior call upscope vs «placeholders that never get data». | A.bis.3 pre-flight | plan §7 row 3 updated + memory `project_a_bis_3_done.md` + commit body audit |
+| **C39** | **POST-AUDIT C39 (A.bis.3)** — biome rules `useUniqueElementIds` + `useValidAriaRole` over-trigger on custom component props named `id=` and `role=` (collide with HTML attribute names). For domain-semantic props use distinct names: `slug` для KPI identifier, `memberRole` для RBAC role. Same pattern reusable across A.bis.X+. Canon: **never name a React component prop after an HTML attribute** unless the prop literally IS the HTML attribute being passed through. | A.bis.3 biome lint surfaced | renamed `KpiCard.id` → `KpiCard.slug`, `DashboardPage.role`+`KpiStrip.role` → `memberRole` |
+| **C40** | **POST-AUDIT C40 (A.bis.3)** — `data-section-id` is sidebar's namespace (A.bis.2 canon: 7 nav rows). Dashboard content sections **must use distinct namespace** (`data-dashboard-section`) to avoid e2e selector collision (`page.locator('[data-section-id]').toHaveCount(7)` will fail если dashboard ALSO emits). Caught at full chromium regression run after dashboard refactor. Naming canon: each architectural region owns ITS OWN attribute namespace. | A.bis.3 full chromium e2e collision surfaced | dashboard sections use `data-dashboard-section="kpi-strip\|recent-activity\|alerts"` |
 
 ---
 
@@ -770,12 +773,74 @@ A.bis.2 main commit `4934bb5` shipped после Layers 1-3 green BUT skipped La
 
 **New process correction (C37)**: «Layer 4+5 multi-layer (real-browser Playwright + axe) is NOT optional per «погнали» canon — каждое «done» claim проходит через ВСЕ слои.» A.bis.2 main commit deferred Layers 4-5 к A.bis.4 closure; real-browser e2e surfaced 23 layout regressions. A.bis.0 had **the exact same lesson** (consent-block axe nested-interactive); A.bis.2 forgot. Henceforth: e2e Layers 4-5 mandatory ВНУТРИ sub-phase scope, не carry-forward к closure. New canon `feedback_layer_4_5_mandatory_per_subphase.md`.
 
-### A.bis.3 (Dashboard refactor) — pending
+### A.bis.3 (Dashboard refactor) — ✅ DONE 2026-05-12
 
-Pre-flight R1+R2 freshness check:
-- [ ] 2026 KPI cards canon (Cloudbeds/Mews/Linear pattern)
+Pre-flight R1+R2 freshness check (≥2026-05-12, empirical):
+- [x] **R1 broad canon** (Cloudbeds operator dashboard / Mews / SaaSFrame anatomy 2026 / Art of Styleframe / NN/G empty-state guidance) — sub-agent dispatched, sources cited inline. Honest disclosure: «no source dated ≥ 2026-05-12; 2026 Q1 freshest dashboard-pattern thought-leadership layer» — accepted as honest gap per `feedback_research_strictness_today.md`.
+- [x] **R2 npm-empirical-verify** — `recharts 3.8.1` fresh / `numbro 2.5.0` stale (reject) / `@nivo/core 0.99.0` stale 1yr (reject) / `victory 37.3.6` heavy / `react-sparklines 1.7.0` dead 4yr / `@visx/sparkline` 404. Senior pick if charting needed: recharts 3.8.1. **A.bis.3 decision: no chart lib added** (no sparklines в Phase 1; tactical KPI numbers только).
+- [x] **Intl.NumberFormat empirical** — `node -e Intl.NumberFormat('ru-RU', {style:'percent'}).format(0)` → `"0 %"`, `.format(0.5)` → `"50 %"`, `.format(0.725)` → `"73 %"` (half-up rounding). Char codes: `35 30 a0 25` (digit/digit/NBSP/%). Pinned in tests.
+- [x] **Codebase recon** — read `_app.o.$orgSlug.index.tsx` 153 LOC, `activity.routes.ts` 25 LOC, `activity.repo.ts` 176 LOC, `booking.routes.ts`, `folio.routes.ts`, `notifications.ts` (admin), `Card.tsx`, `Skeleton.tsx`, `format-ru.ts` целиком; verified shared `booking.ts`/`folio.ts`/`activity.ts`/`notification.ts` types; rbac.ts predicates re-verified.
+- [x] **API surface gap caught**: activity domain has only `listForRecord(objectType, recordId, limit)` — NO tenant-wide feed endpoint. Plan §7 row 3 spec'д «Recent activity reads activity domain» but domain doesn't expose what plan needs. **POST-AUDIT C36-pattern enrichment**: add `listRecent(tenantId, limit)` + `GET /activity/recent` (same as A.bis.2 `/me` mode enrichment).
 
-Outcome: TBD
+Implementation (single commit):
+
+- **POST-AUDIT C38** (plan §16): replaced plan §7 row 3 «Occupancy / ADR / RevPAR placeholders» with **4 tactical operator KPIs** (Заезды сегодня / В отеле / Открытый баланс / Письма со сбоем). Justification: `project_dashboard_external.md` canon (3.1 KPI = DataLens external, NOT our code) + R1 research (Cloudbeds operator dashboard = tactical-today). Surfaced transparently to user upfront — accepted as upscope vs placeholder vapor data.
+- **Backend POST-AUDIT C36 enrichment** (NOT new endpoint per §2 spirit — added to existing `activity` domain): `packages/shared/src/activity.ts` adds `activityRecentParams` zod schema; `activity.repo.ts` adds `listRecent(tenantId, limit)` method (DESC by createdAt + id) с tenant prefix-scan; `activity.routes.ts` adds `GET /api/v1/activity/recent?limit=N` (declared before `/activity` for first-match routing).
+- **Frontend lib**:
+  - `lib/format-ru.ts` extends with `formatPercent(value, fractionDigits=0)` — `Intl.NumberFormat('ru-RU', {style:'percent'})` native, NO new dep.
+  - `features/dashboard/lib/dashboard-labels.ts` — RU verb+noun map for 17 ActivityObjectType × 5 ActivityType (enum FULL coverage tested).
+  - `features/dashboard/lib/compute-kpis.ts` — pure helpers `todayInMoscow()` (TZ-pinned Europe/Moscow), `countArrivalsToday`, `countInHouseNow`, `sumOpenBalanceMinor` (BigInt precision), `countFailedNotifications`.
+  - `features/dashboard/lib/use-dashboard-data.ts` — 3 new query options (bookings-window, failed-notifications, activity-recent).
+- **Frontend components** (8 files под `features/dashboard/components/`):
+  - `kpi-card.tsx` — Card composition с Loading/Error/Value state-machine + tabular-nums + a11y aria-live.
+  - `kpi-strip.tsx` — 4 KPI cards composition с RBAC (canBooking / canReports / canNotifications).
+  - `recent-activity-list.tsx` — `/activity/recent` feed с verb+noun + relative time.
+  - `alerts-list.tsx` — failed notifications с severity icon + Link drill-down + celebratory empty state.
+  - `dashboard-page.tsx` — composition root (header + KpiStrip + RecentActivity + Alerts grid).
+- **Route refactor** `_app.o.$orgSlug.index.tsx`: 153 LOC tile-based dashboard → 60 LOC `<DashboardPage>` composition.
+- **E2E migration**: 4 sites in `tests/e2e/app-a11y.spec.ts` updated from `getByRole('link', { name: /Дебиторка|Туристический налог|Уведомления|Профиль гостиницы/ })` to `page.locator('[data-section-id="<id>"]')` (sidebar selectors per A.bis.2.fix canon).
+- **POST-AUDIT C39**: renamed component props `id` → `slug`, `role` → `memberRole` (biome `useUniqueElementIds` + `useValidAriaRole` over-trigger on HTML attribute name collisions).
+- **POST-AUDIT C40**: renamed dashboard section namespace `data-section-id` → `data-dashboard-section` to avoid sidebar's 7-row count collision (caught by full chromium regression run).
+
+Tests delivered:
+
+| Group | Count |
+|---|---|
+| Backend `activity.repo.test.ts` (ARR1-ARR6 listRecent: cross-tenant + DESC order + limit + empty + mixed objectTypes + roundtrip equality) | 6 strict |
+| `lib/format-ru.test.ts` (P1-P8 formatPercent: 0/0.5/1/fractionDigits/half-up/clamp-not/NBSP/minMax) | 8 strict |
+| `features/dashboard/lib/dashboard-labels.test.ts` (enum FULL 17×5 + Cyrillic regex + composition) | 10 strict |
+| `features/dashboard/lib/compute-kpis.test.ts` (todayInMoscow×3 / arrivals×8 / in-house×4 / balance×5 / failed×4) | 24 strict |
+| `features/dashboard/components/kpi-card.test.tsx` (state-machine enum FULL × 11) | 11 strict |
+| `features/dashboard/components/kpi-strip.test.tsx` (RBAC × roles enum FULL + state derivation + section semantics) | 9 strict |
+| `features/dashboard/components/recent-activity-list.test.tsx` | 5 strict |
+| `features/dashboard/components/alerts-list.test.tsx` | 8 strict |
+| `features/dashboard/components/dashboard-page.test.tsx` | 8 strict |
+| `tests/e2e/dashboard.spec.ts` (composition + axe WCAG 2.2 AA) | 7 e2e |
+| **TOTAL NEW** | **89 strict + 7 e2e + axe** |
+
+Multi-layer verification (all 5 layers green per A.bis.0 senior canon + C37):
+
+| Layer | Result |
+|---|---|
+| TypeScript strict (`pnpm typecheck` 4 workspaces) | ✓ EXIT=0 |
+| Vitest unit dashboard suite | ✓ 75/75 pass |
+| Vitest unit format-ru extension | ✓ 58/58 pass (50 existing + 8 new) |
+| Backend `activity.repo.test.ts` (DB) | ✓ 15/15 (9 existing + 6 new) |
+| Frontend full `pnpm test` | ✓ **1530/1530** (+83 net vs A.bis.2 baseline 1447 — strict math: +89 new − 6 weak-assertion removals folded) |
+| Backend `pnpm test:fast` root | ✓ **4161/4161** pass / 992 skipped DB-tagged |
+| 5 pre-commit gates | ✓ sherif / biome 0 errors / depcruise 0 violations 806 modules / knip clean / typecheck clean |
+| **Ratchet (7 metrics)** | ✓ Ratchet OK: depcruise=0 knip=0 audit_high=7 ts_err=0 biome_err=0 weak_assertions=234 multi_biome_ignore=0 (no regression) |
+| **Real-browser Playwright e2e** dashboard.spec.ts | ✓ 7/7 pass + axe WCAG 2.2 AA zero violations |
+| **Real-browser Playwright e2e** admin-sidebar.spec.ts | ✓ 7/7 pass (after C40 namespace fix) |
+| **Real-browser Playwright e2e** app-a11y.spec.ts | ✓ 15/15 pass (after sidebar selector migration) |
+| **Full chromium e2e suite** | ✓ **130/130** pass (3.8 min) — zero regressions from A.bis.3 refactor |
+
+**New process corrections captured**: C38 (plan deviation upscope для tactical KPIs vs memory canon), C39 (biome prop-name collision rule), C40 (dashboard-section namespace separation).
+
+**Honest carry-forward**:
+- A.bis.4 — Playwright e2e (10 destinations clickable от sidebar — already partly covered by app-a11y + dashboard) + axe matrix 12 cells (3 themes × 4 viewports) full sweep + visual smoke 4 viewports + forced-colors spec.
+- A.bis.5 — Closure: ROADMAP insert + locked-versions update + dependency freshness audit + coverage floor bump check + plan §10 «Owner sees 10» prose drift fix.
+- Sparkline / mini-chart на occupancy/in-house trend cards — deferred к later sub-phase when sufficient time-series data accumulates (need 7-day window of activity for meaningful sparkline).
 
 ### A.bis.4 (E2E + axe matrix + visual) — pending
 

@@ -301,4 +301,169 @@ describe('activity.repo', { tags: ['db'], timeout: 30_000 }, () => {
 		const limited = await repo.listForRecord(TENANT_A, 'booking', recordId, 3)
 		expect(limited).toHaveLength(3)
 	})
+
+	// ============================================================
+	//  listRecent — tenant-wide reverse-chrono feed (A.bis.3 / plan §17).
+	//  PK is (tenantId, objectType, recordId, createdAt, id); we prefix-scan
+	//  the tenant slice then ORDER BY createdAt DESC, id DESC LIMIT N.
+	// ============================================================
+
+	test('[ARR1] listRecent — tenant isolation: rows from tenant A do not surface for tenant B', async () => {
+		// Use distinct, fresh tenants so the assertion holds regardless of
+		// what other tests have inserted into TENANT_A/TENANT_B already.
+		const isolatedTenantA = newId('organization')
+		const isolatedTenantB = newId('organization')
+		const noise = await repo.insert({
+			tenantId: isolatedTenantA,
+			objectType: 'booking',
+			recordId: newId('booking'),
+			activityType: 'created',
+			actorUserId: USER_A,
+			diffJson: { tag: 'tenant-A-only' },
+		})
+		track(noise)
+
+		const seenByB = await repo.listRecent(isolatedTenantB, 50)
+		expect(seenByB).toEqual([])
+
+		const seenByA = await repo.listRecent(isolatedTenantA, 50)
+		// At least one row, and zero of them leak into B's view.
+		expect(seenByA.length).toBeGreaterThanOrEqual(1)
+		expect(seenByA.every((r) => r.tenantId === isolatedTenantA)).toBe(true)
+	})
+
+	test('[ARR2] listRecent — DESC order by createdAt (most recent first), then id DESC as tie-break', async () => {
+		const tenant = newId('organization')
+		const recordId = newId('booking')
+		const first = await repo.insert({
+			tenantId: tenant,
+			objectType: 'booking',
+			recordId,
+			activityType: 'created',
+			actorUserId: USER_A,
+			diffJson: { step: 'first' },
+		})
+		track(first)
+		await new Promise((r) => setTimeout(r, 12))
+		const second = await repo.insert({
+			tenantId: tenant,
+			objectType: 'property',
+			recordId: newId('property'),
+			activityType: 'fieldChange',
+			actorUserId: USER_A,
+			diffJson: { step: 'second' },
+		})
+		track(second)
+		await new Promise((r) => setTimeout(r, 12))
+		const third = await repo.insert({
+			tenantId: tenant,
+			objectType: 'folio',
+			recordId: newId('folio'),
+			activityType: 'statusChange',
+			actorUserId: USER_A,
+			diffJson: { step: 'third' },
+		})
+		track(third)
+
+		const recent = await repo.listRecent(tenant, 10)
+		// Most recent first, oldest last — exact-id sequence.
+		expect(recent.map((r) => r.id)).toEqual([third.id, second.id, first.id])
+		// Verify monotonic DESC on createdAt for paranoia.
+		for (let i = 1; i < recent.length; i++) {
+			const prev = new Date(recent[i - 1]?.createdAt ?? 0).getTime()
+			const curr = new Date(recent[i]?.createdAt ?? 0).getTime()
+			expect(prev).toBeGreaterThanOrEqual(curr)
+		}
+	})
+
+	test('[ARR3] listRecent — respects limit (lower bound trims most-recent N)', async () => {
+		const tenant = newId('organization')
+		const ids: string[] = []
+		for (let i = 0; i < 5; i++) {
+			const a = await repo.insert({
+				tenantId: tenant,
+				objectType: 'booking',
+				recordId: newId('booking'),
+				activityType: 'fieldChange',
+				actorUserId: USER_A,
+				diffJson: { i },
+			})
+			track(a)
+			ids.push(a.id)
+			await new Promise((r) => setTimeout(r, 4))
+		}
+		const limited = await repo.listRecent(tenant, 3)
+		expect(limited).toHaveLength(3)
+		// Latest three inserted (indexes 4, 3, 2 in DESC order).
+		expect(limited.map((r) => r.id)).toEqual([ids[4], ids[3], ids[2]])
+	})
+
+	test('[ARR4] listRecent — empty tenant returns empty array (no zero-row crash)', async () => {
+		const empty = newId('organization')
+		const recent = await repo.listRecent(empty, 20)
+		expect(recent).toEqual([])
+	})
+
+	test('[ARR5] listRecent — mixes objectTypes within the tenant (NOT prefix-locked to one type)', async () => {
+		const tenant = newId('organization')
+		const acts = await Promise.all([
+			repo.insert({
+				tenantId: tenant,
+				objectType: 'booking',
+				recordId: newId('booking'),
+				activityType: 'created',
+				actorUserId: USER_A,
+				diffJson: { kind: 'b' },
+			}),
+			repo.insert({
+				tenantId: tenant,
+				objectType: 'folio',
+				recordId: newId('folio'),
+				activityType: 'created',
+				actorUserId: USER_A,
+				diffJson: { kind: 'f' },
+			}),
+			repo.insert({
+				tenantId: tenant,
+				objectType: 'payment',
+				recordId: newId('payment'),
+				activityType: 'statusChange',
+				actorUserId: USER_A,
+				diffJson: { kind: 'p' },
+			}),
+			repo.insert({
+				tenantId: tenant,
+				objectType: 'notification',
+				recordId: newId('notification'),
+				activityType: 'manualRetry',
+				actorUserId: USER_A,
+				diffJson: { kind: 'n' },
+			}),
+		])
+		for (const a of acts) track(a)
+		const recent = await repo.listRecent(tenant, 10)
+		const seenObjectTypes = new Set(recent.map((r) => r.objectType))
+		// All 4 objectTypes surface — listRecent is NOT per-type prefix-scoped.
+		expect(seenObjectTypes).toEqual(new Set(['booking', 'folio', 'payment', 'notification']))
+	})
+
+	test('[ARR6] listRecent — exact-shape roundtrip equality (diffJson + actorType + nullable impersonator)', async () => {
+		const tenant = newId('organization')
+		const inserted = await repo.insert({
+			tenantId: tenant,
+			objectType: 'booking',
+			recordId: newId('booking'),
+			activityType: 'fieldChange',
+			actorUserId: USER_A,
+			actorType: 'system',
+			diffJson: { field: 'status', oldValue: 'confirmed', newValue: 'in_house' },
+		})
+		track(inserted)
+		const [fetched] = await repo.listRecent(tenant, 1)
+		// Deep-equal: catches JSON-column drift, null-vs-undefined regressions
+		// on `impersonatorUserId`, and lossy actorType roundtrip.
+		expect(fetched).toEqual(inserted)
+		expect(fetched?.actorType).toBe('system')
+		expect(fetched?.impersonatorUserId).toBeNull()
+	})
 })

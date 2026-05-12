@@ -53,6 +53,7 @@ import {
 	formatDateShort,
 	formatMoney,
 	formatMoneyA11y,
+	formatPercent,
 	formatRelative,
 	moneyKopecksSchema,
 } from './format-ru.ts'
@@ -337,5 +338,68 @@ describe('moneyKopecksSchema — adversarial transforms (mutation gate)', () => 
 	test('boundary 0 → 0n (allowed for pre-paid)', () => {
 		expect(moneyKopecksSchema.parse('0')).toBe(0n)
 		expect(moneyKopecksSchema.parse('0,00')).toBe(0n)
+	})
+})
+
+/* =========================================== formatPercent — A.bis.3 (Occupancy)
+ *
+ * Pre-test invariants (per `feedback_strict_tests.md` exact-value canon):
+ *
+ *   [P1] formatPercent(0) → exact "0 %" with NBSP before %.
+ *   [P2] formatPercent(0.5) → "50 %"  (50% in canonical ru-RU spacing).
+ *   [P3] formatPercent(1) → "100 %" (saturated occupancy edge).
+ *   [P4] fractionDigits=1 retains decimal with RU comma: "72,5 %".
+ *   [P5] fractionDigits=0 (default) rounds half-up: 0.725 → "73 %"
+ *        (empirical Node 22 V8 13.x Intl, NOT banker's rounding).
+ *   [P6] >1 NOT clamped — caller's responsibility (defensive coding gate).
+ *   [P7] separator is NBSP (U+00A0), NOT regular space — RU locale gotcha.
+ *   [P8] minimumFractionDigits + maximumFractionDigits both honored (no
+ *        narrow-symbol regression / no truncation drift).
+ */
+describe('formatPercent — Intl.NumberFormat percent ru-RU empirical', () => {
+	test('[P1] zero → exact "0 %" with NBSP+%', () => {
+		expect(formatPercent(0)).toBe(`0${NBSP}%`)
+	})
+
+	test('[P2] half → "50 %"', () => {
+		expect(formatPercent(0.5)).toBe(`50${NBSP}%`)
+	})
+
+	test('[P3] one (saturated) → "100 %"', () => {
+		expect(formatPercent(1)).toBe(`100${NBSP}%`)
+	})
+
+	test('[P4] fractionDigits=1 → comma decimal "72,5 %"', () => {
+		expect(formatPercent(0.725, 1)).toBe(`72,5${NBSP}%`)
+	})
+
+	test('[P5] default fractionDigits=0 rounds half-up: 0.725 → "73 %"', () => {
+		// Empirical (Node 22 + V8 13.x, 2026-05-12): Intl Default rounding
+		// "halfExpand" → away from zero, so .5 rounds up. Mutation gate.
+		expect(formatPercent(0.725)).toBe(`73${NBSP}%`)
+	})
+
+	test('[P6] values > 1 NOT clamped (caller responsibility)', () => {
+		// 150% would be a data bug (more in_house than rooms) but the formatter
+		// must SHOW it not silently clamp — otherwise the operator can't see
+		// they have a data integrity issue. Defensive coding canon: surface
+		// invariant violations to the user, do not paper over.
+		expect(formatPercent(1.5)).toBe(`150${NBSP}%`)
+	})
+
+	test('[P7] separator is NBSP (U+00A0), NEVER regular space', () => {
+		const out = formatPercent(0.42)
+		// Index of NBSP must exist; index of regular space must not be the same.
+		const nbspIdx = out.indexOf(NBSP)
+		const spaceIdx = out.indexOf(' ') // regular U+0020
+		expect(nbspIdx).toBeGreaterThan(0)
+		expect(nbspIdx).not.toBe(spaceIdx)
+	})
+
+	test('[P8] minimumFractionDigits + maximumFractionDigits honored — fractionDigits=2 preserves trailing zero', () => {
+		// 0.5 with fractionDigits=2 produces "50,00 %", NOT "50 %" (no truncation).
+		expect(formatPercent(0.5, 2)).toBe(`50,00${NBSP}%`)
+		// fractionDigits=0 truncates: 0.5 stays "50 %" not "50.0 %".
+		expect(formatPercent(0.5, 0)).toBe(`50${NBSP}%`)
 	})
 })
