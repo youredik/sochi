@@ -13,6 +13,21 @@
  * tenant audit feed (driven by `/activity/recent`, server-side scoped to
  * tenant).
  *
+ * **Architectural choice — inline per-card state machines (NOT route-level Suspense):**
+ *
+ * Receivables route (`_app.o.$orgSlug.receivables.tsx`) uses TanStack Router
+ * `pendingComponent` + `useSuspenseQuery` (loader pre-fetches, route blocks
+ * until ready). That fits its data shape — 2 sequential queries (properties
+ * → first.id → receivables).
+ *
+ * The dashboard fetches **4 independent parallel queries** (bookings window /
+ * receivables / failed notifications / recent activity). Route-level suspend
+ * would block ALL content на slowest query. Inline per-card state machines
+ * (Loading|Error|Value) let each KPI card resolve independently — operator
+ * sees arrivals/in-house numbers сразу even если notifications endpoint
+ * lags. Matches Cloudbeds / Stripe / Linear dashboard 2026 canon (parallel-
+ * fetch, independent resolution). Deliberate design, NOT downgrade.
+ *
  * Plan deviation note (POST-AUDIT C38, see plan §17): the page no longer
  * shows nav tiles — that role moved to the sidebar (A.bis.2). The page is
  * now pure operational summary, matching the operator persona (glance

@@ -32,8 +32,8 @@
  *
  * Requires local YDB.
  */
-import type { ActivityType } from '@horeca/shared'
-import { newId } from '@horeca/shared'
+import type { Activity, ActivityType } from '@horeca/shared'
+import { activityObjectTypeSchema, newId } from '@horeca/shared'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import { createActivityRepo } from './activity.repo.ts'
@@ -445,6 +445,45 @@ describe('activity.repo', { tags: ['db'], timeout: 30_000 }, () => {
 		const seenObjectTypes = new Set(recent.map((r) => r.objectType))
 		// All 4 objectTypes surface — listRecent is NOT per-type prefix-scoped.
 		expect(seenObjectTypes).toEqual(new Set(['booking', 'folio', 'payment', 'notification']))
+	})
+
+	test('[ARR7] listRecent — enum FULL objectType coverage (all 17 types roundtrip via tenant scan)', async () => {
+		// `feedback_strict_tests.md` enum FULL coverage: explicitly insert one
+		// row per ActivityObjectType value and verify listRecent surfaces ALL 17
+		// types within the same tenant. Guards against silent enum-filtering
+		// drift (e.g. a future `WHERE objectType IN (...)` regression). Existing
+		// AE1 covers roundtrip via insert path для `activityType` enum, but
+		// objectType enum FULL was implicit (insert path serves listRecent too,
+		// but explicit verification through listRecent's read path closes the
+		// strict-canon loop).
+		const tenant = newId('organization')
+		const allObjectTypes = activityObjectTypeSchema.options // sourced from shared zod schema — auto-grows
+		expect(allObjectTypes.length).toBe(17)
+
+		const inserted: Activity[] = []
+		for (const objectType of allObjectTypes) {
+			const a = await repo.insert({
+				tenantId: tenant,
+				objectType,
+				recordId: newId('booking'), // recordId shape doesn't constrain objectType FK semantics here
+				activityType: 'created',
+				actorUserId: USER_A,
+				diffJson: { objectType },
+			})
+			track(a)
+			inserted.push(a)
+			// Tiny gap so createdAt differs for stable DESC order.
+			await new Promise((r) => setTimeout(r, 4))
+		}
+
+		// listRecent с limit covering all 17 must return every objectType once.
+		const recent = await repo.listRecent(tenant, 50)
+		expect(recent).toHaveLength(17)
+		const seen = new Set(recent.map((r) => r.objectType))
+		// Set equality — every enum value present exactly once.
+		expect(seen).toEqual(new Set(allObjectTypes))
+		// Order: most-recent (last inserted) first.
+		expect(recent[0]?.objectType).toBe(allObjectTypes[allObjectTypes.length - 1])
 	})
 
 	test('[ARR6] listRecent — exact-shape roundtrip equality (diffJson + actorType + nullable impersonator)', async () => {
