@@ -1,7 +1,11 @@
 /**
- * ResponsiveSheet — Sheet (desktop) ⇄ Vaul Drawer (mobile) wrapper.
+ * ResponsiveSheet — Sheet (desktop) ⇄ Drawer (mobile) wrapper.
  *
- * **M9.5 Phase C canonical (per plan §M9.2 deferred + Vercel Vaul 2026 canon):**
+ * **A.bis.0 (2026-05-12)** — mobile branch now uses Base UI Drawer (`@base-ui/react/drawer`
+ * 1.4.1 GA) instead of Vaul 1.1.2 (UNMAINTAINED). API surface preserved drop-in via
+ * `ui/drawer.tsx` wrapper.
+ *
+ * **M9.5 Phase C canonical (per plan §M9.2 deferred + 2026 canon):**
  * Бизнес-feature sheets (refund / markPaid / notification-detail / migration-
  * detail) must render как right-side Sheet на desktop (≥md, 768px) и как
  * bottom Drawer на mobile (<768px). Bottom-drawer = canonical thumb-reach

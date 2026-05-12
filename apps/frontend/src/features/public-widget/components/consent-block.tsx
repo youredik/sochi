@@ -10,8 +10,9 @@
  *   - 152-ФЗ DPA = mandatory (booking blocked если не accepted).
  *   - 38-ФЗ marketing = optional (booking proceeds в любом case).
  *
- * Architectural choice: ResponsiveSheet (Sheet desktop / Vaul Drawer mobile)
- * для standalone reading. Inline checkboxes остаются в form. Click «Прочитать
+ * Architectural choice: ResponsiveSheet (Sheet desktop / Drawer mobile —
+ * Base UI Drawer post-A.bis.0 2026-05-12, was Vaul) для standalone reading.
+ * Inline checkboxes остаются в form. Click «Прочитать
  * полностью» opens overlay с full text — guest reads, dismisses, then ticks
  * checkbox.
  *

@@ -3,7 +3,8 @@
  *
  * Per memory `project_m6_7_frontend_research.md`:
  *   - **2-step in-Sheet confirm** — НЕ nested Dialog (на iPad ломается focus
- *     trap, vaul + Radix Sheet не любят вложенные portals). Локальный
+ *     trap, drawer + Radix Sheet не любят вложенные portals; гот'cha же для
+ *     Base UI Drawer post-A.bis.0). Локальный
  *     `step: 'form' | 'confirm'` state переключает body внутри одного Sheet.
  *   - **Sheet right-side** (480px iPad-h, full на portrait) — единый паттерн
  *     с MarkPaidSheet.

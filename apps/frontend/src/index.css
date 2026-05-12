@@ -331,11 +331,11 @@ body {
  *
  * Skeleton-shimmer уже handles fallback автоматически (через linear-gradient
  * без animation duration). Здесь global blanket для ВСЕХ animations
- * (включая Vaul drawer, View Transitions, Tailwind animate-* classes). */
+ * (включая Base UI Drawer, View Transitions, Tailwind animate-* classes). */
 @media (prefers-reduced-motion: reduce) {
 	/* WCAG 2.3.3 override canon — motion-sensitive users должны trump
-	 * component-level animation declarations (Vaul drawer transform,
-	 * Tailwind animate-*, View Transitions API). !important здесь
+	 * component-level animation declarations (Base UI Drawer transform/swipe
+	 * gestures, Tailwind animate-*, View Transitions API). !important здесь
 	 * intentional блокирующий cascade для accessibility. */
 	*,
 	*::before,
@@ -367,9 +367,9 @@ body {
 	}
 
 	/* M9.5 @starting-style для Radix Sheet/Dialog enter (Baseline 2024).
-	 * Vaul Drawer ИСКЛЮЧЁН — у него собственная spring-animation system
-	 * через transform translateY (Round 4 self-audit fix W4 — наш CSS
-	 * data-state pattern не сработает).
+	 * Base UI Drawer (post-A.bis.0 2026-05-12) использует data-open/data-closed
+	 * same convention как Radix, плюс CSS vars --drawer-swipe-movement-y для
+	 * gesture progress. Animation system унифицирована.
 	 *
 	 * Graceful fallback — браузеры без @starting-style просто не получат
 	 * entry-anim, ничего не сломается. Round 5 research: Baseline newly

@@ -168,7 +168,7 @@ export function SearchAndPick({
 			className="min-h-svh bg-gradient-to-b from-primary/5 via-background to-background"
 			lang="ru"
 		>
-			{/* pb-32 на mobile — safe-padding под bottom-fixed Vaul peek bar (~80px + safe-area). md+: 0. */}
+			{/* pb-32 на mobile — safe-padding под bottom-fixed Drawer peek bar (~80px + safe-area, Base UI post-A.bis.0). md+: 0. */}
 			<main className="mx-auto max-w-6xl px-4 pt-6 pb-32 sm:px-6 md:py-10 md:pb-10">
 				<header className="mb-6 md:mb-8">
 					<p className="text-xs font-medium uppercase tracking-wider text-primary">

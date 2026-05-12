@@ -2,9 +2,11 @@
  * `<StickySummary>` — desktop right-rail / mobile bottom-fixed summary с
  * pricing breakdown + free-cancel deadline + Continue CTA.
  *
- * Plan §M9.widget.2: «desktop right-sticky / mobile bottom-fixed via Vaul».
+ * Plan §M9.widget.2: «desktop right-sticky / mobile bottom-fixed via Drawer».
+ * **A.bis.0 (2026-05-12)** — Drawer impl swapped Vaul → Base UI 1.4.1 GA (drop-in via
+ * `ui/drawer.tsx` wrapper).
  *   - Desktop ≥md: right-column sticky aside
- *   - Mobile: collapsed Vaul drawer (peek bar with total + Continue CTA),
+ *   - Mobile: collapsed Drawer (peek bar with total + Continue CTA),
  *     tap to expand for full breakdown. Pattern: Hostaway 2026 + Mews
  *     Distributor canon — keeps decision-making 1-tap distance даже на small
  *     viewport, без crowding rate cards.
@@ -116,7 +118,7 @@ export function StickySummary({
 		)
 	}
 
-	// Mobile: bottom-fixed peek bar + Vaul drawer для full breakdown.
+	// Mobile: bottom-fixed peek bar + Drawer для full breakdown (Base UI post-A.bis.0).
 	// pb-[env(safe-area-inset-bottom)] — iOS notch / home-indicator canon (2024+).
 	return (
 		<Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
@@ -125,26 +127,28 @@ export function StickySummary({
 				className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] shadow-[0_-4px_20px_rgba(0,0,0,0.08)] supports-[backdrop-filter]:backdrop-blur"
 			>
 				<div className="mx-auto flex max-w-6xl items-center gap-3">
-					<DrawerTrigger asChild>
-						<button
-							type="button"
-							className="flex flex-1 items-center justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-							aria-label="Развернуть детали стоимости"
-							data-testid="summary-peek-trigger"
-						>
-							<span className="flex flex-col">
-								<span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-									Итого
-								</span>
-								<span
-									data-testid="summary-total"
-									className="text-base font-semibold text-primary tabular-nums"
-								>
-									{peekTotalKopecks !== null ? formatRub(peekTotalKopecks) : '—'}
-								</span>
+					{/*
+					 * A.bis.0 Vaul→Base UI migration: Drawer.Trigger renders as <button>
+					 * by default (no `asChild` pattern в Base UI — `render` prop instead).
+					 * Inline className + aria-label directly on Trigger.
+					 */}
+					<DrawerTrigger
+						className="flex flex-1 items-center justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+						aria-label="Развернуть детали стоимости"
+						data-testid="summary-peek-trigger"
+					>
+						<span className="flex flex-col">
+							<span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+								Итого
 							</span>
-							<ChevronUp className="size-4 text-muted-foreground" aria-hidden />
-						</button>
+							<span
+								data-testid="summary-total"
+								className="text-base font-semibold text-primary tabular-nums"
+							>
+								{peekTotalKopecks !== null ? formatRub(peekTotalKopecks) : '—'}
+							</span>
+						</span>
+						<ChevronUp className="size-4 text-muted-foreground" aria-hidden />
 					</DrawerTrigger>
 					<Button
 						type="button"
