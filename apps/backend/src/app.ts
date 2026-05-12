@@ -72,6 +72,7 @@ import type { AppEnv } from './factory.ts'
 import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
 import { createMagicLinkSecretResolver } from './lib/magic-link/secret.ts'
 import { logger } from './logger.ts'
+import { loadTenantMode } from './middleware/demo-lock.ts'
 import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
 import { createOtelIngest } from './otel-ingest.ts'
@@ -710,7 +711,10 @@ const routes = app
 	.route('/api/v1', createBookingRoutes(bookingFactory, idempotency))
 	.route('/api/v1', createActivityRoutes(activityFactory))
 	.route('/api/v1', createGuestRoutes(guestFactory, idempotency))
-	.route('/api/v1', createMeRoutes())
+	.route(
+		'/api/v1',
+		createMeRoutes((tenantId) => loadTenantMode(sql, tenantId)),
+	)
 	.route('/api/v1', createFolioRoutes(folioFactory, idempotency))
 	.route('/api/v1', createPaymentRoutes(paymentFactory, idempotency))
 	.route('/api/v1', createRefundRoutes(refundFactory, idempotency))

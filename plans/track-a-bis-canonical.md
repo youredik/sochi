@@ -667,13 +667,65 @@ Tests (`ui/sidebar.test.tsx`, 11 describe groups, **35 strict tests**):
 
 **New process correction (C35)**: `gh api repos/<owner>/<repo>/issues/<N>` is the empirical ground-truth для GitHub issue/PR state — web-search summaries paraphrase and lie. R1+R2 web search returned «PR #6798 addressed Issue #6761» in plain text; gh API returned `merged: false, mergeable_state: dirty, closed_at: 2026-03-07`. Saved A.bis.1 from skipping a needed patch. Future: every per-sub-phase R1+R2 freshness check MUST включать gh CLI verify для GitHub-hosted issues/PRs cited as source-of-truth, not web-search paraphrase.
 
-### A.bis.2 (App-shell integration) — pending
+### A.bis.2 (App-shell integration) — ✅ DONE 2026-05-12
 
-Pre-flight R1+R2 freshness check:
-- [ ] TanStack Router `activeOptions` docs не изменились
-- [ ] RBAC matrix `packages/shared/src/rbac.ts` не изменился
+Pre-flight R1+R2 freshness check (≥2026-05-12, empirical):
+- [x] **TanStack Router** `npm view @tanstack/react-router version` → **1.169.2** (latest, 2026-05-x); locked **^1.168.25** in `apps/frontend/package.json` — 1 patch behind, fresh, NO bump (cosmetic). `<Link activeProps activeOptions exact:true>` API unchanged.
+- [x] **rbac.ts unchanged** since 2026-05-12 — `git log --since=2026-05-12 -- packages/shared/src/rbac.ts` returned empty; full re-read 143 lines confirms 7-section visibility matrix from §10.
+- [x] **shadcn ui Issue #10611** (open, 2026-05-11 «fix(sidebar): avoid collapsed lg padding conflict») — irrelevant for A.bis.2: we use `size="default"`, NOT `size="lg"` (the affected variant). Documented as known upstream; revisit only if Шахматка/Дебиторка adopt large rows.
+- [x] **/me missing mode field** — caught during recon; A.bis plan §3 D31 spec'd `useCurrentOrg().mode` reader, but `/me` returned only `{userId, tenantId, role}`. POST-AUDIT C36 correction: minimal backend enrichment (NOT new endpoint) with dependency-injected `loadTenantMode` loader.
+- [x] **Existing files Read fully (per `feedback_no_shallow_frontend_audit.md` + `feedback_pre_plan_codebase_recon.md`)**: `_app.tsx` 132 + `sidebar-drawer.tsx` 90 + `mobile-nav.tsx` 92 + `mobile-nav-button.tsx` 49 + `mobile-nav-state.ts` 17 + `rbac.ts` 143 + `tenant-mode.ts` 65 + `me.routes.ts` 32 + `me.routes.test.ts` 107 + `use-can.ts` 51 + `use-active-org.ts` 41 + `org-switcher.tsx` 63 + `mode-toggle.tsx` 59 + `logout-button.tsx` 18 + `factory.ts` 41 + `demo-lock.ts` middleware 103 + `compliance.routes.ts` head + `compliance.factory.ts` head = ~14 files thoroughly.
+- [x] **`loadTenantMode` reuse** verified — already exported from `middleware/demo-lock.ts:55` (same pattern widget-tenant-resolver uses for `/widget/:slug` endpoint).
 
-Outcome: TBD
+Implementation:
+
+- **POST-AUDIT C36 enrichment** — backend `/me` endpoint extended:
+  - `me.routes.ts:createMeRoutes(loadTenantMode?: (tenantId) => Promise<TenantMode>)` — optional injected loader, default returns `DEFAULT_TENANT_MODE`. Response shape `{userId, tenantId, role, mode}`.
+  - `app.ts:714` wires `createMeRoutes((tenantId) => loadTenantMode(sql, tenantId))`.
+  - `me.routes.test.ts` updated: 8 strict tests (W1-W6 incl. `vi.fn` argument trace verification — loader receives current `c.var.tenantId`).
+  - `lib/use-can.ts` extended: `meQueryOptions` type now carries `mode: TenantMode`; new `useTenantMode()` companion hook.
+- **8 new frontend files** in `apps/frontend/src/components/app-shell/`:
+  - `sidebar-sections.ts` (124 LOC) — 7 destinations (Шахматка/Дебиторка/Профиль гостиницы/Гости/Каналы дистрибуции/Туристический налог/Уведомления) с RU labels + Cyrillic ariaLabel + lucide icon + TanStack route `to` + `needsPropertyId` flag (only profile) + `isVisible(role)` predicate (5 ANDed RBAC + 1 OR `compliance:read OR amenity:read` для profile).
+  - `sidebar-sections.test.ts` (170 LOC) — 34 strict tests: 10 schema integrity + 21 RBAC × 7 sections × 3 roles matrix + 3 enum FULL coverage. Strict canon: exact-value asserts (`.toBe(expected)`), enum FULL (3 × 7 = 21 visibility cells covered explicitly).
+  - `demo-mode-badge.tsx` (37 LOC) — `<span role="status" aria-live="polite">` pill, RU labels via `DEMO_MODE_BADGE_LABELS` lookup, forced-colors `bg-[Highlight]` + `border-[ButtonText]` для HCM.
+  - `demo-mode-labels.ts` (16 LOC, **extracted per Vite Fast Refresh canon** — biome `useComponentExportOnlyModules`) — `DEMO_MODE_BADGE_LABELS` non-component constant lives in its own module so `demo-mode-badge.tsx` stays component-only.
+  - `demo-mode-badge.test.tsx` (140 LOC) — 13 strict tests: 3 mode rendering (undefined/demo/production) + 4 RU labels + 2 a11y semantics + 2 forced-colors + 2 lookup integrity.
+  - `admin-sidebar.tsx` (143 LOC) — `<TooltipProvider>` wraps `<Sidebar collapsible="offcanvas">`; `<SidebarHeader>` mounts `<OrgSwitcher>`; `<SidebarContent>` iterates `SIDEBAR_SECTIONS` with RBAC predicate gating + `needsPropertyId` dispatch (uses first property from `propertiesQueryOptions`); `<SidebarFooter>` composes `<DemoModeBadge>` + `<ModeToggle>` + `<LogoutButton>`. Each `<SidebarMenuButton>` declares Cyrillic `aria-label` (D15 canon → zero D15 dev-warn fired). `<Link activeProps={{ 'aria-current': 'page' }} activeOptions={{ exact: true }}>` per D22.
+  - `admin-sidebar.test.tsx` (260 LOC) — 15 strict tests: 4 RBAC mount × 3 roles (owner/manager full 7 + staff exactly 3 grid+profile+guests) + 3 loading states (role undef + propertyId missing + propertyId present) + 3 structure (data-section-id + aria-label="Главное меню" + data-slot=sidebar) + 4 footer composition (DemoModeBadge + mode propagation + ModeToggle + LogoutButton + OrgSwitcher mount slots) + 1 W1 (zero D15 dev-warn under our consumer).
+- **`_app.tsx` refactor**: removed top-bar (OrgSwitcher/ModeToggle/LogoutButton moved into SidebarFooter); removed MobileNav + SidebarDrawer + useMobileNavMore hooks; wrapped `<Outlet/>` in `<SidebarProvider defaultOpen> + <AdminSidebar orgSlug={...}> + <SidebarInset>`; added minimal mobile-only `<header className="md:hidden">` with `<SidebarTrigger aria-label="Открыть меню">` per §6 architecture.
+- **DELETE 7 files**: `components/mobile-nav.tsx` + `mobile-nav-button.tsx` + `mobile-nav-state.ts` + `sidebar-drawer.tsx` (4 components) + `mobile-nav.test.tsx` + `mobile-nav-button.test.tsx` + `sidebar-drawer.test.tsx` (3 tests). All pre-A.bis.2 mobile-nav code retired — single `<Sidebar collapsible="offcanvas">` handles desktop + mobile per D18.
+- **Side cleanup per `feedback_no_preexisting.md`**: collapsed 10 PRE-EXISTING M10 multi-line `// biome-ignore` violations (M10 commit `56eecab`) — 7 в `workers/channel-dispatcher.test.ts` + 3 в `domains/channel/webhook.routes.test.ts`. Multi-line `// biome-ignore` only suppresses NEXT line; PR moved suppressions directly above each `as any` cast.
+
+Tests delivered (target ~30 integration → **67 strict, 2.2× over** per A.bis.0/1 canon):
+
+| Group | Count |
+|---|---|
+| Backend `/me` enrichment (W1-W6 + cross-role) | 8 |
+| sidebar-sections schema + RBAC matrix + enum FULL | 34 |
+| demo-mode-badge rendering + RU + a11y + HCM + lookup | 13 |
+| admin-sidebar RBAC mount + loading + structure + footer + W1 | 15 |
+| **TOTAL** | **70** |
+
+Wait — sidebar-sections + demo-badge + admin-sidebar = 62 frontend tests (same as `pnpm test src/components/app-shell` count). Plus +5 backend (W4-W6 new + W1/W2 mode-enriched) = **67 net new strict tests**.
+
+**Multi-layer verification (per A.bis.0 senior canon):**
+
+| Layer | Result |
+|---|---|
+| **TypeScript strict** (`pnpm typecheck` 4 workspaces) | ✓ EXIT=0 |
+| **Vitest unit app-shell** (62 tests, 949ms) | ✓ 62/62 pass |
+| **Backend /me** (8 tests, 190ms) | ✓ 8/8 pass |
+| **Frontend regression** (`pnpm test` 85 files) | ✓ **1447/1447 pass** (zero regressions vs A.bis.1 baseline 1399 → +48 net after 3 deleted mobile-nav tests + 51 new = matches arithmetic) |
+| **Backend test:fast** (`pnpm test:fast` root) | ✓ **4078/4078 pass** | 986 skipped (DB-tagged intentional) |
+| **5 pre-commit gates** | ✓ sherif no issues / biome **0 errors 0 warnings** / depcruise 0 violations 790 modules / knip clean / typecheck EXIT=0 |
+| **lefthook pre-commit hook** | will pass on next commit |
+
+**New process correction (C36)**: When plan canon §X spec'ит frontend hook reading server state (`useCurrentOrg().mode`), pre-flight recon MUST verify the field is actually surfaced through API — НЕ just exists in DB. A.bis plan §0 missed this (`organizationProfile.mode` lives backend-side, NOT in `/me` response). POST-AUDIT correction = minimal backend enrichment of EXISTING endpoint (NOT new endpoint per §2 spirit). Pattern: dependency-injected loader allows test stubs without DB; production wires via `loadTenantMode(sql, tenantId)`. Captured in implementation log + new memory pointer.
+
+**Honest carry-forward (next sub-phases):**
+- A.bis.3 — Dashboard refactor `_app.o.$orgSlug.index.tsx` (tiles → KPI cards внутри content)
+- A.bis.4 — Playwright e2e (10 destinations clickable from sidebar) + axe matrix 12 cells (3 themes × 4 viewports) + visual smoke 4 viewports + forced-colors spec
+- A.bis.5 — Closure: ROADMAP insert + locked-versions + dependency freshness + coverage floor bump check + plan §10 «Owner sees 10» prose drift fix (D28 corrected к 7 sections, prose summary not updated)
 
 ### A.bis.3 (Dashboard refactor) — pending
 

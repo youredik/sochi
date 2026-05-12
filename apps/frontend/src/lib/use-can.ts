@@ -12,7 +12,7 @@
  * Pairs с `<RbacButton>` для aria-disabled + tooltip pattern (NOT just
  * `disabled` — WCAG hostility per Smashing 2021/22 + CSS-Tricks canon).
  */
-import { hasPermission, type MemberRole } from '@horeca/shared'
+import { hasPermission, type MemberRole, type TenantMode } from '@horeca/shared'
 import { queryOptions, useQuery } from '@tanstack/react-query'
 import { api } from './api.ts'
 
@@ -22,7 +22,7 @@ export const meQueryOptions = queryOptions({
 		const res = await api.api.v1.me.$get()
 		if (!res.ok) throw new Error(`me HTTP ${res.status}`)
 		const body = (await res.json()) as {
-			data: { userId: string; tenantId: string; role: MemberRole }
+			data: { userId: string; tenantId: string; role: MemberRole; mode: TenantMode }
 		}
 		return body.data
 	},
@@ -33,6 +33,18 @@ export const meQueryOptions = queryOptions({
 export function useCurrentRole(): MemberRole | undefined {
 	const { data } = useQuery(meQueryOptions)
 	return data?.role
+}
+
+/**
+ * Tenant mode for the active organization (`'demo'` | `'production'`).
+ * Returns `undefined` while loading. Driven by `organizationProfile.mode`
+ * (server-resolved) and exposed via `/api/v1/me`. A.bis.2 introduced this
+ * read path so the admin app-shell `<DemoModeBadge>` can render `[DEMO]`
+ * vs `[LIVE]` pill in `<SidebarFooter>`.
+ */
+export function useTenantMode(): TenantMode | undefined {
+	const { data } = useQuery(meQueryOptions)
+	return data?.mode
 }
 
 /**

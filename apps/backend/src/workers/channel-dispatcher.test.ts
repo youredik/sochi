@@ -121,8 +121,8 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 		const httpAttempt = vi.fn(
 			async (): Promise<HttpAttemptResult> => ({ ok: true, httpStatus: 200 }),
 		)
-		// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 		const handle = startChannelDispatcher({
+			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
 			httpAttempt,
 			pollIntervalMs: 10,
@@ -144,8 +144,8 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 				errorMessage: 'upstream',
 			}),
 		)
-		// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 		const handle = startChannelDispatcher({
+			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
 			httpAttempt,
 			pollIntervalMs: 10,
@@ -168,8 +168,8 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 				errorMessage: 'bad request',
 			}),
 		)
-		// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 		const handle = startChannelDispatcher({
+			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
 			httpAttempt,
 			pollIntervalMs: 10,
@@ -190,8 +190,8 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 				errorMessage: 'timeout',
 			}),
 		)
-		// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 		const handle = startChannelDispatcher({
+			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
 			httpAttempt,
 			pollIntervalMs: 10,
@@ -209,8 +209,8 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 				errorMessage: 'rate-limited',
 			}),
 		)
-		// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 		const handle = startChannelDispatcher({
+			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
 			httpAttempt,
 			pollIntervalMs: 10,
@@ -228,8 +228,8 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 				errorMessage: 'ECONNRESET',
 			}),
 		)
-		// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 		const handle = startChannelDispatcher({
+			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
 			httpAttempt,
 			pollIntervalMs: 10,
@@ -274,8 +274,8 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 				return { ok: true, httpStatus: 200 }
 			},
 		)
-		// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 		const handle = startChannelDispatcher({
+			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
 			httpAttempt,
 			pollIntervalMs: 10,

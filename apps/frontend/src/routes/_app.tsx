@@ -1,13 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Outlet, redirect, useParams, useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { AdminSidebar } from '../components/app-shell/admin-sidebar.tsx'
 import { InstallPrompt } from '../components/install-prompt.tsx'
-import { MobileNav } from '../components/mobile-nav.tsx'
-import { useMobileNavMore } from '../components/mobile-nav-state.ts'
-import { ModeToggle } from '../components/mode-toggle.tsx'
-import { SidebarDrawer } from '../components/sidebar-drawer.tsx'
-import { LogoutButton } from '../features/auth/components/logout-button.tsx'
-import { OrgSwitcher } from '../features/tenancy/components/org-switcher.tsx'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar.tsx'
 import { authClient, sessionQueryOptions } from '../lib/auth-client.ts'
 import { subscribeAuthBroadcasts } from '../lib/broadcast-auth.ts'
 
@@ -22,7 +18,15 @@ import { subscribeAuthBroadcasts } from '../lib/broadcast-auth.ts'
  *   2. Session exists but no `activeOrganizationId` → try to set first
  *      org as active (stankoff-v2 "org onboarding in guard" pattern),
  *      or send to /o-select if multiple orgs, or to /signup if zero
- *   3. All set → render the authenticated chrome (top bar + Outlet)
+ *   3. All set → render the authenticated chrome (sidebar app-shell + Outlet)
+ *
+ * App-shell (A.bis.2): single `<SidebarProvider>` (D14 canon — multiple
+ * providers share cookie + Cmd+B per shadcn-ui/ui#9335; PATCH-D14 in
+ * `ui/sidebar.tsx` enforces dev-only). `<AdminSidebar>` mounts когда
+ * `orgSlug` resolved (route guard guarantees it for tenant-scoped paths).
+ * Mobile (<768 px) gets a minimal top-bar with `<SidebarTrigger>` —
+ * canonical shadcn pattern (no auto-hamburger; explicit trigger required
+ * per §6 architecture diagram + §16 C26).
  *
  * Mounted-side: subscribe to cross-tab BroadcastChannel messages so a
  * logout or org-switch in a peer tab propagates here instantly — without
@@ -66,7 +70,6 @@ function AppLayout() {
 	const router = useRouter()
 	const params = useParams({ strict: false })
 	const orgSlug = params.orgSlug as string | undefined
-	const mobileNav = useMobileNavMore()
 
 	useEffect(
 		() =>
@@ -84,48 +87,26 @@ function AppLayout() {
 	)
 
 	return (
-		<div className="flex min-h-svh flex-col">
-			{/*
-			 * Top header — sticky на mobile + desktop. Mobile показывает только
-			 * brand + ModeToggle (OrgSwitcher/Logout уехали в SidebarDrawer
-			 * под More-tab); desktop (md+) сохраняет existing layout полностью.
-			 * pt-safe-top — для iOS PWA standalone (notch/Dynamic Island).
-			 */}
-			<header className="border-b border-border bg-background/80 pt-safe-top sticky top-0 z-40 backdrop-blur">
-				<div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
-					<span className="text-sm font-semibold tracking-tight text-foreground">HoReCa</span>
-					<div className="flex items-center gap-2">
-						<div className="hidden md:block">
-							<OrgSwitcher />
-						</div>
-						<ModeToggle />
-						<div className="hidden md:block">
-							<LogoutButton />
-						</div>
-					</div>
-				</div>
-			</header>
-			{/*
-			 * Outlet — pb-20 на mobile (запас под bottom-nav 64px высота),
-			 * pb-0 desktop. flex-1 заполняет verticai space между header и
-			 * bottom-nav.
-			 */}
-			<div className="flex-1 pb-20 md:pb-0">
+		<SidebarProvider defaultOpen>
+			{orgSlug ? <AdminSidebar orgSlug={orgSlug} /> : null}
+			<SidebarInset>
+				{/*
+				 * Minimal mobile top-bar (md:hidden) — explicit <SidebarTrigger>
+				 * mount per shadcn canon §6 + plan §16 C26. Brand label kept на
+				 * правой стороне для recognizability. Desktop (md+) скрывает —
+				 * <SidebarHeader> внутри AdminSidebar содержит OrgSwitcher.
+				 * pt-safe-top — iOS PWA standalone notch / Dynamic Island.
+				 */}
+				{orgSlug ? (
+					<header className="border-border bg-background/80 pt-safe-top sticky top-0 z-40 flex items-center justify-between border-b px-4 py-3 backdrop-blur md:hidden">
+						<SidebarTrigger aria-label="Открыть меню" />
+						<span className="text-sm font-semibold tracking-tight">HoReCa</span>
+					</header>
+				) : null}
 				<Outlet />
-			</div>
-			{/*
-			 * Bottom-tab + SidebarDrawer — только при наличии orgSlug (вне
-			 * o-select / signup). Drawer mounted один раз — multiple MobileNav
-			 * instances невозможны (single AppLayout per app).
-			 */}
-			{orgSlug ? (
-				<>
-					<MobileNav orgSlug={orgSlug} onMoreClick={mobileNav.onMoreClick} />
-					<SidebarDrawer orgSlug={orgSlug} open={mobileNav.open} onOpenChange={mobileNav.setOpen} />
-				</>
-			) : null}
-			{/* PWA install hint (mobile только, dismissable, persists). */}
-			<InstallPrompt />
-		</div>
+				{/* PWA install hint (mobile only, dismissable, persists). */}
+				<InstallPrompt />
+			</SidebarInset>
+		</SidebarProvider>
 	)
 }
