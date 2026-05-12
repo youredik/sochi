@@ -1,7 +1,7 @@
 {
   "_doc": "Ratchet baseline — these metrics may ONLY decrease (or stay equal). Pre-push gate fails when a metric regresses past these caps. To improve: ship the improvement + lower the value here in the same commit, explicit reasoning in commit message. Adapted from stankoff-v2 canonical pattern (`fix(test): vitest 4 isolate:false` lineage 2026-05-08).",
   "_updated": "2026-05-12",
-  "_updated_by_commit": "fix(a-bis.5.audit) — pnpm overrides serialize-javascript@^7.0.5 closes last high CVE — audit_high 1→0 (ALL prod CVEs resolved)",
+  "_updated_by_commit": "chore(tsgo): Phase 9 — Oxlint+tsgolint adoption + protobufjs@^8.2.0 override (CVE chain re-zeroed after upstream advisory db update) + 2 new ratchet metrics oxlint_type_aware_{errors,warnings}",
 
   "depcruise_violations_max": 0,
   "knip_unused_max": 0,
@@ -10,6 +10,8 @@
   "biome_errors_max": 0,
   "weak_assertions_max": 234,
   "multi_line_biome_ignore_max": 0,
+  "oxlint_type_aware_errors_max": 345,
+  "oxlint_type_aware_warnings_max": 335,
 
   "_depcruise_baseline_note": "0 (clean across 790 modules / 2313 deps). Any new circular / banned import → fail.",
   "_knip_baseline_note": "0 — clean. New unused export / file / dep → fail.",
@@ -18,6 +20,8 @@
   "_biome_baseline_note": "0 errors (28 → 6 → 0 после A.bis.2 fix-up cleanup). Warnings tracked separately, не gate. New error → fail.",
   "_weak_assertions_baseline_note": "234 — initial measurement 2026-05-12. PRE-EXISTING from prior milestones. NOT a regression from A.bis.2; locked here as starting point. Ratchet down each milestone closure (per `feedback_strict_tests.md` canon — exact-value asserts > existence-only). New `.toBeDefined()/.toBeTruthy()/.toBeFalsy()/.toBeInstanceOf(Array)` → count > 234 → fail.",
   "_multi_line_biome_ignore_baseline_note": "0 after A.bis.2.fix collapsed 10 PRE-EXISTING M10 multi-line biome-ignore comments. New multi-line `// biome-ignore` → suppression doesn't reach the violation → fail. Move comment directly above the violating line OR use `biome-ignore-start/end` block syntax.",
+  "_oxlint_type_aware_errors_note": "345 errors at locked baseline 2026-05-12 (initial measurement was 360 before protobufjs@^8.2.0 override resolved CVE chain + 15 violations). NEW capability — type-aware lint via Oxlint+tsgolint (TS 7 compiler-backed). Catches classes biome misses: 249 require-await, 96 no-unsafe-assignment, 79 no-unsafe-member-access, 62 no-unnecessary-type-assertion, 45 no-unsafe-call, 40 no-base-to-string, 15 no-misused-promises, 10 no-floating-promises (PROD HAZARD), 8 await-thenable, 7 unbound-method, others. Ratchet down each milestone per `feedback_aggressive_delegacy.md` canon. Per-rule fix priorities: no-floating-promises + no-misused-promises FIRST (production correctness), no-base-to-string next, no-unsafe-* family (tighten types from any), require-await mass-fix (drop async or add await). Enforced via `scripts/oxlint-ratchet-check.sh` in post-push.yml (BLOCKING) — runtime ~5s with warm cache.",
+  "_oxlint_type_aware_warnings_note": "335 warnings at initial measurement 2026-05-12. Lower priority: prefer-nullish-coalescing (15), prefer-optional-chain (10), no-unsafe-{return,argument} (14 combined). Hygiene track but counted in ratchet to prevent silent regression.",
 
   "_excluded": {
     "test_leaks": "Vitest 4 detect-async-leaks reports false positives on Promise.race losing branches per stankoff research 2026-04-25. Structural noise, не prod threat.",

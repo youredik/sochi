@@ -1,0 +1,34 @@
+{
+	"$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+	"options": {
+		"typeAware": true,
+		"typeCheck": true
+	},
+	"plugins": ["typescript"],
+	"rules": {
+		"typescript/no-floating-promises": "error",
+		"typescript/await-thenable": "error",
+		"typescript/no-misused-promises": "error",
+		"typescript/no-unnecessary-type-assertion": "error",
+		"typescript/require-await": "error",
+		"typescript/unbound-method": "error",
+		"typescript/restrict-plus-operands": "error",
+		"typescript/restrict-template-expressions": "warn",
+		"typescript/prefer-nullish-coalescing": "warn",
+		"typescript/prefer-optional-chain": "warn",
+		"typescript/no-unsafe-argument": "warn",
+		"typescript/no-unsafe-assignment": "warn",
+		"typescript/no-unsafe-call": "warn",
+		"typescript/no-unsafe-member-access": "warn",
+		"typescript/no-unsafe-return": "warn",
+		"typescript/strict-boolean-expressions": "off"
+	},
+	"ignorePatterns": [
+		".artifacts/**",
+		"dist/**",
+		".stryker-tmp/**",
+		"node_modules/**",
+		"apps/widget-embed/dist/**",
+		"packages/shared/dist/**"
+	]
+}

@@ -21,6 +21,8 @@
 		"typecheck:tsgo:shared": "tsgo --noEmit -p packages/shared/tsconfig.json",
 		"tsgo:diff": "node scripts/tsgo-diff.ts",
 		"tsgo:sweep": "node scripts/tsgo-diff-sweep.ts",
+		"oxlint": "oxlint",
+		"oxlint:types": "oxlint --type-aware",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
@@ -72,6 +74,8 @@
 		"knip": "^6.13.0",
 		"lefthook": "^2.1.6",
 		"npm-run-all2": "^8.0.4",
+		"oxlint": "^1.64.0",
+		"oxlint-tsgolint": "^0.22.1",
 		"sherif": "^1.11.1",
 		"size-limit": "^12.1.0",
 		"typescript": "^6.0.3",
@@ -84,7 +88,8 @@
 			"sharp"
 		],
 		"overrides": {
-			"serialize-javascript": "^7.0.5"
+			"serialize-javascript": "^7.0.5",
+			"protobufjs@<8.0.2": "^8.2.0"
 		}
 	}
 }

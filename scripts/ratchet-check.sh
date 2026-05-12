@@ -121,3 +121,7 @@ if [ "$FAIL" = "1" ]; then
 fi
 
 echo "Ratchet OK: depcruise=$DEPCR knip=$KNIP audit_high=$AUDIT ts_err=$TS_ERR biome_err=$BIOME_ERR weak_assertions=$WEAK_ASSERTIONS multi_biome_ignore=$MULTI_BI"
+# Note: oxlint_type_aware_{errors,warnings}_max baselines tracked in
+# .ratchet/baseline.json but enforced via `scripts/oxlint-ratchet-check.sh`
+# in post-push.yml (BLOCKING). The ~15s runtime exceeds pre-push 30s cap;
+# post-push runs the full safety net before macOS Sosumi RED notification.

@@ -108,6 +108,18 @@ jobs:
       - name: tsgo divergence audit (BLOCKING)
         run: pnpm tsgo:diff
 
+      # Phase 9 (oxlint+tsgolint adoption 2026-05-12): type-aware lint
+      # gate via Oxlint+tsgolint (TS 7 compiler-backed). Catches classes
+      # biome's syntax-only and Biotype miss: no-floating-promises,
+      # no-misused-promises, no-base-to-string, no-unsafe-* family.
+      # BLOCKING — drift past baseline = main RED + macOS Sosumi.
+      # ~5s runtime warm cache. Separated from ratchet-check.sh (pre-push)
+      # because ~15s cold > 30s pre-push cap.
+      # Triage: `pnpm oxlint:types` locally for per-violation context.
+      # Per-rule fix priorities in .ratchet/baseline.json note.
+      - name: oxlint type-aware ratchet (BLOCKING)
+        run: bash scripts/oxlint-ratchet-check.sh
+
       - name: Notify on failure (macOS)
         if: failure()
         run: |
