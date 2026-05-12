@@ -1,9 +1,10 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { lingui } from '@lingui/vite-plugin'
+import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
-import react from '@vitejs/plugin-react'
+import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -15,12 +16,17 @@ export default defineConfig({
 			target: 'react',
 			autoCodeSplitting: true,
 		}),
-		react({
-			babel: {
-				// react-compiler: auto-memoize; lingui macro: extract-at-build for i18n.
-				// Order matters only if plugins disagree on AST — here they don't.
-				plugins: ['babel-plugin-react-compiler', '@lingui/babel-plugin-lingui-macro'],
-			},
+		react(),
+		// React Compiler 1.0 (stable Oct 2025) + Lingui macro — via @rolldown/plugin-babel.
+		// CANONICAL Vite 8 + @vitejs/plugin-react v6 setup (verified May 2026):
+		// v6 dropped legacy `react({ babel: {...} })`; Babel-based plugins run via
+		// @rolldown/plugin-babel separately. Old config silently no-op'd until
+		// Phase 14 (bundle had 2 useMemoCache markers; fix below brought hundreds).
+		// API: presets/plugins at top level, NOT wrapped in `babelConfig`.
+		// Docs: https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md
+		babel({
+			presets: [reactCompilerPreset({ target: '19' })],
+			plugins: ['@lingui/babel-plugin-lingui-macro'],
 		}),
 		lingui(),
 		tailwindcss(),
