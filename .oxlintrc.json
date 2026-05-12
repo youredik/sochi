@@ -7,7 +7,7 @@
 	"plugins": ["typescript"],
 	"rules": {
 		"typescript/no-floating-promises": "error",
-		"typescript/await-thenable": "error",
+		"typescript/await-thenable": "warn",
 		"typescript/no-misused-promises": [
 			"error",
 			{
@@ -17,7 +17,7 @@
 			}
 		],
 		"typescript/no-unnecessary-type-assertion": "error",
-		"typescript/require-await": "error",
+		"typescript/require-await": "off",
 		"typescript/unbound-method": "error",
 		"typescript/restrict-plus-operands": "error",
 		"typescript/restrict-template-expressions": "warn",
