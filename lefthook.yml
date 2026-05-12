@@ -28,7 +28,12 @@ pre-commit:
 
     - name: typecheck
       glob: "*.{ts,tsx}"
-      run: pnpm typecheck
+      # tsgo (TS 7 native-preview) via run-p: 15s → 4s on this monorepo
+      # (4-project parallel, 0 divergence vs tsc on baseline 2026-05-12).
+      # ratchet-check.sh in pre-push still runs authoritative tsc (parallel
+      # variant); if tsgo silently passes anything tsc would fail, pre-push
+      # catches it. See project_tsgo_pilot_2026_05_12.md.
+      run: pnpm typecheck:tsgo
 
     - name: knip
       glob: "*.{ts,tsx,json}"
