@@ -589,6 +589,8 @@ export const SIDEBAR_SECTIONS = [
 | **C38** | **POST-AUDIT C38 (A.bis.3)** — plan §7 row 3 spec'д «Occupancy / ADR / RevPAR placeholders» but `project_dashboard_external.md` canon (zaфиксирован 2026-04-26 user directive) explicitly says **3.1 KPI Dashboard = Yandex DataLens external, NOT в нашем коде**. Plan v1 row 3 spec written before that memory was applied. **Replaced** placeholders with **4 tactical operator KPIs** (Заезды сегодня / В отеле / Открытый баланс / Письма со сбоем) + Recent activity (via NEW `/activity/recent` C36-pattern enrichment) + Alerts (notification outbox). R1 research 2026-05-12 confirms: Cloudbeds operator dashboard = tactical-today, NOT analytical (ADR/RevPAR живут в Manager's Report). Surfaced transparently before implementation; senior call upscope vs «placeholders that never get data». | A.bis.3 pre-flight | plan §7 row 3 updated + memory `project_a_bis_3_done.md` + commit body audit |
 | **C39** | **POST-AUDIT C39 (A.bis.3)** — biome rules `useUniqueElementIds` + `useValidAriaRole` over-trigger on custom component props named `id=` and `role=` (collide with HTML attribute names). For domain-semantic props use distinct names: `slug` для KPI identifier, `memberRole` для RBAC role. Same pattern reusable across A.bis.X+. Canon: **never name a React component prop after an HTML attribute** unless the prop literally IS the HTML attribute being passed through. | A.bis.3 biome lint surfaced | renamed `KpiCard.id` → `KpiCard.slug`, `DashboardPage.role`+`KpiStrip.role` → `memberRole` |
 | **C40** | **POST-AUDIT C40 (A.bis.3)** — `data-section-id` is sidebar's namespace (A.bis.2 canon: 7 nav rows). Dashboard content sections **must use distinct namespace** (`data-dashboard-section`) to avoid e2e selector collision (`page.locator('[data-section-id]').toHaveCount(7)` will fail если dashboard ALSO emits). Caught at full chromium regression run after dashboard refactor. Naming canon: each architectural region owns ITS OWN attribute namespace. | A.bis.3 full chromium e2e collision surfaced | dashboard sections use `data-dashboard-section="kpi-strip\|recent-activity\|alerts"` |
+| **C41** | **PRE-FLIGHT C41 (A.bis.4)** — viewport-state matrix specs MUST verify state mapping against current breakpoint constants AT plan time, not «discover at implementation». Plan v1 §8 axe matrix table assigned `768=offcanvas-open`, but D17 (added later) set md:=768px → 768 became persistent desktop, not mobile-offcanvas. Caught at A.bis.4 pre-flight; resolved upfront in matrix spec docstring (NOT silent downscope) by normalising to natural state per viewport + 2 explicit state-variant cells. Future plans with viewport×state matrices: explicit state inventory per viewport with breakpoint references, not generic «mobile/tablet/desktop» bucketing. | A.bis.4 pre-flight recon | matrix normalised + 2 state variants + plan §8 honest disclosure in spec docstring |
+| **C42** | **C42 (A.bis.4)** — visual snapshots of authenticated tenant-scoped pages MUST mask tenant-dependent zones (OrgSwitcher org name from fresh-tenant signup timestamp, KPI numeric values from seed data). Stable masking selector = the structural region wrapping volatile content (`[data-slot="sidebar-header"]` for OrgSwitcher, not the individual inner button which may rerender). Snapshot baselines tracked under `<spec>.spec.ts-snapshots/<name>-<project>-<platform>.png` (Playwright canonical convention). `maxDiffPixelRatio: 0.05` matches M9.widget.7 canon. | A.bis.4 implementation | admin-shell-matrix snapshots mask `[data-slot="sidebar-header"]` |
 
 ---
 
@@ -842,13 +844,59 @@ Multi-layer verification (all 5 layers green per A.bis.0 senior canon + C37):
 - A.bis.5 — Closure: ROADMAP insert + locked-versions update + dependency freshness audit + coverage floor bump check + plan §10 «Owner sees 10» prose drift fix.
 - Sparkline / mini-chart на occupancy/in-house trend cards — deferred к later sub-phase when sufficient time-series data accumulates (need 7-day window of activity for meaningful sparkline).
 
-### A.bis.4 (E2E + axe matrix + visual) — pending
+### A.bis.4 (E2E + axe matrix + visual) — ✅ DONE 2026-05-12
 
-Pre-flight R1+R2 freshness check:
-- [ ] axe-core/playwright latest version verify
-- [ ] Lost-Pixel или Playwright snapshot canonical
+Pre-flight R1+R2 freshness check (≥ 2026-05-12, empirical):
+- [x] **@playwright/test 1.60.0** — `npm view @playwright/test` (latest, published **2026-05-11**, 1 day ago). Locked `^1.59.1` → 1 minor behind, **bump candidate for A.bis.5 dep-freshness audit** (NOT mid-task per `feedback_test_loop_canon.md` + `feedback_dependency_freshness.md` — batched closure bump).
+- [x] **@axe-core/playwright 4.11.3** — `npm view` confirms latest stable (published 2026-04-30, 12 days ago). Sochi locked at 4.11.3 EXACT pin (`package.json:32`) → fresh, no bump.
+- [x] **axe-core 4.11.4** underlying — `npm view axe-core version` 4.11.4 (published 2026-05-07). @axe-core/playwright bundles its own pin — no separate bump.
+- [x] **gh API** `repos/microsoft/playwright/issues?labels=forced-colors` → `[]` empty (no open forced-colors regression). `browser.newContext({ forcedColors: 'active' })` + `colorScheme: 'dark'` canonical 2026 confirmed.
+- [x] **WebFetch `playwright.dev/docs/api/class-page#page-emulate-media`** verified options: `colorScheme: null|"light"|"dark"|"no-preference"`, `contrast: null|"no-preference"|"more"`, `forcedColors: null|"active"|"none"` — stable, no API drift.
+- [x] **Codebase recon** — `tests/e2e/perf-a11y.spec.ts` 48-cell widget matrix is canonical template (4 surfaces × 3 themes × 4 viewports + 4 forced-colors visual snapshots). `tests/axe-known-noise.ts` exports `WCAG_AA_TAGS` + `filterKnownNoise` tuple-allowlist (currently empty baseline). `tests/e2e/<spec>.spec.ts-snapshots/` is Playwright canonical baseline storage. `PLAYWRIGHT_SKIP_A11Y_MATRIX=1` env skip canonical for local fast iteration.
+- [x] **Plan §8 viewport-state contradiction caught** — plan v1 §8 matrix table specifies 768=offcanvas-open BUT D17 set md:=768px → 768 IS persistent desktop. Surfaced upfront before implementation (C38 canon: «Surface deviation transparently to user BEFORE implementation»). Matrix normalised to NATURAL state per viewport + 2 explicit state variants (offcanvas-OPEN at 320 + collapsed-icon at 1440).
 
-Outcome: TBD
+Implementation:
+
+- **NEW `tests/e2e/admin-shell-matrix.spec.ts`** (276 LOC) — comprehensive 18-test e2e file with three `describe` groups:
+  - **Axe matrix 12 cells** (3 themes × 4 viewports) — light/dark/forced-colors × 320/768/1024/1440. Each cell spawns fresh `browser.newContext({ storageState, viewport, colorScheme, forcedColors })`, navigates to `/o/{slug}/`, settles via `settle(page)` helper (h1 visible + KPI strip mounted + ALL 4 cards reach data-state ∈ value|error + `document.fonts.ready` + animations completed), runs `new AxeBuilder({ page }).withTags([...WCAG_AA_TAGS])` against tuple-allowlist, asserts zero filtered violations.
+  - **Explicit state variants** (2 cells) — `light/320-offcanvas-OPEN` (click trigger → `[data-mobile="true"][data-slot="sidebar"]` mounts → axe scan with PATCH-D12 dismiss button «Закрыть меню» visible) + `light/1440-collapsed-icon` (Cmd+B keyboard shortcut → desktop sidebar wrapper flips `data-state="collapsed"` → axe scan).
+  - **Visual smoke 4 viewports** — 320 snapshots the mobile `<header className="md:hidden">` trigger bar (selector `header.filter({ has: locator('[data-slot="sidebar-trigger"]') })`); 768/1024/1440 snapshot the persistent `[data-slot="sidebar"]` element with `<SidebarHeader>` masked (OrgSwitcher org name varies per fresh-tenant signup timestamp). All snapshots `maxDiffPixelRatio: 0.05` (5% — canon M9.widget.7).
+- **EXTEND `tests/e2e/admin-sidebar.spec.ts`** (+~90 LOC, 14 tests total — 7 existing + 7 new):
+  - **D12 mobile dismiss spec** — `page.setViewportSize({ width: 320 })` → click `[data-slot="sidebar-trigger"]` → `[data-mobile="true"][data-slot="sidebar"]` visible → `getByRole('button', { name: 'Закрыть меню' })` focusable via `.focus()` → `toBeFocused()` → press Enter → sheet `toBeHidden()`. Functional proof PATCH-D12 keyboard-escape path works real-browser (JSDOM can't simulate Sheet sliding out).
+  - **D22 per-path active-highlight isolation × 6 paths** — `/grid` `/receivables` `/guests` `/channels` `/tax` `/notifications`. Each: navigate via sidebar row click, assert URL match, assert clicked row has `aria-current="page"`, AND assert `locator('[data-section-id][aria-current="page"]').toHaveCount(1)` (D22 isolation guard against future nested-route double-marking).
+- **NEW snapshot baselines** in `tests/e2e/admin-shell-matrix.spec.ts-snapshots/`: 4 PNG files (admin-shell-{320-mobile-header,768-sidebar,1024-sidebar,1440-sidebar}-chromium-darwin.png).
+- **Skipped from honest delta**: `profile` route D22 test omitted (route requires `propertyId` resolution; existing `app-a11y.spec.ts` covers profile path via `[data-section-id="profile"]` click). Acceptable as documented gap — D22 isolation tested via 6 of 7 owner-visible rows is sufficient enum coverage.
+
+Tests delivered (target plan §7 row 4 = 12 e2e):
+
+| Group | Count |
+|---|---|
+| `admin-shell-matrix.spec.ts` axe matrix 3×4 | 12 |
+| `admin-shell-matrix.spec.ts` state variants (mobile-OPEN + collapsed-icon) | 2 |
+| `admin-shell-matrix.spec.ts` visual smoke 4 viewports | 4 |
+| `admin-sidebar.spec.ts` D12 mobile dismiss | 1 |
+| `admin-sidebar.spec.ts` D22 per-path isolation × 6 paths | 6 |
+| **TOTAL NEW** | **25** (2.1× over plan target 12) |
+
+Multi-layer verification (all 5 layers green per A.bis.0 senior canon + C37):
+
+| Layer | Result |
+|---|---|
+| TypeScript strict (`pnpm typecheck` 4 workspaces) | ✓ EXIT=0 |
+| Vitest unit | N/A — A.bis.4 is pure e2e per scope (matrix specs run under Playwright transpilation, not Vitest) |
+| 5 pre-commit gates | ✓ sherif no issues / biome 0 errors (2 PRE-EXISTING `global-mocks.ts:129` warnings carried from `6a6f60c`, NOT new) / depcruise 0 violations 806 modules / knip clean / typecheck EXIT=0 |
+| **Ratchet (7 metrics)** | ✓ Ratchet OK: depcruise=0 knip=0 audit_high=7 ts_err=0 biome_err=0 weak_assertions=234 multi_biome_ignore=0 (no regression vs A.bis.3 baseline) |
+| **Real-browser Playwright e2e** admin-shell-matrix.spec.ts | ✓ 19/19 pass (28.1s, first run with `--update-snapshots` created 4 baselines) |
+| **Real-browser Playwright e2e** admin-sidebar.spec.ts | ✓ 14/14 pass (17.5s, all D12+D22 new tests green) |
+| **Full Playwright chromium suite** | ✓ **223/223 pass** (4.9 min) — zero regressions across widget + grid + payments + bookings + setup + auth + sidebar + dashboard + a11y + admin-channels suites |
+
+**New process corrections captured**:
+
+- **C41** — **Viewport-state matrix specs MUST verify state mapping against current breakpoint constants AT plan time** (not «discover at implementation»). Plan v1 §8 axe matrix table assigned `768=offcanvas-open`, which became impossible once D17 set md:=768px (768 is now persistent desktop). Caught upfront at A.bis.4 pre-flight + resolved transparently in spec docstring. Future plans with viewport×state matrices: explicit state inventory per viewport with breakpoint references, not generic «mobile/tablet/desktop» bucketing.
+- **C42** — **Visual snapshots of authenticated tenant-scoped pages MUST mask tenant-dependent zones** (OrgSwitcher org name, KPI numeric values from seed data). Stable masking selector = the structural region wrapping volatile content (`<SidebarHeader>` for OrgSwitcher, not the individual `<button>` inside which may rerender). Confirmed approach: `mask: [page.locator('[data-slot="sidebar-header"]')]` keeps the snapshot semantically about rail width / footer flex / theme tokens rather than per-tenant pixel drift.
+
+**Honest carry-forward**:
+- A.bis.5 closure — ROADMAP insert + memory consolidation (`project_a_bis_done.md` superseding 0/1/2/3/4 individual `_done` memories OR keeping them as historical layer; user prefers «consolidated» per plan §7 row 5b) + locked-versions update (incl. `@playwright/test` 1.59.1 → 1.60.0 bump candidate) + architecture decisions update (app-shell + D17 breakpoint trade-off + inline-state-machines rationale) + Lingui v5→v6 drift fix in `project_m5_tech_decisions.md` + `pnpm outdated --recursive` audit + coverage floor bump check.
 
 ### A.bis.5 (Closure) — pending
 

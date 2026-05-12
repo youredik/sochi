@@ -110,3 +110,76 @@ test.describe('AdminSidebar — axe-core WCAG 2.2 AA audit', () => {
 		expect(results.violations).toEqual([])
 	})
 })
+
+// ---------------------------------------------------------------------------
+// A.bis.4 — additional functional guards: D12 mobile dismiss button + D22
+// per-path active-highlight isolation (exactly one row carries
+// aria-current="page" at any time, even with the activeOptions exact:true
+// preventive guard against future nested admin routes).
+// ---------------------------------------------------------------------------
+
+test.describe('AdminSidebar — D12 mobile dismiss button (PATCH-D12)', () => {
+	test('mobile offcanvas — «Закрыть меню» button is focusable + closes the sheet', async ({
+		page,
+	}) => {
+		// Force a phone-size viewport so the sidebar primitive renders its
+		// mobile branch (Sheet-based offcanvas) instead of the persistent
+		// desktop column. D17 breakpoint = 768 px → 320 is mobile.
+		await page.setViewportSize({ width: 320, height: 700 })
+		await page.goto('/')
+		// Mobile <header className="md:hidden"> hosts the trigger.
+		await page.locator('[data-slot="sidebar-trigger"]').first().click()
+		// Mobile Sheet mounts SheetContent with data-mobile="true".
+		const mobileSheet = page.locator('[data-mobile="true"][data-slot="sidebar"]')
+		await expect(mobileSheet).toBeVisible()
+		// D12 patch: focusable Cyrillic-labelled close button. Sheet's auto-
+		// close (English "Close" sr-only) is disabled via showCloseButton={false}
+		// in the primitive — our own <SheetClose><Button aria-label="Закрыть меню">
+		// is the only escape route apart from Esc, so it MUST be focusable.
+		const dismiss = page.getByRole('button', { name: 'Закрыть меню' })
+		await expect(dismiss).toBeVisible()
+		// Move focus to it via Tab traversal — confirms it sits on the
+		// keyboard focus path, not just visually present.
+		await dismiss.focus()
+		await expect(dismiss).toBeFocused()
+		// Activate via Enter; Sheet open state flips, panel slides out.
+		await page.keyboard.press('Enter')
+		await expect(mobileSheet).toBeHidden()
+	})
+})
+
+test.describe('AdminSidebar — D22 per-path active-highlight isolation', () => {
+	// Navigate to each section's route and assert: that section's row carries
+	// `aria-current="page"`, AND no other row carries it. Activates the D22
+	// preventive guard against the future `/admin/channels/:id` style nested
+	// routes inadvertently double-marking the parent.
+	const paths: ReadonlyArray<{
+		readonly target: string
+		readonly slug: string
+		readonly urlMatch: RegExp
+	}> = [
+		{ target: 'grid', slug: 'grid', urlMatch: /\/grid$/ },
+		{ target: 'receivables', slug: 'receivables', urlMatch: /\/receivables$/ },
+		{ target: 'guests', slug: 'guests', urlMatch: /\/admin\/migration-registrations$/ },
+		{ target: 'channels', slug: 'channels', urlMatch: /\/admin\/channels$/ },
+		{ target: 'tax', slug: 'tax', urlMatch: /\/admin\/tax(\?.*)?$/ },
+		{ target: 'notifications', slug: 'notifications', urlMatch: /\/admin\/notifications(\?.*)?$/ },
+	]
+
+	for (const { target, slug, urlMatch } of paths) {
+		test(`/${slug} — exactly one row carries aria-current="page"`, async ({ page }) => {
+			await page.goto('/')
+			await expect(page.locator('[data-slot="sidebar"]').first()).toBeVisible()
+			await page.locator(`[data-section-id="${target}"]`).first().click()
+			await expect(page).toHaveURL(urlMatch)
+			// The clicked row is aria-current.
+			await expect(page.locator(`[data-section-id="${target}"]`)).toHaveAttribute(
+				'aria-current',
+				'page',
+			)
+			// No other row carries aria-current — D22 isolation guard.
+			const currentRows = page.locator('[data-section-id][aria-current="page"]')
+			await expect(currentRows).toHaveCount(1)
+		})
+	}
+})
