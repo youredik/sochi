@@ -76,11 +76,30 @@ function AppLayout() {
 			subscribeAuthBroadcasts({
 				onLogout: () => {
 					void queryClient.invalidateQueries({ queryKey: sessionQueryOptions.queryKey })
-					void router.navigate({ to: '/login', search: { redirect: undefined } })
+					// BUG-BH8 (A.bis.5 senior self-audit 2026-05-12): без
+					// `reloadDocument: true` peer-tab navigation hits /login
+					// beforeLoad which calls `ensureQueryData(sessionQueryOptions)`
+					// — that returns CACHED valid session (invalidation выше
+					// async ещё не отыграло) → /login bounces back to
+					// `search.redirect ?? '/'`. Tab A's `useSignOut` уже
+					// использует reloadDocument:true; peer tab MUST mirror.
+					void router.navigate({
+						to: '/login',
+						search: { redirect: undefined },
+						reloadDocument: true,
+					})
 				},
 				onOrgChange: (_organizationId, slug) => {
 					void queryClient.invalidateQueries({ queryKey: sessionQueryOptions.queryKey })
-					void router.navigate({ to: '/o/$orgSlug', params: { orgSlug: slug } })
+					// Same race vector: org-change peer-tab navigation needs the
+					// router context rehydrated с new active org session shape.
+					// `_app/o/$orgSlug` guard reads cached session; without
+					// reloadDocument peer tab may stick on old slug.
+					void router.navigate({
+						to: '/o/$orgSlug',
+						params: { orgSlug: slug },
+						reloadDocument: true,
+					})
 				},
 			}),
 		[queryClient, router],
