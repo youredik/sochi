@@ -85,16 +85,28 @@ jobs:
         run: pnpm lhci:collect
         continue-on-error: true
 
-      # Phase 3 (tsgo pilot 2026-05-12): empirical tsc/tsgo divergence
-      # data accrual. Runs both compilers on every tsconfig, parses
-      # diagnostics into (file, line, col, code) tuples, reports drift.
-      # Informational only (continue-on-error). Gate flip threshold:
-      # TS 7 GA reached AND 0 divergence on 10+ consecutive main pushes.
-      # Flip = swap ratchet-check.sh `pnpm typecheck:parallel` →
-      # `pnpm typecheck:tsgo`. See project_tsgo_pilot_2026_05_12.md.
-      - name: tsgo divergence shadow (informational)
+      # Phase 5 (tsgo pilot 2026-05-12, aggressive flip): tsc/tsgo
+      # divergence is now a BLOCKING audit gate. Canonical `pnpm typecheck`
+      # uses tsgo (Phase 4 full). This step compares tsgo vs tsc on every
+      # tsconfig and FAILS post-push CI on any (file, line, col, code)
+      # drift — main goes RED and macOS Sosumi fires.
+      #
+      # Why blocking (not warn-only like size/lhci):
+      # warn-only suits fluctuating budgets; compiler diagnostic drift is
+      # a concrete bug (in our code or in tsgo beta). Silent accrual of
+      # drift defeats the whole audit-trail purpose.
+      #
+      # Triage on red:
+      #   1. `pnpm tsgo:diff` locally — read tsc-only vs tsgo-only sets
+      #   2. tsc-only (tsgo missed) → file upstream
+      #      https://github.com/microsoft/typescript-go/issues
+      #      revert path: package.json `"typecheck"` → `"run-p typecheck:tsc:*"`
+      #   3. tsgo-only (tsgo stricter) → fix code OR document why tsgo
+      #      is wrong + revert path until upstream fix
+      #
+      # See project_tsgo_pilot_2026_05_12.md.
+      - name: tsgo divergence audit (BLOCKING)
         run: pnpm tsgo:diff
-        continue-on-error: true
 
       - name: Notify on failure (macOS)
         if: failure()
