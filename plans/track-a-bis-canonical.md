@@ -1,7 +1,69 @@
 # Track A.bis — Hotelier Admin App-Shell Sidebar (canonical sub-phase plan)
 
-**Дата:** 2026-05-12
+**Дата:** 2026-05-12 (POST-AUDIT corrections appended same day)
 **Track:** A.bis (вставляется между Track A ✅ done и Track B deploy — per `plans/ROADMAP.md` future amend).
+
+> **POST-AUDIT (2026-05-12, после b396ac0):** Empirical recon ui/ folder caught 4 factual errors в v1 plan. §0 Codebase state добавлен (new canon `feedback_pre_plan_codebase_recon.md`). Decisions D2-D5 + §3 + §5 + §13 + §7 sub-phase scope обновлены ниже. См. §16 process correction C32+.
+
+---
+
+## §0. Codebase state (empirical recon 2026-05-12) — MANDATORY (per `feedback_pre_plan_codebase_recon.md`)
+
+**Existing `apps/frontend/src/components/ui/` inventory** (24 files, 2247 LOC, всё verified `wc -l` + Read):
+
+| File | LOC | Implementation | Status для A.bis |
+|---|---|---|---|
+| `sheet.tsx` | 147 | **Radix Dialog**-based (`from 'radix-ui'`) — `<Sheet>`, `<SheetTrigger>`, `<SheetClose>`, `<SheetContent side="top/right/bottom/left">`, `<SheetHeader>`, `<SheetFooter>`, `<SheetTitle>`, `<SheetDescription>`, `<SheetOverlay>`, `<SheetPortal>`. Includes built-in close button `<XIcon>` via `showCloseButton?` prop | **EXISTS — re-use as-is** (was wrongly planned as «create» в v1) |
+| `drawer.tsx` | 132 | **Vaul**-based (`from 'vaul'`) — same API surface as Sheet | **DROP** target (rewrite OR delete после responsive-sheet migration) |
+| `responsive-sheet.tsx` | 126 | **useMediaQuery bifurcation** (`'(min-width: 768px)'`) — desktop → Sheet (Radix), mobile → Drawer (Vaul). Context-shared `isMobile`. Drop-in API. Consumers: `consent-block.tsx`, `refund-sheet.tsx`, `migration-registration-detail-sheet.tsx` | **EXISTS** — already bifurcates (was wrongly planned to «split» в v1). Only underlying `drawer.tsx` impl changes |
+| `dialog.tsx` | 101 | Radix Dialog wrapper (modal, не side-sheet) | unchanged |
+| `tooltip.tsx` | 55 | `from 'radix-ui'` Tooltip — used by shadcn sidebar collapsed-rail labels | re-use |
+| `popover.tsx`, `tabs.tsx`, `radio-group.tsx`, `toggle-group.tsx`, `label.tsx`, `separator.tsx`, `card.tsx`, `field.tsx`, `calendar.tsx`, `alert.tsx`, `badge.tsx`, `dropdown-menu.tsx`, `select.tsx`, `button.tsx`, `toggle.tsx`, `checkbox.tsx`, `textarea.tsx`, `input.tsx`, `skeleton.tsx` | total ~1600 | All `from 'radix-ui'` unified imports | re-use |
+
+**Existing `apps/frontend/package.json` (verified `cat`):**
+- `react ^19.2.5` ✓
+- **`radix-ui ^1.4.3`** (verified npm: 2025-12-17, MIT) — **UNIFIED Radix package**, exposes all primitives via subpath imports (`import { Dialog as ... } from 'radix-ui'`). Already used by 10 existing `ui/*.tsx` files (verified grep). Means: **NO need ADD separate `@radix-ui/react-*` packages** (Major correction vs v1 plan D2-D5).
+- `tailwindcss ^4.2.4` ✓ (bump candidate 4.3.0)
+- `lucide-react ^1.11.0` ✓ (bump candidate 1.14.0)
+- `vaul 1.1.2` ✓ DROP target (used by drawer.tsx)
+- `@lingui/react ^6.0.0` ✓ (NOT v5 as memory `project_m5_tech_decisions.md` claims — drift fix obligation)
+- `radix-ui ^1.4.3` — verified subpath `import { Collapsible as ... } from 'radix-ui'` works (verified `npm view radix-ui exports` shows `'./*'` wildcard)
+- **NEW deps required**: `@base-ui/react ^1.4.1` (Base UI Drawer для widget swipe-to-dismiss UX preservation — verified npm 2026-04-20, MIT)
+
+**Vaul consumers (verified grep):**
+- `apps/frontend/src/components/ui/drawer.tsx` (wrapper) — DROP target
+- `apps/frontend/src/components/sidebar-drawer.tsx` (admin) — DELETE entirely в A.bis.2 (заменяется shadcn `<Sidebar collapsible="offcanvas">`)
+- `apps/frontend/src/features/public-widget/components/sticky-summary.tsx` (widget guest mobile summary) — DIRECT Drawer usage, needs migration
+- Indirect via `ResponsiveSheet`: `consent-block.tsx`, `refund-sheet.tsx`, `migration-registration-detail-sheet.tsx` — **transparent migration** (если drawer.tsx меняется под `ResponsiveSheet`)
+
+**Existing nav/layout (verified Read):**
+- `routes/__root.tsx` (20 lines) — simple `<Outlet/>` shell
+- `routes/_app.tsx` (132 lines) — `MobileNav` + `SidebarDrawer` + top-bar + `InstallPrompt` + `OrgSwitcher` + `LogoutButton` + `ModeToggle`
+- `routes/_app.o.$orgSlug.tsx` (35 lines) — tenant guard only (`setActive` if URL slug ≠ session)
+- `routes/_app.o.$orgSlug.index.tsx` (153 lines) — dashboard tiles (5 visible: Шахматка/Дебиторка/Тур.налог/Уведомления/Профиль)
+- `components/mobile-nav.tsx` + `mobile-nav-button.tsx` + `mobile-nav-state.ts` + `sidebar-drawer.tsx` — DELETE candidates (replaced by shadcn `<Sidebar>`)
+
+**Existing routes (`find apps/frontend/src/routes`):** 25 files total. Admin routes available:
+- `_app.o.$orgSlug.index.tsx` (dashboard)
+- `_app.o.$orgSlug.grid.tsx` (Шахматка)
+- `_app.o.$orgSlug.receivables.tsx`
+- `_app.o.$orgSlug.properties.$propertyId.content.tsx`
+- `_app.o.$orgSlug.admin.migration-registrations.tsx`
+- `_app.o.$orgSlug.admin.channels.tsx`
+- `_app.o.$orgSlug.admin.tax.tsx`
+- `_app.o.$orgSlug.admin.notifications.tsx`
+- `_app.o.$orgSlug.account.security.tsx`
+- `_app.o.$orgSlug.bookings.$bookingId.folios.$folioId.tsx`
+- `_app.o.$orgSlug.setup.tsx`
+
+**RBAC** (verified Read `packages/shared/src/rbac.ts` 143 lines):
+- 3 roles: owner / manager / staff
+- Resources: property, room, ratePlan, booking, guest, folio, payment, refund, receipt, report, notification, billing, compliance, amenity, description, media, addon, migrationRegistration
+- **No `settings` resource** (verified grep empty)
+- staff has `migrationRegistration:read` (rbac.ts:116) — для front-desk видимости заселения
+- staff does NOT have `notification:read` (rbac.ts:107)
+
+---
 **Scope:** Desktop persistent app-shell sidebar для hotelier admin (`/o/:slug/*`), Vaul→Sheet/BaseUI migration, dashboard refactor «tiles внутри content», RBAC × sidebar, демо/прод badge, RU a11y canon.
 **Canonical guard:** `feedback_engineering_philosophy.md` (production-grade с первой строчки) + `feedback_aggressive_delegacy.md` (Vaul UNMAINTAINED — миграция обязательна) + `feedback_behaviour_faithful_mock_canon.md` (sidebar identical для demo + production tenants).
 **Research:** R1 (UX/UI canon ≥2026-05-12, 28 sources) + R2 (tech primitives + npm-verify ≥2026-05-12, all pkgs empirically curl'нуты) + R3 adversarial (18 D-corrections к R1+R2) + **R4 empirical-verify** (3 R3-неточности пойманы: Radix dec'25 не aug'25; Base UI pkg name `@base-ui/react` не `@base-ui-components/react`; PR #6798 closed unmerged, не merged). 22+ corrections к baseline mental-model.
@@ -100,10 +162,10 @@
 ### Library / package canon
 
 - **D1** — Primitive: **shadcn-ui sidebar via CLI** (`pnpm dlx shadcn@latest add sidebar`). In-repo source, owned. NOT Mantine AppShell / Park UI / React Aria Components (rationale в §15 alternatives reconsidered).
-- **D2** — Sheet (admin Vaul replacement): **`@radix-ui/react-dialog` 1.1.15** (npm-verified 2025-12-24, MIT). Used by shadcn `<Sheet>` internally.
-- **D3** — Sub-menu nesting: **`@radix-ui/react-collapsible` 1.1.12** (npm-verified 2025-12-24, MIT). For 2-level Каналы → TL/YT/ETG.
-- **D4** — Collapsed-rail tooltips: **`@radix-ui/react-tooltip` 1.2.8** (npm-verified 2025-12-24, MIT). Already used by shadcn sidebar internally.
-- **D5** — asChild composition: **`@radix-ui/react-slot` 1.2.4** (npm-verified 2025-12-24, MIT). For `<SidebarMenuButton asChild><Link>...</Link></SidebarMenuButton>`.
+- **D2** — Sheet (admin Vaul replacement): **`ui/sheet.tsx` УЖЕ существует** (147 lines, `from 'radix-ui'` Dialog primitive). Re-use as-is. NO new pkg add (per §0 codebase recon). **POST-AUDIT correction v1 D2 wrongly said «ADD @radix-ui/react-dialog»**.
+- **D3** — Sub-menu nesting: `import { Collapsible as ... } from 'radix-ui'` — unified pkg already covers (verified `npm view radix-ui exports` shows `'./*'` wildcard). NO separate ADD. **POST-AUDIT correction v1 D3 wrongly said «ADD @radix-ui/react-collapsible»**.
+- **D4** — Collapsed-rail tooltips: **`ui/tooltip.tsx` УЖЕ существует** (55 lines, `from 'radix-ui'`). Re-use. **POST-AUDIT correction v1 D4 wrongly said «ADD @radix-ui/react-tooltip»**.
+- **D5** — asChild composition: `import { Slot } from 'radix-ui'` already used by `ui/badge.tsx:3` (verified grep). NO separate ADD. **POST-AUDIT correction v1 D5 wrongly said «ADD @radix-ui/react-slot»**.
 - **D6** — Widget Vaul replacement: **`@base-ui/react` 1.4.1 GA** (npm-verified 2026-04-20, MIT) — **NOT `@base-ui-components/react` (still rc.0 from Dec 2025 — R3 cited wrong pkg)**. Has `Drawer` с `swipeDirection`, `snapPoints`, `--drawer-swipe-movement-y` CSS var.
 - **D7** — Icons: **`lucide-react`** bump **1.11.0 → 1.14.0** (npm-verified 2026-04-29, ISC). Tree-shakeable per-icon.
 - **D8** — Tailwind: bump **`tailwindcss` 4.2.4 → 4.3.0** (npm-verified 2026-05-11, MIT — **published вчера**). Container queries fully GA в 4.3.
@@ -175,23 +237,21 @@
 | `vaul` | DROP | — | 2024-12-14 (17mo stale) | MIT | ✓ confirmed unmaintained |
 | `tailwindcss` | BUMP `^4.2.4` → `^4.3.0` | 4.3.0 | **2026-05-11** | MIT | ✓ |
 | `lucide-react` | BUMP `^1.11.0` → `^1.14.0` | 1.14.0 | 2026-04-29 | ISC | ✓ |
-| `@radix-ui/react-dialog` | ADD `^1.1.15` | 1.1.15 | 2025-12-24 | MIT | ✓ (R3 ошибся «Aug 2025») |
-| `@radix-ui/react-collapsible` | ADD `^1.1.12` | 1.1.12 | 2025-12-24 | MIT | ✓ (R3 ошибся «Aug 2025») |
-| `@radix-ui/react-tooltip` | ADD `^1.2.8` | 1.2.8 | 2025-12-24 | MIT | ✓ |
-| `@radix-ui/react-slot` | ADD `^1.2.4` | 1.2.4 | 2025-12-24 | MIT | ✓ |
-| `@base-ui/react` | ADD `^1.4.1` | 1.4.1 | 2026-04-20 | MIT | ✓ (R3 cited wrong pkg name) |
+| `radix-ui` (unified) | **KEEP `^1.4.3`** — already in deps | 1.4.3 | 2025-12-17 | MIT | ✓ (§0 recon caught: subpath imports `from 'radix-ui'` cover Dialog/Collapsible/Tooltip/Slot — NO separate ADD per pkg) |
+| `@base-ui/react` | ADD `^1.4.1` (для widget swipe UX) | 1.4.1 | 2026-04-20 | MIT | ✓ (R3 cited wrong pkg name) |
 | `react-resizable-panels` | DEFER | (4.11.0 verified 2026-05-02) | — | MIT | ✓ |
-| `cmdk` | DEFER (A.bis.6) | (1.1.1, 2025-08-27 stale + Cyrillic broken) | — | MIT | ✓ |
+| `cmdk` | OUT of scope | (1.1.1, 2025-08-27 stale + Cyrillic broken) | — | MIT | ✓ |
 | `react-aria-components` | REJECT | (1.17.0, 2026-05-08) | — | Apache-2.0 | ✓ alternative considered |
-| `@nozbe/microfuzz` | DEFER (A.bis.6) | (1.0.0, 2024-06-14) | — | MIT | ✓ stale-ish |
+| `@nozbe/microfuzz` | DEFER | (1.0.0, 2024-06-14) | — | MIT | ✓ stale-ish |
 | `cyrillic-to-translit-js` | REJECT | (3.2.1, 2022-06-14 4yr stale) | — | MIT | ✓ — replace с 30-line custom |
 
-**Net `package.json` change для A.bis.0..A.bis.5:**
+**Net `package.json` change для A.bis.0..A.bis.5** (POST-AUDIT corrected):
 - DROP: 1 pkg (vaul)
 - BUMP: 2 pkgs (tailwindcss, lucide-react)
-- ADD: 5 pkgs (@base-ui/react + 4 Radix primitives)
+- ADD: **1 pkg (@base-ui/react)** — NOT 5 (Radix primitives already covered unified pkg)
+- **Total: 4 mutations** (NOT 8 as v1 plan claimed)
 
-Все 8 mutation'ов в `apps/frontend/package.json` — единым diff в A.bis.0 commit.
+Все **4 mutations** (POST-AUDIT corrected, было 8 в v1 plan) в `apps/frontend/package.json` — единым diff в A.bis.0 commit.
 
 ---
 
@@ -243,7 +303,7 @@ Desktop (`md:` and up): sidebar persistent visible, `<SidebarTrigger>` НЕ ну
 
 | # | Sub-phase | Scope | Strict tests target | Commit |
 |---|---|---|---|---|
-| **A.bis.0** | Vaul migration prep | DROP vaul + ADD @base-ui/react + ADD 4 Radix primitives + bump tailwind/lucide. Create `ui/sheet.tsx` + `ui/widget-drawer.tsx`. Migrate 3 Vaul consumers (sticky-summary widget → BaseUI Drawer; sidebar-drawer.tsx → удаление; ui/responsive-sheet.tsx → delegates в ui/sheet.tsx; migration-registration-detail-sheet → Radix Sheet). | ~25 unit | 1 |
+| **A.bis.0** | Vaul migration prep (**POST-AUDIT scope corrected**) | (a) **DROP vaul**. (b) **BUMP tailwindcss + lucide-react**. (c) **ADD @base-ui/react ^1.4.1** для widget swipe UX. (d) **Rewrite `ui/drawer.tsx`** — Vaul → Base UI Drawer subpath `from '@base-ui/react/drawer'` с swipeDirection + snapPoints. (e) `ui/sheet.tsx` + `ui/responsive-sheet.tsx` **re-use as-is** (existing per §0 codebase recon). (f) Migrate `sticky-summary.tsx` direct Drawer consumer (drop-in import). (g) `consent-block.tsx` + `refund-sheet.tsx` + `migration-detail-sheet.tsx` — **transparent migration** через ResponsiveSheet (no consumer change). (h) `sidebar-drawer.tsx` admin — НЕ trogаем, DELETE в A.bis.2. | ~15 unit | 1 |
 | **A.bis.1** | shadcn sidebar primitive | shadcn CLI add sidebar → `ui/sidebar.tsx`. Apply 5 patches (D12-D16). Unit tests covering controlled-prop guard, cookie persistence, aria-label, forced-colors, mobile dismiss button. | ~20 unit + a11y | 1 |
 | **A.bis.2** | App-shell integration | `<SidebarProvider>` в `_app.tsx`. Build `app-shell/admin-sidebar.tsx` + `sidebar-sections.ts` + `demo-mode-badge.tsx`. RBAC × sections matrix. 10 destinations (8 active routes + 2 disabled-placeholder). Delete mobile-nav.tsx + mobile-nav-button.tsx + mobile-nav-state.ts + sidebar-drawer.tsx. | ~30 integration | 1 |
 | **A.bis.3** | Dashboard refactor | `_app.o.$orgSlug.index.tsx` — tiles → KPI cards внутри content. Главная превращается в реальный dashboard (Occupancy/ADR/RevPAR placeholders, Recent activity list читает activity domain, Alerts читает notification outbox). | ~15 unit | 1 |
@@ -419,7 +479,9 @@ export const SIDEBAR_SECTIONS = [
 
 ---
 
-## §13. Migration plan (Vaul → 5 paths) — **CORRECTED после self-audit A3**
+## §13. Migration plan (Vaul → 3 actual paths) — **POST-AUDIT corrected (was 5 paths v1)**
+
+**POST-AUDIT insight (§0 recon):** `ui/responsive-sheet.tsx` УЖЕ bifurcates desktop/mobile через `useMediaQuery`. Consumers через ResponsiveSheet (consent-block / refund-sheet / migration-detail) получают **transparent migration** когда меняется underlying `drawer.tsx` impl. Only **direct Drawer consumers** + `drawer.tsx` itself нуждаются в коде. Plus widget vs admin split simplified.
 
 **5 текущих Vaul consumer'а** (self-audit iteration 3 поймал 2 пропущенных через `ResponsiveSheet`):
 
@@ -431,7 +493,7 @@ export const SIDEBAR_SECTIONS = [
 | `apps/frontend/src/features/public-widget/components/sticky-summary.tsx` | Vaul Drawer для guest mobile summary | **Base UI Drawer** (`ui/widget-drawer.tsx`) — `swipeDirection="down"` + `snapPoints` — preserves drag-to-dismiss UX гостей. | A.bis.0 |
 | `apps/frontend/src/features/public-widget/components/consent-block.tsx` (**self-audit A3 catch**) | Использует `ResponsiveSheet` (Trigger/Content/Header/Title/Description) для consent texts modal | Widget path → **Base UI Drawer** wrapper (`ResponsiveSheet` widget variant). Drag-to-dismiss preserves guest UX. | A.bis.0 |
 | `apps/frontend/src/components/ui/drawer.tsx` (wrapper) | shadcn-canonical Vaul wrapper | **DELETE** after all 5 consumer'ов мигрировали | A.bis.0 closure |
-| `apps/frontend/src/components/ui/responsive-sheet.tsx` (uses drawer.tsx) | Single delegate в drawer.tsx | **SPLIT в 2 wrapper'а**: <br>• admin path: delegates в `ui/sheet.tsx` (Radix Dialog)<br>• widget path: delegates в `ui/widget-drawer.tsx` (Base UI Drawer)<br>Use 2 separate import paths: `@/components/ui/responsive-sheet/admin` + `@/components/ui/responsive-sheet/widget`. Consumers update импорт. | A.bis.0 |
+| `apps/frontend/src/components/ui/responsive-sheet.tsx` (uses drawer.tsx) | Already bifurcates desktop Sheet/mobile Drawer | **NO CHANGE** (per §0 recon — existing useMediaQuery split works). Underlying `drawer.tsx` impl change propagates transparently. **POST-AUDIT correction v1 «SPLIT в 2 wrapper'а» был не нужен.** | A.bis.0 |
 
 **Empirical-verify gap** для Base UI Drawer в widget context — widget использует Lit Web Component + Shadow DOM (apps/widget-embed). Base UI Drawer Shadow DOM compat НЕ verified в R1+R2+R3 — этот sticky-summary в **SPA путь** (`apps/frontend`), не embed-bundle. Embed widget не использует Vaul direct — SPA renders inside iframe fallback. So **scope ограничен SPA path**, Shadow DOM не concern для A.bis.
 
@@ -515,6 +577,12 @@ export const SIDEBAR_SECTIONS = [
 | C29 | **Empirical RBAC full-read** (per `feedback_no_shallow_frontend_audit.md`): `settings` resource confirmed missing; `billing` exists для owner; staff has `migrationRegistration:read` (rbac.ts:116), NOT `notification`; rbac.ts has 143 lines, не нужно скрытых resources | full-read rbac.ts 2026-05-12 | §10 verified |
 | C30 | **Lingui drift**: memory `project_m5_tech_decisions.md` говорит v5, actual `@lingui/react ^6.0.0` + ZERO `<Trans>` usages. Memory update obligation | empirical grep | A.bis.5 closure (f) |
 | C31 | **Mission link**: A.bis не закрывает напрямую функцию из 7×3 мандата — это **архитектурный foundation** разблокирующий будущие admin-страницы (rate-calendar/inventory/payments). Без A.bis каждая будущая admin-страница повторит channels-discoverability gap. Senior pragmatism: pre-deploy single architectural foundation > 5 ad-hoc tile additions | mission framing review (since beginning of our work) | §1 |
+| **C32** | **POST-AUDIT 2026-05-12 (после b396ac0)** — empirical full-map ui/ folder + `radix-ui` subpath analysis surfaced **4 factual errors в v1 plan**: | empirical recon | new `feedback_pre_plan_codebase_recon.md` canon + §0 added |
+| C32.1 | v1 D2-D5 «ADD `@radix-ui/react-{dialog,collapsible,tooltip,slot}`» — но `radix-ui` unified ^1.4.3 уже в deps, subpath imports cover all 4 primitives | npm view + grep | D2-D5 corrected |
+| C32.2 | v1 §3 «Create `ui/sheet.tsx`» — но **уже существует** 147 lines Radix Dialog-based | wc -l + Read | §3 + §0 |
+| C32.3 | v1 §13 «Split `ui/responsive-sheet.tsx`» — но **уже bifurcates** desktop/mobile через useMediaQuery | Read | §13 + §0 |
+| C32.4 | v1 «8 package mutations» — реально **4** (1 DROP + 2 BUMP + 1 ADD `@base-ui/react`) | §0 recon | §5 + §7 A.bis.0 |
+| C33 | **New canon** `feedback_pre_plan_codebase_recon.md` — mandatory §0 «Codebase state» в каждом plan canon ДО §1 Mission. Read all existing relevant files + grep deps + verify «create X» не существует. Predicts plan canon factual accuracy. | this session learning | new memory + MEMORY.md pointer |
 
 ---
 
