@@ -32,7 +32,6 @@ import * as React from 'react'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 declare global {
-	// biome-ignore lint/style/useNamingConvention: ambient test-only global, conventional CONSTANT_CASE
 	var __SOCHI_TEST_MOCKS__: ReturnType<typeof createMocks> | undefined
 }
 
@@ -126,7 +125,6 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 // notifications visually); `toast.*` are vi.fn so tests assert calls.
 vi.mock('sonner', () => ({
 	toast: _mocks.toast,
-	// biome-ignore lint/style/useNamingConvention: sonner public API uses PascalCase
 	Toaster: () => null,
 }))
 

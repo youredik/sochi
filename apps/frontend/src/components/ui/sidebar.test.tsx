@@ -342,7 +342,7 @@ describe('Sidebar — keyboard shortcut Cmd+B / Ctrl+B', () => {
 		expect(probe.ctx.state).toBe('expanded')
 	})
 
-	// PATCH-D23 (A.bis.5 fix-up — bug A1.1 from senior bug hunt 2026-05-12):
+	// PATCH-D27 (A.bis.5 fix-up — bug A1.1 from senior bug hunt 2026-05-12):
 	// Cmd+B / Ctrl+B must NOT capture when the user is typing in a text
 	// input surface. Verifies the four target classes guarded by the
 	// keydown listener: <input>, <textarea>, <select>, contenteditable.

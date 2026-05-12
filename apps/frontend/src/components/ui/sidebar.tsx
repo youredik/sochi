@@ -123,7 +123,7 @@ function SidebarProvider({
     }
   }, [isMobile, setOpen])
 
-  // PATCH-D23 (A.bis.5 fix-up — bug A1.1 from senior bug hunt 2026-05-12):
+  // PATCH-D27 (A.bis.5 fix-up — bug A1.1 from senior bug hunt 2026-05-12):
   // Cmd+B / Ctrl+B must NOT capture when focus lives in a text-input
   // surface — otherwise `preventDefault()` clobbers the user's bold
   // shortcut inside a contenteditable / textarea AND the sidebar toggles
