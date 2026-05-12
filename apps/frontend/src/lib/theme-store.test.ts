@@ -124,7 +124,7 @@ describe('theme-store — Adversarial', () => {
 	it('[A1] corrupted localStorage JSON does not crash store', () => {
 		localStorage.setItem(STORAGE_KEY, '{not valid json}')
 		// Force re-hydration. Zustand persist swallows JSON parse errors (canonical safe).
-		useThemeStore.persist.rehydrate()
+		void useThemeStore.persist.rehydrate()
 		// Store stays operational regardless of corruption — ничего не throw'ит
 		expect(useThemeStore.getState().theme).toBeDefined()
 		expect(['light', 'dark', 'system']).toContain(useThemeStore.getState().theme)

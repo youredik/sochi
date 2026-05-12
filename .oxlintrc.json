@@ -8,7 +8,14 @@
 	"rules": {
 		"typescript/no-floating-promises": "error",
 		"typescript/await-thenable": "error",
-		"typescript/no-misused-promises": "error",
+		"typescript/no-misused-promises": [
+			"error",
+			{
+				"checksVoidReturn": {
+					"attributes": false
+				}
+			}
+		],
 		"typescript/no-unnecessary-type-assertion": "error",
 		"typescript/require-await": "error",
 		"typescript/unbound-method": "error",

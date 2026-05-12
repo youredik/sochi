@@ -162,7 +162,7 @@ function AdminNotificationsRoute() {
 				<NotificationsFilterBar
 					value={filterValue}
 					onChange={(next) => {
-						navigate({
+						void navigate({
 							search: {
 								...(next.status ? { status: next.status } : {}),
 								...(next.kind ? { kind: next.kind } : {}),
@@ -181,7 +181,7 @@ function AdminNotificationsRoute() {
 				<NotificationsTable
 					items={page.items}
 					onRowClick={(id) => {
-						navigate({
+						void navigate({
 							search: { ...search, id },
 							replace: false,
 						})
@@ -195,7 +195,7 @@ function AdminNotificationsRoute() {
 						variant="outline"
 						onClick={() => {
 							if (page.nextCursor)
-								navigate({
+								void navigate({
 									search: { ...search, cursor: page.nextCursor },
 									replace: true,
 								})
@@ -224,7 +224,7 @@ function AdminNotificationsRoute() {
 								// Strip `id` from URL — preserves other filters.
 								const next = { ...search }
 								delete (next as { id?: string }).id
-								navigate({ search: next, replace: false })
+								void navigate({ search: next, replace: false })
 							}
 						}}
 					/>

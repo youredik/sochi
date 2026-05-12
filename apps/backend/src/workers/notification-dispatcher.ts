@@ -171,7 +171,9 @@ export function startNotificationDispatcher(
 		} finally {
 			inFlight = null
 			if (!stopped) {
-				timer = setTimeout(loop, pollIntervalMs)
+				timer = setTimeout(() => {
+					void loop()
+				}, pollIntervalMs)
 			}
 		}
 	}
@@ -179,7 +181,9 @@ export function startNotificationDispatcher(
 	if (!opts.skipTimer) {
 		log.info({ pollIntervalMs, batchSize }, 'notification-dispatcher: started')
 		// Stagger first run by a small delay so app boot isn't blocked.
-		timer = setTimeout(loop, 500)
+		timer = setTimeout(() => {
+			void loop()
+		}, 500)
 	}
 
 	return {

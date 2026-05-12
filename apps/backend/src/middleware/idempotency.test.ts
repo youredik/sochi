@@ -108,12 +108,12 @@ describe('idempotencyMiddleware', { tags: ['db'], timeout: 30_000 }, () => {
 				// Always throws BookingNotFoundError → onError maps to 404.
 				// Used by [IM10] to verify error-response caching + replay.
 				await c.req.json()
-				handler(null)
+				void handler(null)
 				const { BookingNotFoundError } = await import('../errors/domain.ts')
 				throw new BookingNotFoundError('book_nonexistent')
 			})
 			.get('/ping', async (c) => {
-				handler(null)
+				void handler(null)
 				return c.json({ ok: true }, 200)
 			})
 		return { app, handler }

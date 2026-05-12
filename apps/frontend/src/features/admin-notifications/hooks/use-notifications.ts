@@ -77,8 +77,8 @@ export function useRetryNotification() {
 		},
 		onSuccess: (_data, id) => {
 			// Invalidate list (status changed) + detail of this row.
-			queryClient.invalidateQueries({ queryKey: ['admin', 'notifications', 'list'] })
-			queryClient.invalidateQueries({
+			void queryClient.invalidateQueries({ queryKey: ['admin', 'notifications', 'list'] })
+			void queryClient.invalidateQueries({
 				queryKey: ['admin', 'notifications', 'detail', id],
 			})
 		},

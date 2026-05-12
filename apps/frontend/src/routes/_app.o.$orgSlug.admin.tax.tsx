@@ -167,7 +167,7 @@ function AdminTaxRoute() {
 					properties={properties}
 					xlsxUrl={xlsxUrl}
 					onChange={(next) => {
-						navigate({
+						void navigate({
 							search: {
 								from: next.from,
 								to: next.to,
