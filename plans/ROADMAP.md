@@ -9,7 +9,12 @@
 
 ## Сейчас работаем над
 
-**Track A.bis (pre-flight DONE 2026-05-12)** — Hotelier Admin App-Shell Sidebar. Plan canon: [`plans/track-a-bis-canonical.md`](track-a-bis-canonical.md). R1+R2+R3+R4 empirical-verify ≥2026-05-12 — 22+ corrections captured. **7 active sidebar destinations** (no vapor links per `feedback_no_halfway.md`). **Vaul → shadcn `<Sheet>` + Base UI 1.4.1 GA Drawer** migration (5 consumers — sidebar-drawer DELETE / migration-detail / refund-sheet / sticky-summary / consent-block). 6 sub-phases A.bis.0..A.bis.5. ~102 strict tests target. 5 shadcn sidebar known-issue patches (D12-D16: #6761 dismiss button / #8176 uncontrolled prop / #9335 single-provider / aria-label Cyrillic / forced-colors). Discovery breakpoint `md:` (768px) domain-specific для front-desk tablets (override generic R2 `lg:` canon). Закрывает 1 из 3 P0 (Channels недискаверабельны на desktop) + foundation для разблокировки rate-calendar / inventory-CRUD / settings sub-phases.
+**Track A.bis IN PROGRESS** — Hotelier Admin App-Shell Sidebar. Plan canon: [`plans/track-a-bis-canonical.md`](track-a-bis-canonical.md). R1+R2+R3+R4 empirical-verify ≥2026-05-12 — 22+ corrections captured. **7 active sidebar destinations** (no vapor links per `feedback_no_halfway.md`). **Vaul → shadcn `<Sheet>` + Base UI 1.4.1 GA Drawer** migration. 6 sub-phases A.bis.0..A.bis.5. ~102 strict tests target. 5 shadcn sidebar known-issue patches (D12-D16). Discovery breakpoint `md:` (768px) domain-specific для front-desk tablets.
+
+**Sub-phase progress:**
+- ✅ **A.bis.0 DONE** (commits `150f3e5` impl + `4adf37a` fix-up) — Vaul → Base UI Drawer migration. 1382 unit + 43 widget e2e all green. Senior learning captured: transparent migration claim требует real-browser e2e proof (JSDOM + TypeScript missed consent-block nested-interactive, Playwright + @axe-core caught it).
+- 🟡 **A.bis.1 NEXT** — shadcn sidebar primitive CLI add + 5 patches D12-D16 (mobile dismiss / uncontrolled prop / single-provider / aria-label Cyrillic / forced-colors).
+- ⏳ A.bis.2..A.bis.5 — App-shell integration / Dashboard refactor / E2E+axe matrix / Closure.
 
 **Awaiting Track B kickoff** (after A.bis lands) — Yandex Cloud deploy phase. Plan canon `plans/track-b-deploy-canonical.md` to be created (R1+R2+R3 ≥ today's date перед стартом). Cached research в `project_deferred_deploy_plan.md` (SourceCraft + Lockbox + ALB + monitoring + cron infra).
 

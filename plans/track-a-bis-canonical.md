@@ -590,14 +590,25 @@ export const SIDEBAR_SECTIONS = [
 
 *Заполняется по мере landing каждой sub-phase.*
 
-### A.bis.0 (Vaul migration prep) — pending
+### A.bis.0 (Vaul migration prep) — ✅ DONE 2026-05-12
 
 Pre-flight R1+R2 freshness check (≥2026-05-12):
-- [ ] npm-verify Base UI 1.4.1 still GA
-- [ ] npm-verify @radix-ui/react-dialog still 1.1.15 (или новее)
-- [ ] Vaul status — still unmaintained? (sanity)
+- [x] npm-verify Base UI 1.4.1 GA confirmed (2026-04-20, MIT)
+- [x] npm-verify @radix-ui covered by unified `radix-ui ^1.4.3` (no separate adds)
+- [x] Vaul status — confirmed unmaintained (17mo stale 2024-12-14)
+- [x] Base UI Drawer API surface fetched + compared к Vaul (WebFetch base-ui.com/react/components/drawer)
+- [x] sticky-summary.tsx + consent-block.tsx + refund-sheet.tsx + ui/drawer.tsx + ui/responsive-sheet.tsx full-read
 
-Outcome: TBD
+Outcome: 2 commits `150f3e5` (impl) + `4adf37a` (consent-block fix-up).
+
+**Multi-layer verification:**
+- TypeScript: ✓ caught sticky-summary asChild API break BEFORE commit (fixed inline)
+- Vitest: ✓ 1382 unit tests pass (baseline 1346 + 18 new drawer + 18 + 0 in fix-up)
+- 5 pre-commit gates: sherif/biome/depcruise/knip/typecheck all green (15.71s + 17.98s)
+- Playwright widget.spec.ts: 43/43 (после fix-up) — including [GP7] axe mobile 360×740
+- **Real-browser axe caught consent-block nested-interactive** что JSDOM+TS missed → `4adf37a`
+
+**New process correction (C34)**: «transparent migration» claim для indirect consumers через ResponsiveSheet требует empirical e2e proof. JSDOM tests insufficient — axe runtime rules (nested-interactive, color-contrast) только real-browser. Capture в new memory `project_a_bis_0_done.md` + `feedback_pre_plan_codebase_recon.md` corollary.
 
 ### A.bis.1 (shadcn sidebar primitive) — pending
 
