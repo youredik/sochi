@@ -341,6 +341,118 @@ describe('Sidebar — keyboard shortcut Cmd+B / Ctrl+B', () => {
 		})
 		expect(probe.ctx.state).toBe('expanded')
 	})
+
+	// PATCH-D23 (A.bis.5 fix-up — bug A1.1 from senior bug hunt 2026-05-12):
+	// Cmd+B / Ctrl+B must NOT capture when the user is typing in a text
+	// input surface. Verifies the four target classes guarded by the
+	// keydown listener: <input>, <textarea>, <select>, contenteditable.
+	it('[K5] Cmd+B with target=<input> does NOT toggle + does NOT preventDefault', () => {
+		const probe = renderWithProbe({ defaultOpen: true })
+		const input = document.createElement('input')
+		document.body.appendChild(input)
+		try {
+			const event = new KeyboardEvent('keydown', {
+				key: 'b',
+				metaKey: true,
+				cancelable: true,
+				bubbles: true,
+			})
+			act(() => {
+				input.dispatchEvent(event)
+			})
+			expect(probe.ctx.state).toBe('expanded') // unchanged
+			expect(event.defaultPrevented).toBe(false) // input's bold shortcut preserved
+		} finally {
+			input.remove()
+		}
+	})
+
+	it('[K6] Cmd+B with target=<textarea> does NOT toggle (input-capture guard)', () => {
+		const probe = renderWithProbe({ defaultOpen: true })
+		const ta = document.createElement('textarea')
+		document.body.appendChild(ta)
+		try {
+			act(() => {
+				ta.dispatchEvent(
+					new KeyboardEvent('keydown', {
+						key: 'b',
+						metaKey: true,
+						cancelable: true,
+						bubbles: true,
+					}),
+				)
+			})
+			expect(probe.ctx.state).toBe('expanded')
+		} finally {
+			ta.remove()
+		}
+	})
+
+	it('[K7] Cmd+B with target=<select> does NOT toggle (input-capture guard)', () => {
+		const probe = renderWithProbe({ defaultOpen: true })
+		const sel = document.createElement('select')
+		document.body.appendChild(sel)
+		try {
+			act(() => {
+				sel.dispatchEvent(
+					new KeyboardEvent('keydown', {
+						key: 'b',
+						metaKey: true,
+						cancelable: true,
+						bubbles: true,
+					}),
+				)
+			})
+			expect(probe.ctx.state).toBe('expanded')
+		} finally {
+			sel.remove()
+		}
+	})
+
+	it('[K8] Cmd+B with contenteditable target does NOT toggle (rich-text guard)', () => {
+		const probe = renderWithProbe({ defaultOpen: true })
+		const div = document.createElement('div')
+		div.setAttribute('contenteditable', 'true')
+		document.body.appendChild(div)
+		try {
+			act(() => {
+				div.dispatchEvent(
+					new KeyboardEvent('keydown', {
+						key: 'b',
+						metaKey: true,
+						cancelable: true,
+						bubbles: true,
+					}),
+				)
+			})
+			expect(probe.ctx.state).toBe('expanded')
+		} finally {
+			div.remove()
+		}
+	})
+
+	it('[K9] Cmd+B with target=<button> (non-input) STILL toggles (regression guard)', () => {
+		// Sanity check that the K5-K8 guard isn't too greedy — clicking a
+		// button on the page then pressing Cmd+B should still toggle.
+		const probe = renderWithProbe({ defaultOpen: true })
+		const btn = document.createElement('button')
+		document.body.appendChild(btn)
+		try {
+			act(() => {
+				btn.dispatchEvent(
+					new KeyboardEvent('keydown', {
+						key: 'b',
+						metaKey: true,
+						cancelable: true,
+						bubbles: true,
+					}),
+				)
+			})
+			expect(probe.ctx.state).toBe('collapsed')
+		} finally {
+			btn.remove()
+		}
+	})
 })
 
 /* -------------------------------------------------------------------------- */
@@ -561,6 +673,59 @@ describe('Sidebar — PATCH-D15 aria-label canon', () => {
 			String(args[0]).includes('without an explicit `aria-label`'),
 		)
 		expect(offending.length).toBe(0)
+	})
+
+	// PATCH-D15 tightening (A.bis.5 fix-up — bug A1.2 from senior bug
+	// hunt 2026-05-12): `typeof "" === "string"` is true, so an empty
+	// or whitespace-only aria-label slipped through D15.2 logic and
+	// silenced the dev-warn. SR users got NO accessible name. Treat
+	// empty/whitespace string as «unlabelled».
+	it('[D15.4] SidebarMenuButton with aria-label="" (empty) → console.warn fired', () => {
+		render(
+			<SidebarProvider>
+				<SidebarMenu>
+					<SidebarMenuItem>
+						<SidebarMenuButton aria-label="">Шахматка</SidebarMenuButton>
+					</SidebarMenuItem>
+				</SidebarMenu>
+			</SidebarProvider>,
+		)
+		const offending = warnSpy.mock.calls.filter((args) =>
+			String(args[0]).includes('without an explicit `aria-label`'),
+		)
+		expect(offending.length).toBeGreaterThanOrEqual(1)
+	})
+
+	it('[D15.5] SidebarMenuButton with aria-label="   " (whitespace) → console.warn fired', () => {
+		render(
+			<SidebarProvider>
+				<SidebarMenu>
+					<SidebarMenuItem>
+						<SidebarMenuButton aria-label="   ">Шахматка</SidebarMenuButton>
+					</SidebarMenuItem>
+				</SidebarMenu>
+			</SidebarProvider>,
+		)
+		const offending = warnSpy.mock.calls.filter((args) =>
+			String(args[0]).includes('without an explicit `aria-label`'),
+		)
+		expect(offending.length).toBeGreaterThanOrEqual(1)
+	})
+
+	it('[D15.6] SidebarMenuButton with aria-labelledby="" (empty) → console.warn fired', () => {
+		render(
+			<SidebarProvider>
+				<SidebarMenu>
+					<SidebarMenuItem>
+						<SidebarMenuButton aria-labelledby="">Шахматка</SidebarMenuButton>
+					</SidebarMenuItem>
+				</SidebarMenu>
+			</SidebarProvider>,
+		)
+		const offending = warnSpy.mock.calls.filter((args) =>
+			String(args[0]).includes('without an explicit `aria-label`'),
+		)
+		expect(offending.length).toBeGreaterThanOrEqual(1)
 	})
 })
 

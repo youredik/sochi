@@ -438,9 +438,9 @@ Desktop (`md:` and up): sidebar persistent visible, `<SidebarTrigger>` НЕ ну
 
 **Strict tests:** 3 roles × 7 sections = 21 visibility assertions (exact-value, NOT >=). Cumulative `test-fast`-level. Enum FULL coverage per `feedback_strict_tests.md`.
 
-**Staff sees 3 of 10 sections.** Owner sees 10. Manager sees 9 (no Settings).
+**Staff sees 3 of 7 sections** (Шахматка / Профиль гостиницы / Гости). **Owner sees 7. Manager sees 6** (excludes nothing currently — manager has all listed permissions; once Settings lands ADD `settings` resource gated owner-only). PRIOR plan v1 prose «Owner sees 10. Staff sees 3 of 10» was a v1 D28 drift (vapor + disabled-future sections); corrected per D30 «no vapor links» canon.
 
-Disabled-future sections (Бронирования, Тарифы, Платежи, Активность, Настройки) render visible с `<Badge>скоро</Badge>` для visible roadmap discoverability, но `aria-disabled="true"` + не clickable.
+**NO disabled-future sections** per D30 / `feedback_no_halfway.md` — sidebar grows incrementally («route + sidebar item in one PR»). Previously-listed vapor entries (Бронирования / Тарифы / Платежи / Активность / Настройки) are NOT rendered at all. Add per-section when the actual route lands, not before.
 
 ---
 
@@ -591,6 +591,10 @@ export const SIDEBAR_SECTIONS = [
 | **C40** | **POST-AUDIT C40 (A.bis.3)** — `data-section-id` is sidebar's namespace (A.bis.2 canon: 7 nav rows). Dashboard content sections **must use distinct namespace** (`data-dashboard-section`) to avoid e2e selector collision (`page.locator('[data-section-id]').toHaveCount(7)` will fail если dashboard ALSO emits). Caught at full chromium regression run after dashboard refactor. Naming canon: each architectural region owns ITS OWN attribute namespace. | A.bis.3 full chromium e2e collision surfaced | dashboard sections use `data-dashboard-section="kpi-strip\|recent-activity\|alerts"` |
 | **C41** | **PRE-FLIGHT C41 (A.bis.4)** — viewport-state matrix specs MUST verify state mapping against current breakpoint constants AT plan time, not «discover at implementation». Plan v1 §8 axe matrix table assigned `768=offcanvas-open`, but D17 (added later) set md:=768px → 768 became persistent desktop, not mobile-offcanvas. Caught at A.bis.4 pre-flight; resolved upfront in matrix spec docstring (NOT silent downscope) by normalising to natural state per viewport + 2 explicit state-variant cells. Future plans with viewport×state matrices: explicit state inventory per viewport with breakpoint references, not generic «mobile/tablet/desktop» bucketing. | A.bis.4 pre-flight recon | matrix normalised + 2 state variants + plan §8 honest disclosure in spec docstring |
 | **C42** | **C42 (A.bis.4)** — visual snapshots of authenticated tenant-scoped pages MUST mask tenant-dependent zones (OrgSwitcher org name from fresh-tenant signup timestamp, KPI numeric values from seed data). Stable masking selector = the structural region wrapping volatile content (`[data-slot="sidebar-header"]` for OrgSwitcher, not the individual inner button which may rerender). Snapshot baselines tracked under `<spec>.spec.ts-snapshots/<name>-<project>-<platform>.png` (Playwright canonical convention). `maxDiffPixelRatio: 0.05` matches M9.widget.7 canon. | A.bis.4 implementation | admin-shell-matrix snapshots mask `[data-slot="sidebar-header"]` |
+| **C43** | **POST-AUDIT C43 (A.bis.5 senior bug hunt)** — `Cmd+B/Ctrl+B` global window-keydown listeners MUST NOT capture when focus lives in `<input>`/`<textarea>`/`<select>`/`isContentEditable` — otherwise `preventDefault()` clobbers the user's native shortcut (e.g. bold in rich text) AND the sidebar toggles mid-typing. Production canon: modal/global shortcuts respect input focus context. Surfaced by senior bug hunt (no production bug yet because admin lacks rich-text editors, but the regression vector is one Tiptap-mount away). Fix in `ui/sidebar.tsx` PATCH-D23 marker; verified by 5 new sidebar.test.tsx units (K5-K9). | A.bis.5 senior bug hunt | `event.target instanceof HTMLInputElement \|\| ...` guard before `preventDefault()` |
+| **C44** | **POST-AUDIT C44 (A.bis.5 senior bug hunt)** — `typeof "" === "string"` so an empty `aria-label=""` slipped through PATCH-D15's «labelled» check. SR users got NO accessible name + the dev-warn went silent — perfect bypass surface for a future contributor «just silence the warn». Tighten to `typeof === "string" && val.trim().length > 0` for both `aria-label` and `aria-labelledby`. Verified by 3 new sidebar.test.tsx units (D15.4 empty / D15.5 whitespace / D15.6 empty aria-labelledby). | A.bis.5 senior bug hunt | PATCH-D15 condition tightened in `ui/sidebar.tsx` |
+| **C45** | **POST-AUDIT C45 (A.bis.5 senior bug hunt)** — `/activity/recent` (A.bis.3) was NOT RBAC-gated: shown to all 3 roles on the dashboard, returning ALL 17 ObjectTypes' activity. Staff lacks `notification:read` / `refund:read` / `report:read` (channel-gate) yet read one-line summaries of every notification dispatch / refund / channel sync via the dashboard — even though the underlying detail pages 403 them. Senior fix: post-query filter via shared helper `filterActivitiesByRole(items, role)` (mirror of `rbac.ts` matrix). Owner+manager pass-through, staff filtered out от 5 ObjectTypes (refund / dispute / notification / channelDispatch / channelInbox). Verified by 17 new `packages/shared/src/activity.test.ts` units (enum FULL 17 ObjectType × 3 roles cells + 6 filter-behavior cells). | A.bis.5 senior bug hunt | `apps/backend/src/domains/activity/activity.routes.ts` route uses `filterActivitiesByRole(items, c.var.memberRole)` |
+| **C46** | **POST-AUDIT C46 (A.bis.5 senior bug hunt)** — visual snapshots scoped to a viewport-independent locator (e.g. `[data-slot="sidebar"]` with fixed `16rem` width) produce byte-identical baselines across the «4 viewports» suite — false-positive coverage. Plus axe matrix cells named `admin-shell/X` scanning a page where the sidebar isn't in DOM (mobile 320 = offcanvas closed → no sidebar mount) pass on the WRONG surface. Plus modal escape-route tests (D12 mobile dismiss) covering only one path (Enter) miss Esc / Tab-trap / Shift+Tab regressions. Triple-fix: (1) full-page snapshots per viewport with strategic volatile-zone masking — each viewport baseline now visually distinct (320 stacked / 768 sidebar+stacked / 1024 grid 2-col / 1440 wider grid). (2) `assertShellSurfaceMounted(page, viewportWidth)` guard called per matrix cell — at <768 verifies trigger button visible; at ≥768 verifies sidebar mounted. (3) D12 adversarial spec: Esc-close + 20-step Tab focus-trap + 20-step Shift+Tab reverse-trap. | A.bis.5 senior bug hunt | admin-shell-matrix.spec.ts rewritten — fullpage snapshots + shell-surface guard + 3 adversarial D12 cells |
 
 ---
 
@@ -898,7 +902,49 @@ Multi-layer verification (all 5 layers green per A.bis.0 senior canon + C37):
 **Honest carry-forward**:
 - A.bis.5 closure — ROADMAP insert + memory consolidation (`project_a_bis_done.md` superseding 0/1/2/3/4 individual `_done` memories OR keeping them as historical layer; user prefers «consolidated» per plan §7 row 5b) + locked-versions update (incl. `@playwright/test` 1.59.1 → 1.60.0 bump candidate) + architecture decisions update (app-shell + D17 breakpoint trade-off + inline-state-machines rationale) + Lingui v5→v6 drift fix in `project_m5_tech_decisions.md` + `pnpm outdated --recursive` audit + coverage floor bump check.
 
-### A.bis.5 (Closure) — pending
+### A.bis.5 (Closure) — IN PROGRESS 2026-05-12
+
+**Senior bug-hunt phase complete** (user push «объяви реальную охоту на баги!!!!» 2026-05-12 после первоначального A.bis.4 commit `c70c15b`). Cross-checked code A.bis.1→A.bis.4 целиком против production-grade canon (`feedback_strict_tests.md` + `feedback_no_halfway.md` + `feedback_empirical_method.md`).
+
+**7 real bugs surfaced** (6 fixed in this commit, 1 prose drift fixed):
+
+| # | Bug | Site | Severity | Fix |
+|---|---|---|---|---|
+| **A1.1** | `Cmd+B/Ctrl+B` window-keydown captures even when focus lives in `<input>`/`<textarea>`/`<select>`/contenteditable — `preventDefault()` leaks into form's bold shortcut + sidebar toggles mid-typing | `ui/sidebar.tsx:127` keydown listener | medium | PATCH-D23 input-focus guard — 5 new K5-K9 unit tests |
+| **A1.2** | PATCH-D15 dev-warn accepts empty `aria-label=""` as valid (`typeof "" === "string"` is true) — SR users get NO accessible name + warn silenced | `ui/sidebar.tsx:602-605` | low (dev-only) | tighten к `trim().length > 0` check — 3 new D15.4-D15.6 unit tests |
+| **A3.1** | `/activity/recent` not RBAC-gated — staff sees one-line summaries of 5 ObjectTypes (refund / dispute / notification / channelDispatch / channelInbox) they have no `read` permission for | `activity.routes.ts` route | medium | post-query `filterActivitiesByRole(items, c.var.memberRole)` shared helper — 17 new strict tests in `shared/activity.test.ts` |
+| **A4.1** | Visual snapshot scoped к viewport-independent locator (`[data-slot="sidebar"]` fixed 16rem) → 3 desktop baselines byte-identical → false-positive «4 viewport coverage» | `admin-shell-matrix.spec.ts` | medium | switch к full-page snapshots per viewport with strategic mask — each baseline visually distinct |
+| **A4.2** | axe matrix cells named «admin-shell/X» scan page where sidebar NOT mounted at 320 (offcanvas-closed = no DOM) — false-positive «sidebar a11y green» | `admin-shell-matrix.spec.ts` matrix loop | medium | `assertShellSurfaceMounted(page, viewportWidth)` guard per cell |
+| **A4.3** | D12 mobile dismiss only Enter-close — missing Esc + Tab focus-trap + Shift+Tab reverse-trap (canonical modal escape routes per WAI ARIA + Radix Dialog spec) | `admin-sidebar.spec.ts` D12 spec | medium | 3 new adversarial e2e cells in `admin-shell-matrix.spec.ts` describe «D12 adversarial escape routes» |
+| **Plan §10 prose drift** | «Owner sees 10. Staff sees 3 of 10» + 5 vapor disabled-future sections — D28 corrected к 7 active sections + D30 «no vapor» canon | `plans/track-a-bis-canonical.md` §10 | low | §10 prose corrected к «Owner sees 7. Manager sees 6. Staff sees 3 of 7» + «NO disabled-future sections» |
+
+**Production code changes** (3 files):
+- `apps/frontend/src/components/ui/sidebar.tsx` — PATCH-D23 input-focus guard + PATCH-D15 tightening
+- `apps/backend/src/domains/activity/activity.routes.ts` — `filterActivitiesByRole` post-query gate
+- `packages/shared/src/activity.ts` — `roleCanReadActivityObject` + `filterActivitiesByRole` helpers exported
+
+**Test additions** (+28 strict tests):
+- `apps/frontend/src/components/ui/sidebar.test.tsx`: +8 (K5-K9 input-capture × 5, D15.4-D15.6 empty-string × 3)
+- `packages/shared/src/activity.test.ts` NEW: +17 (enum FULL 17×3 = 51 visibility cells + 6 filter-behavior cells, condensed to 17 test cases with multi-assert)
+- `tests/e2e/admin-shell-matrix.spec.ts`: +3 (Esc-close + Tab-trap + Shift+Tab-trap, 20-step boundary check)
+
+**Ratchet improvement** (tightened in same commit per canon):
+- `audit_high_critical_max`: 7 → **6** (one transitive CVE auto-resolved in dep cascade during work session — captured the improvement, denied future regression at 7)
+- All other metrics unchanged (depcruise=0 / knip=0 / ts_err=0 / biome_err=0 / weak_assertions=234 / multi_biome_ignore=0)
+
+**Multi-layer verification post-fix-up:**
+
+| Layer | Result |
+|---|---|
+| TypeScript strict (`pnpm typecheck` 4 workspaces) | ✓ EXIT=0 |
+| `pnpm test:fast` aggregate | ✓ **4185 passed / 0 failed** | 993 skipped (DB-tagged) in 39s |
+| 5 pre-commit gates (sherif/biome/depcruise/knip/typecheck) | ✓ all green |
+| Ratchet (7 metrics) | ✓ Ratchet OK: depcruise=0 knip=0 audit_high=6 ts_err=0 biome_err=0 weak_assertions=234 multi_biome_ignore=0 |
+| Playwright admin-shell-matrix.spec.ts | ✓ **22/22 pass** (31.6s, regenerated 4 new fullpage baselines) |
+| Full Playwright chromium suite | ✓ **226/226 pass** (4.8 min) — zero regressions across widget/grid/payments/bookings/setup/auth/sidebar/dashboard/a11y/channels |
+| Visual snapshot inspection | ✓ all 4 baselines visually distinct per viewport (320 stacked / 768 sidebar+stacked / 1024 grid 2-col / 1440 wider grid) |
+
+**Honest disclosure**: NOT yet done — A.bis.5 closure docs (ROADMAP insert + `project_a_bis_done.md` consolidated memory + `project_locked_versions.md` update + `project_architecture_decisions.md` update + `project_m5_tech_decisions.md` Lingui v5→v6 drift fix + `pnpm outdated --recursive` audit + coverage floor bump check) — next commit batch in A.bis.5 scope.
 
 ---
 

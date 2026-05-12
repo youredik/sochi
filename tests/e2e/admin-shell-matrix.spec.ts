@@ -88,6 +88,23 @@ async function settle(page: Page) {
 	)
 }
 
+/**
+ * Assert that the right app-shell surface is mounted before axe scan / visual
+ * snapshot — guards against the failure mode where axe «passes» on a page
+ * that doesn't actually contain the sidebar (false-positive coverage). At
+ * <768 px the persistent sidebar is NOT in DOM (offcanvas-closed); the
+ * mobile trigger lives in `<header className="md:hidden">`. At >=768 px the
+ * persistent sidebar is mounted with `md:block` (data-slot="sidebar" on the
+ * desktop wrapper).
+ */
+async function assertShellSurfaceMounted(page: Page, viewportWidth: number) {
+	if (viewportWidth < 768) {
+		await expect(page.locator('[data-slot="sidebar-trigger"]').first()).toBeVisible()
+	} else {
+		await expect(page.locator('[data-slot="sidebar"]').first()).toBeVisible()
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Axe matrix — 12 cells (3 themes × 4 viewports).
 // ---------------------------------------------------------------------------
@@ -118,6 +135,14 @@ test.describe('admin-shell axe matrix — 12 cells (3 themes × 4 viewports)', (
 					await page.goto('/')
 					await expect(page).toHaveURL(/\/o\/[^/]+\/?$/)
 					await settle(page)
+					// A.bis.5 fix-up — bug A4.2 from senior bug hunt 2026-05-12:
+					// guard that the SHELL SURFACE we name in the test ID is
+					// actually mounted before axe scan, otherwise the cell
+					// might pass on a page that doesn't even contain the
+					// sidebar (false-positive coverage). Mobile <768 px =
+					// trigger button in `<header className="md:hidden">`;
+					// desktop ≥768 px = persistent `[data-slot="sidebar"]`.
+					await assertShellSurfaceMounted(page, vp.width)
 
 					const results = await new AxeBuilder({ page }).withTags([...WCAG_AA_TAGS]).analyze()
 					const filtered = filterKnownNoise(results.violations)
@@ -222,21 +247,72 @@ test.describe('admin-shell axe — explicit state variants', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Visual smoke — 4 viewports × Playwright snapshot.
+// Visual smoke — 4 viewports × full-page Playwright snapshot.
 //
-// 320 mobile snapshots the `<header className="md:hidden">` trigger bar
-// (sidebar lives off-screen in offcanvas closed). 768/1024/1440 snapshot
-// the persistent `<[data-slot="sidebar"]>` element with `<SidebarHeader>`
-// masked — the OrgSwitcher renders a per-tenant org name from fresh
-// signup (`auth.setup.ts` timestamps the org name) so the header pixels
-// drift run-to-run; masking it isolates the snapshot to the regression-
-// prone layout chrome (rail width, footer flex, row gaps, theme tokens).
+// A.bis.5 fix-up — bug A4.1 from senior bug hunt 2026-05-12: the prior
+// implementation snapshot-scoped a `[data-slot="sidebar"]` locator (sidebar
+// has fixed `16rem` width per A.bis.1 D19), so 3 desktop snapshots
+// (768/1024/1440) were byte-identical and provided false-positive 4-viewport
+// coverage. Restructured to full-page snapshots per viewport with strategic
+// volatile-region masks — now each baseline captures the actual responsive
+// layout (mobile trigger bar appears at 320 only; sidebar gap at md+;
+// dashboard content reflows; `<header className="md:hidden">` toggles).
+//
+// Masks (volatile content that mutates run-to-run без structural meaning):
+//   • [data-slot="sidebar-header"] — OrgSwitcher org name timestamped from
+//     auth.setup.ts fresh-tenant signup.
+//   • [data-dashboard-section="kpi-strip"] — KPI numeric values depend on
+//     seed data (arrivals/in-house/balance vary).
+//   • [data-dashboard-section="recent-activity"] — relative timestamps
+//     («2 мин. назад» etc) drift seconds-to-seconds.
+//   • [data-slot="demo-mode-badge"] — pill string (LIVE / DEMO) — kept
+//     UNMASKED since auth.setup.ts pins to production mode и regression
+//     here matters (demo/live UX divergence).
 // ---------------------------------------------------------------------------
 
-test.describe('admin-shell visual smoke — 4 viewports', () => {
+test.describe('admin-shell visual smoke — 4 viewports (full-page)', () => {
 	test.skip(SKIP_MATRIX, 'PLAYWRIGHT_SKIP_A11Y_MATRIX=1 set')
 
-	test('[VIS admin-shell/320] mobile trigger bar snapshot', async ({ browser }) => {
+	for (const vp of VIEWPORTS) {
+		test(`[VIS admin-shell/${vp.name}] full-page responsive snapshot`, async ({ browser }) => {
+			const ctx = await browser.newContext({
+				storageState: STORAGE_STATE,
+				viewport: { width: vp.width, height: vp.height },
+			})
+			const page = await ctx.newPage()
+			try {
+				await page.goto('/')
+				await expect(page).toHaveURL(/\/o\/[^/]+\/?$/)
+				await settle(page)
+				await assertShellSurfaceMounted(page, vp.width)
+				// fullPage:false (default) — capture only the viewport window;
+				// fullPage:true would scroll-render the entire document and lose
+				// the «what does the operator see in the first paint» semantic.
+				await expect(page).toHaveScreenshot(`admin-shell-${vp.name}-fullpage.png`, {
+					maxDiffPixelRatio: 0.05,
+					mask: [
+						page.locator('[data-slot="sidebar-header"]'),
+						page.locator('[data-dashboard-section="kpi-strip"]'),
+						page.locator('[data-dashboard-section="recent-activity"]'),
+					],
+				})
+			} finally {
+				await ctx.close()
+			}
+		})
+	}
+})
+
+// ---------------------------------------------------------------------------
+// D12 adversarial paths (A.bis.5 fix-up — bug A4.3 from senior bug hunt
+// 2026-05-12): the prior `admin-sidebar.spec.ts` covered only Enter-close.
+// Production canon for a modal Sheet/Dialog requires ALL canonical escape
+// routes work: Esc, Tab focus-trap (no leak outside sheet), Shift+Tab
+// reverse boundary, click-outside-overlay. PATCH-D12 must hold under each.
+// ---------------------------------------------------------------------------
+
+test.describe('admin-shell D12 mobile sheet — adversarial escape routes', () => {
+	test('Esc key closes the mobile sheet (Radix Dialog canonical)', async ({ browser }) => {
 		const ctx = await browser.newContext({
 			storageState: STORAGE_STATE,
 			viewport: { width: 320, height: 700 },
@@ -245,44 +321,77 @@ test.describe('admin-shell visual smoke — 4 viewports', () => {
 		try {
 			await page.goto('/')
 			await settle(page)
-			// The mobile-only <header className="md:hidden"> wraps SidebarTrigger.
-			// Locator via `filter({ has: ... })` finds the header element that
-			// contains the trigger — stable across viewport changes.
-			const mobileHeader = page
-				.locator('header')
-				.filter({ has: page.locator('[data-slot="sidebar-trigger"]') })
-			await expect(mobileHeader).toBeVisible()
-			await expect(mobileHeader).toHaveScreenshot('admin-shell-320-mobile-header.png', {
-				maxDiffPixelRatio: 0.05,
-			})
+			await page.locator('[data-slot="sidebar-trigger"]').first().click()
+			const mobileSheet = page.locator('[data-mobile="true"][data-slot="sidebar"]')
+			await expect(mobileSheet).toBeVisible()
+			await page.keyboard.press('Escape')
+			await expect(mobileSheet).toBeHidden()
 		} finally {
 			await ctx.close()
 		}
 	})
 
-	for (const vp of VIEWPORTS.slice(1)) {
-		test(`[VIS admin-shell/${vp.name}] desktop sidebar snapshot`, async ({ browser }) => {
-			const ctx = await browser.newContext({
-				storageState: STORAGE_STATE,
-				viewport: { width: vp.width, height: vp.height },
-			})
-			const page = await ctx.newPage()
-			try {
-				await page.goto('/')
-				await settle(page)
-				const sidebar = page.locator('[data-slot="sidebar"]').first()
-				await expect(sidebar).toBeVisible()
-				// Mask the <SidebarHeader> (OrgSwitcher org name varies per
-				// tenant signup timestamp). DemoModeBadge in <SidebarFooter>
-				// renders a fixed string ('Продакшн-режим' for owner-tenant
-				// from auth.setup.ts) — no mask needed there.
-				await expect(sidebar).toHaveScreenshot(`admin-shell-${vp.name}-sidebar.png`, {
-					maxDiffPixelRatio: 0.05,
-					mask: [page.locator('[data-slot="sidebar-header"]')],
-				})
-			} finally {
-				await ctx.close()
-			}
+	test('focus is trapped inside the sheet — Tab cycle stays within Sheet', async ({ browser }) => {
+		const ctx = await browser.newContext({
+			storageState: STORAGE_STATE,
+			viewport: { width: 320, height: 700 },
 		})
-	}
+		const page = await ctx.newPage()
+		try {
+			await page.goto('/')
+			await settle(page)
+			await page.locator('[data-slot="sidebar-trigger"]').first().click()
+			const mobileSheet = page.locator('[data-mobile="true"][data-slot="sidebar"]')
+			await expect(mobileSheet).toBeVisible()
+			// Press Tab 20× — focus must stay within the sheet on every step
+			// (Radix Dialog focus-trap canon). If the trap leaks, a Tab will
+			// move into the underlying `<header>` mobile trigger or dashboard
+			// content — those are outside the Sheet's DOM subtree.
+			for (let i = 0; i < 20; i++) {
+				await page.keyboard.press('Tab')
+				const inside = await page.evaluate(() => {
+					const sheet = document.querySelector(
+						'[data-mobile="true"][data-slot="sidebar"]',
+					) as HTMLElement | null
+					if (!sheet) return false
+					const active = document.activeElement
+					return Boolean(active && sheet.contains(active))
+				})
+				expect(inside).toBe(true)
+			}
+		} finally {
+			await ctx.close()
+		}
+	})
+
+	test('Shift+Tab reverse cycle also stays within the sheet (boundary guard)', async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext({
+			storageState: STORAGE_STATE,
+			viewport: { width: 320, height: 700 },
+		})
+		const page = await ctx.newPage()
+		try {
+			await page.goto('/')
+			await settle(page)
+			await page.locator('[data-slot="sidebar-trigger"]').first().click()
+			const mobileSheet = page.locator('[data-mobile="true"][data-slot="sidebar"]')
+			await expect(mobileSheet).toBeVisible()
+			for (let i = 0; i < 20; i++) {
+				await page.keyboard.press('Shift+Tab')
+				const inside = await page.evaluate(() => {
+					const sheet = document.querySelector(
+						'[data-mobile="true"][data-slot="sidebar"]',
+					) as HTMLElement | null
+					if (!sheet) return false
+					const active = document.activeElement
+					return Boolean(active && sheet.contains(active))
+				})
+				expect(inside).toBe(true)
+			}
+		} finally {
+			await ctx.close()
+		}
+	})
 })

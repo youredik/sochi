@@ -1,11 +1,11 @@
 {
   "_doc": "Ratchet baseline — these metrics may ONLY decrease (or stay equal). Pre-push gate fails when a metric regresses past these caps. To improve: ship the improvement + lower the value here in the same commit, explicit reasoning in commit message. Adapted from stankoff-v2 canonical pattern (`fix(test): vitest 4 isolate:false` lineage 2026-05-08).",
   "_updated": "2026-05-12",
-  "_updated_by_commit": "feat(a-bis.2.fix) — initial baseline",
+  "_updated_by_commit": "fix(a-bis.4) — A.bis.5 senior bug-hunt — audit_high 7→6 (one transitive CVE auto-resolved in dep cascade)",
 
   "depcruise_violations_max": 0,
   "knip_unused_max": 0,
-  "audit_high_critical_max": 7,
+  "audit_high_critical_max": 6,
   "ts_strict_errors_max": 0,
   "biome_errors_max": 0,
   "weak_assertions_max": 234,

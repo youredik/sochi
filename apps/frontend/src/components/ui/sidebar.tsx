@@ -123,12 +123,29 @@ function SidebarProvider({
     }
   }, [isMobile, setOpen])
 
+  // PATCH-D23 (A.bis.5 fix-up — bug A1.1 from senior bug hunt 2026-05-12):
+  // Cmd+B / Ctrl+B must NOT capture when focus lives in a text-input
+  // surface — otherwise `preventDefault()` clobbers the user's bold
+  // shortcut inside a contenteditable / textarea AND the sidebar toggles
+  // unexpectedly mid-typing. Production canon: modal shortcuts respect
+  // input focus context. The guard checks the actual `event.target`
+  // (not `document.activeElement`) so synthetic events дотягиваются
+  // тоже. `isContentEditable` covers Tiptap/Slate/Lexical rich text.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
         (event.metaKey || event.ctrlKey)
       ) {
+        const target = event.target as HTMLElement | null
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          target?.isContentEditable === true
+        ) {
+          return
+        }
         event.preventDefault()
         toggleSidebar()
       }
@@ -599,9 +616,15 @@ function SidebarMenuButton({
   // <SidebarMenuButton>. In dev we hard-warn so unlabelled rails cannot
   // silently ship. (Production stays free of the cost.)
   if (import.meta.env.DEV) {
+    // PATCH-D15 tightening (A.bis.5 fix-up — bug A1.2 from senior bug
+    // hunt 2026-05-12): typeof "" === "string" is true, so an empty
+    // aria-label="" silently bypassed the guard. SR users get no
+    // accessible name. Treat empty/whitespace string as «unlabelled».
+    const rawLabel = (props as Record<string, unknown>)["aria-label"]
+    const rawLabelledBy = (props as Record<string, unknown>)["aria-labelledby"]
     const labeled =
-      typeof (props as Record<string, unknown>)["aria-label"] === "string" ||
-      typeof (props as Record<string, unknown>)["aria-labelledby"] === "string"
+      (typeof rawLabel === "string" && rawLabel.trim().length > 0) ||
+      (typeof rawLabelledBy === "string" && rawLabelledBy.trim().length > 0)
     if (!labeled) {
       // eslint-disable-next-line no-console
       console.warn(

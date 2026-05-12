@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { MemberRole } from './rbac.ts'
 
 /**
  * Activity — polymorphic audit log. Populated ONLY by the CDC consumer
@@ -125,6 +126,61 @@ export const activityListParams = z.object({
 export const activityRecentParams = z.object({
 	limit: z.coerce.number().int().min(1).max(50).optional().default(20),
 })
+
+/**
+ * Per-role allow-list of ActivityObjectType values that the role MAY see in
+ * the operator dashboard's «Recent activity» feed.
+ *
+ * **Why a function, not a static map** (A.bis.5 fix-up — bug A3.1 from senior
+ * bug hunt 2026-05-12): `/activity/recent` is reached by all 3 roles
+ * (owner / manager / staff) because the dashboard surface is universal, but
+ * staff lacks `notification:read` / `refund:read` / `report:read` (the latter
+ * is the channel-manager gate). The endpoint must NOT surface activity
+ * entries for objectTypes the role can't access by URL — otherwise staff
+ * reads a one-line summary of every notification dispatch / refund attempt /
+ * channel sync via the dashboard even though the underlying detail pages
+ * 403 them. Mirror of the resource-level RBAC matrix in `rbac.ts`.
+ *
+ * Mapping rationale (each ObjectType → the rbac.ts resource that gates its
+ * detail surface):
+ *   - booking / property / roomType / room / ratePlan / availability / rate
+ *     → booking / property / room / ratePlan (all 3 roles read)
+ *   - guest / folio / payment / receipt → all 3 roles read
+ *   - migrationRegistration → all 3 roles read (rbac.ts:116)
+ *   - refund / dispute → manager+ (refund:read; staff lacks)
+ *   - notification → manager+ (notification:read; staff lacks per rbac.ts:107)
+ *   - channelDispatch / channelInbox → manager+ (gated by report:read like
+ *     the /admin/channels page; staff lacks report:read)
+ *
+ * Used by `/activity/recent` route handler to post-filter the repo response
+ * by `c.var.memberRole`. Kept in `shared` (not in `apps/backend`) so the
+ * frontend can also pre-filter if a future use-case fetches the raw feed
+ * client-side.
+ */
+
+const STAFF_DENIED_ACTIVITY_TYPES = new Set<ActivityObjectType>([
+	'refund',
+	'dispute',
+	'notification',
+	'channelDispatch',
+	'channelInbox',
+])
+
+export function roleCanReadActivityObject(
+	role: MemberRole,
+	objectType: ActivityObjectType,
+): boolean {
+	if (role === 'owner' || role === 'manager') return true
+	// role === 'staff'
+	return !STAFF_DENIED_ACTIVITY_TYPES.has(objectType)
+}
+
+export function filterActivitiesByRole<T extends { objectType: ActivityObjectType }>(
+	items: readonly T[],
+	role: MemberRole,
+): T[] {
+	return items.filter((a) => roleCanReadActivityObject(role, a.objectType))
+}
 
 // `fieldChange` / `statusChange` diffJson payload is documented as
 // `{ field, oldValue, newValue }` — the runtime shape is enforced by the
