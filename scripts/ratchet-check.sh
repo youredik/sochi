@@ -61,7 +61,12 @@ if [ "$AUDIT" -gt "$AUDIT_MAX" ]; then
 fi
 
 # 4. typecheck (strict mode errors)
-if ! pnpm typecheck > /dev/null 2>&1; then
+# Uses authoritative `typecheck:parallel` (tsc via run-p) — 32% faster than
+# sequential, same compiler, same diagnostics. tsgo is NOT used here
+# pre-TS-7-GA: ratchet is the pre-push final gate; flipping to tsgo
+# requires GA + 10+ consecutive zero-divergence pushes from shadow CI
+# (post-push.yml `tsgo divergence shadow`). See project_tsgo_pilot_2026_05_12.md.
+if ! pnpm typecheck:parallel > /dev/null 2>&1; then
 	TS_ERR=1
 else
 	TS_ERR=0
