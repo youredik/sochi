@@ -1,12 +1,16 @@
 import { passkey } from '@better-auth/passkey'
 import { type EntityKind, newId } from '@horeca/shared'
 import { betterAuth } from 'better-auth'
+import { magicLink } from 'better-auth/plugins/magic-link'
 import { organization } from 'better-auth/plugins/organization'
 import { ac, manager, owner, staff } from './access-control.ts'
 import { ydbAdapter } from './db/better-auth-adapter.ts'
 import { sql } from './db/index.ts'
 import { toTs } from './db/ydb-helpers.ts'
 import { env } from './env.ts'
+import { magicLinkEmail } from './lib/auth/magic-link-email.ts'
+import { logger } from './logger.ts'
+import { createEmailAdapter } from './workers/lib/postbox-adapter.ts'
 
 /** 14-day trial for newly created organizations. Defined here (not in a magic
  *  number) so billing code downstream reads the same constant. */
@@ -16,10 +20,17 @@ const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000
 /**
  * Better Auth instance for HoReCa.
  *
- * Launch constraints (explicit):
- *   - Only email + password. No magic link, no OAuth, no passkeys на старте.
- *   - Email verification is OFF на старте so owners can register and click around
- *     without an email round-trip. Turn ON before the first real customer.
+ * Auth methods (canon 2026):
+ *   - **Magic-link** — primary passwordless flow. BA built-in plugin (`magic-link`)
+ *     with `disableSignUp: false` enables JIT user creation — same button serves
+ *     sign-in AND sign-up via email. 5-minute token TTL, single-use.
+ *   - **Email + password** — fallback. Pwned-pass check + 8-char min still on.
+ *     Email verification OFF на старте so owners can register and click around
+ *     без email round-trip. Turn ON before the first real customer.
+ *   - **WebAuthn passkey** — power-user upgrade after first sign-in (M9.5 Phase D).
+ *   - **Yandex SmartCaptcha** — bot protection. Gates sign-up / sign-in /
+ *     magic-link via `before` hook (next commit) when SMARTCAPTCHA_SERVER_KEY
+ *     is set; bypassed in dev where the key is unset.
  *   - Organization plugin owns multi-tenancy — organization.id == tenantId.
  *   - Roles: owner / manager / staff (see access-control.ts).
  *   - Users CAN create organizations на старте. Once we have real customers this
@@ -27,6 +38,12 @@ const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000
  *
  * ID generation: typeid with prefix per model (usr_, ses_, org_, …).
  */
+
+// Module-level email adapter: dual-mode transport (Mailpit dev / Postbox prod)
+// picked once from env. Same instance reused for magic-link, invitation,
+// password-reset emails — keeps SES/SMTP client connection warm.
+const emailAdapter = createEmailAdapter(env, logger)
+const emailFromAddress = `"${env.EMAIL_FROM_NAME}" <${env.EMAIL_FROM_ADDRESS}>`
 
 const BA_MODEL_TO_ENTITY: Record<string, EntityKind> = {
 	user: 'user',
@@ -88,6 +105,44 @@ export const auth = betterAuth({
 		},
 	},
 	plugins: [
+		/**
+		 * Magic-link sign-in (canon 2026 — passwordless first).
+		 *
+		 * `disableSignUp: false` allows JIT user creation — same button serves
+		 * both sign-in and sign-up via email. Token TTL 5 min балансирует
+		 * security (short window) vs UX (user has time to switch tabs).
+		 *
+		 * `sendMagicLink` callback delivers via our dual-mode email adapter:
+		 * Mailpit SMTP (dev, see http://localhost:8125) or Yandex Postbox
+		 * (prod, SES-compatible API). Failure is logged but not thrown —
+		 * Better Auth returns 200 to caller regardless so we don't leak
+		 * email-exists-or-not via timing.
+		 */
+		magicLink({
+			expiresIn: 300,
+			disableSignUp: false,
+			sendMagicLink: async ({ email, url }) => {
+				const { subject, html, text } = magicLinkEmail({
+					signInUrl: url,
+					expiryMinutes: 5,
+				})
+				const result = await emailAdapter.send({
+					from: emailFromAddress,
+					to: email,
+					subject,
+					html,
+					text,
+				})
+				if (result.kind === 'sent') {
+					logger.info({ messageId: result.messageId }, 'Magic-link email dispatched')
+				} else {
+					logger.warn(
+						{ kind: result.kind, reason: result.reason },
+						'Magic-link email delivery failed',
+					)
+				}
+			},
+		}),
 		/**
 		 * M9.5 Phase D — WebAuthn passkey support.
 		 *
