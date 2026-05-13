@@ -14,7 +14,7 @@
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 const LEVEL_ORDER: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 }
-const MIN_LEVEL: LogLevel = import.meta.env.DEV ? 'debug' : 'info'
+const MIN_LEVEL: LogLevel = process.env.NODE_ENV !== 'production' ? 'debug' : 'info'
 
 function emit(level: LogLevel, msg: string, ctx?: Record<string, unknown>): void {
 	if (LEVEL_ORDER[level] < LEVEL_ORDER[MIN_LEVEL]) return

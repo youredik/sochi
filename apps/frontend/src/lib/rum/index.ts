@@ -259,6 +259,22 @@ class RumBatcher {
 let started = false
 
 /**
+ * Reset the module-level `started` flag — TEST-ONLY API. Production code
+ * MUST NOT call this. Vitest auto-reset modules between tests via
+ * `vi.resetModules()`; bun:test does not (module cache persists), so we
+ * expose an explicit reset for per-test fresh `startRum()` invocations.
+ *
+ * Canon: bun:test 2026 docs «explicit reset > module cache mutation» —
+ * cleaner than `mock.module()` per-test and respects production singleton.
+ *
+ * Name prefix `__` signals «internal, do not depend on». Tree-shaken in
+ * production bundles when no code imports it.
+ */
+export function __resetForTesting(): void {
+	started = false
+}
+
+/**
  * Initialize RUM pipeline. Call once after main React mount.
  *
  * Idempotent: subsequent calls are no-ops (web-vitals callbacks would fire

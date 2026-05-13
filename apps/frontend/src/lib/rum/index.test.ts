@@ -31,12 +31,19 @@ afterEach(() => {
 	mock.clearAllMocks()
 })
 
-beforeEach(() => {
+beforeEach(async () => {
 	// Default: not prerendering.
 	Object.defineProperty(document, 'prerendering', {
 		configurable: true,
 		value: false,
 	})
+	// bun:test does not auto-reset modules between tests (Vitest had
+	// `vi.resetModules()` semantics). The RUM module exposes
+	// `__resetForTesting()` to clear its `started` singleton so each test
+	// gets a fresh `startRum()` registration (otherwise second test
+	// receives inert handle with `bufferSize: () => 0`).
+	const { __resetForTesting } = await import('./index.ts')
+	__resetForTesting()
 })
 
 function makeMetric(over: Partial<{ name: string; value: number; rating: string }> = {}): {

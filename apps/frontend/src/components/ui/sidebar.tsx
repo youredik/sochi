@@ -157,7 +157,7 @@ function SidebarProvider({
   // PATCH-D14 dev guard (see __sidebarProviderInstances above).
   const instanceId = React.useId()
   React.useEffect(() => {
-    if (!import.meta.env.DEV) return
+    if (process.env.NODE_ENV === "production") return
     __sidebarProviderInstances.add(instanceId)
     if (__sidebarProviderInstances.size > 1) {
       // eslint-disable-next-line no-console
@@ -615,7 +615,7 @@ function SidebarMenuButton({
   // requires a Cyrillic aria-label OR aria-labelledby on every
   // <SidebarMenuButton>. In dev we hard-warn so unlabelled rails cannot
   // silently ship. (Production stays free of the cost.)
-  if (import.meta.env.DEV) {
+  if (process.env.NODE_ENV !== "production") {
     // PATCH-D15 tightening (A.bis.5 fix-up — bug A1.2 from senior bug
     // hunt 2026-05-12): typeof "" === "string" is true, so an empty
     // aria-label="" silently bypassed the guard. SR users get no

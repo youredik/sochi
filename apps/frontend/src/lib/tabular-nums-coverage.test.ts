@@ -1,10 +1,14 @@
 /**
  * tabular-nums coverage — strict grep-test (M9.6 plan canon).
  *
- * Vite `import.meta.glob({ as: 'raw' })` reads source files at build-time
- * (no node:fs in SPA — biome `noRestrictedImports` enforced). Each entry =
- * raw text of a file matched by glob. We grep tabular-nums usage в financial
- * components against regression.
+ * Reads source files at test-time via Bun-native `Bun.file()` and greps
+ * `tabular-nums` usage in financial components against regression.
+ *
+ * Phase 16 (2026-05-13): migrated from Vite's `import.meta.glob({ as: 'raw' })`
+ * (build-time, Vite-only — Bun #6060 still open for implementation) to
+ * `Bun.file(...).text()` + `import.meta.dir` (Bun-native). Universal under
+ * bun:test, no `node:fs` (which biome forbids in SPA per architecture rule
+ * `noRestrictedImports`).
  *
  * Pre-done audit:
  *   [T1] Money component (visible span) uses tabular-nums
@@ -14,51 +18,41 @@
  *   [T5] refund-sheet financial dl rows use tabular-nums (≥3 occurrences)
  *
  * **Note:** index.css `.tabular-nums` declaration verified implicitly via
- * any successful React render — если utility класс отсутствует в @layer,
- * Tailwind compilation fails OR computed style mismatches. Source-grep CSS
- * declaration redundant + Vite `?raw` doesn't load CSS plugin output.
+ * any successful React render — if the utility class is missing from
+ * @layer, Tailwind compilation fails OR computed style mismatches.
+ * Source-grep CSS declaration redundant.
  */
 import { describe, expect, it } from 'bun:test'
 
-const FINANCIAL_FILES = import.meta.glob<string>(
-	[
-		'../components/money.tsx',
-		'../features/receivables/components/receivables-table.tsx',
-		'../features/receivables/components/kpi-cards.tsx',
-		'../features/folios/components/refund-sheet.tsx',
-	],
-	{ query: '?raw', import: 'default', eager: true },
-)
+const DIR = import.meta.dir
 
-function getSrc(suffix: string): string {
-	const entry = Object.entries(FINANCIAL_FILES).find(([k]) => k.endsWith(suffix))
-	if (!entry) throw new Error(`Source not found: ${suffix}`)
-	return entry[1]
+async function readSrc(rel: string): Promise<string> {
+	return await Bun.file(`${DIR}/${rel}`).text()
 }
 
 describe('tabular-nums coverage — financial component regressions guard', () => {
-	it('[T1] Money component (visible span) uses tabular-nums', () => {
-		const src = getSrc('money.tsx')
+	it('[T1] Money component (visible span) uses tabular-nums', async () => {
+		const src = await readSrc('../components/money.tsx')
 		expect(src).toMatch(/className=\{cn\('tabular-nums/)
 	})
 
-	it('[T2] MoneyInput display uses tabular-nums', () => {
-		const src = getSrc('money.tsx')
+	it('[T2] MoneyInput display uses tabular-nums', async () => {
+		const src = await readSrc('../components/money.tsx')
 		expect(src).toMatch(/text-2xl tabular-nums/)
 	})
 
-	it('[T3] receivables-table money + days use tabular-nums (≥2)', () => {
-		const src = getSrc('receivables-table.tsx')
+	it('[T3] receivables-table money + days use tabular-nums (≥2)', async () => {
+		const src = await readSrc('../features/receivables/components/receivables-table.tsx')
 		expect(src.match(/tabular-nums/g)?.length).toBeGreaterThanOrEqual(2)
 	})
 
-	it('[T4] receivables KPI cards use tabular-nums (≥3)', () => {
-		const src = getSrc('kpi-cards.tsx')
+	it('[T4] receivables KPI cards use tabular-nums (≥3)', async () => {
+		const src = await readSrc('../features/receivables/components/kpi-cards.tsx')
 		expect(src.match(/tabular-nums/g)?.length).toBeGreaterThanOrEqual(3)
 	})
 
-	it('[T5] refund-sheet financial dl rows use tabular-nums (≥3)', () => {
-		const src = getSrc('refund-sheet.tsx')
+	it('[T5] refund-sheet financial dl rows use tabular-nums (≥3)', async () => {
+		const src = await readSrc('../features/folios/components/refund-sheet.tsx')
 		expect(src.match(/tabular-nums/g)?.length).toBeGreaterThanOrEqual(3)
 	})
 })
