@@ -334,6 +334,18 @@ export class MailpitAdapter implements EmailAdapter {
 						resolve({ kind: 'transient', reason: `SMTP ${line}` })
 						return
 					}
+					// RFC 5321 §4.2.1 — multi-line replies use `-` between the code
+					// and the text on all but the LAST line (which uses space). The
+					// state machine must advance ONCE per command response, not once
+					// per line; otherwise a multi-line EHLO answer (which Mailpit /
+					// Postfix / Postbox all emit: 250-greets / 250-SIZE / 250-AUTH /
+					// 250-…/ 250 SMTPUTF8) fast-forwards the cursor through every
+					// SMTP step in a single data event, blasting commands out of
+					// order and resolving as «sent» before the server has even
+					// received MAIL FROM. That race silently dropped magic-link
+					// emails in dev: BA's `sendMagicLink` resolved status:true while
+					// Mailpit had nothing in its inbox.
+					if (line.length > 3 && line[3] === '-') continue
 					step += 1
 					if (step === 1) socket.write('EHLO sochi\r\n')
 					else if (step === 2) socket.write(`MAIL FROM:<${input.from}>\r\n`)

@@ -325,6 +325,111 @@ describe('createEmailAdapter — selection logic', () => {
 	})
 })
 
+/* ============================================================ MailpitAdapter unit — multi-line SMTP parser */
+
+describe('MailpitAdapter — multi-line SMTP response parser', () => {
+	/**
+	 * RFC 5321 §4.2.1 — multi-line replies use `-` between code and text on
+	 * all but the FINAL line (space). Regression guard: a previous version
+	 * incremented the state-machine cursor once per LINE rather than once
+	 * per command, which caused a multi-line EHLO answer to fast-forward
+	 * through every SMTP step in a single data event, blasting MAIL FROM /
+	 * RCPT TO / DATA / message-body / QUIT out of order. The adapter would
+	 * then resolve `{kind: 'sent'}` while the server received nothing —
+	 * silently dropping magic-link emails in dev.
+	 *
+	 * This test stands up a tiny in-process TCP server that scripts a
+	 * realistic Postfix/Mailpit-shaped EHLO multi-line answer, exchanges
+	 * the rest of the SMTP dialog, and verifies (a) the adapter resolves
+	 * sent + (b) the server saw all five client commands in canonical order.
+	 */
+	test('multi-line EHLO does not fast-forward state machine; commands arrive in order', async () => {
+		const net = await import('node:net')
+		const received: string[] = []
+		let quitResolve: (() => void) | null = null
+		const quitArrived = new Promise<void>((r) => {
+			quitResolve = r
+		})
+
+		const server = net.createServer((socket) => {
+			let receiveBuffer = ''
+			let dataMode = false
+			socket.setEncoding('utf8')
+			socket.write('220 mailpit-test.local ESMTP Service ready\r\n')
+			socket.on('data', (chunk: string | Buffer) => {
+				receiveBuffer += chunk
+				if (!receiveBuffer.includes('\r\n')) return
+				const lines = receiveBuffer.split('\r\n')
+				receiveBuffer = lines.pop() ?? ''
+				for (const line of lines) {
+					if (dataMode) {
+						if (line === '.') {
+							dataMode = false
+							received.push('DATA_END')
+							socket.write('250 2.0.0 Ok: queued as ABC\r\n')
+						}
+						continue
+					}
+					if (line.startsWith('EHLO')) {
+						received.push('EHLO')
+						// Mailpit / Postfix actual shape — 5 continuation lines + final SP.
+						socket.write(
+							'250-mailpit-test.local greets you\r\n' +
+								'250-SIZE 0\r\n' +
+								'250-AUTH LOGIN PLAIN\r\n' +
+								'250-ENHANCEDSTATUSCODES\r\n' +
+								'250-8BITMIME\r\n' +
+								'250 SMTPUTF8\r\n',
+						)
+					} else if (line.startsWith('MAIL FROM')) {
+						received.push('MAIL_FROM')
+						socket.write('250 2.1.0 Ok\r\n')
+					} else if (line.startsWith('RCPT TO')) {
+						received.push('RCPT_TO')
+						socket.write('250 2.1.5 Ok\r\n')
+					} else if (line === 'DATA') {
+						received.push('DATA')
+						dataMode = true
+						socket.write('354 Start mail input; end with <CR><LF>.<CR><LF>\r\n')
+					} else if (line === 'QUIT') {
+						received.push('QUIT')
+						socket.write('221 2.0.0 Bye\r\n')
+						socket.end()
+						quitResolve?.()
+					}
+				}
+			})
+		})
+
+		await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+		const addr = server.address()
+		if (!addr || typeof addr === 'string') {
+			server.close()
+			throw new Error('failed to bind test SMTP server')
+		}
+
+		const { MailpitAdapter: Mailpit } = await import('./postbox-adapter.ts')
+		const adapter = new Mailpit('127.0.0.1', addr.port)
+		const result = await adapter.send({
+			from: 'sender@local',
+			to: 'recipient@local',
+			subject: 'multi-line regression guard',
+			html: '<p>x</p>',
+			text: 'x',
+		})
+		// Wait for QUIT to actually land at the server before tearing it down —
+		// adapter.send resolves immediately after writing QUIT, leaving the
+		// outbound bytes briefly in flight.
+		await quitArrived
+
+		server.close()
+
+		expect(result.kind).toBe('sent')
+		// Canonical order — no command fired before the previous one was ACKed.
+		expect(received).toEqual(['EHLO', 'MAIL_FROM', 'RCPT_TO', 'DATA', 'DATA_END', 'QUIT'])
+	})
+})
+
 /* ============================================================ MailpitAdapter integration */
 
 /**
