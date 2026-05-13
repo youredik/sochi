@@ -64,6 +64,15 @@ pre-commit:
       glob: 'apps/widget-embed/src/**/*.{ts,tsx}'
       run: bash scripts/decorator-canary.sh
 
+    - name: backend-no-import-meta-env
+      # Block `import.meta.env` in backend / shared code — Bun #21097
+      # (OPEN 2026-05-13) empties it to {} under `bun build --compile`,
+      # silently dropping env-dependent branches in the distroless binary.
+      # See scripts/backend-no-import-meta-env.sh header for context +
+      # removal trigger. Inventory ref: phase_16_closure_done item #6.
+      glob: '{apps/backend,packages/shared}/src/**/*.{ts,tsx}'
+      run: bash scripts/backend-no-import-meta-env.sh
+
 # Pre-push: minimal blocking gate (≤5s hard cap).
 # Skip via `LEFTHOOK=0 git push` (built-in env override; не --no-verify).
 #
