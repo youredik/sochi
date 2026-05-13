@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * App-wide WCAG 2.2 AA audit (M5e.3.4).
  *

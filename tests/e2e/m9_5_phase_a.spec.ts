@@ -1,4 +1,5 @@
-import { expect, type Page, test } from '@playwright/test'
+import { test } from './_fixtures.ts'
+import { expect, type Page } from '@playwright/test'
 import { seedBookingFixture } from './_seed-booking'
 
 /**

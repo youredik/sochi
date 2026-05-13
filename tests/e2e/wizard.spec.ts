@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * Wizard-specific adversarial tests. Run under `chromium` project with
  * storageState from auth.setup.ts (owner has already completed wizard).

@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * Post-deploy smoke — no DB writes, no storageState, runs against any
  * BASE_URL (staging / prod). Guards against "backend is up but wiring is

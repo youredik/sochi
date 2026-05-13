@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * M9.5 Phase D + M9.6 senior-pass — passkey e2e via Playwright Virtual
  * Authenticator API (CDP `WebAuthn.enable` + `addVirtualAuthenticator`).

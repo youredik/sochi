@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test, type Page } from '@playwright/test'
+import { test } from './_fixtures.ts'
+import { expect, type Page } from '@playwright/test'
 import { filterKnownNoise, WCAG_AA_TAGS } from '../axe-known-noise.ts'
 
 /**

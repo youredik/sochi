@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * AdminSidebar — empirical real-browser e2e + axe WCAG 2.2 AA audit
  * (A.bis.2 layer 4+5 verification per «погнали» canon: каждое «done» claim

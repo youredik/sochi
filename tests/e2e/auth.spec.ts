@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * Adversarial auth suite — hunts regressions, each case documents a
  * specific invariant that real users would notice if broken. Exact-value

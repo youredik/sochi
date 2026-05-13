@@ -5,8 +5,16 @@ import { expect, test as setup } from '@playwright/test'
  * setup wizard (property → roomType → rooms) so downstream `chromium`
  * tests land on a real tenant dashboard, not the wizard.
  *
- * Each pre-push run creates a new user (timestamp in email) — the test DB
- * never needs pruning, and cross-run pollution stays tenant-isolated.
+ * **Per-worker tenant (Phase 16 closure 2026-05-13)**: each Playwright
+ * worker creates its OWN tenant + storage state. Together with
+ * `fullyParallel: true` + `workers: 4` + per-worker `storageState` fixture
+ * in `_fixtures.ts`, gives ~3–4× CI wall-clock speed-up without cross-
+ * worker booking/state contention. Playwright runs the setup project once
+ * per worker slot, each getting a unique `setupInfo.workerIndex`.
+ *
+ * Each pre-push run creates fresh user(s) (timestamp + workerIdx in
+ * email) — the test DB never needs pruning, and cross-run pollution
+ * stays tenant-isolated.
  *
  * Adversarial checks embedded along the way:
  *   - progress indicator increments step-by-step (1 → 2 → 3)
@@ -17,11 +25,12 @@ import { expect, test as setup } from '@playwright/test'
  *   - clicking "Завершить настройку" while 0 rooms are created is blocked
  *     (button `disabled` attribute) — verified by filling one room first
  */
-setup('authenticate owner + complete setup wizard', async ({ page }) => {
+setup('authenticate owner + complete setup wizard', async ({ page }, setupInfo) => {
 	const ts = Date.now()
-	const email = `e2e-owner-${ts}@sochi.local`
+	const workerIdx = setupInfo.workerIndex
+	const email = `e2e-owner-${ts}-w${workerIdx}@sochi.local`
 	const password = 'playwright-e2e-01'
-	const orgName = `E2E Hotel ${ts}`
+	const orgName = `E2E Hotel ${ts} W${workerIdx}`
 
 	// --- Signup ---
 	await page.goto('/signup')
@@ -94,5 +103,5 @@ setup('authenticate owner + complete setup wizard', async ({ page }) => {
 	// Grid has 1 rowheader (Тип номера) + 15 date columnheaders = 16 total.
 	await expect(page.getByRole('grid')).toHaveAttribute('aria-colcount', '16')
 
-	await page.context().storageState({ path: 'tests/.auth/owner.json' })
+	await page.context().storageState({ path: `tests/.auth/owner-w${workerIdx}.json` })
 })

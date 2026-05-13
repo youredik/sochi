@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * Grid (M5d) adversarial e2e. Runs with `owner.json` storageState from
  * auth.setup.ts, so the tenant already has property + roomType + 2 rooms.

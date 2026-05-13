@@ -36,7 +36,8 @@
  */
 
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 import { filterKnownNoise, WCAG_AA_TAGS } from '../axe-known-noise.ts'
 
 const SKIP_MATRIX = process.env.PLAYWRIGHT_SKIP_A11Y_MATRIX === '1'

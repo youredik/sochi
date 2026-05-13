@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * Empirical accessibility verification (M5e.3.2) — axe-core automated
  * WCAG 2.2 AA audit on the reservation grid.

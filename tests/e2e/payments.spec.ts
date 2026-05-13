@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, type Page, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect, type Page } from '@playwright/test'
 // API-only seed (no UI grid traversal) keeps payment specs deterministic под
 // full e2e:smoke load. Ranged-day bookings (15+ days в будущем) не пересекаются
 // с bookings.spec.ts (futureDays 1-10) — нет inventory contention. 60s timeout

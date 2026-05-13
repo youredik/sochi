@@ -6,8 +6,8 @@
  * Pre-requirement: backend running + demo tenant seeded (auto-seeded в startup).
  */
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 const WIDGET_URL = '/widget/demo-sirius'
 
 test.describe('widget public route — anonymous + axe', () => {

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * Dashboard — empirical real-browser e2e + axe WCAG 2.2 AA audit
  * (A.bis.3 Layer 4+5 mandatory per C37 canon — `feedback_layer_4_5_mandatory_per_subphase.md`).

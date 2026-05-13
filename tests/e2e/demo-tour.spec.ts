@@ -11,8 +11,8 @@
  * Smoke project — anonymous, runs against `demo-sirius` seed.
  */
 
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 const WIDGET_URL = '/widget/demo-sirius'
 
 test.describe('demo tour overlay (D9-D11)', () => {

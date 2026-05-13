@@ -18,8 +18,8 @@
  */
 
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8787'
 const IFRAME_URL = `${API_URL}/api/embed/v1/iframe/demo-sirius/demo-prop-sirius-main.html`
 

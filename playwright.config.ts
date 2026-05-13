@@ -4,24 +4,27 @@ import { defineConfig, devices } from '@playwright/test'
  * Playwright configuration (stankoff-v2 pattern, verified 2026).
  *
  * Projects:
- *   - `setup`   — runs auth.setup.ts (signup + saves storageState.json).
- *   - `chromium` — authenticated suite, reuses storageState. Depends on setup.
+ *   - `setup`    — runs auth.setup.ts once per worker (signup + saves
+ *     `tests/.auth/owner-w{workerIdx}.json`).
+ *   - `chromium` — authenticated suite, picks up per-worker storage via
+ *     `tests/e2e/_fixtures.ts`. Depends on setup.
  *   - `smoke`    — anonymous-only suite for post-deploy sanity (no DB writes,
  *     no storageState dependency). Runs against any BASE_URL.
  *
  * webServer: starts backend + frontend dev servers unless already running.
  * Locally reuses — CI gets fresh per-run (`reuseExistingServer: !CI`).
  *
- * Workers (Phase 16 speedup 2026-05-13):
- *   - Local: `workers: 1` (dev process reuse + shared session safety —
- *     parallelism here is a rabbit hole per stankoff-v2 lineage).
- *   - CI: `workers: 2` (fresh per-run webServer + tenant created by
- *     `auth.setup.ts` is reused read-mostly by 21 specs → 2 workers
- *     parallel-safe per round-2 research 2026-05-13 + Playwright canon
- *     `playwright.dev/docs/test-parallel`). Expected wall-clock ~1.8×.
- *   - `fullyParallel: false` (per-file scheduling preserves file-level
- *     setup affinity; per-test scheduling deferred until per-test
- *     tenant slug isolation lands).
+ * Workers + parallelism (Phase 16 closure 2026-05-13):
+ *   - **Local**: `workers: 1` (dev process reuse + shared session safety
+ *     — parallelism here is a rabbit hole per stankoff-v2 lineage).
+ *   - **CI**: `workers: 4` + `fullyParallel: true`. Per-worker tenant
+ *     isolation via `auth.setup.ts` (creates `e2e-owner-{ts}-w{idx}@
+ *     sochi.local` per worker slot) + `_fixtures.ts` worker-scoped
+ *     `storageState` fixture. Each spec picks up its own worker's storage.
+ *     Expected wall-clock ~3-4× vs the prior single-tenant workers=2
+ *     (~1.8× baseline). Per Playwright canon `playwright.dev/docs/auth
+ *     #multiple-signed-in-roles` + `test-fixtures#worker-scoped-fixtures`
+ *     (≥2026-05-13 verify).
  */
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5273'
@@ -30,10 +33,10 @@ const isRemote = BASE_URL !== 'http://localhost:5273'
 
 export default defineConfig({
 	testDir: './tests/e2e',
-	fullyParallel: false,
+	fullyParallel: Boolean(process.env.CI),
 	forbidOnly: Boolean(process.env.CI),
 	retries: process.env.CI ? 1 : 0,
-	workers: process.env.CI ? 2 : 1,
+	workers: process.env.CI ? 4 : 1,
 	reporter: process.env.CI ? 'github' : 'line',
 	use: {
 		baseURL: BASE_URL,
@@ -49,7 +52,12 @@ export default defineConfig({
 			name: 'chromium',
 			use: {
 				...devices['Desktop Chrome'],
-				storageState: 'tests/.auth/owner.json',
+				// Default storageState — per-worker override comes from
+				// tests/e2e/_fixtures.ts (worker-scoped fixture). Static path
+				// here is the fallback when a spec imports raw `test` from
+				// '@playwright/test'; if that happens the spec hits w0
+				// storage (which `setup` always produces first).
+				storageState: 'tests/.auth/owner-w0.json',
 			},
 			dependencies: ['setup'],
 			testMatch: /.*\.spec\.ts/,

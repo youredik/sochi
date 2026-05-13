@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-
+import { test } from './_fixtures.ts'
+import { expect } from '@playwright/test'
 /**
  * Multi-tab BroadcastChannel auth-state propagation — adversarial e2e
  * surfaced by A.bis.5 senior self-audit 2026-05-12 (initial bug-hunt
