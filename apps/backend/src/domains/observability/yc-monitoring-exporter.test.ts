@@ -11,7 +11,7 @@
  */
 
 import type { RumMetric } from '@horeca/shared/rum'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, mock } from 'bun:test'
 import {
 	circuitBreakerPolicy,
 	composePolicies,
@@ -39,10 +39,6 @@ function makeMetric(over: Partial<RumMetric> = {}): RumMetric {
 		...over,
 	}
 }
-
-afterEach(() => {
-	vi.useRealTimers()
-})
 
 describe('metricToYcPayloads — wire shape', () => {
 	it('[YCM1] DGAUGE single payload from non-INP metric', () => {
@@ -113,13 +109,13 @@ describe('createYcMonitoringExporter.flush', () => {
 		}
 		expect(buffer.size).toBe(12_000)
 
-		const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 200 }))
+		const fetchMock = mock().mockResolvedValue(new Response('', { status: 200 }))
 		const exporter = createYcMonitoringExporter({
 			endpoint: 'https://monitoring.api.cloud.yandex.net',
 			folderId: 'b1gtest',
 			serviceName: 'horeca',
 			resolveIamToken: async () => 'token',
-			fetch: fetchMock,
+			fetch: fetchMock as unknown as typeof fetch,
 		})
 		const result = await exporter.flush(buffer)
 		expect(result.batches).toBe(2)
@@ -141,16 +137,16 @@ describe('createYcMonitoringExporter.flush', () => {
 	it('[YCM2.b] URL + auth header shape correct (production wire format)', async () => {
 		const buffer = new RumBuffer({ capacity: 10 })
 		buffer.push(makeMetric(), '203.0.113.0')
-		const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 200 }))
+		const fetchMock = mock().mockResolvedValue(new Response('', { status: 200 }))
 		const exporter = createYcMonitoringExporter({
 			endpoint: 'https://monitoring.api.cloud.yandex.net',
 			folderId: 'b1gtest',
 			serviceName: 'horeca',
 			resolveIamToken: async () => 'iam-bearer-xyz',
-			fetch: fetchMock,
+			fetch: fetchMock as unknown as typeof fetch,
 		})
 		await exporter.flush(buffer)
-		expect(fetchMock).toHaveBeenCalledOnce()
+		expect(fetchMock).toHaveBeenCalledTimes(1)
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
 		const parsed = new URL(url)
 		expect(parsed.host).toBe('monitoring.api.cloud.yandex.net')
@@ -166,7 +162,7 @@ describe('createYcMonitoringExporter.flush', () => {
 		const buffer = new RumBuffer({ capacity: 10 })
 		buffer.push(makeMetric(), '203.0.113.0')
 
-		const fetchMock = vi.fn().mockResolvedValue(new Response('rate limited', { status: 429 }))
+		const fetchMock = mock().mockResolvedValue(new Response('rate limited', { status: 429 }))
 
 		// Tight policy: 1 attempt, no retries — verifies that 5xx-class rejection
 		// propagates as exporter.flush().skipped without throwing.
@@ -182,7 +178,7 @@ describe('createYcMonitoringExporter.flush', () => {
 				folderId: 'b1gtest',
 				serviceName: 'horeca',
 				resolveIamToken: async () => 'token',
-				fetch: fetchMock,
+				fetch: fetchMock as unknown as typeof fetch,
 			},
 			tightPolicy,
 		)
@@ -202,13 +198,13 @@ describe('createYcMonitoringExporter.flush', () => {
 	it('[YCM3.b] 4xx (client error) NOT retried per shouldRetry policy', async () => {
 		const buffer = new RumBuffer({ capacity: 10 })
 		buffer.push(makeMetric(), '203.0.113.0')
-		const fetchMock = vi.fn().mockResolvedValue(new Response('bad request', { status: 400 }))
+		const fetchMock = mock().mockResolvedValue(new Response('bad request', { status: 400 }))
 		const exporter = createYcMonitoringExporter({
 			endpoint: 'https://monitoring.api.cloud.yandex.net',
 			folderId: 'b1gtest',
 			serviceName: 'horeca',
 			resolveIamToken: async () => 'token',
-			fetch: fetchMock,
+			fetch: fetchMock as unknown as typeof fetch,
 		})
 		const result = await exporter.flush(buffer)
 		expect(result.skipped).toBe(1)

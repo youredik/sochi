@@ -11,7 +11,7 @@
  *   [F6]      filter doesn't mutate input.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	type Activity,
 	type ActivityObjectType,

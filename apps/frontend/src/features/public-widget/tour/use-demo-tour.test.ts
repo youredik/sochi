@@ -11,16 +11,16 @@
  */
 
 import { act, renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 
 const STORAGE_KEY = 'horeca:demo-tour:status'
 
-// happy-dom 20.9 + vitest 4 env имеет broken Storage API (removeItem/clear не
-// functions). Hoist localStorage stub ПЕРЕД import — useDemoTour reads
-// localStorage at hook-call time so stub must be live by then.
-const storageData = vi.hoisted(() => ({ value: new Map<string, string>() }))
+// Top-level localStorage stub for bun:test. useDemoTour reads localStorage at
+// hook-call time, so the stub MUST be live BEFORE the dynamic `await import`
+// of './use-demo-tour' below.
+const storageData = { value: new Map<string, string>() }
 
-vi.hoisted(() => {
+;(() => {
 	const stub = {
 		getItem: (k: string) => storageData.value.get(k) ?? null,
 		setItem: (k: string, v: string) => {
@@ -42,27 +42,26 @@ vi.hoisted(() => {
 		writable: true,
 		configurable: true,
 	})
-})
+})()
 
 const { useDemoTour } = await import('./use-demo-tour.ts')
+
+const originalMatchMedia = globalThis.matchMedia
 
 beforeEach(() => {
 	storageData.value.clear()
 	// Default matchMedia mock — no reduced motion.
-	vi.stubGlobal(
-		'matchMedia',
-		vi.fn().mockImplementation((query: string) => ({
-			matches: false,
-			media: query,
-			addEventListener: vi.fn(),
-			removeEventListener: vi.fn(),
-			dispatchEvent: vi.fn(),
-		})),
-	)
+	;(globalThis as { matchMedia?: unknown }).matchMedia = mock((query: string) => ({
+		matches: false,
+		media: query,
+		addEventListener: mock(),
+		removeEventListener: mock(),
+		dispatchEvent: mock(),
+	}))
 })
 
 afterEach(() => {
-	vi.unstubAllGlobals()
+	;(globalThis as { matchMedia?: unknown }).matchMedia = originalMatchMedia
 	storageData.value.clear()
 })
 
@@ -125,16 +124,13 @@ describe('useDemoTour — prefers-reduced-motion (D11.b)', () => {
 	})
 
 	it('[TOUR3.b] reducedMotion=true когда matchMedia("(prefers-reduced-motion: reduce)").matches=true', () => {
-		vi.stubGlobal(
-			'matchMedia',
-			vi.fn().mockImplementation((query: string) => ({
-				matches: query.includes('reduced-motion'),
-				media: query,
-				addEventListener: vi.fn(),
-				removeEventListener: vi.fn(),
-				dispatchEvent: vi.fn(),
-			})),
-		)
+		;(globalThis as { matchMedia?: unknown }).matchMedia = mock((query: string) => ({
+			matches: query.includes('reduced-motion'),
+			media: query,
+			addEventListener: mock(),
+			removeEventListener: mock(),
+			dispatchEvent: mock(),
+		}))
 		const { result } = renderHook(() => useDemoTour())
 		expect(result.current.reducedMotion).toBe(true)
 	})

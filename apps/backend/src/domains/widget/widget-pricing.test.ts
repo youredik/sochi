@@ -5,8 +5,8 @@
  * Coverage: exact-value asserts (not «something truthy»), negative paths
  * throw, immutability of inputs, RU-specific tax rounding (favor guest).
  */
-import { fc, test as fcTest } from '@fast-check/vitest'
-import { describe, expect, test } from 'vitest'
+import * as fc from 'fast-check'
+import { describe, expect, test } from 'bun:test'
 import {
 	buildQuote,
 	computeFreeCancelDeadline,
@@ -39,13 +39,14 @@ describe('sumNightlyRates', () => {
 		expect(() => sumNightlyRates([1n, -1n])).toThrow(/Negative rate amount/)
 	})
 
-	fcTest.prop([fc.array(fc.bigInt({ min: 0n, max: 10n ** 12n }), { maxLength: 30 })])(
-		'sum equals reduce-add для non-negative',
-		(amts) => {
-			const expected = amts.reduce((a, b) => a + b, 0n)
-			expect(sumNightlyRates(amts)).toBe(expected)
-		},
-	)
+	test('sum equals reduce-add для non-negative', () => {
+		void fc.assert(
+			fc.property(fc.array(fc.bigInt({ min: 0n, max: 10n ** 12n }), { maxLength: 30 }), (amts) => {
+				const expected = amts.reduce((a, b) => a + b, 0n)
+				expect(sumNightlyRates(amts)).toBe(expected)
+			}),
+		)
+	})
 
 	test('input array NOT mutated', () => {
 		const input = [1n, 2n, 3n]
@@ -90,14 +91,19 @@ describe('computeTourismTaxMicros', () => {
 		expect(() => computeTourismTaxMicros(-1n, 200)).toThrow(/negative/)
 	})
 
-	fcTest.prop([fc.bigInt({ min: 0n, max: 10n ** 14n }), fc.integer({ min: 0, max: 10_000 })])(
-		'tax ≤ subtotal × bps_max ratio',
-		(subtotal, bps) => {
-			const tax = computeTourismTaxMicros(subtotal, bps)
-			expect(tax).toBeGreaterThanOrEqual(0n)
-			expect(tax).toBeLessThanOrEqual(subtotal)
-		},
-	)
+	test('tax ≤ subtotal × bps_max ratio', () => {
+		void fc.assert(
+			fc.property(
+				fc.bigInt({ min: 0n, max: 10n ** 14n }),
+				fc.integer({ min: 0, max: 10_000 }),
+				(subtotal, bps) => {
+					const tax = computeTourismTaxMicros(subtotal, bps)
+					expect(tax).toBeGreaterThanOrEqual(0n)
+					expect(tax).toBeLessThanOrEqual(subtotal)
+				},
+			),
+		)
+	})
 })
 
 describe('micrsToKopecks', () => {

@@ -10,22 +10,22 @@
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, mock } from 'bun:test'
 
-const signInPasskeyMock = vi.fn()
-vi.mock('@/lib/auth-client', () => ({
+const signInPasskeyMock = mock()
+mock.module('@/lib/auth-client', () => ({
 	authClient: { signIn: { passkey: signInPasskeyMock } },
 }))
-const toastError = vi.fn()
-vi.mock('sonner', () => ({
-	toast: { error: toastError, success: vi.fn() },
+const toastError = mock()
+mock.module('sonner', () => ({
+	toast: { error: toastError, success: mock() },
 }))
 
 const { PasskeySigninButton } = await import('./passkey-signin-button')
 
 afterEach(() => {
 	cleanup()
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 describe('PasskeySigninButton', () => {
@@ -38,16 +38,16 @@ describe('PasskeySigninButton', () => {
 		signInPasskeyMock.mockResolvedValueOnce({ data: { user: { id: 'usr_x' } } })
 		render(<PasskeySigninButton />)
 		await userEvent.setup().click(screen.getByRole('button', { name: /Войти через passkey/ }))
-		expect(signInPasskeyMock).toHaveBeenCalledOnce()
+		expect(signInPasskeyMock).toHaveBeenCalledTimes(1)
 	})
 
 	it('[P2] success → onSuccess fires', async () => {
 		signInPasskeyMock.mockResolvedValueOnce({ data: { user: { id: 'usr_x' } } })
-		const onSuccess = vi.fn()
+		const onSuccess = mock()
 		render(<PasskeySigninButton onSuccess={onSuccess} />)
 		await userEvent.setup().click(screen.getByRole('button', { name: /Войти через passkey/ }))
 		await waitFor(() => {
-			expect(onSuccess).toHaveBeenCalledOnce()
+			expect(onSuccess).toHaveBeenCalledTimes(1)
 		})
 	})
 

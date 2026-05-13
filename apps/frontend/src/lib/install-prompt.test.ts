@@ -13,12 +13,14 @@
  *     [D2] isStandalone() — true когда display-mode standalone matches OR
  *           navigator.standalone === true
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test'
 
 const STORAGE_KEY = 'horeca-install-prompt'
 
-const storageData = vi.hoisted(() => ({ value: new Map<string, string>() }))
-vi.hoisted(() => {
+// bun:test has no auto-hoist. Top-level stub installs BEFORE the dynamic
+// `await import('./install-prompt')` so Zustand persist captures our stub.
+const storageData = { value: new Map<string, string>() }
+;(() => {
 	const stub = {
 		getItem: (k: string) => storageData.value.get(k) ?? null,
 		setItem: (k: string, v: string) => {
@@ -40,7 +42,7 @@ vi.hoisted(() => {
 		writable: true,
 		configurable: true,
 	})
-})
+})()
 
 const { useInstallPromptStore, isIosSafari, isStandalone } = await import('./install-prompt')
 
@@ -73,14 +75,22 @@ describe('install-prompt store', () => {
 })
 
 describe('isIosSafari detection', () => {
-	let uaSpy: ReturnType<typeof vi.spyOn>
+	const originalUaDescriptor = Object.getOwnPropertyDescriptor(
+		Object.getPrototypeOf(window.navigator),
+		'userAgent',
+	)
 
 	afterEach(() => {
-		uaSpy?.mockRestore()
+		if (originalUaDescriptor) {
+			Object.defineProperty(window.navigator, 'userAgent', originalUaDescriptor)
+		}
 	})
 
 	function mockUA(ua: string) {
-		uaSpy = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(ua)
+		Object.defineProperty(window.navigator, 'userAgent', {
+			get: () => ua,
+			configurable: true,
+		})
 	}
 
 	it('[D1.a] iPhone Safari → true', () => {
@@ -113,8 +123,8 @@ describe('isIosSafari detection', () => {
 })
 
 describe('isStandalone detection', () => {
-	let mqSpy: ReturnType<typeof vi.spyOn>
-	let stdSpy: ReturnType<typeof vi.spyOn> | undefined
+	let mqSpy: ReturnType<typeof spyOn>
+	let stdSpy: ReturnType<typeof spyOn> | undefined
 
 	afterEach(() => {
 		mqSpy?.mockRestore()
@@ -122,17 +132,17 @@ describe('isStandalone detection', () => {
 	})
 
 	function mockMatchMedia(matches: boolean) {
-		mqSpy = vi.spyOn(window, 'matchMedia').mockImplementation(
+		mqSpy = spyOn(window, 'matchMedia').mockImplementation(
 			() =>
 				({
 					matches,
 					media: '(display-mode: standalone)',
 					onchange: null,
-					addListener: vi.fn(),
-					removeListener: vi.fn(),
-					addEventListener: vi.fn(),
-					removeEventListener: vi.fn(),
-					dispatchEvent: vi.fn(),
+					addListener: mock(),
+					removeListener: mock(),
+					addEventListener: mock(),
+					removeEventListener: mock(),
+					dispatchEvent: mock(),
 				}) as MediaQueryList,
 		)
 	}

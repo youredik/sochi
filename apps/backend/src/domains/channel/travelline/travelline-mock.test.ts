@@ -11,7 +11,7 @@
  * Plus cross-tenant isolation + cancellation semantics + cancellation policy enum.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'bun:test'
 import {
 	computeChecksum,
 	createTravellineMock,
@@ -560,8 +560,4 @@ describe('TravelLine Mock — emitReservationEvent CloudEvent envelope', () => {
 		expect(event.id).toBe(reservation.tlReservationId)
 		expect(event.subject).toBe(reservation.tlReservationId)
 	})
-})
-
-afterEach(() => {
-	vi.useRealTimers()
 })

@@ -25,7 +25,7 @@
  */
 import type { MemberRole, TourismTaxOrgReport } from '@horeca/shared'
 import { readSheet } from 'read-excel-file/node'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import type { BookingFactory } from '../../domains/booking/booking.factory.ts'
 import { requirePermission } from '../../middleware/require-permission.ts'
 import { createTestRouter, type TestContext } from '../../tests/setup.ts'

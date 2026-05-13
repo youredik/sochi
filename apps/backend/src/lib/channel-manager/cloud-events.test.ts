@@ -8,7 +8,7 @@
  * version-pinning enforcement.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	buildCloudEvent,
 	buildEventType,

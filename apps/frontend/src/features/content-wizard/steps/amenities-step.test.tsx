@@ -45,25 +45,25 @@ import {
 	type PropertyAmenityRow,
 } from '@horeca/shared'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, type Mock, test, mock } from 'bun:test'
 
-vi.mock('../../../lib/use-can.ts', () => ({
-	useCan: vi.fn(() => true),
-	useCurrentRole: vi.fn(() => 'owner'),
+mock.module('../../../lib/use-can.ts', () => ({
+	useCan: mock(() => true),
+	useCurrentRole: mock(() => 'owner'),
 }))
 
-vi.mock('../hooks/use-amenities.ts', () => ({
-	useAmenities: vi.fn(() => ({ data: [], isLoading: false, error: null })),
-	useSetAmenities: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+mock.module('../hooks/use-amenities.ts', () => ({
+	useAmenities: mock(() => ({ data: [], isLoading: false, error: null })),
+	useSetAmenities: mock(() => ({ mutateAsync: mock(), isPending: false })),
 }))
 
 import { useCan } from '../../../lib/use-can.ts'
 import { useAmenities, useSetAmenities } from '../hooks/use-amenities.ts'
 import { AmenitiesStep } from './amenities-step.tsx'
 
-const mockedUseCan = vi.mocked(useCan)
-const mockedUseAmenities = vi.mocked(useAmenities)
-const mockedUseSet = vi.mocked(useSetAmenities)
+const mockedUseCan = useCan as unknown as Mock<typeof useCan>
+const mockedUseAmenities = useAmenities as unknown as Mock<typeof useAmenities>
+const mockedUseSet = useSetAmenities as unknown as Mock<typeof useSetAmenities>
 
 beforeEach(() => {
 	mockedUseCan.mockImplementation(() => true)
@@ -73,14 +73,14 @@ beforeEach(() => {
 		error: null,
 	} as unknown as ReturnType<typeof useAmenities>)
 	mockedUseSet.mockReturnValue({
-		mutateAsync: vi.fn(),
+		mutateAsync: mock(),
 		isPending: false,
 	} as unknown as ReturnType<typeof useSetAmenities>)
 })
 
 afterEach(() => {
 	cleanup()
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 function setRole(role: MemberRole) {
@@ -276,7 +276,7 @@ const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f
 
 describe('<AmenitiesStep> — save serialization', () => {
 	test('[S1] save with no selection → mutation called with empty items array', () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUseSet.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -290,7 +290,7 @@ describe('<AmenitiesStep> — save serialization', () => {
 	})
 
 	test('[S2] checked amenity with no value → serialized with value=null', () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUseSet.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -305,7 +305,7 @@ describe('<AmenitiesStep> — save serialization', () => {
 	})
 
 	test('[S3] supportsValue amenity with non-empty value → serialized verbatim (trimmed)', () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUseSet.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -322,7 +322,7 @@ describe('<AmenitiesStep> — save serialization', () => {
 	})
 
 	test('[S4] each item has exactly 3 fields: amenityCode, freePaid, value', () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUseSet.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -343,7 +343,7 @@ describe('<AmenitiesStep> — save serialization', () => {
 
 describe('<AmenitiesStep> — idempotency', () => {
 	test('[I1] save includes a UUIDv4 Idempotency-Key', () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUseSet.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -355,7 +355,7 @@ describe('<AmenitiesStep> — idempotency', () => {
 	})
 
 	test('[I2] two saves → two distinct keys (NOT shared across user-actions)', () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUseSet.mockReturnValue({
 			mutateAsync,
 			isPending: false,

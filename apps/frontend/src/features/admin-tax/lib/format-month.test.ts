@@ -20,7 +20,7 @@
  *   Immutability:
  *     [I1] input string unchanged after call
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { formatMonthRu } from './format-month.ts'
 
 describe('formatMonthRu — happy path (all 12 months)', () => {

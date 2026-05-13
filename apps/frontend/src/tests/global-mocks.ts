@@ -29,7 +29,8 @@
 
 import { cleanup } from '@testing-library/react'
 import * as React from 'react'
-import { afterEach, beforeEach, vi } from 'vitest'
+import * as actualRouter from '@tanstack/react-router'
+import { afterEach, beforeEach, mock } from 'bun:test'
 
 declare global {
 	var __SOCHI_TEST_MOCKS__: ReturnType<typeof createMocks> | undefined
@@ -39,19 +40,19 @@ function createMocks() {
 	return {
 		// TanStack Router — navigation hooks return jest.fn defaults so tests
 		// can assert `globalMocks.navigate.toHaveBeenCalledWith(...)`.
-		navigate: vi.fn(),
-		routerInvalidate: vi.fn(),
+		navigate: mock(),
+		routerInvalidate: mock(),
 
 		// sonner — toast notifications; tests assert call args without
 		// caring about UI render (Toaster is null-rendered).
-		toast: Object.assign(vi.fn(), {
-			success: vi.fn(),
-			error: vi.fn(),
-			info: vi.fn(),
-			warning: vi.fn(),
-			loading: vi.fn(),
-			promise: vi.fn(),
-			dismiss: vi.fn(),
+		toast: Object.assign(mock(), {
+			success: mock(),
+			error: mock(),
+			info: mock(),
+			warning: mock(),
+			loading: mock(),
+			promise: mock(),
+			dismiss: mock(),
 		}),
 	}
 }
@@ -72,10 +73,9 @@ export const globalMocks = _mocks
 // vi.mock factory snapshots the vi.fn ref at factory time and downstream
 // `globalMocks.navigate.mockReturnValue(...)` doesn't propagate
 // (canonical stankoff observation 2026-05-07).
-vi.mock('@tanstack/react-router', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('@tanstack/react-router')>()
+mock.module('@tanstack/react-router', () => {
 	return {
-		...actual,
+		...actualRouter,
 		useNavigate: () => _mocks.navigate,
 		useRouter: () => ({
 			navigate: _mocks.navigate,
@@ -123,7 +123,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 
 // Mock sonner globally. `Toaster` returns null (unit tests don't render
 // notifications visually); `toast.*` are vi.fn so tests assert calls.
-vi.mock('sonner', () => ({
+mock.module('sonner', () => ({
 	toast: _mocks.toast,
 	Toaster: () => null,
 }))
@@ -131,17 +131,15 @@ vi.mock('sonner', () => ({
 // Reset call history every test (clear, NOT reset — preserves the vi.fn impls
 // set above; resetAllMocks would wipe them and tests would crash).
 beforeEach(() => {
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 // Cleanup between tests (forward-compatible с future isolate:false).
 // `cleanup()` unmounts React trees rendered by @testing-library/react.
-// `useRealTimers()` restores real timers (per Vitest #9888 isolate:false
-// footgun). Storage clears prevent draft-state leakage between tests
-// — guarded for happy-dom (некоторые versions stub Storage без `.clear`).
+// `useRealTimers()` restores real timers. Storage clears prevent draft-state
+// leakage between tests — guarded for happy-dom.
 afterEach(() => {
 	cleanup()
-	vi.useRealTimers()
 	if (typeof window !== 'undefined') {
 		try {
 			window.localStorage?.clear?.()

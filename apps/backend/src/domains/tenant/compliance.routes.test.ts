@@ -9,7 +9,7 @@
  *   - Missing tenant row → 404 (NOT silently inserts)
  */
 import type { MemberRole, TenantCompliance, TenantCompliancePatch } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { onError } from '../../errors/on-error.ts'
 import { createTestRouter, type TestContext } from '../../tests/setup.ts'
 import type { TenantComplianceFactory } from './compliance.factory.ts'

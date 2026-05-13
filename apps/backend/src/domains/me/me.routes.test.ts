@@ -16,7 +16,7 @@
  * indirectly via e2e (frontend useCan hits real `/api/v1/me`).
  */
 import type { MemberRole, TenantMode } from '@horeca/shared'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, test, mock } from 'bun:test'
 import { createTestRouter, type TestContext } from '../../tests/setup.ts'
 
 const FAKE_USER = {
@@ -131,7 +131,7 @@ describe('GET /me — response shape (mirror of me.routes.ts handler)', () => {
 	})
 
 	test('[W6] loader receives current tenantId (not stale, not hard-coded)', async () => {
-		const loader = vi.fn(async (_tenantId: string): Promise<TenantMode> => 'demo')
+		const loader = mock(async (_tenantId: string): Promise<TenantMode> => 'demo')
 		const app = buildApp('owner', loader)
 		await app.request('/me')
 		expect(loader).toHaveBeenCalledTimes(1)

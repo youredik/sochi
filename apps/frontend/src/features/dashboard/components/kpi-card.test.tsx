@@ -35,7 +35,7 @@
  *     [K15] data-testid="kpi-card-<id>" on root
  */
 import { render, screen, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { KpiCard } from './kpi-card.tsx'
 
 describe('KpiCard — Loading state', () => {

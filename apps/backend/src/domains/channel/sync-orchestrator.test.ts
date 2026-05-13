@@ -10,7 +10,7 @@
  *   - Pooled inventory overbooking detection с inventoryBuffer
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import type { ChannelConnection } from './connection.repo.ts'
 import {
 	detectPooledOverbooking,

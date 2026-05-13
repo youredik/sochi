@@ -15,7 +15,7 @@
  */
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { ChessboardDatePicker } from './chessboard-date-picker'
 
 afterEach(() => {
@@ -24,12 +24,12 @@ afterEach(() => {
 
 describe('ChessboardDatePicker — render', () => {
 	it('[R1] trigger button с aria-label', () => {
-		render(<ChessboardDatePicker value="2026-04-28" onChange={vi.fn()} />)
+		render(<ChessboardDatePicker value="2026-04-28" onChange={mock()} />)
 		expect(screen.getByRole('button', { name: 'Перейти к дате' })).toBeDefined()
 	})
 
 	it('[R2] formatted date label visible на trigger', () => {
-		render(<ChessboardDatePicker value="2026-04-28" onChange={vi.fn()} />)
+		render(<ChessboardDatePicker value="2026-04-28" onChange={mock()} />)
 		const trigger = screen.getByRole('button', { name: 'Перейти к дате' })
 		expect(trigger.textContent).toMatch(/28/)
 	})
@@ -37,7 +37,7 @@ describe('ChessboardDatePicker — render', () => {
 
 describe('ChessboardDatePicker — open + interaction', () => {
 	it('[O1] click trigger → Popover opens с Calendar grid', async () => {
-		render(<ChessboardDatePicker value="2026-04-28" onChange={vi.fn()} />)
+		render(<ChessboardDatePicker value="2026-04-28" onChange={mock()} />)
 		const user = userEvent.setup()
 		await user.click(screen.getByRole('button', { name: 'Перейти к дате' }))
 		// react-day-picker v9 renders role="grid" с aria-label включающим месяц.
@@ -45,7 +45,7 @@ describe('ChessboardDatePicker — open + interaction', () => {
 	})
 
 	it('[O2] selected date — gridcell[data-day="2026-04-28"] имеет data-selected="true" (rdp v9 canon)', async () => {
-		render(<ChessboardDatePicker value="2026-04-28" onChange={vi.fn()} />)
+		render(<ChessboardDatePicker value="2026-04-28" onChange={mock()} />)
 		const user = userEvent.setup()
 		await user.click(screen.getByRole('button', { name: 'Перейти к дате' }))
 		const cell = document.querySelector('td[data-day="2026-04-28"]')
@@ -54,7 +54,7 @@ describe('ChessboardDatePicker — open + interaction', () => {
 	})
 
 	it('[O3] Calendar uses ru-RU locale (date-fns/locale ru applied)', async () => {
-		render(<ChessboardDatePicker value="2026-04-28" onChange={vi.fn()} />)
+		render(<ChessboardDatePicker value="2026-04-28" onChange={mock()} />)
 		const user = userEvent.setup()
 		await user.click(screen.getByRole('button', { name: 'Перейти к дате' }))
 		// rdp v9 month-caption + day aria-labels = русские (e.g. «28 апреля 2026»).
@@ -62,7 +62,7 @@ describe('ChessboardDatePicker — open + interaction', () => {
 	})
 
 	it('[S1] click day cell → onChange с ISO + Popover closes', async () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		render(<ChessboardDatePicker value="2026-04-28" onChange={onChange} />)
 		const user = userEvent.setup()
 		await user.click(screen.getByRole('button', { name: 'Перейти к дате' }))

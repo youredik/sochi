@@ -24,8 +24,9 @@
  *   [DP3] Every emitted activity carries the expected tenantId + recordId
  *         from the image (for any INSERT/UPDATE/DELETE event)
  */
-import { fc, test as pbTest } from '@fast-check/vitest'
-import { describe, expect, test } from 'vitest'
+import type { ActivityObjectType } from '@horeca/shared'
+import * as fc from 'fast-check'
+import { describe, expect, test } from 'bun:test'
 import {
 	buildActivitiesFromEvent,
 	type CdcEvent,
@@ -312,46 +313,49 @@ const imageArb = fc.dictionary(fc.string({ minLength: 1, maxLength: 20 }), jsonV
 })
 
 describe('diffFields — property-based', () => {
-	pbTest.prop([imageArb, imageArb])(
-		'[DP1] no entry EVER emitted for a field in skip-set, regardless of values',
-		(oldImage, newImage) => {
-			const diffs = diffFields(oldImage, newImage)
-			for (const d of diffs) {
-				expect(SYSTEM_FIELDS.has(d.field)).toBe(false)
-			}
-		},
-	)
+	test('[DP1] no entry EVER emitted for a field in skip-set, regardless of values', () => {
+		void fc.assert(
+			fc.property(imageArb, imageArb, (oldImage, newImage) => {
+				const diffs = diffFields(oldImage, newImage)
+				for (const d of diffs) {
+					expect(SYSTEM_FIELDS.has(d.field)).toBe(false)
+				}
+			}),
+		)
+	})
 
-	pbTest.prop([imageArb])(
-		'[DP2] diffing an image against itself yields an empty result',
-		(image) => {
-			// Deep clone to guarantee ref inequality — JSON.stringify roundtrip.
-			const clone = JSON.parse(JSON.stringify(image)) as Record<string, unknown>
-			expect(diffFields(image, clone)).toEqual([])
-		},
-	)
+	test('[DP2] diffing an image against itself yields an empty result', () => {
+		void fc.assert(
+			fc.property(imageArb, (image) => {
+				// Deep clone to guarantee ref inequality — JSON.stringify roundtrip.
+				const clone = JSON.parse(JSON.stringify(image)) as Record<string, unknown>
+				expect(diffFields(image, clone)).toEqual([])
+			}),
+		)
+	})
 })
 
 describe('buildActivitiesFromEvent — property-based', () => {
 	const tenantArb = fc.string({ minLength: 1, maxLength: 30 })
 	const recordArb = fc.string({ minLength: 1, maxLength: 30 })
 
-	pbTest.prop([tenantArb, recordArb, imageArb])(
-		'[DP3] every emitted activity carries tenantId + recordId from the PK key array',
-		(tenantId, recordId, image) => {
-			// Booking compound PK: [tenantId, propertyId, checkIn, id].
-			const event: CdcEvent = {
-				key: [tenantId, 'prop_any', '2030-01-01', recordId],
-				newImage: image,
-			}
-			const acts = buildActivitiesFromEvent(event, 'booking')
-			for (const a of acts) {
-				expect(a.tenantId).toBe(tenantId)
-				expect(a.recordId).toBe(recordId)
-				expect(a.objectType).toBe('booking')
-			}
-		},
-	)
+	test('[DP3] every emitted activity carries tenantId + recordId from the PK key array', () => {
+		void fc.assert(
+			fc.property(tenantArb, recordArb, imageArb, (tenantId, recordId, image) => {
+				// Booking compound PK: [tenantId, propertyId, checkIn, id].
+				const event: CdcEvent = {
+					key: [tenantId, 'prop_any', '2030-01-01', recordId],
+					newImage: image,
+				}
+				const acts = buildActivitiesFromEvent(event, 'booking')
+				for (const a of acts) {
+					expect(a.tenantId).toBe(tenantId)
+					expect(a.recordId).toBe(recordId)
+					expect(a.objectType).toBe('booking')
+				}
+			}),
+		)
+	})
 })
 
 // ===========================================================================
@@ -463,8 +467,16 @@ describe('extractIdentity — 3D-PK domains (refund/receipt/dispute)', () => {
 describe('extractIdentity — FULL ActivityObjectType enum coverage', () => {
 	// Lock that EVERY ActivityObjectType is dispatched correctly.
 	// 4D-PK domains → key[3]; 3D-PK → key[2]; 2D fallback → key[1].
-	const FOUR_D = ['booking', 'folio', 'payment'] as const
-	const THREE_D = ['refund', 'receipt', 'dispute'] as const
+	const FOUR_D = [
+		'booking',
+		'folio',
+		'payment',
+	] as const satisfies ReadonlyArray<ActivityObjectType>
+	const THREE_D = [
+		'refund',
+		'receipt',
+		'dispute',
+	] as const satisfies ReadonlyArray<ActivityObjectType>
 	const TWO_D_FALLBACK = [
 		'property',
 		'roomType',
@@ -473,47 +485,56 @@ describe('extractIdentity — FULL ActivityObjectType enum coverage', () => {
 		'availability',
 		'rate',
 		'guest',
-	] as const
+	] as const satisfies ReadonlyArray<ActivityObjectType>
 
 	test('all known ActivityObjectTypes are covered (3+3+7 = 13)', () => {
 		expect(FOUR_D.length + THREE_D.length + TWO_D_FALLBACK.length).toBe(13)
 	})
 
-	test.each(FOUR_D)('4D dispatch: %s → key[0]=tenantId, key[3]=id', (objectType) => {
-		const event: CdcEvent = {
-			key: ['org_a', 'p1', 'middle', 'rec_z'],
-			newImage: { status: 's', updatedBy: 'u' },
-		}
-		const acts = buildActivitiesFromEvent(event, objectType)
-		expect(acts).toHaveLength(1)
-		expect(acts[0]?.tenantId).toBe('org_a')
-		expect(acts[0]?.recordId).toBe('rec_z')
-		expect(acts[0]?.objectType).toBe(objectType)
-	})
+	test.each([...FOUR_D])(
+		'4D dispatch: %s → key[0]=tenantId, key[3]=id',
+		(objectType: ActivityObjectType) => {
+			const event: CdcEvent = {
+				key: ['org_a', 'p1', 'middle', 'rec_z'],
+				newImage: { status: 's', updatedBy: 'u' },
+			}
+			const acts = buildActivitiesFromEvent(event, objectType)
+			expect(acts).toHaveLength(1)
+			expect(acts[0]?.tenantId).toBe('org_a')
+			expect(acts[0]?.recordId).toBe('rec_z')
+			expect(acts[0]?.objectType).toBe(objectType)
+		},
+	)
 
-	test.each(THREE_D)('3D dispatch: %s → key[0]=tenantId, key[2]=id', (objectType) => {
-		const event: CdcEvent = {
-			key: ['org_a', 'parent_id', 'rec_z'],
-			newImage: { status: 's', updatedBy: 'u' },
-		}
-		const acts = buildActivitiesFromEvent(event, objectType)
-		expect(acts).toHaveLength(1)
-		expect(acts[0]?.tenantId).toBe('org_a')
-		expect(acts[0]?.recordId).toBe('rec_z')
-		expect(acts[0]?.objectType).toBe(objectType)
-	})
+	test.each([...THREE_D])(
+		'3D dispatch: %s → key[0]=tenantId, key[2]=id',
+		(objectType: ActivityObjectType) => {
+			const event: CdcEvent = {
+				key: ['org_a', 'parent_id', 'rec_z'],
+				newImage: { status: 's', updatedBy: 'u' },
+			}
+			const acts = buildActivitiesFromEvent(event, objectType)
+			expect(acts).toHaveLength(1)
+			expect(acts[0]?.tenantId).toBe('org_a')
+			expect(acts[0]?.recordId).toBe('rec_z')
+			expect(acts[0]?.objectType).toBe(objectType)
+		},
+	)
 
-	test.each(TWO_D_FALLBACK)('2D fallback: %s → key[0]=tenantId, key[1]=id', (objectType) => {
-		const event: CdcEvent = {
-			key: ['org_a', 'rec_z'],
-			newImage: { name: 'sample', updatedBy: 'u' },
-		}
-		const acts = buildActivitiesFromEvent(event, objectType)
-		expect(acts).toHaveLength(1)
-		expect(acts[0]?.tenantId).toBe('org_a')
-		expect(acts[0]?.recordId).toBe('rec_z')
-		expect(acts[0]?.objectType).toBe(objectType)
-	})
+	test.each([...TWO_D_FALLBACK])(
+		'2D fallback: %s → key[0]=tenantId, key[1]=id',
+		(objectType: ActivityObjectType) => {
+			const event: CdcEvent = {
+				key: ['org_a', 'rec_z'],
+				newImage: { name: 'sample', updatedBy: 'u' },
+			}
+			const acts = buildActivitiesFromEvent(event, objectType)
+			expect(acts).toHaveLength(1)
+			expect(acts[0]?.tenantId).toBe('org_a')
+			expect(acts[0]?.recordId).toBe('rec_z')
+			expect(acts[0]?.objectType).toBe(objectType)
+		},
+	)
 })
 
 describe('extractIdentity — cross-domain isolation', () => {

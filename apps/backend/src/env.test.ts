@@ -5,7 +5,7 @@
  * once at module load against `process.env`. These tests exercise the parser
  * with synthetic inputs, NOT the runtime singleton.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { envSchema } from './env.ts'
 
 const REQUIRED_FIELDS = {

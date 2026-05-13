@@ -17,7 +17,7 @@
  *   default deniedReason fallback ('Недоступно для вашей роли')
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import { RbacButton } from './rbac-button.tsx'
 
 afterEach(cleanup)
@@ -30,7 +30,7 @@ describe('<RbacButton> — can=true (granted)', () => {
 	})
 
 	test('[G2] onClick fires when clicked', () => {
-		const onClick = vi.fn()
+		const onClick = mock()
 		render(
 			<RbacButton can={true} onClick={onClick}>
 				Возврат
@@ -60,7 +60,7 @@ describe('<RbacButton> — can=false (denied)', () => {
 	})
 
 	test('[D2] onClick does NOT fire when can=false', () => {
-		const onClick = vi.fn()
+		const onClick = mock()
 		render(
 			<RbacButton can={false} onClick={onClick}>
 				Возврат

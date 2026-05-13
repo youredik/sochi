@@ -18,7 +18,7 @@
  */
 import type { MigrationRegistration } from '@horeca/shared'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import { MigrationRegistrationsTable } from './migration-registrations-table.tsx'
 
 afterEach(cleanup)
@@ -57,7 +57,7 @@ const FIXTURE: MigrationRegistration = {
 
 describe('MigrationRegistrationsTable — render', () => {
 	test('[T1] empty items → EmptyState, NO table', () => {
-		render(<MigrationRegistrationsTable items={[]} onRowClick={vi.fn()} />)
+		render(<MigrationRegistrationsTable items={[]} onRowClick={mock()} />)
 		expect(screen.queryByRole('table')).toBeNull()
 		expect(screen.getByRole('heading', { level: 3, name: 'Нет регистраций' })).toBeTruthy()
 		expect(
@@ -66,7 +66,7 @@ describe('MigrationRegistrationsTable — render', () => {
 	})
 
 	test('[T2] non-empty → table rendered с column headers', () => {
-		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={vi.fn()} />)
+		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={mock()} />)
 		expect(screen.getByRole('table')).toBeTruthy()
 		// Headers: Создано / Бронь / Гость / Пребывание / Канал / Статус / Опрошено
 		const headers = screen.getAllByRole('columnheader')
@@ -74,7 +74,7 @@ describe('MigrationRegistrationsTable — render', () => {
 	})
 
 	test('[T3] row contains bookingId + guestId', () => {
-		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={vi.fn()} />)
+		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={mock()} />)
 		expect(screen.getByText('book_001')).toBeTruthy()
 		expect(screen.getByText('gst_001')).toBeTruthy()
 	})
@@ -82,7 +82,7 @@ describe('MigrationRegistrationsTable — render', () => {
 
 describe('MigrationRegistrationsTable — click + keyboard', () => {
 	test('[C1] click row → onRowClick(id)', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={onRowClick} />)
 		const rows = screen.getAllByRole('row')
 		// rows[0] = header, rows[1] = data
@@ -91,7 +91,7 @@ describe('MigrationRegistrationsTable — click + keyboard', () => {
 	})
 
 	test('[C2] Enter keypress on row → onRowClick(id)', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={onRowClick} />)
 		const rows = screen.getAllByRole('row')
 		fireEvent.keyDown(rows[1]!, { key: 'Enter' })
@@ -99,7 +99,7 @@ describe('MigrationRegistrationsTable — click + keyboard', () => {
 	})
 
 	test('[C3] Space keypress on row → onRowClick(id)', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={onRowClick} />)
 		const rows = screen.getAllByRole('row')
 		fireEvent.keyDown(rows[1]!, { key: ' ' })
@@ -109,13 +109,13 @@ describe('MigrationRegistrationsTable — click + keyboard', () => {
 
 describe('MigrationRegistrationsTable — status badge integration', () => {
 	test('[B1] status 0 (draft) → badge label "Черновик"', () => {
-		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={vi.fn()} />)
+		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={mock()} />)
 		expect(document.body.textContent).toContain('Черновик')
 	})
 
 	test('[B2] status 3 (executed) → badge label "Исполнено"', () => {
 		const executed = { ...FIXTURE, statusCode: 3, isFinal: true }
-		render(<MigrationRegistrationsTable items={[executed]} onRowClick={vi.fn()} />)
+		render(<MigrationRegistrationsTable items={[executed]} onRowClick={mock()} />)
 		expect(document.body.textContent).toContain('Исполнено')
 	})
 })

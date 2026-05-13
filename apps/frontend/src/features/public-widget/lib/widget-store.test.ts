@@ -10,7 +10,7 @@
  * happy-dom 20.x doesn't ship a localStorage by default in Vitest 4 runtime;
  * stub it just like `chessboard-window-selector.test.tsx` (Map-backed).
  */
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 const storageData = new Map<string, string>()
 const stub: Storage = {

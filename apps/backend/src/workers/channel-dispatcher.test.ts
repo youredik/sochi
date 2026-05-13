@@ -9,7 +9,7 @@
  *   - Per-row httpAttempt routing
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, mock } from 'bun:test'
 import type { ChannelDispatchRow } from '../domains/channel/dispatch.repo.ts'
 import { DISPATCH_MAX_ATTEMPTS } from '../lib/channel-manager/channel-dispatch.ts'
 import { type HttpAttemptResult, startChannelDispatcher } from './channel-dispatcher.ts'
@@ -118,7 +118,7 @@ async function drain(handle: { stop: () => Promise<void> }) {
 describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 	it('[CD1] HTTP 200 success → markSent', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const httpAttempt = vi.fn(
+		const httpAttempt = mock(
 			async (): Promise<HttpAttemptResult> => ({ ok: true, httpStatus: 200 }),
 		)
 		const handle = startChannelDispatcher({
@@ -137,7 +137,7 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 
 	it('[CD2] HTTP 500 retryable → markRetry с next attempt scheduled', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const httpAttempt = vi.fn(
+		const httpAttempt = mock(
 			async (): Promise<HttpAttemptResult> => ({
 				ok: false,
 				httpStatus: 500,
@@ -161,7 +161,7 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 
 	it('[CD3] HTTP 400 permanent → markDlq IMMEDIATELY (no retries)', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const httpAttempt = vi.fn(
+		const httpAttempt = mock(
 			async (): Promise<HttpAttemptResult> => ({
 				ok: false,
 				httpStatus: 400,
@@ -183,7 +183,7 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 
 	it('[CD4] HTTP 408 retryable (4xx exception) → markRetry', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const httpAttempt = vi.fn(
+		const httpAttempt = mock(
 			async (): Promise<HttpAttemptResult> => ({
 				ok: false,
 				httpStatus: 408,
@@ -202,7 +202,7 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 
 	it('[CD5] HTTP 429 retryable → markRetry', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const httpAttempt = vi.fn(
+		const httpAttempt = mock(
 			async (): Promise<HttpAttemptResult> => ({
 				ok: false,
 				httpStatus: 429,
@@ -221,7 +221,7 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 
 	it('[CD6] network error (httpStatus null) retryable → markRetry', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const httpAttempt = vi.fn(
+		const httpAttempt = mock(
 			async (): Promise<HttpAttemptResult> => ({
 				ok: false,
 				httpStatus: null,
@@ -240,8 +240,8 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 
 	it('[CD7] budget exhausted (attemptCount = MAX-1) → next failure → markDlq + onAutoDisable', async () => {
 		const repo = buildInMemoryRepo([buildRow({ attemptCount: DISPATCH_MAX_ATTEMPTS - 1 })])
-		const onAutoDisable = vi.fn(async () => undefined)
-		const httpAttempt = vi.fn(
+		const onAutoDisable = mock(async () => undefined)
+		const httpAttempt = mock(
 			async (): Promise<HttpAttemptResult> => ({
 				ok: false,
 				httpStatus: 500,
@@ -267,7 +267,7 @@ describe('channel dispatcher — outcome routing (CD1-CD8)', () => {
 
 	it('[CD8] httpAttempt invoked with row payload + idempotencyKey passthrough', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const httpAttempt = vi.fn(
+		const httpAttempt = mock(
 			async ({ row }: { row: ChannelDispatchRow }): Promise<HttpAttemptResult> => {
 				expect(row.idempotencyKey).toBe('org_a:b1:1:TL')
 				expect(row.payload).toEqual({ hello: 'world' })

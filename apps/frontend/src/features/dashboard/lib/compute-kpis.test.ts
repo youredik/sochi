@@ -38,7 +38,7 @@
  *     [N4] Adversarial: status='pending' NOT counted (only 'failed')
  */
 import type { Booking, Folio, Notification } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	countArrivalsToday,
 	countFailedNotifications,

@@ -12,7 +12,7 @@
  *   [PF9] formatRu doesn't crash with weird whitespace + characters
  */
 
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { formatRu, isValidRuPhone, toE164 } from './phone-format.ts'
 
 describe('formatRu', () => {

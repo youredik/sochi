@@ -11,7 +11,7 @@
  * Pure functions only — no DB. Repo-level tests in
  * apps/backend/src/domains/tenant/compliance.repo.test.ts.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	checkGuestHouseInvariant,
 	checkTaxRegimeInvariant,
@@ -49,9 +49,9 @@ describe('checkGuestHouseInvariant', () => {
 		expect(err).toMatch(/гостевых домов.*ФЗ-127/)
 	})
 
-	it.each(ksrCategoryValues.filter((v) => v !== 'guest_house'))(
+	it.each([...ksrCategoryValues].filter((v) => v !== 'guest_house'))(
 		'rejects ksrCategory=%s with guestHouseFz127Registered=true (only guest_house may set this)',
-		(category) => {
+		(category: (typeof ksrCategoryValues)[number]) => {
 			const err = checkGuestHouseInvariant({
 				ksrCategory: category,
 				guestHouseFz127Registered: true,
@@ -60,9 +60,9 @@ describe('checkGuestHouseInvariant', () => {
 		},
 	)
 
-	it.each(ksrCategoryValues.filter((v) => v !== 'guest_house'))(
+	it.each([...ksrCategoryValues].filter((v) => v !== 'guest_house'))(
 		'rejects ksrCategory=%s with guestHouseFz127Registered=false (same constraint)',
-		(category) => {
+		(category: (typeof ksrCategoryValues)[number]) => {
 			const err = checkGuestHouseInvariant({
 				ksrCategory: category,
 				guestHouseFz127Registered: false,
@@ -98,9 +98,9 @@ describe('checkTaxRegimeInvariant', () => {
 		expect(err).toMatch(/Самозанятый.*NPD/)
 	})
 
-	it.each(legalEntityTypeValues.filter((v) => v !== 'npd'))(
+	it.each([...legalEntityTypeValues].filter((v) => v !== 'npd'))(
 		'rejects legalEntityType=%s + taxRegime=NPD (NPD only for self-employed)',
-		(legalType) => {
+		(legalType: (typeof legalEntityTypeValues)[number]) => {
 			const err = checkTaxRegimeInvariant({ legalEntityType: legalType, taxRegime: 'NPD' })
 			expect(err).toMatch(/NPD.*только для legalEntityType=npd/)
 		},

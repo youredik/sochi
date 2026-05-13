@@ -7,7 +7,7 @@
  *     setTimeout) instead of vi.useFakeTimers (which interacts badly with
  *     `Promise.race` against real timeouts).
  */
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, mock } from 'bun:test'
 import {
 	CircuitOpenError,
 	circuitBreakerPolicy,
@@ -42,14 +42,15 @@ describe('timeoutPolicy', () => {
 
 	it('TimeoutError carries the configured timeoutMs', async () => {
 		const policy = timeoutPolicy(33)
+		let caught: TimeoutError | undefined
 		try {
 			await policy.execute(() => new Promise((r) => setTimeout(r, 200)))
-			expect.fail('should have thrown')
 		} catch (err) {
-			expect(err).toBeInstanceOf(TimeoutError)
-			expect((err as TimeoutError).timeoutMs).toBe(33)
-			expect((err as TimeoutError).message).toBe('Operation timed out after 33ms')
+			caught = err as TimeoutError
 		}
+		expect(caught).toBeInstanceOf(TimeoutError)
+		expect(caught?.timeoutMs).toBe(33)
+		expect(caught?.message).toBe('Operation timed out after 33ms')
 	})
 
 	it('propagates the original error if op rejects before timeout', async () => {
@@ -72,8 +73,8 @@ describe('timeoutPolicy', () => {
 
 describe('retryPolicy', () => {
 	it('returns success on first try without delay', async () => {
-		const op = vi.fn(async () => 'ok')
-		const delay = vi.fn(async () => undefined)
+		const op = mock(async () => 'ok')
+		const delay = mock(async () => undefined)
 		const policy = retryPolicy({ attempts: 3, baseMs: 100, maxMs: 1000, delay })
 		const result = await policy.execute(op)
 		expect(result).toBe('ok')
@@ -83,11 +84,11 @@ describe('retryPolicy', () => {
 
 	it('retries up to `attempts` times then propagates last error', async () => {
 		let calls = 0
-		const op = vi.fn(async () => {
+		const op = mock(async () => {
 			calls += 1
 			throw new Error(`fail-${calls}`)
 		})
-		const delay = vi.fn(async () => undefined)
+		const delay = mock(async () => undefined)
 		const policy = retryPolicy({
 			attempts: 3,
 			baseMs: 100,
@@ -103,7 +104,7 @@ describe('retryPolicy', () => {
 
 	it('eventually succeeds — final attempt returns', async () => {
 		let calls = 0
-		const op = vi.fn(async () => {
+		const op = mock(async () => {
 			calls += 1
 			if (calls < 3) throw new Error(`tmp-${calls}`)
 			return 'recovered'
@@ -162,10 +163,10 @@ describe('retryPolicy', () => {
 	})
 
 	it('shouldRetry=false aborts retries early (no delay) and propagates immediately', async () => {
-		const op = vi.fn(async () => {
+		const op = mock(async () => {
 			throw new Error('400 bad request')
 		})
-		const delay = vi.fn(async () => undefined)
+		const delay = mock(async () => undefined)
 		const policy = retryPolicy({
 			attempts: 5,
 			baseMs: 100,
@@ -180,7 +181,7 @@ describe('retryPolicy', () => {
 
 	it('shouldRetry receives the actual error and 1-indexed attempt number', async () => {
 		const captured: Array<{ msg: string; n: number }> = []
-		const op = vi.fn(async () => {
+		const op = mock(async () => {
 			throw new Error(`fail-${op.mock.calls.length + 1}`)
 		})
 		await expect(
@@ -226,7 +227,7 @@ describe('circuitBreakerPolicy', () => {
 
 	it('opens after `failureThreshold` consecutive failures and rejects fast', async () => {
 		const policy = circuitBreakerPolicy({ failureThreshold: 2, resetAfterMs: 1_000 })
-		const failingOp = vi.fn(async () => {
+		const failingOp = mock(async () => {
 			throw new Error('upstream-down')
 		})
 		// First 2 fail → trip
@@ -239,7 +240,7 @@ describe('circuitBreakerPolicy', () => {
 
 	it('counter resets to 0 on success between failures', async () => {
 		const policy = circuitBreakerPolicy({ failureThreshold: 3, resetAfterMs: 1_000 })
-		const op = vi.fn(async () => {
+		const op = mock(async () => {
 			const n = op.mock.calls.length
 			// Fail, fail, succeed, fail, fail — never reaches threshold of 3 consecutive
 			if (n === 1 || n === 2 || n === 4 || n === 5) throw new Error('flaky')
@@ -317,14 +318,15 @@ describe('circuitBreakerPolicy', () => {
 			}),
 		).rejects.toThrow()
 		now += 100
+		let caught: CircuitOpenError | undefined
 		try {
 			await policy.execute(async () => 'unreached')
-			expect.fail()
 		} catch (err) {
-			expect(err).toBeInstanceOf(CircuitOpenError)
-			// openedAt was 5000, resetAfterMs 1000 → resetAt = 6000
-			expect((err as CircuitOpenError).resetAt.getTime()).toBe(6_000)
+			caught = err as CircuitOpenError
 		}
+		expect(caught).toBeInstanceOf(CircuitOpenError)
+		// openedAt was 5000, resetAfterMs 1000 → resetAt = 6000
+		expect(caught?.resetAt.getTime()).toBe(6_000)
 	})
 
 	it('rejects construction with invalid options', () => {
@@ -357,7 +359,7 @@ describe('composePolicies', () => {
 		// Inner fn always throws fast (so timeout never fires).
 		// Expectation: retry will run 3 attempts, all fail, propagating;
 		// circuit sees those 3 failures as ONE composed call → counter=1 → trip on next.
-		const op = vi.fn(async () => {
+		const op = mock(async () => {
 			throw new Error('upstream')
 		})
 		const policy = composePolicies(

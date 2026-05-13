@@ -7,7 +7,7 @@
  *   - Math precision: bigint preserves to last копейка across realistic stay sizes
  *   - Stryker-friendly exact-value asserts on every codepath (no ranges)
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { computeTourismTax, tourismTaxLineId } from './tourism-tax.ts'
 
 describe('computeTourismTax — happy path Сочи 2026 (2%)', () => {

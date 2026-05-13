@@ -14,12 +14,13 @@
  *     [C3] theme='system' → no-media meta has NO content attr (восстанавливаем static fallback)
  */
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test'
 
-// Hoisted localStorage stub — required для Zustand persist module-load capture
-// (happy-dom 20.9 broken Storage API в vitest env)
-const storageData = vi.hoisted(() => ({ value: new Map<string, string>() }))
-vi.hoisted(() => {
+// Top-level localStorage stub — bun:test has no auto-hoist. Static imports
+// above don't depend on localStorage; the dynamic `await import` below picks
+// up our stub via Zustand persist module-load capture.
+const storageData = { value: new Map<string, string>() }
+;(() => {
 	const stub = {
 		getItem: (k: string) => storageData.value.get(k) ?? null,
 		setItem: (k: string, v: string) => {
@@ -41,13 +42,13 @@ vi.hoisted(() => {
 		writable: true,
 		configurable: true,
 	})
-})
+})()
 
 const { useThemeStore } = await import('./theme-store')
 const { ThemeProvider } = await import('./theme-provider')
 
 let originalHtml: HTMLElement
-let matchMediaSpy: ReturnType<typeof vi.spyOn>
+let matchMediaSpy: ReturnType<typeof spyOn>
 
 function mockSystemTheme(dark: boolean) {
 	matchMediaSpy.mockImplementation((query: string) => {
@@ -56,11 +57,11 @@ function mockSystemTheme(dark: boolean) {
 			matches,
 			media: query,
 			onchange: null,
-			addListener: vi.fn(),
-			removeListener: vi.fn(),
-			addEventListener: vi.fn(),
-			removeEventListener: vi.fn(),
-			dispatchEvent: vi.fn(),
+			addListener: mock(),
+			removeListener: mock(),
+			addEventListener: mock(),
+			removeEventListener: mock(),
+			dispatchEvent: mock(),
 		} as MediaQueryList
 	})
 }
@@ -75,7 +76,7 @@ function setupMetaThemeColor() {
 
 beforeEach(() => {
 	originalHtml = document.documentElement
-	matchMediaSpy = vi.spyOn(window, 'matchMedia')
+	matchMediaSpy = spyOn(window, 'matchMedia')
 	document.documentElement.classList.remove('dark')
 	useThemeStore.setState({ theme: 'system' })
 	// Clear any leftover theme-color meta

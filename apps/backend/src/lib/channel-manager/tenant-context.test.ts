@@ -12,7 +12,7 @@
  */
 
 import { setTimeout as sleep } from 'node:timers/promises'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, mock } from 'bun:test'
 import type { ChannelManagerAdapter } from './adapter.ts'
 import { createPerTenantAdapterCache, resolveAdapter } from './tenant-context.ts'
 
@@ -91,8 +91,8 @@ describe('invalidateTenant — prefix scan (TC6)', () => {
 describe('resolveAdapter — cache-hit / miss / factory-once (TC7-TC10)', () => {
 	it('[TC7] miss: factory invoked, adapter cached for next read', async () => {
 		const cache = createPerTenantAdapterCache({ maxEntries: 10, ttlMs: 60_000 })
-		const factory = vi.fn(async () => buildStubAdapter('TL'))
-		const versionLookup = vi.fn(async () => 1n)
+		const factory = mock(async () => buildStubAdapter('TL'))
+		const versionLookup = mock(async () => 1n)
 		await resolveAdapter(
 			{ cache, factory, versionLookup },
 			{ organizationId: 'org_a', channelId: 'TL' },
@@ -107,9 +107,9 @@ describe('resolveAdapter — cache-hit / miss / factory-once (TC7-TC10)', () => 
 
 	it('[TC8] adapterVersion bump → factory invoked again (hot reload)', async () => {
 		const cache = createPerTenantAdapterCache({ maxEntries: 10, ttlMs: 60_000 })
-		const factory = vi.fn(async () => buildStubAdapter('TL'))
+		const factory = mock(async () => buildStubAdapter('TL'))
 		let v = 1n
-		const versionLookup = vi.fn(async () => v)
+		const versionLookup = mock(async () => v)
 		await resolveAdapter(
 			{ cache, factory, versionLookup },
 			{ organizationId: 'org_a', channelId: 'TL' },
@@ -124,10 +124,10 @@ describe('resolveAdapter — cache-hit / miss / factory-once (TC7-TC10)', () => 
 
 	it('[TC9] different tenants do NOT share cache (cross-tenant isolation)', async () => {
 		const cache = createPerTenantAdapterCache({ maxEntries: 10, ttlMs: 60_000 })
-		const factory = vi.fn(async (input: { organizationId: string; channelId: string }) =>
+		const factory = mock(async (input: { organizationId: string; channelId: string }) =>
 			buildStubAdapter(`${input.organizationId}:${input.channelId}`),
 		)
-		const versionLookup = vi.fn(async () => 1n)
+		const versionLookup = mock(async () => 1n)
 		const a = await resolveAdapter(
 			{ cache, factory, versionLookup },
 			{ organizationId: 'org_a', channelId: 'TL' },
@@ -143,10 +143,10 @@ describe('resolveAdapter — cache-hit / miss / factory-once (TC7-TC10)', () => 
 
 	it('[TC10] different channels на same tenant produce different cache entries', async () => {
 		const cache = createPerTenantAdapterCache({ maxEntries: 10, ttlMs: 60_000 })
-		const factory = vi.fn(async (input: { organizationId: string; channelId: string }) =>
+		const factory = mock(async (input: { organizationId: string; channelId: string }) =>
 			buildStubAdapter(input.channelId),
 		)
-		const versionLookup = vi.fn(async () => 1n)
+		const versionLookup = mock(async () => 1n)
 		const tl = await resolveAdapter(
 			{ cache, factory, versionLookup },
 			{ organizationId: 'org_a', channelId: 'TL' },

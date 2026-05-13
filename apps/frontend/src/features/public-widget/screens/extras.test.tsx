@@ -37,7 +37,7 @@
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import type {
 	PublicProperty,
 	PublicRateOption,
@@ -50,7 +50,7 @@ import { Extras } from './extras.tsx'
 // Mock fetch — controlled per-test via globalThis.fetch.
 afterEach(() => {
 	cleanup()
-	vi.restoreAllMocks()
+	mock.restore()
 })
 
 const tenant: PublicWidgetTenant = {
@@ -126,7 +126,7 @@ const transfer: PublicWidgetAddon = {
 
 function mockFetchResponse(addons: readonly PublicWidgetAddon[]) {
 	const response = { data: { tenant, property, addons } }
-	globalThis.fetch = vi.fn(() =>
+	globalThis.fetch = mock(() =>
 		Promise.resolve(
 			new Response(JSON.stringify(response), {
 				status: 200,
@@ -137,13 +137,13 @@ function mockFetchResponse(addons: readonly PublicWidgetAddon[]) {
 }
 
 function mockFetch404() {
-	globalThis.fetch = vi.fn(() =>
+	globalThis.fetch = mock(() =>
 		Promise.resolve(new Response('', { status: 404 })),
 	) as unknown as typeof globalThis.fetch
 }
 
 function mockFetch500() {
-	globalThis.fetch = vi.fn(() =>
+	globalThis.fetch = mock(() =>
 		Promise.resolve(new Response('Server error', { status: 500 })),
 	) as unknown as typeof globalThis.fetch
 }
@@ -162,10 +162,10 @@ function renderExtras(overrides: Partial<Parameters<typeof Extras>[0]> = {}) {
 		selectedRate: rate,
 		tourismTaxRateBps: 200,
 		cart: [],
-		onCartChange: vi.fn(),
-		onContinue: vi.fn(),
-		onSkip: vi.fn(),
-		onNotFound: vi.fn(),
+		onCartChange: mock(),
+		onContinue: mock(),
+		onSkip: mock(),
+		onNotFound: mock(),
 		...overrides,
 	}
 	return {
@@ -298,7 +298,7 @@ describe('<Extras> — 404 + error fallback', () => {
 describe('<Extras> — loading', () => {
 	test('[E11] query.isLoading → skeleton rendered', () => {
 		// Don't resolve fetch — promise pending.
-		globalThis.fetch = vi.fn(
+		globalThis.fetch = mock(
 			() =>
 				new Promise(() => {
 					/* never */

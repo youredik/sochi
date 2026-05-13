@@ -20,7 +20,7 @@
  *     [E3] 403 body includes `role` для debugging
  */
 import type { MemberRole } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { createTestRouter, type TestContext } from '../tests/setup.ts'
 import { requirePermission } from './require-permission.ts'
 

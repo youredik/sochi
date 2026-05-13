@@ -8,7 +8,7 @@
  *
  * Adversarial focus: 11..14 + 111..114 mod100 propagation (canon trap).
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { ruPlural } from './ru-plural.ts'
 
 describe('ruPlural — pure function (RU CLDR three-form: one/few/many)', () => {

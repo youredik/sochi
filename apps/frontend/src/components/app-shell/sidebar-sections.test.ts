@@ -25,7 +25,7 @@
  *     [E3] expected owner-visible set = expected manager-visible set = full 7 exact
  */
 import type { MemberRole } from '@horeca/shared'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { SIDEBAR_SECTIONS, SIDEBAR_SECTIONS_BY_ID } from './sidebar-sections'
 
 const ALL_SECTION_IDS = [

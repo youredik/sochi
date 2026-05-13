@@ -60,16 +60,16 @@ import {
 	taxRegimeValues,
 } from '@horeca/shared'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, type Mock, test, mock } from 'bun:test'
 
-vi.mock('../../../lib/use-can.ts', () => ({
-	useCan: vi.fn(() => true),
-	useCurrentRole: vi.fn(() => 'owner'),
+mock.module('../../../lib/use-can.ts', () => ({
+	useCan: mock(() => true),
+	useCurrentRole: mock(() => 'owner'),
 }))
 
-vi.mock('../hooks/use-compliance.ts', () => ({
-	useCompliance: vi.fn(() => ({ data: null, isLoading: false, error: null })),
-	usePatchCompliance: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+mock.module('../hooks/use-compliance.ts', () => ({
+	useCompliance: mock(() => ({ data: null, isLoading: false, error: null })),
+	usePatchCompliance: mock(() => ({ mutateAsync: mock(), isPending: false })),
 }))
 
 import { hasPermission, type MemberRole } from '@horeca/shared'
@@ -77,9 +77,9 @@ import { useCan } from '../../../lib/use-can.ts'
 import { useCompliance, usePatchCompliance } from '../hooks/use-compliance.ts'
 import { ComplianceStep } from './compliance-step.tsx'
 
-const mockedUseCan = vi.mocked(useCan)
-const mockedUseCompliance = vi.mocked(useCompliance)
-const mockedUsePatch = vi.mocked(usePatchCompliance)
+const mockedUseCan = useCan as unknown as Mock<typeof useCan>
+const mockedUseCompliance = useCompliance as unknown as Mock<typeof useCompliance>
+const mockedUsePatch = usePatchCompliance as unknown as Mock<typeof usePatchCompliance>
 
 beforeEach(() => {
 	mockedUseCan.mockImplementation(() => true)
@@ -89,14 +89,14 @@ beforeEach(() => {
 		error: null,
 	} as unknown as ReturnType<typeof useCompliance>)
 	mockedUsePatch.mockReturnValue({
-		mutateAsync: vi.fn(),
+		mutateAsync: mock(),
 		isPending: false,
 	} as unknown as ReturnType<typeof usePatchCompliance>)
 })
 
 afterEach(() => {
 	cleanup()
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 function setRole(role: MemberRole) {
@@ -359,7 +359,7 @@ describe('<ComplianceStep> — submit serialization', () => {
 	}
 
 	test('[S1] empty form submit → all fields null (explicit clear)', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUsePatch.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -381,7 +381,7 @@ describe('<ComplianceStep> — submit serialization', () => {
 	})
 
 	test('[S2] partial form submit — only filled fields, others null', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUsePatch.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -402,7 +402,7 @@ describe('<ComplianceStep> — submit serialization', () => {
 	})
 
 	test('[S3] revenue "1,000,000" → bigint 1_000_000_000_000n', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUsePatch.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -424,7 +424,7 @@ describe('<ComplianceStep> — submit serialization', () => {
 	})
 
 	test('[S4] revenue "1234.56" → bigint 1_234_560_000n', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUsePatch.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -445,7 +445,7 @@ describe('<ComplianceStep> — submit serialization', () => {
 	})
 
 	test('[S5] revenue "abc" → undefined (parse failed, kept untouched)', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUsePatch.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -464,7 +464,7 @@ describe('<ComplianceStep> — submit serialization', () => {
 	})
 
 	test('[S6] whitespace-only ksrId → null (trimmed empty)', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUsePatch.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -484,7 +484,7 @@ describe('<ComplianceStep> — submit serialization', () => {
 	})
 
 	test('[I1] every submit includes a UUIDv4 Idempotency-Key (retry-safety)', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUsePatch.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -499,7 +499,7 @@ describe('<ComplianceStep> — submit serialization', () => {
 	})
 
 	test('[I2] two submits → two distinct keys (NOT cached, NOT shared)', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUsePatch.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -555,7 +555,7 @@ describe('<ComplianceStep> — a11y', () => {
 		const labelId = section.getAttribute('aria-labelledby')
 		expect(labelId).not.toBeNull()
 		const h2 = within(section).getByRole('heading', { level: 2 })
-		expect(h2.id).toBe(labelId)
+		expect(h2.id).toBe(labelId as string)
 	})
 
 	test('[A2] revenue input has aria-describedby pointing to a non-empty hint', () => {

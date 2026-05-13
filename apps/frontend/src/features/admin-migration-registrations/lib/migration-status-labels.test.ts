@@ -10,7 +10,7 @@
  *   [C1] CHANNEL_LABEL_RU contains 3 valid channels
  */
 import { EPGU_STATUS_CODES } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { CHANNEL_LABEL_RU, statusBadgeFor } from './migration-status-labels.ts'
 
 describe('statusBadgeFor — FULL enum coverage (all 14 EPGU codes)', () => {

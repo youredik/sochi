@@ -13,7 +13,7 @@
  *     [HP7] empty permissions object → true (nothing requested = nothing denied)
  *     [HP8] full enum: every role × every action explicit
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { ALL_ROLES, hasPermission, type MemberRole } from './rbac.ts'
 
 describe('ALL_ROLES — exhaustive enum coverage', () => {
@@ -250,19 +250,23 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 		'retry',
 	] as const
 
-	test.each(ALL_ROLES)('every (resource × action) tuple matches matrix for role %s', (role) => {
-		for (const resource of ALL_RESOURCES) {
-			const expectedActions = EXPECTED[role][resource] ?? []
-			for (const action of ALL_ACTIONS) {
-				const actual = hasPermission(role, { [resource]: [action] })
-				const expected = expectedActions.includes(action)
-				expect(
-					actual,
-					`role=${role}, resource=${resource}, action=${action} expected=${expected} got=${actual}`,
-				).toBe(expected)
+	test.each([...ALL_ROLES])(
+		'every (resource × action) tuple matches matrix for role %s',
+		(role) => {
+			for (const resource of ALL_RESOURCES) {
+				const expectedActions =
+					EXPECTED[role][resource as keyof (typeof EXPECTED)[typeof role]] ?? []
+				for (const action of ALL_ACTIONS) {
+					const actual = hasPermission(role, { [resource]: [action] })
+					const expected = expectedActions.includes(action)
+					expect(
+						actual,
+						`role=${role}, resource=${resource}, action=${action} expected=${expected} got=${actual}`,
+					).toBe(expected)
+				}
 			}
-		}
-	})
+		},
+	)
 
 	test('full action set per resource — granted role passes ALL', () => {
 		// Iterate role × resource → assert hasPermission(role, { resource: [allGranted] }) === true

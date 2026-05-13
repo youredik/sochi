@@ -47,19 +47,19 @@
  */
 import { hasPermission, type MemberRole, type PropertyMedia } from '@horeca/shared'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, type Mock, test, mock } from 'bun:test'
 
-vi.mock('../../../lib/use-can.ts', () => ({
-	useCan: vi.fn(() => true),
-	useCurrentRole: vi.fn(() => 'owner'),
+mock.module('../../../lib/use-can.ts', () => ({
+	useCan: mock(() => true),
+	useCurrentRole: mock(() => 'owner'),
 }))
 
-vi.mock('../hooks/use-media.ts', () => ({
-	useMediaList: vi.fn(() => ({ data: [], isLoading: false, error: null })),
-	useUploadMedia: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
-	usePatchMedia: vi.fn(() => ({ mutate: vi.fn() })),
-	useDeleteMedia: vi.fn(() => ({ mutate: vi.fn() })),
-	useSetHero: vi.fn(() => ({ mutate: vi.fn() })),
+mock.module('../hooks/use-media.ts', () => ({
+	useMediaList: mock(() => ({ data: [], isLoading: false, error: null })),
+	useUploadMedia: mock(() => ({ mutateAsync: mock(), isPending: false })),
+	usePatchMedia: mock(() => ({ mutate: mock() })),
+	useDeleteMedia: mock(() => ({ mutate: mock() })),
+	useSetHero: mock(() => ({ mutate: mock() })),
 }))
 
 import { useCan } from '../../../lib/use-can.ts'
@@ -72,12 +72,12 @@ import {
 } from '../hooks/use-media.ts'
 import { MediaStep } from './media-step.tsx'
 
-const mockedUseCan = vi.mocked(useCan)
-const mockedUseList = vi.mocked(useMediaList)
-const mockedUpload = vi.mocked(useUploadMedia)
-const mockedPatch = vi.mocked(usePatchMedia)
-const mockedDelete = vi.mocked(useDeleteMedia)
-const mockedSetHero = vi.mocked(useSetHero)
+const mockedUseCan = useCan as unknown as Mock<typeof useCan>
+const mockedUseList = useMediaList as unknown as Mock<typeof useMediaList>
+const mockedUpload = useUploadMedia as unknown as Mock<typeof useUploadMedia>
+const mockedPatch = usePatchMedia as unknown as Mock<typeof usePatchMedia>
+const mockedDelete = useDeleteMedia as unknown as Mock<typeof useDeleteMedia>
+const mockedSetHero = useSetHero as unknown as Mock<typeof useSetHero>
 
 beforeEach(() => {
 	mockedUseCan.mockImplementation(() => true)
@@ -86,7 +86,7 @@ beforeEach(() => {
 		isLoading: false,
 		error: null,
 	} as unknown as ReturnType<typeof useMediaList>)
-	const stubMut = { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }
+	const stubMut = { mutate: mock(), mutateAsync: mock(), isPending: false }
 	mockedUpload.mockReturnValue(stubMut as unknown as ReturnType<typeof useUploadMedia>)
 	mockedPatch.mockReturnValue(stubMut as unknown as ReturnType<typeof usePatchMedia>)
 	mockedDelete.mockReturnValue(stubMut as unknown as ReturnType<typeof useDeleteMedia>)
@@ -95,7 +95,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup()
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 function setRole(role: MemberRole) {
@@ -304,8 +304,8 @@ describe('<MediaStep> — altRu invariant', () => {
 // ────────────────────────────────────────────────────────────────────
 
 describe('<MediaStep> — upload mutation', () => {
-	function setUpload(): ReturnType<typeof vi.fn> {
-		const mutateAsync = vi.fn().mockResolvedValue({})
+	function setUpload(): ReturnType<typeof mock> {
+		const mutateAsync = mock().mockResolvedValue({})
 		mockedUpload.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -373,7 +373,7 @@ const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f
 
 describe('<MediaStep> — idempotency', () => {
 	test('[I1] upload sends a UUIDv4 Idempotency-Key', async () => {
-		const mutateAsync = vi.fn().mockResolvedValue({})
+		const mutateAsync = mock().mockResolvedValue({})
 		mockedUpload.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -390,9 +390,9 @@ describe('<MediaStep> — idempotency', () => {
 	})
 
 	test('[I2] patch + delete + setHero each carry distinct UUIDv4 keys', () => {
-		const patchMutate = vi.fn()
-		const delMutate = vi.fn()
-		const heroMutate = vi.fn()
+		const patchMutate = mock()
+		const delMutate = mock()
+		const heroMutate = mock()
 		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
 			typeof usePatchMedia
 		>)
@@ -440,7 +440,7 @@ describe('<MediaStep> — idempotency', () => {
 
 describe('<MediaStep> — delete confirm dialog', () => {
 	test('[Dc1] click Удалить → dialog opens, mutation NOT yet fired', () => {
-		const delMutate = vi.fn()
+		const delMutate = mock()
 		mockedDelete.mockReturnValue({ mutate: delMutate } as unknown as ReturnType<
 			typeof useDeleteMedia
 		>)
@@ -457,7 +457,7 @@ describe('<MediaStep> — delete confirm dialog', () => {
 	})
 
 	test('[Dc2] dialog Отмена → no mutation, dialog closes', () => {
-		const delMutate = vi.fn()
+		const delMutate = mock()
 		mockedDelete.mockReturnValue({ mutate: delMutate } as unknown as ReturnType<
 			typeof useDeleteMedia
 		>)
@@ -473,7 +473,7 @@ describe('<MediaStep> — delete confirm dialog', () => {
 	})
 
 	test('[Dc3] dialog Удалить → del.mutate fires once', () => {
-		const delMutate = vi.fn()
+		const delMutate = mock()
 		mockedDelete.mockReturnValue({ mutate: delMutate } as unknown as ReturnType<
 			typeof useDeleteMedia
 		>)
@@ -529,7 +529,7 @@ describe('<MediaStep> — sort order', () => {
 	})
 
 	test('[So2] move-up → patch.mutate with new sortOrder for row above-1', () => {
-		const patchMutate = vi.fn()
+		const patchMutate = mock()
 		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
 			typeof usePatchMedia
 		>)
@@ -551,7 +551,7 @@ describe('<MediaStep> — sort order', () => {
 	})
 
 	test('[So3] move-down → patch.mutate with new sortOrder for row below+1', () => {
-		const patchMutate = vi.fn()
+		const patchMutate = mock()
 		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
 			typeof usePatchMedia
 		>)

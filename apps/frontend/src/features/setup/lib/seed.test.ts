@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { buildSeedPayload, rubToMicrosString } from './seed.ts'
 
 describe('rubToMicrosString — money-conversion discipline', () => {

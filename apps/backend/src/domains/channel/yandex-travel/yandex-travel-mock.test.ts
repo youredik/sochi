@@ -15,7 +15,7 @@
  *   - Алиса AI discoverability: metadata via emit envelope
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { buildCloudEvent, buildSourceUrn } from '../../../lib/channel-manager/cloud-events.ts'
 import { computeYtSignature, createYandexTravelMock, findNonRuHost } from './yandex-travel-mock.ts'
 

@@ -6,7 +6,7 @@
  */
 
 import { jwtVerify, SignJWT } from 'jose'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { type CommitTokenSecretSource, signCommitToken, verifyCommitToken } from './commit-token.ts'
 
 const KEY_A = new TextEncoder().encode('A'.repeat(32))

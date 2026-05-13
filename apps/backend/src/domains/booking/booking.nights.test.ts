@@ -14,8 +14,8 @@
  *   [NB6] Same-day (checkIn === checkOut) → empty array (zero-night booking
  *         isn't payable; business layer should reject upstream)
  */
-import { fc, test } from '@fast-check/vitest'
-import { describe, expect, test as vitestTest } from 'vitest'
+import * as fc from 'fast-check'
+import { describe, expect, test } from 'bun:test'
 import { __bookingRepoInternals } from './booking.repo.ts'
 
 const { nightsBetween } = __bookingRepoInternals
@@ -46,46 +46,53 @@ const stayArb = fc
 	})
 
 describe('nightsBetween — property-based', () => {
-	test.prop([stayArb])('[NB1] length equals UTC day difference', ({ checkIn, checkOut }) => {
-		const msDiff =
-			new Date(`${checkOut}T00:00:00Z`).getTime() - new Date(`${checkIn}T00:00:00Z`).getTime()
-		expect(nightsBetween(checkIn, checkOut)).toHaveLength(msDiff / MS_PER_DAY)
+	test('[NB1] length equals UTC day difference', () => {
+		void fc.assert(
+			fc.property(stayArb, ({ checkIn, checkOut }) => {
+				const msDiff =
+					new Date(`${checkOut}T00:00:00Z`).getTime() - new Date(`${checkIn}T00:00:00Z`).getTime()
+				expect(nightsBetween(checkIn, checkOut)).toHaveLength(msDiff / MS_PER_DAY)
+			}),
+		)
 	})
 
-	test.prop([stayArb])(
-		'[NB2,NB3] bookends: first=checkIn, last=checkOut-1 day',
-		({ checkIn, checkOut }) => {
-			const nights = nightsBetween(checkIn, checkOut)
-			expect(nights[0]).toBe(checkIn)
-			const expectedLast = new Date(`${checkOut}T00:00:00Z`)
-			expectedLast.setUTCDate(expectedLast.getUTCDate() - 1)
-			expect(nights[nights.length - 1]).toBe(expectedLast.toISOString().slice(0, 10))
-		},
-	)
+	test('[NB2,NB3] bookends: first=checkIn, last=checkOut-1 day', () => {
+		void fc.assert(
+			fc.property(stayArb, ({ checkIn, checkOut }) => {
+				const nights = nightsBetween(checkIn, checkOut)
+				expect(nights[0]).toBe(checkIn)
+				const expectedLast = new Date(`${checkOut}T00:00:00Z`)
+				expectedLast.setUTCDate(expectedLast.getUTCDate() - 1)
+				expect(nights[nights.length - 1]).toBe(expectedLast.toISOString().slice(0, 10))
+			}),
+		)
+	})
 
-	test.prop([stayArb])(
-		'[NB4] strictly ascending, no gaps, no duplicates',
-		({ checkIn, checkOut }) => {
-			const nights = nightsBetween(checkIn, checkOut)
-			for (let i = 1; i < nights.length; i++) {
-				const prev = new Date(`${nights[i - 1]}T00:00:00Z`).getTime()
-				const curr = new Date(`${nights[i]}T00:00:00Z`).getTime()
-				expect(curr - prev).toBe(MS_PER_DAY)
-			}
-			expect(new Set(nights).size).toBe(nights.length)
-		},
-	)
+	test('[NB4] strictly ascending, no gaps, no duplicates', () => {
+		void fc.assert(
+			fc.property(stayArb, ({ checkIn, checkOut }) => {
+				const nights = nightsBetween(checkIn, checkOut)
+				for (let i = 1; i < nights.length; i++) {
+					const prev = new Date(`${nights[i - 1]}T00:00:00Z`).getTime()
+					const curr = new Date(`${nights[i]}T00:00:00Z`).getTime()
+					expect(curr - prev).toBe(MS_PER_DAY)
+				}
+				expect(new Set(nights).size).toBe(nights.length)
+			}),
+		)
+	})
 
-	test.prop([stayArb])(
-		'[NB5] every produced date is a valid YYYY-MM-DD',
-		({ checkIn, checkOut }) => {
-			for (const d of nightsBetween(checkIn, checkOut)) {
-				expect(d).toMatch(YMD_REGEX)
-			}
-		},
-	)
+	test('[NB5] every produced date is a valid YYYY-MM-DD', () => {
+		void fc.assert(
+			fc.property(stayArb, ({ checkIn, checkOut }) => {
+				for (const d of nightsBetween(checkIn, checkOut)) {
+					expect(d).toMatch(YMD_REGEX)
+				}
+			}),
+		)
+	})
 
-	vitestTest('[NB6] same-day stay (checkIn === checkOut) → empty array', () => {
+	test('[NB6] same-day stay (checkIn === checkOut) → empty array', () => {
 		expect(nightsBetween('2027-05-10', '2027-05-10')).toEqual([])
 	})
 })

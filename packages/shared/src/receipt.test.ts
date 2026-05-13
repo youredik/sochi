@@ -19,7 +19,7 @@
  *   [X] RECEIPT_CORRECTION_CHAIN_MAX_DEPTH: exact value 3 (54-ФЗ regulatory)
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { newId } from './ids.ts'
 import {
 	RECEIPT_CORRECTION_CHAIN_MAX_DEPTH,

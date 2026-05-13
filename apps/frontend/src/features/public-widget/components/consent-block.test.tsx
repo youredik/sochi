@@ -15,7 +15,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import { ConsentBlock } from './consent-block.tsx'
 
 function renderWithProviders(ui: React.ReactNode) {
@@ -73,7 +73,7 @@ describe('ConsentBlock', () => {
 	})
 
 	test('[CB4] click DPA → onAcceptedDpaChange(true)', async () => {
-		const onDpa = vi.fn()
+		const onDpa = mock()
 		renderWithProviders(
 			<ConsentBlock
 				acceptedDpa={false}
@@ -87,7 +87,7 @@ describe('ConsentBlock', () => {
 	})
 
 	test('[CB5] click marketing → onAcceptedMarketingChange(true)', async () => {
-		const onMk = vi.fn()
+		const onMk = mock()
 		renderWithProviders(
 			<ConsentBlock
 				acceptedDpa={false}

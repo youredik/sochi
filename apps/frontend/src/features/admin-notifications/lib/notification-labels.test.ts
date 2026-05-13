@@ -27,7 +27,7 @@
  *   Immutability:
  *     [I1] mutating returned StatusBadgeConf does NOT poison config
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { notificationKindLabel, notificationStatusBadge } from './notification-labels.ts'
 
 describe('notificationStatusBadge — exact match', () => {

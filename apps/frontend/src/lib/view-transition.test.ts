@@ -8,11 +8,11 @@
  *   [V4] fn invoked ровно один раз (no double-call)
  *   [V5] fn errors don't crash wrapper — propagate normally (caller handles)
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { viewTransitionApply } from './view-transition'
 
 let originalStartViewTransition: typeof document.startViewTransition | undefined
-let matchMediaSpy: ReturnType<typeof vi.spyOn>
+let matchMediaSpy: ReturnType<typeof spyOn>
 
 function mockReducedMotion(reduce: boolean) {
 	matchMediaSpy.mockImplementation((query: string) => {
@@ -21,18 +21,18 @@ function mockReducedMotion(reduce: boolean) {
 			matches,
 			media: query,
 			onchange: null,
-			addListener: vi.fn(),
-			removeListener: vi.fn(),
-			addEventListener: vi.fn(),
-			removeEventListener: vi.fn(),
-			dispatchEvent: vi.fn(),
+			addListener: mock(),
+			removeListener: mock(),
+			addEventListener: mock(),
+			removeEventListener: mock(),
+			dispatchEvent: mock(),
 		} as MediaQueryList
 	})
 }
 
 beforeEach(() => {
 	originalStartViewTransition = document.startViewTransition
-	matchMediaSpy = vi.spyOn(window, 'matchMedia')
+	matchMediaSpy = spyOn(window, 'matchMedia')
 })
 
 afterEach(() => {
@@ -51,22 +51,22 @@ describe('viewTransitionApply', () => {
 	it('[V1] no startViewTransition API → fn called synchronously', () => {
 		mockReducedMotion(false)
 		Reflect.deleteProperty(document, 'startViewTransition')
-		const fn = vi.fn()
+		const fn = mock()
 		viewTransitionApply(fn)
 		expect(fn).toHaveBeenCalledTimes(1)
 	})
 
 	it('[V2] reduce-motion=true → fn called sync (API bypassed)', () => {
 		mockReducedMotion(true)
-		const startSpy = vi.fn(() => ({
+		const startSpy = mock(() => ({
 			ready: Promise.resolve(),
 			finished: Promise.resolve(),
 			updateCallbackDone: Promise.resolve(),
-			skipTransition: vi.fn(),
+			skipTransition: mock(),
 		}))
 		;(document as unknown as { startViewTransition: typeof startSpy }).startViewTransition =
 			startSpy
-		const fn = vi.fn()
+		const fn = mock()
 		viewTransitionApply(fn)
 		expect(fn).toHaveBeenCalledTimes(1)
 		expect(startSpy).not.toHaveBeenCalled()
@@ -74,18 +74,18 @@ describe('viewTransitionApply', () => {
 
 	it('[V3] reduce-motion=false + API present → startViewTransition wraps fn', () => {
 		mockReducedMotion(false)
-		const startSpy = vi.fn((cb: () => void) => {
+		const startSpy = mock((cb: () => void) => {
 			cb()
 			return {
 				ready: Promise.resolve(),
 				finished: Promise.resolve(),
 				updateCallbackDone: Promise.resolve(),
-				skipTransition: vi.fn(),
+				skipTransition: mock(),
 			}
 		})
 		;(document as unknown as { startViewTransition: typeof startSpy }).startViewTransition =
 			startSpy
-		const fn = vi.fn()
+		const fn = mock()
 		viewTransitionApply(fn)
 		expect(startSpy).toHaveBeenCalledTimes(1)
 		expect(fn).toHaveBeenCalledTimes(1)
@@ -93,25 +93,25 @@ describe('viewTransitionApply', () => {
 
 	it('[V4] fn invoked exactly once (not double-called)', () => {
 		mockReducedMotion(false)
-		const startSpy = vi.fn((cb: () => void) => {
+		const startSpy = mock((cb: () => void) => {
 			cb()
 			return {
 				ready: Promise.resolve(),
 				finished: Promise.resolve(),
 				updateCallbackDone: Promise.resolve(),
-				skipTransition: vi.fn(),
+				skipTransition: mock(),
 			}
 		})
 		;(document as unknown as { startViewTransition: typeof startSpy }).startViewTransition =
 			startSpy
-		const fn = vi.fn()
+		const fn = mock()
 		viewTransitionApply(fn)
 		expect(fn).toHaveBeenCalledTimes(1)
 	})
 
 	it('[V5] fn throwing propagates — wrapper не глотает errors', () => {
 		mockReducedMotion(true)
-		const fn = vi.fn(() => {
+		const fn = mock(() => {
 			throw new Error('boom')
 		})
 		expect(() => viewTransitionApply(fn)).toThrow('boom')

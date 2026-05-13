@@ -14,7 +14,7 @@
  *     [H3] returned value matches UUIDv4 shape
  */
 import { renderHook } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { freshIdempotencyKey, useIdempotencyKey } from './idempotency.ts'
 
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/

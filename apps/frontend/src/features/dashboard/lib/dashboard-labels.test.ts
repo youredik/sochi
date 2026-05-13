@@ -31,7 +31,7 @@ import {
 	activityObjectTypeSchema,
 	activityTypeSchema,
 } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	ACTIVITY_OBJECT_TYPE_LABELS_RU,
 	ACTIVITY_TYPE_VERBS_RU,

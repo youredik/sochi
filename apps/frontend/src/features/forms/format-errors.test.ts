@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { formatErrors } from './format-errors.ts'
 
 /**
@@ -74,7 +74,7 @@ describe('formatErrors', () => {
 			const input = ['a', { message: 'b' }, null] as const
 			const snapshot = [...input]
 			formatErrors(input)
-			expect(input).toEqual(snapshot)
+			expect([...input]).toEqual(snapshot)
 		})
 	})
 })

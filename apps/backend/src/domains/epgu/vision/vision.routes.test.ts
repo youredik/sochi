@@ -16,7 +16,7 @@
  *     [V-Z5] base64 decodes to empty bytes → 400 (handler guard)
  */
 import type { MemberRole } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { onError } from '../../../errors/on-error.ts'
 import { createTestRouter, type TestContext } from '../../../tests/setup.ts'
 import { createMockVisionOcr } from './mock-vision.ts'

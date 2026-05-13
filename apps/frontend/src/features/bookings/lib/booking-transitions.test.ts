@@ -1,5 +1,5 @@
 import type { BookingStatus } from '@horeca/shared'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	applyOptimisticStatusUpdate,
 	availableTransitions,
@@ -84,9 +84,12 @@ describe('availableTransitions — exact-value per status', () => {
 })
 
 describe('cross-cutting invariant: isTerminal iff no transitions available', () => {
-	it.each(ALL_STATUSES)('%s: isTerminal ↔ availableTransitions.length === 0', (s) => {
-		expect(isTerminal(s)).toBe(availableTransitions(s).length === 0)
-	})
+	it.each([...ALL_STATUSES])(
+		'%s: isTerminal ↔ availableTransitions.length === 0',
+		(s: BookingStatus) => {
+			expect(isTerminal(s)).toBe(availableTransitions(s).length === 0)
+		},
+	)
 })
 
 describe('nextStatus — total over valid pairs, throws on invalid', () => {
@@ -184,7 +187,7 @@ describe('applyOptimisticStatusUpdate — pure cache transform', () => {
 	it('returns a new array (referentially distinct) even on no-match (cache re-render invariant)', () => {
 		const prev = [band('b1', 'confirmed')] as const
 		const out = applyOptimisticStatusUpdate(prev, 'b_not_present', 'cancelled')
-		expect(out).toEqual(prev)
+		expect(out).toEqual([...prev])
 		expect(out).not.toBe(prev) // new array reference — triggers re-render
 	})
 

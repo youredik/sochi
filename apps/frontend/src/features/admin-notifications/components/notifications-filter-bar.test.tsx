@@ -23,7 +23,7 @@
  *     [S2] kind select renders all 7 kinds + "Любой"
  */
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import {
 	NotificationsFilterBar,
 	type NotificationsFilterValue,
@@ -41,7 +41,7 @@ const EMPTY: NotificationsFilterValue = {
 
 describe('NotificationsFilterBar — recipient input', () => {
 	test('[R1] clearing populated input → recipient: null', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		const { getByLabelText } = render(
 			<NotificationsFilterBar value={{ ...EMPTY, recipient: 'old@host' }} onChange={onChange} />,
 		)
@@ -51,7 +51,7 @@ describe('NotificationsFilterBar — recipient input', () => {
 	})
 
 	test('[R2] non-empty → recipient: exact value (no transform)', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		const { getByLabelText } = render(<NotificationsFilterBar value={EMPTY} onChange={onChange} />)
 		fireEvent.change(getByLabelText('Получатель'), {
 			target: { value: 'guest@example.local' },
@@ -63,7 +63,7 @@ describe('NotificationsFilterBar — recipient input', () => {
 	})
 
 	test('[R3] whitespace-only → null (trim)', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		const { getByLabelText } = render(
 			<NotificationsFilterBar value={{ ...EMPTY, recipient: 'old@host' }} onChange={onChange} />,
 		)
@@ -74,7 +74,7 @@ describe('NotificationsFilterBar — recipient input', () => {
 
 describe('NotificationsFilterBar — date inputs', () => {
 	test('[D1] empty "С даты" → from: null', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		const { getByLabelText } = render(
 			<NotificationsFilterBar value={{ ...EMPTY, from: '2026-04-01' }} onChange={onChange} />,
 		)
@@ -83,14 +83,14 @@ describe('NotificationsFilterBar — date inputs', () => {
 	})
 
 	test('[D2] valid "С даты" → from: YYYY-MM-DD', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		const { getByLabelText } = render(<NotificationsFilterBar value={EMPTY} onChange={onChange} />)
 		fireEvent.change(getByLabelText('С даты'), { target: { value: '2026-05-01' } })
 		expect(onChange).toHaveBeenCalledWith({ ...EMPTY, from: '2026-05-01' })
 	})
 
 	test('[D3] empty "По дату" → to: null', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		const { getByLabelText } = render(
 			<NotificationsFilterBar value={{ ...EMPTY, to: '2026-04-30' }} onChange={onChange} />,
 		)
@@ -101,7 +101,7 @@ describe('NotificationsFilterBar — date inputs', () => {
 
 describe('NotificationsFilterBar — shape preservation', () => {
 	test('[P1] changing recipient preserves all other fields', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		const initial: NotificationsFilterValue = {
 			status: 'failed',
 			kind: 'booking_confirmed',
@@ -122,7 +122,7 @@ describe('NotificationsFilterBar — shape preservation', () => {
 	})
 
 	test('[P2] changing "С даты" preserves status/kind/recipient/to', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		const initial: NotificationsFilterValue = {
 			status: 'pending',
 			kind: 'payment_succeeded',

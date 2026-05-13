@@ -12,7 +12,7 @@
  */
 import { cleanup, render, screen } from '@testing-library/react'
 import { CalendarRangeIcon } from 'lucide-react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'bun:test'
 import { EmptyState } from './empty-state'
 
 afterEach(() => {

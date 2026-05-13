@@ -18,12 +18,12 @@
  *   Persistence:
  *     [P1] partialize keeps only windowDays + viewMode
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'bun:test'
 
 const STORAGE_KEY = 'horeca-chessboard-prefs'
 
-const storageData = vi.hoisted(() => ({ value: new Map<string, string>() }))
-vi.hoisted(() => {
+const storageData = { value: new Map<string, string>() }
+;(() => {
 	const stub = {
 		getItem: (k: string) => storageData.value.get(k) ?? null,
 		setItem: (k: string, v: string) => {
@@ -45,7 +45,7 @@ vi.hoisted(() => {
 		writable: true,
 		configurable: true,
 	})
-})
+})()
 
 const { useChessboardPrefsStore } = await import('./chessboard-prefs-store')
 

@@ -13,7 +13,7 @@
 import { Hono } from 'hono'
 import { contextStorage } from 'hono/context-storage'
 import { requestId } from 'hono/request-id'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { currentRequestId, requestContext, tryRequestContext } from './context.ts'
 import type { AppEnv } from './factory.ts'
 

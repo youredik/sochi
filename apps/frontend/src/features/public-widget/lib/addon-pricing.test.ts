@@ -7,7 +7,7 @@
  *   - Enum FULL coverage (every AddonPricingUnit roundtrips)
  *   - VAT layering verified across multiple rates
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	type AddonCartEntry,
 	addonGrossKopecks,

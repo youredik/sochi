@@ -19,7 +19,7 @@
  *   [X] enabled defaults to true when omitted
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { newId } from './ids.ts'
 import {
 	folioLineCategorySchema,
@@ -40,7 +40,7 @@ const validBase = () =>
 	}) satisfies Record<string, unknown>
 
 describe('routingRuleMatchScopeSchema (3 enum values FULL)', () => {
-	it.each(['property', 'company', 'ratePlan'] as const)('accepts %s', (v) => {
+	it.each(['property', 'company', 'ratePlan'] as string[])('accepts %s', (v: string) => {
 		expect(routingRuleMatchScopeSchema.safeParse(v).success).toBe(true)
 	})
 
@@ -64,7 +64,7 @@ describe('folioLineCategorySchema (11 enum values FULL)', () => {
 		'noShowFee',
 	] as const
 
-	it.each(ALL_CATEGORIES)('accepts %s', (v) => {
+	it.each([...ALL_CATEGORIES])('accepts %s', (v: (typeof ALL_CATEGORIES)[number]) => {
 		expect(folioLineCategorySchema.safeParse(v).success).toBe(true)
 	})
 

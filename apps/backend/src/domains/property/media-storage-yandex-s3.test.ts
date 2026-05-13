@@ -17,10 +17,10 @@
  *        handles real flag flip
  *   [Y9] putDerivedBytes infers Content-Type from key extension
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, mock } from 'bun:test'
 
-const sendMock = vi.fn()
-vi.mock('@aws-sdk/client-s3', () => ({
+const sendMock = mock()
+mock.module('@aws-sdk/client-s3', () => ({
 	S3Client: class {
 		send = sendMock
 	},
@@ -40,8 +40,8 @@ vi.mock('@aws-sdk/client-s3', () => ({
 	},
 }))
 
-const getSignedUrlMock = vi.fn()
-vi.mock('@aws-sdk/s3-request-presigner', () => ({
+const getSignedUrlMock = mock()
+mock.module('@aws-sdk/s3-request-presigner', () => ({
 	getSignedUrl: getSignedUrlMock,
 }))
 
@@ -56,7 +56,7 @@ const BASE_OPTS = {
 }
 
 afterEach(() => {
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 describe('Yandex S3 MediaStorage', () => {

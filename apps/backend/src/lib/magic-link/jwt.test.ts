@@ -30,7 +30,7 @@
  *     [J15] scope='mutate' → audience='portal'
  */
 
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { MAGIC_LINK_TTL_SECONDS, signMagicLinkJwt, verifyMagicLinkJwt } from './jwt.ts'
 import { generateMagicLinkSecret } from './secret.ts'
 

@@ -14,7 +14,7 @@
  * matchMedia mocked per @testing-library canon (window.matchMedia stub).
  */
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 import {
 	ResponsiveSheet,
 	ResponsiveSheetContent,
@@ -27,15 +27,15 @@ function mockMatchMedia(matches: boolean) {
 	Object.defineProperty(window, 'matchMedia', {
 		writable: true,
 		configurable: true,
-		value: vi.fn().mockImplementation((query: string) => ({
+		value: mock().mockImplementation((query: string) => ({
 			matches,
 			media: query,
 			onchange: null,
-			addListener: vi.fn(),
-			removeListener: vi.fn(),
-			addEventListener: vi.fn(),
-			removeEventListener: vi.fn(),
-			dispatchEvent: vi.fn(() => false),
+			addListener: mock(),
+			removeListener: mock(),
+			addEventListener: mock(),
+			removeEventListener: mock(),
+			dispatchEvent: mock(() => false),
 		})),
 	})
 }

@@ -19,7 +19,7 @@
  *     [E1] CONTENT_WIZARD_STEPS has all 6 ContentStep values, in canonical order
  *     [E2] STEP_LABELS has every ContentStep key with non-empty label
  */
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'bun:test'
 import {
 	CONTENT_WIZARD_STEPS,
 	type ContentStep,

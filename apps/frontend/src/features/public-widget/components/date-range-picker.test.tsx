@@ -12,7 +12,7 @@
  * через behavior asserts above + E2E happy path для full keyboard nav.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { DateRangePicker } from './date-range-picker.tsx'
 
 afterEach(() => cleanup())

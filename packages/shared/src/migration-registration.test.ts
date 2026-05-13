@@ -34,7 +34,7 @@
  *     [V2] migrationRegistrationPatch retryRequested=true → valid
  *     [V3] epguChannel valid set + invalid rejected
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	checkStayPeriodInvariant,
 	computeNextPollAtMs,
@@ -52,7 +52,15 @@ describe('migration-registration — enums', () => {
 	test('[E1] identityMethod has exactly 5 values (ПП-174)', () => {
 		expect(identityMethodValues).toHaveLength(5)
 		expect([...identityMethodValues].sort()).toEqual(
-			['passport_paper', 'passport_zagran', 'driver_license', 'ebs', 'digital_id_max'].sort(),
+			[
+				...([
+					'passport_paper',
+					'passport_zagran',
+					'driver_license',
+					'ebs',
+					'digital_id_max',
+				] as const),
+			].sort(),
 		)
 	})
 

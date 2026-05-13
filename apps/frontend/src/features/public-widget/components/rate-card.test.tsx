@@ -24,7 +24,7 @@
  *     [A3] No photo seeded → SVG placeholder rendered (no broken img)
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import type {
 	PublicAvailabilityOffering,
 	PublicRateOption,
@@ -156,7 +156,7 @@ describe('<RateCard>', () => {
 	})
 
 	test('[R6] Click rate calls onSelectRate с ratePlanId', () => {
-		const onSelect = vi.fn()
+		const onSelect = mock()
 		render(
 			<RateCard
 				offering={sellableOffering}

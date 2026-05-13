@@ -4,7 +4,7 @@
 		"module": "nodenext",
 		"moduleResolution": "nodenext",
 		"rootDir": "./src",
-		"types": ["node"],
+		"types": ["node", "bun"],
 		"rewriteRelativeImportExtensions": true,
 		"erasableSyntaxOnly": true
 	},

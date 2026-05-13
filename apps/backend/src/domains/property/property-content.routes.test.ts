@@ -21,7 +21,7 @@ import type {
 	PropertyMedia,
 	PropertyMediaCreateInput,
 } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { onError } from '../../errors/on-error.ts'
 import { createTestRouter, type TestContext } from '../../tests/setup.ts'
 import type { createAddonsRepo } from './addons.repo.ts'

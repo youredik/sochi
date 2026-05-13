@@ -17,32 +17,35 @@
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-// Hoisted localStorage stub — required для Zustand persist module-load capture
-const storageData = vi.hoisted(() => ({ value: new Map<string, string>() }))
-vi.hoisted(() => {
-	const stub = {
-		getItem: (k: string) => storageData.value.get(k) ?? null,
-		setItem: (k: string, v: string) => {
-			storageData.value.set(k, String(v))
-		},
-		removeItem: (k: string) => {
-			storageData.value.delete(k)
-		},
-		clear: () => {
-			storageData.value.clear()
-		},
-		key: (i: number) => Array.from(storageData.value.keys())[i] ?? null,
-		get length() {
-			return storageData.value.size
-		},
-	} satisfies Storage
-	Object.defineProperty(globalThis, 'localStorage', {
-		value: stub,
-		writable: true,
-		configurable: true,
-	})
+// localStorage stub — must be installed BEFORE the dynamic imports of `./mode-toggle`
+// and `@/lib/theme-store` so Zustand `persist` middleware captures our stub at module
+// load. In Vitest this was wrapped in `vi.hoisted()` (which runs above the static
+// `import` declarations); in bun:test there is no auto-hoist mechanism, but ESM
+// top-level code already runs after the static imports complete and before the
+// subsequent `await import(...)`, which matches what we need.
+const storageData = { value: new Map<string, string>() }
+const stub = {
+	getItem: (k: string) => storageData.value.get(k) ?? null,
+	setItem: (k: string, v: string) => {
+		storageData.value.set(k, String(v))
+	},
+	removeItem: (k: string) => {
+		storageData.value.delete(k)
+	},
+	clear: () => {
+		storageData.value.clear()
+	},
+	key: (i: number) => Array.from(storageData.value.keys())[i] ?? null,
+	get length() {
+		return storageData.value.size
+	},
+} satisfies Storage
+Object.defineProperty(globalThis, 'localStorage', {
+	value: stub,
+	writable: true,
+	configurable: true,
 })
 
 const { ModeToggle } = await import('./mode-toggle')

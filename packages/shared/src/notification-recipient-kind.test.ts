@@ -11,7 +11,7 @@
  *   - exact-value asserts on every enum member (no count alone)
  *   - regression: removing/renaming a value WILL fail loud
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	deriveRecipientKindFromNotificationKind,
 	type NotificationKind,
@@ -35,7 +35,7 @@ describe('NotificationKind enum (regression — fail loud)', () => {
 		'booking_magic_link',
 	]
 
-	it.each(allValues)('accepts canonical kind %s', (k) => {
+	it.each([...allValues])('accepts canonical kind %s', (k: (typeof allValues)[number]) => {
 		expect(notificationKindSchema.parse(k)).toBe(k)
 	})
 
@@ -55,7 +55,7 @@ describe('NotificationKind enum (regression — fail loud)', () => {
 describe('NotificationRecipientKind enum (regression — fail loud)', () => {
 	const allValues: NotificationRecipientKind[] = ['user', 'guest', 'system', 'channel']
 
-	it.each(allValues)('accepts canonical recipientKind %s', (k) => {
+	it.each(allValues)('accepts canonical recipientKind %s', (k: NotificationRecipientKind) => {
 		expect(notificationRecipientKindSchema.parse(k)).toBe(k)
 	})
 
@@ -79,7 +79,7 @@ describe('NotificationRecipientKind enum (regression — fail loud)', () => {
 describe('M8.A.0.6 new public-widget kinds (locked-in subset)', () => {
 	const newKinds = ['pre_arrival', 'booking_cancelled', 'booking_modified'] as const
 
-	it.each(newKinds)('%s is a valid NotificationKind', (k) => {
+	it.each([...newKinds])('%s is a valid NotificationKind', (k: (typeof newKinds)[number]) => {
 		expect(notificationKindSchema.parse(k)).toBe(k)
 	})
 })

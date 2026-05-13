@@ -10,9 +10,9 @@
  * Pattern for future domain invariants — copy this shape when writing
  * property-based tests for Rate.compute(), Availability.allotment() etc.
  */
-import { fc, test } from '@fast-check/vitest'
+import * as fc from 'fast-check'
 import { Optional } from '@ydbjs/value/optional'
-import { describe, expect, test as vitestTest } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { dateOpt, decimalToMicros, microsToDecimal, toNumber } from './ydb-helpers.ts'
 
 describe('toNumber', () => {
@@ -20,39 +20,57 @@ describe('toNumber', () => {
 		expect(toNumber(null)).toBeNull()
 	})
 
-	test.prop([fc.integer()])('is identity on safe JS number inputs', (n) => {
-		expect(toNumber(n)).toBe(n)
+	test('is identity on safe JS number inputs', () => {
+		void fc.assert(
+			fc.property(fc.integer(), (n) => {
+				expect(toNumber(n)).toBe(n)
+			}),
+		)
 	})
 
-	test.prop([
-		fc.bigInt({ min: BigInt(Number.MIN_SAFE_INTEGER), max: BigInt(Number.MAX_SAFE_INTEGER) }),
-	])('safe bigint → number preserves exact value', (b: bigint) => {
-		const result = toNumber(b)
-		expect(typeof result).toBe('number')
-		expect(result).toBe(Number(b))
-		// Round-trip: converting back to bigint must equal the input.
-		expect(BigInt(result ?? 0)).toBe(b)
+	test('safe bigint → number preserves exact value', () => {
+		void fc.assert(
+			fc.property(
+				fc.bigInt({ min: BigInt(Number.MIN_SAFE_INTEGER), max: BigInt(Number.MAX_SAFE_INTEGER) }),
+				(b: bigint) => {
+					const result = toNumber(b)
+					expect(typeof result).toBe('number')
+					expect(result).toBe(Number(b))
+					// Round-trip: converting back to bigint must equal the input.
+					expect(BigInt(result ?? 0)).toBe(b)
+				},
+			),
+		)
 	})
 
-	test.prop([
-		fc.oneof(
-			fc.bigInt({ min: BigInt(Number.MAX_SAFE_INTEGER) + 1n, max: 2n ** 63n - 1n }),
-			fc.bigInt({ min: -(2n ** 63n), max: BigInt(Number.MIN_SAFE_INTEGER) - 1n }),
-		),
-	])('throws on bigint exceeding MAX_SAFE_INTEGER (no silent precision loss)', (unsafeBigint) => {
-		expect(() => toNumber(unsafeBigint)).toThrow(/exceeds/)
+	test('throws on bigint exceeding MAX_SAFE_INTEGER (no silent precision loss)', () => {
+		void fc.assert(
+			fc.property(
+				fc.oneof(
+					fc.bigInt({ min: BigInt(Number.MAX_SAFE_INTEGER) + 1n, max: 2n ** 63n - 1n }),
+					fc.bigInt({ min: -(2n ** 63n), max: BigInt(Number.MIN_SAFE_INTEGER) - 1n }),
+				),
+				(unsafeBigint) => {
+					expect(() => toNumber(unsafeBigint)).toThrow(/exceeds/)
+				},
+			),
+		)
 	})
 
-	test.prop([fc.integer({ min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER })])(
-		'number↔bigint equivalence: toNumber(n) === toNumber(BigInt(n))',
-		(n) => {
-			expect(toNumber(n)).toBe(toNumber(BigInt(n)))
-		},
-	)
+	test('number↔bigint equivalence: toNumber(n) === toNumber(BigInt(n))', () => {
+		void fc.assert(
+			fc.property(
+				fc.integer({ min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER }),
+				(n) => {
+					expect(toNumber(n)).toBe(toNumber(BigInt(n)))
+				},
+			),
+		)
+	})
 })
 
 describe('micros ↔ decimal conversion', () => {
-	vitestTest('exact-value boundaries', () => {
+	test('exact-value boundaries', () => {
 		expect(decimalToMicros('0')).toBe(0n)
 		expect(decimalToMicros('1')).toBe(1_000_000n)
 		expect(decimalToMicros('1.5')).toBe(1_500_000n)
@@ -70,42 +88,47 @@ describe('micros ↔ decimal conversion', () => {
 		expect(microsToDecimal(-42_500_000n)).toBe('-42.5')
 	})
 
-	vitestTest('rejects invalid decimal strings', () => {
+	test('rejects invalid decimal strings', () => {
 		expect(() => decimalToMicros('abc')).toThrow(/Invalid decimal/)
 		expect(() => decimalToMicros('1.2.3')).toThrow(/Invalid decimal/)
 		expect(() => decimalToMicros('')).toThrow(/Invalid decimal/)
 		expect(() => decimalToMicros('1e5')).toThrow(/Invalid decimal/) // no scientific notation
 	})
 
-	test.prop([
-		fc
-			.tuple(
-				fc.integer({ min: -1_000_000_000, max: 1_000_000_000 }),
-				fc.integer({ min: 0, max: 999_999 }),
-			)
-			.map(([whole, frac]) => {
-				const fracStr = frac.toString().padStart(6, '0').replace(/0+$/, '')
-				return fracStr.length > 0 ? `${whole}.${fracStr}` : `${whole}`
-			}),
-	])('roundtrip: micros → decimal → micros is identity for representable values', (s) => {
-		const micros = decimalToMicros(s)
-		const back = microsToDecimal(micros)
-		expect(decimalToMicros(back)).toBe(micros)
+	test('roundtrip: micros → decimal → micros is identity for representable values', () => {
+		void fc.assert(
+			fc.property(
+				fc
+					.tuple(
+						fc.integer({ min: -1_000_000_000, max: 1_000_000_000 }),
+						fc.integer({ min: 0, max: 999_999 }),
+					)
+					.map(([whole, frac]) => {
+						const fracStr = frac.toString().padStart(6, '0').replace(/0+$/, '')
+						return fracStr.length > 0 ? `${whole}.${fracStr}` : `${whole}`
+					}),
+				(s) => {
+					const micros = decimalToMicros(s)
+					const back = microsToDecimal(micros)
+					expect(decimalToMicros(back)).toBe(micros)
+				},
+			),
+		)
 	})
 })
 
 describe('dateOpt (nullable YDB `Date` binding helper)', () => {
-	vitestTest('[DO1] null input returns an Optional wrapping null', () => {
+	test('[DO1] null input returns an Optional wrapping null', () => {
 		const result = dateOpt(null)
 		expect(result).toBeInstanceOf(Optional)
 	})
 
-	vitestTest('[DO2] undefined input treated as null (same Optional)', () => {
+	test('[DO2] undefined input treated as null (same Optional)', () => {
 		const result = dateOpt(undefined)
 		expect(result).toBeInstanceOf(Optional)
 	})
 
-	vitestTest('[DO3] YYYY-MM-DD input returns an Optional with a non-null Date payload', () => {
+	test('[DO3] YYYY-MM-DD input returns an Optional with a non-null Date payload', () => {
 		const result = dateOpt('2026-07-15')
 		expect(result).toBeInstanceOf(Optional)
 		// The wrapped primitive is NOT the same instance as NULL — we check by
@@ -127,21 +150,19 @@ describe('dateOpt (nullable YDB `Date` binding helper)', () => {
 		})
 		.map((day) => new Date(day * MS_PER_DAY).toISOString().slice(0, 10))
 
-	test.prop([ymdArb])(
-		'[DOP1] dateOpt never throws on any valid YYYY-MM-DD in booking horizon',
-		(ymd) => {
-			expect(() => dateOpt(ymd)).not.toThrow()
-			expect(dateOpt(ymd)).toBeInstanceOf(Optional)
-		},
-	)
+	test('[DOP1] dateOpt never throws on any valid YYYY-MM-DD in booking horizon', () => {
+		void fc.assert(
+			fc.property(ymdArb, (ymd) => {
+				expect(() => dateOpt(ymd)).not.toThrow()
+				expect(dateOpt(ymd)).toBeInstanceOf(Optional)
+			}),
+		)
+	})
 
-	vitestTest(
-		'[DO4] month/year rollover dates accepted (Dec 31 → Jan 1, leap-day 2028-02-29)',
-		() => {
-			// 2028 is a leap year (divisible by 4 and by 400).
-			expect(() => dateOpt('2028-02-29')).not.toThrow()
-			expect(() => dateOpt('2026-12-31')).not.toThrow()
-			expect(() => dateOpt('2027-01-01')).not.toThrow()
-		},
-	)
+	test('[DO4] month/year rollover dates accepted (Dec 31 → Jan 1, leap-day 2028-02-29)', () => {
+		// 2028 is a leap year (divisible by 4 and by 400).
+		expect(() => dateOpt('2028-02-29')).not.toThrow()
+		expect(() => dateOpt('2026-12-31')).not.toThrow()
+		expect(() => dateOpt('2027-01-01')).not.toThrow()
+	})
 })

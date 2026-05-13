@@ -28,7 +28,8 @@
  *     [Cy1] 3 pending rows → all polled, scanned=3
  *     [Cy2] 1 transient throw → cycle continues, others updated
  */
-import { afterEach, describe, expect, test } from 'vitest'
+import type { EpguErrorCategory } from '@horeca/shared'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { createMockArchiveBuilder } from '../archive/mock-archive.ts'
 import { createMockRklCheck } from '../rkl/mock-rkl.ts'
 import { createMockEpguTransport } from '../transport/mock-epgu.ts'
@@ -284,9 +285,10 @@ describe('RegistrationService — pollOne', () => {
 		const beforeRetry = before?.retryCount ?? 0
 		const result = await svc.pollOne(ENQ_INPUT.tenantId, id)
 		const after = repo.rows.get(id)
+		expect(after).toBeDefined()
 		expect(after?.retryCount).toBe(beforeRetry + 1)
 		// FSM may or may not have advanced depending on trajectory + time
-		expect([1, 2, 17, 21, 3]).toContain(after?.statusCode)
+		expect([1, 2, 17, 21, 3] as ReadonlyArray<number | undefined>).toContain(after?.statusCode)
 		expect([true, false]).toContain(result.isFinal)
 	})
 
@@ -348,7 +350,7 @@ describe('RegistrationService — pollOne', () => {
 
 describe('classifyReasonRefuse', () => {
 	test('[Cr1] all 8 canonical texts → correct EpguErrorCategory', () => {
-		const cases: ReadonlyArray<readonly [string, string]> = [
+		const cases: ReadonlyArray<readonly [string, EpguErrorCategory]> = [
 			['Несоответствие формата данных требованиям ФЛК', 'validation_format'],
 			['Ошибка проверки электронной подписи', 'signature_invalid'],
 			['Дубликат уведомления о прибытии', 'duplicate_notification'],

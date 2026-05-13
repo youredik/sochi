@@ -26,7 +26,7 @@
  *     [L1] year=2026 q=1 → "I квартал 2026"
  *     [L2] year=2025 q=4 → "IV квартал 2025"
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	currentYearQuarter,
 	defaultPeriod,

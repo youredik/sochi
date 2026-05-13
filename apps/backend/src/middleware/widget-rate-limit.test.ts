@@ -25,7 +25,7 @@
 
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'bun:test'
 import type { AppEnv } from '../factory.ts'
 import {
 	__testWidgetRateLimitInternals,

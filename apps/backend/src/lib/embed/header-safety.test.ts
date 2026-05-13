@@ -5,7 +5,7 @@
  * CRLF / NUL injection attempts and origin-format violations.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { assertHeaderSafe, assertOriginSafe, HTTPS_ORIGIN_REGEX } from './header-safety.ts'
 
 describe('assertHeaderSafe — CRLF + NUL rejection', () => {

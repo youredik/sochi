@@ -8,7 +8,7 @@
  *   - adversarial: extra keys in `sections` are rejected (.strict)
  *   - locale fallback exhaustive covered
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	buildHotelJsonLd,
 	checkAccessibilityCoverage,

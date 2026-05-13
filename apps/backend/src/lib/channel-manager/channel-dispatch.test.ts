@@ -6,7 +6,7 @@
  * 4xx no-retry / 5xx retryable)».
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	__testHooks,
 	buildIdempotencyKey,

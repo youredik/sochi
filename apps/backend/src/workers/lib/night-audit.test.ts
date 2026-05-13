@@ -6,7 +6,7 @@
  * (mutation-testing-friendly — Stryker M6.5.1 expects exact-value asserts on
  * every codepath, not "smoke" passes).
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	addDays,
 	businessDate,

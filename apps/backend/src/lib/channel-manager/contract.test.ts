@@ -9,7 +9,7 @@
  * that the contract surface compiles + is structurally consumable.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import type { ChannelManagerAdapter, ChannelMetadata, DispatchStatus } from './index.ts'
 
 describe('ChannelManagerAdapter contract surface (M10 / A7.1)', () => {

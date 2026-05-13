@@ -8,7 +8,7 @@
  * Intl.NumberFormat('ru-RU') canon. Tests use regex match instead of strict
  * equality to avoid hidden-character flakiness across Node versions.
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { formatDateRange, formatMeals, formatMoscowDateTime, formatRub } from './widget-format.ts'
 
 describe('formatRub', () => {

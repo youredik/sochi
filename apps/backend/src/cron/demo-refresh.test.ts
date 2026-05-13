@@ -13,7 +13,7 @@
  *   - run_date deterministic regardless of wall-clock midnight crossing.
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, mock } from 'bun:test'
 import {
 	__testHooks,
 	buildDemoRefreshCron,
@@ -29,7 +29,7 @@ describe('demo-refresh — Croner config (D12)', () => {
 	})
 
 	it('[CRON1.b] paused builder produces non-firing job (test seam)', async () => {
-		const handler = vi.fn().mockResolvedValue(undefined)
+		const handler = mock().mockResolvedValue(undefined)
 		const job = buildDemoRefreshCron({ handler, paused: true })
 		// Paused → never fires; we trigger manually if needed.
 		expect(job.isStopped()).toBe(false)
@@ -46,7 +46,7 @@ describe('demo-refresh — Croner config (D12)', () => {
 
 describe('demo-refresh — cold-start startup-check (D13 cold-start race)', () => {
 	it('[CRON2] runOnceOnStartup invokes handler ONCE если shouldFire=true', async () => {
-		const handler = vi.fn().mockResolvedValue(undefined)
+		const handler = mock().mockResolvedValue(undefined)
 		const now = new Date('2026-05-04T10:00:00Z')
 		const result = await runOnceOnStartup({
 			shouldFire: async () => true,
@@ -63,7 +63,7 @@ describe('demo-refresh — cold-start startup-check (D13 cold-start race)', () =
 	})
 
 	it('[CRON2.b] runOnceOnStartup SKIPS handler если shouldFire=false', async () => {
-		const handler = vi.fn().mockResolvedValue(undefined)
+		const handler = mock().mockResolvedValue(undefined)
 		const result = await runOnceOnStartup({
 			shouldFire: async () => false,
 			handler,
@@ -92,7 +92,7 @@ describe('demo-refresh — handler idempotency contract', () => {
 	it('[CRON4] handler invoked with stable run_date (idempotent UPSERT key)', async () => {
 		// Per D13: handler MUST be idempotent. We verify the contract — runDate
 		// stays stable across N invocations on the same wall-clock day.
-		const handler = vi.fn().mockResolvedValue(undefined)
+		const handler = mock().mockResolvedValue(undefined)
 		const now = new Date('2026-05-04T10:00:00Z')
 		await runOnceOnStartup({ shouldFire: async () => true, handler, now: () => now })
 		await runOnceOnStartup({ shouldFire: async () => true, handler, now: () => now })
@@ -107,7 +107,7 @@ describe('demo-refresh — handler idempotency contract', () => {
 	})
 
 	it('[CRON5] handler error propagates (Croner catch: callback receives it)', async () => {
-		const failHandler = vi.fn().mockRejectedValue(new Error('boom'))
+		const failHandler = mock().mockRejectedValue(new Error('boom'))
 		await expect(
 			runOnceOnStartup({ shouldFire: async () => true, handler: failHandler }),
 		).rejects.toThrow('boom')
@@ -127,7 +127,7 @@ describe('demo-refresh — Cron API surface (R2-croner #4 protect, #3 SIGTERM)',
 	})
 
 	it('[CRON6.b] job.stop() prevents future ticks (SIGTERM scenario)', () => {
-		const handler = vi.fn().mockResolvedValue(undefined)
+		const handler = mock().mockResolvedValue(undefined)
 		const job = buildDemoRefreshCron({ handler, paused: false })
 		// Simulate SIGTERM — call stop().
 		job.stop()

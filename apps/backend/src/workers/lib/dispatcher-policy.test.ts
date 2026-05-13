@@ -8,7 +8,7 @@
  *   - shouldDeadLetter at boundary
  *   - input validation: rejects negative / fractional retryCount
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	buildPendingPredicate,
 	computeNextAttemptAt,

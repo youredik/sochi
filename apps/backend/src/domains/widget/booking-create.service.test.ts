@@ -39,7 +39,7 @@
  *     [BC21] WIDGET_ACTOR_USER_ID exported as 'system:public_widget' canon
  */
 import { type Booking, type Guest, newId } from '@horeca/shared'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import {
 	StaleAvailabilityError,
 	WidgetConsentMissingError,
@@ -155,23 +155,22 @@ function buildDeps(
 ): {
 	deps: WidgetBookingCreateServiceDeps
 	mocks: {
-		getAvailability: ReturnType<typeof vi.fn>
-		guestCreate: ReturnType<typeof vi.fn>
-		bookingCreate: ReturnType<typeof vi.fn>
-		paymentCreateIntent: ReturnType<typeof vi.fn>
-		recordConsents: ReturnType<typeof vi.fn>
+		getAvailability: ReturnType<typeof mock>
+		guestCreate: ReturnType<typeof mock>
+		bookingCreate: ReturnType<typeof mock>
+		paymentCreateIntent: ReturnType<typeof mock>
+		recordConsents: ReturnType<typeof mock>
 	}
 } {
 	const guestId = overrides.guestId ?? newId('guest')
 	const bookingId = overrides.bookingId ?? newId('booking')
 	const paymentId = newId('payment')
 
-	const getAvailability = vi
-		.fn()
-		.mockResolvedValue(overrides.availability ?? buildAvailabilityResponse())
-	const guestCreate = vi
-		.fn()
-		.mockImplementation(async (_tenantId: string, _input: unknown): Promise<Guest> => {
+	const getAvailability = mock().mockResolvedValue(
+		overrides.availability ?? buildAvailabilityResponse(),
+	)
+	const guestCreate = mock().mockImplementation(
+		async (_tenantId: string, _input: unknown): Promise<Guest> => {
 			return {
 				id: guestId,
 				tenantId: TENANT_ID,
@@ -198,8 +197,9 @@ function buildDeps(
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString(),
 			}
-		})
-	const bookingCreate = vi.fn().mockImplementation(async (): Promise<Booking> => {
+		},
+	)
+	const bookingCreate = mock().mockImplementation(async (): Promise<Booking> => {
 		return {
 			id: bookingId,
 			tenantId: TENANT_ID,
@@ -244,7 +244,7 @@ function buildDeps(
 			version: 1,
 		} as unknown as Booking
 	})
-	const paymentCreateIntent = vi.fn().mockResolvedValue({
+	const paymentCreateIntent = mock().mockResolvedValue({
 		kind: 'created' as const,
 		payment: {
 			id: paymentId,
@@ -284,41 +284,41 @@ function buildDeps(
 	// SQL stub — recordConsents inserts; we mock a no-op `tag` template literal
 	// function that swallows args. Real test would use real SQL — этот unit test
 	// focuses на orchestration shape, не consent persistence (tested separately).
-	const sqlStub = vi
-		.fn()
-		.mockReturnValue(Promise.resolve([])) as unknown as WidgetBookingCreateServiceDeps['sql']
+	const sqlStub = mock().mockReturnValue(
+		Promise.resolve([]),
+	) as unknown as WidgetBookingCreateServiceDeps['sql']
 
 	return {
 		deps: {
 			widgetService: {
 				getAvailability,
-				listProperties: vi.fn(),
-				getPropertyDetail: vi.fn(),
-				listAddons: vi.fn(),
+				listProperties: mock(),
+				getPropertyDetail: mock(),
+				listAddons: mock(),
 			} as unknown as WidgetBookingCreateServiceDeps['widgetService'],
 			guestService: {
 				create: guestCreate,
-				list: vi.fn(),
-				getById: vi.fn(),
-				update: vi.fn(),
-				delete: vi.fn(),
+				list: mock(),
+				getById: mock(),
+				update: mock(),
+				delete: mock(),
 			},
 			bookingService: {
 				create: bookingCreate,
-				getById: vi.fn(),
-				listByProperty: vi.fn(),
-				cancel: vi.fn(),
-				checkIn: vi.fn(),
-				checkOut: vi.fn(),
-				markNoShow: vi.fn(),
+				getById: mock(),
+				listByProperty: mock(),
+				cancel: mock(),
+				checkIn: mock(),
+				checkOut: mock(),
+				markNoShow: mock(),
 			} as unknown as WidgetBookingCreateServiceDeps['bookingService'],
 			paymentService: {
 				createIntent: paymentCreateIntent,
-				getById: vi.fn(),
-				getByIdempotencyKey: vi.fn(),
-				listByFolio: vi.fn(),
-				listByBooking: vi.fn(),
-				applyTransition: vi.fn(),
+				getById: mock(),
+				getByIdempotencyKey: mock(),
+				listByFolio: mock(),
+				listByBooking: mock(),
+				applyTransition: mock(),
 			},
 			sql: sqlStub,
 		},
@@ -327,7 +327,7 @@ function buildDeps(
 			guestCreate,
 			bookingCreate,
 			paymentCreateIntent,
-			recordConsents: sqlStub as unknown as ReturnType<typeof vi.fn>,
+			recordConsents: sqlStub as unknown as ReturnType<typeof mock>,
 		},
 	}
 }
@@ -373,7 +373,7 @@ function buildInput(overrides: Partial<WidgetBookingCreateInput> = {}): WidgetBo
 }
 
 afterEach(() => {
-	vi.restoreAllMocks()
+	mock.restore()
 })
 
 describe('widget booking-create service', () => {

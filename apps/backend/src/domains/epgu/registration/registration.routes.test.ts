@@ -25,7 +25,7 @@
  *     [Z2] submit empty archiveBase64 → 400
  */
 import type { MemberRole, MigrationRegistrationPatch } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { onError } from '../../../errors/on-error.ts'
 import { createTestRouter, type TestContext } from '../../../tests/setup.ts'
 import type { MigrationRegistrationFactory } from './registration.factory.ts'

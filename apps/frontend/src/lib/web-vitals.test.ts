@@ -8,14 +8,14 @@
  *   [W4] span.end() called per metric (no leaked spans)
  *   [W5] tracer name === 'frontend-vitals' (single source for OTel filtering)
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, mock } from 'bun:test'
 
-const onCLSMock = vi.fn()
-const onINPMock = vi.fn()
-const onLCPMock = vi.fn()
-const onFCPMock = vi.fn()
-const onTTFBMock = vi.fn()
-vi.mock('web-vitals', () => ({
+const onCLSMock = mock()
+const onINPMock = mock()
+const onLCPMock = mock()
+const onFCPMock = mock()
+const onTTFBMock = mock()
+mock.module('web-vitals', () => ({
 	onCLS: onCLSMock,
 	onINP: onINPMock,
 	onLCP: onLCPMock,
@@ -23,28 +23,28 @@ vi.mock('web-vitals', () => ({
 	onTTFB: onTTFBMock,
 }))
 
-const startSpanMock = vi.fn()
-const setAttributeMock = vi.fn()
-const endMock = vi.fn()
-const getTracerMock = vi.fn(() => ({ startSpan: startSpanMock }))
-vi.mock('@opentelemetry/api', () => ({
+const startSpanMock = mock()
+const setAttributeMock = mock()
+const endMock = mock()
+const getTracerMock = mock(() => ({ startSpan: startSpanMock }))
+mock.module('@opentelemetry/api', () => ({
 	trace: { getTracer: getTracerMock },
 }))
 
 const { reportWebVitals } = await import('./web-vitals')
 
 afterEach(() => {
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 describe('reportWebVitals — registration', () => {
 	it('[W1] registers all 5 web-vitals handlers', () => {
 		reportWebVitals()
-		expect(onCLSMock).toHaveBeenCalledOnce()
-		expect(onINPMock).toHaveBeenCalledOnce()
-		expect(onLCPMock).toHaveBeenCalledOnce()
-		expect(onFCPMock).toHaveBeenCalledOnce()
-		expect(onTTFBMock).toHaveBeenCalledOnce()
+		expect(onCLSMock).toHaveBeenCalledTimes(1)
+		expect(onINPMock).toHaveBeenCalledTimes(1)
+		expect(onLCPMock).toHaveBeenCalledTimes(1)
+		expect(onFCPMock).toHaveBeenCalledTimes(1)
+		expect(onTTFBMock).toHaveBeenCalledTimes(1)
 	})
 
 	it('[W5] tracer name === "frontend-vitals"', () => {
@@ -86,6 +86,6 @@ describe('reportWebVitals — span emission', () => {
 		reportWebVitals()
 		const onINPCallback = onINPMock.mock.calls[0]?.[0] as (m: object) => void
 		onINPCallback({ name: 'INP', value: 200, rating: 'good', id: 'v3-inp-y' })
-		expect(endMock).toHaveBeenCalledOnce()
+		expect(endMock).toHaveBeenCalledTimes(1)
 	})
 })

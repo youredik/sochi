@@ -6,7 +6,7 @@
  * cross-tenant)».
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { classifyIncoming, computeBodyHash, type InboxRow } from './inbox.ts'
 
 const NOW = new Date('2026-05-04T12:00:00Z')

@@ -19,8 +19,8 @@
  *   [P-GET-1] getCartQuantity(empty, id) === 0 (opt-in canon)
  *   [P-SER-1] serialize → deserialize roundtrip preserves positive entries
  */
-import { fc, test } from '@fast-check/vitest'
-import { describe, expect } from 'vitest'
+import * as fc from 'fast-check'
+import { describe, expect, test } from 'bun:test'
 import {
 	addonGrossKopecks,
 	addonNetKopecks,
@@ -66,115 +66,161 @@ const arbCart = fc.array(arbCartEntry, { minLength: 0, maxLength: 5 }).map((entr
 })
 
 describe('addon-pricing property invariants', () => {
-	test.prop([arbLinearUnit, arbPriceKopecks, arbQuantity, arbQuantity, arbNights, arbPersons], {
-		numRuns: 200,
-	})(
-		'[P-NET-1] linear additivity: net(qtyA+qtyB) === net(qtyA) + net(qtyB)',
-		(unit, price, qtyA, qtyB, nights, persons) => {
-			const ctx = { nights, persons }
-			const left = addonNetKopecks(unit, price, qtyA + qtyB, ctx)
-			const right =
-				addonNetKopecks(unit, price, qtyA, ctx) + addonNetKopecks(unit, price, qtyB, ctx)
-			expect(left).toBe(right)
-		},
-	)
-
-	test.prop([arbLinearUnit, arbPriceKopecks, arbQuantity, arbVatBps, arbNights, arbPersons], {
-		numRuns: 200,
-	})('[P-GROSS-1] gross >= net (VAT non-negative)', (unit, price, qty, vatBps, nights, persons) => {
-		const ctx = { nights, persons }
-		const net = addonNetKopecks(unit, price, qty, ctx)
-		const gross = addonGrossKopecks(unit, price, qty, vatBps, ctx)
-		expect(gross).toBeGreaterThanOrEqual(net)
+	test('[P-NET-1] linear additivity: net(qtyA+qtyB) === net(qtyA) + net(qtyB)', () => {
+		void fc.assert(
+			fc.property(
+				arbLinearUnit,
+				arbPriceKopecks,
+				arbQuantity,
+				arbQuantity,
+				arbNights,
+				arbPersons,
+				(unit, price, qtyA, qtyB, nights, persons) => {
+					const ctx = { nights, persons }
+					const left = addonNetKopecks(unit, price, qtyA + qtyB, ctx)
+					const right =
+						addonNetKopecks(unit, price, qtyA, ctx) + addonNetKopecks(unit, price, qtyB, ctx)
+					expect(left).toBe(right)
+				},
+			),
+			{ numRuns: 200 },
+		)
 	})
 
-	test.prop([arbLinearUnit, arbPriceKopecks, arbQuantity, arbVatBps, arbNights, arbPersons], {
-		numRuns: 200,
-	})(
-		'[P-VAT-1] vat === gross - net (formula consistency)',
-		(unit, price, qty, vatBps, nights, persons) => {
-			const ctx = { nights, persons }
-			const vat = addonVatKopecks(unit, price, qty, vatBps, ctx)
-			const gross = addonGrossKopecks(unit, price, qty, vatBps, ctx)
-			const net = addonNetKopecks(unit, price, qty, ctx)
-			expect(vat).toBe(gross - net)
-		},
-	)
-
-	test.prop([arbLinearUnit, arbPriceKopecks, arbQuantity, arbVatBps, arbNights, arbPersons], {
-		numRuns: 100,
-	})(
-		'[P-CART-1] single-entry cart total === addonGross at that qty',
-		(unit, price, qty, vatBps, nights, persons) => {
-			fc.pre(qty >= 1) // P-CART-1 only meaningful для qty>=1; qty=0 tested separately
-			const addon: PublicWidgetAddon = {
-				addonId: 'addn_test',
-				code: 'TEST',
-				category: 'OTHER',
-				nameRu: 'test',
-				nameEn: null,
-				descriptionRu: null,
-				descriptionEn: null,
-				pricingUnit: unit,
-				priceKopecks: price,
-				currency: 'RUB',
-				vatBps,
-				inventoryMode: 'NONE',
-				dailyCapacity: null,
-				seasonalTags: [],
-				sortOrder: 0,
-			}
-			const ctx = { nights, persons }
-			const cartTotal = cartGrossTotalKopecks(
-				[{ addonId: 'addn_test', quantity: qty }],
-				[addon],
-				ctx,
-			)
-			const direct = addonGrossKopecks(unit, price, qty, vatBps, ctx)
-			expect(cartTotal).toBe(direct)
-		},
-	)
-
-	test.prop([arbCart], { numRuns: 100 })('[P-CART-2] empty/no-addons cart total === 0', (cart) => {
-		// No addons in catalog → defensive skip
-		const total = cartGrossTotalKopecks(cart, [], { nights: 5, persons: 2 })
-		expect(total).toBe(0)
+	test('[P-GROSS-1] gross >= net (VAT non-negative)', () => {
+		void fc.assert(
+			fc.property(
+				arbLinearUnit,
+				arbPriceKopecks,
+				arbQuantity,
+				arbVatBps,
+				arbNights,
+				arbPersons,
+				(unit, price, qty, vatBps, nights, persons) => {
+					const ctx = { nights, persons }
+					const net = addonNetKopecks(unit, price, qty, ctx)
+					const gross = addonGrossKopecks(unit, price, qty, vatBps, ctx)
+					expect(gross).toBeGreaterThanOrEqual(net)
+				},
+			),
+			{ numRuns: 200 },
+		)
 	})
 
-	test.prop([arbCart, arbAddonId], { numRuns: 100 })(
-		'[P-SET-1] setCartQuantity(cart, id, 0) removes id (and only id)',
-		(cart, id) => {
-			const result = setCartQuantity(cart, id, 0)
-			expect(result.find((e) => e.addonId === id)).toBeUndefined()
-			// All other entries preserved (length difference ≤1)
-			const removed = cart.some((e) => e.addonId === id)
-			expect(result).toHaveLength(removed ? cart.length - 1 : cart.length)
-		},
-	)
+	test('[P-VAT-1] vat === gross - net (formula consistency)', () => {
+		void fc.assert(
+			fc.property(
+				arbLinearUnit,
+				arbPriceKopecks,
+				arbQuantity,
+				arbVatBps,
+				arbNights,
+				arbPersons,
+				(unit, price, qty, vatBps, nights, persons) => {
+					const ctx = { nights, persons }
+					const vat = addonVatKopecks(unit, price, qty, vatBps, ctx)
+					const gross = addonGrossKopecks(unit, price, qty, vatBps, ctx)
+					const net = addonNetKopecks(unit, price, qty, ctx)
+					expect(vat).toBe(gross - net)
+				},
+			),
+			{ numRuns: 200 },
+		)
+	})
 
-	test.prop([arbCart, arbAddonId, fc.integer({ min: 1, max: 50 })], { numRuns: 100 })(
-		'[P-SET-2] setCartQuantity idempotent на same value',
-		(cart, id, qty) => {
-			const once = setCartQuantity(cart, id, qty)
-			const twice = setCartQuantity(once, id, qty)
-			expect(twice).toEqual(once)
-		},
-	)
+	test('[P-CART-1] single-entry cart total === addonGross at that qty', () => {
+		void fc.assert(
+			fc.property(
+				arbLinearUnit,
+				arbPriceKopecks,
+				arbQuantity,
+				arbVatBps,
+				arbNights,
+				arbPersons,
+				(unit, price, qty, vatBps, nights, persons) => {
+					fc.pre(qty >= 1)
+					const addon: PublicWidgetAddon = {
+						addonId: 'addn_test',
+						code: 'TEST',
+						category: 'OTHER',
+						nameRu: 'test',
+						nameEn: null,
+						descriptionRu: null,
+						descriptionEn: null,
+						pricingUnit: unit,
+						priceKopecks: price,
+						currency: 'RUB',
+						vatBps,
+						inventoryMode: 'NONE',
+						dailyCapacity: null,
+						seasonalTags: [],
+						sortOrder: 0,
+					}
+					const ctx = { nights, persons }
+					const cartTotal = cartGrossTotalKopecks(
+						[{ addonId: 'addn_test', quantity: qty }],
+						[addon],
+						ctx,
+					)
+					const direct = addonGrossKopecks(unit, price, qty, vatBps, ctx)
+					expect(cartTotal).toBe(direct)
+				},
+			),
+			{ numRuns: 100 },
+		)
+	})
 
-	test.prop([arbCart, arbAddonId], { numRuns: 100 })(
-		'[P-GET-1] getCartQuantity для non-existing id → 0 (opt-in canon)',
-		(cart, id) => {
-			fc.pre(!cart.some((e) => e.addonId === id))
-			expect(getCartQuantity(cart, id)).toBe(0)
-		},
-	)
+	test('[P-CART-2] empty/no-addons cart total === 0', () => {
+		void fc.assert(
+			fc.property(arbCart, (cart) => {
+				const total = cartGrossTotalKopecks(cart, [], { nights: 5, persons: 2 })
+				expect(total).toBe(0)
+			}),
+			{ numRuns: 100 },
+		)
+	})
 
-	test.prop([arbCart], { numRuns: 100 })(
-		'[P-SER-1] serialize → deserialize roundtrip preserves cart entries',
-		(cart) => {
-			const serialized = serializeCart(cart)
-			const restored = deserializeCart(serialized)
-			expect(restored).toEqual(cart)
-		},
-	)
+	test('[P-SET-1] setCartQuantity(cart, id, 0) removes id (and only id)', () => {
+		void fc.assert(
+			fc.property(arbCart, arbAddonId, (cart, id) => {
+				const result = setCartQuantity(cart, id, 0)
+				expect(result.find((e) => e.addonId === id)).toBeUndefined()
+				const removed = cart.some((e) => e.addonId === id)
+				expect(result).toHaveLength(removed ? cart.length - 1 : cart.length)
+			}),
+			{ numRuns: 100 },
+		)
+	})
+
+	test('[P-SET-2] setCartQuantity idempotent на same value', () => {
+		void fc.assert(
+			fc.property(arbCart, arbAddonId, fc.integer({ min: 1, max: 50 }), (cart, id, qty) => {
+				const once = setCartQuantity(cart, id, qty)
+				const twice = setCartQuantity(once, id, qty)
+				expect(twice).toEqual(once)
+			}),
+			{ numRuns: 100 },
+		)
+	})
+
+	test('[P-GET-1] getCartQuantity для non-existing id → 0 (opt-in canon)', () => {
+		void fc.assert(
+			fc.property(arbCart, arbAddonId, (cart, id) => {
+				fc.pre(!cart.some((e) => e.addonId === id))
+				expect(getCartQuantity(cart, id)).toBe(0)
+			}),
+			{ numRuns: 100 },
+		)
+	})
+
+	test('[P-SER-1] serialize → deserialize roundtrip preserves cart entries', () => {
+		void fc.assert(
+			fc.property(arbCart, (cart) => {
+				const serialized = serializeCart(cart)
+				const restored = deserializeCart(serialized)
+				expect(restored).toEqual(cart)
+			}),
+			{ numRuns: 100 },
+		)
+	})
 })

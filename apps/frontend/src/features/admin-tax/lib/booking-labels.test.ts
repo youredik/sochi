@@ -26,7 +26,7 @@
  *   Immutability:
  *     [I1] STATUS_LABEL config not mutated by repeated calls
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { channelLabel, statusBadgeConf } from './booking-labels.ts'
 
 describe('statusBadgeConf — exact match all 5 canonical statuses', () => {

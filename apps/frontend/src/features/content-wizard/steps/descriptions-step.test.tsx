@@ -47,25 +47,25 @@ import {
 	propertyDescriptionSectionKeys,
 } from '@horeca/shared'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, type Mock, test, mock } from 'bun:test'
 
-vi.mock('../../../lib/use-can.ts', () => ({
-	useCan: vi.fn(() => true),
-	useCurrentRole: vi.fn(() => 'owner'),
+mock.module('../../../lib/use-can.ts', () => ({
+	useCan: mock(() => true),
+	useCurrentRole: mock(() => 'owner'),
 }))
 
-vi.mock('../hooks/use-descriptions.ts', () => ({
-	useDescriptions: vi.fn(() => ({ data: [], isLoading: false, error: null })),
-	useUpsertDescription: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+mock.module('../hooks/use-descriptions.ts', () => ({
+	useDescriptions: mock(() => ({ data: [], isLoading: false, error: null })),
+	useUpsertDescription: mock(() => ({ mutateAsync: mock(), isPending: false })),
 }))
 
 import { useCan } from '../../../lib/use-can.ts'
 import { useDescriptions, useUpsertDescription } from '../hooks/use-descriptions.ts'
 import { DescriptionsStep } from './descriptions-step.tsx'
 
-const mockedUseCan = vi.mocked(useCan)
-const mockedUseDescr = vi.mocked(useDescriptions)
-const mockedUpsert = vi.mocked(useUpsertDescription)
+const mockedUseCan = useCan as unknown as Mock<typeof useCan>
+const mockedUseDescr = useDescriptions as unknown as Mock<typeof useDescriptions>
+const mockedUpsert = useUpsertDescription as unknown as Mock<typeof useUpsertDescription>
 
 beforeEach(() => {
 	mockedUseCan.mockImplementation(() => true)
@@ -75,14 +75,14 @@ beforeEach(() => {
 		error: null,
 	} as unknown as ReturnType<typeof useDescriptions>)
 	mockedUpsert.mockReturnValue({
-		mutateAsync: vi.fn(),
+		mutateAsync: mock(),
 		isPending: false,
 	} as unknown as ReturnType<typeof useUpsertDescription>)
 })
 
 afterEach(() => {
 	cleanup()
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 function setRole(role: MemberRole) {
@@ -295,7 +295,7 @@ describe('<DescriptionsStep> — min required', () => {
 
 describe('<DescriptionsStep> — save serialization', () => {
 	test('[S1] save fires mutateAsync with locale="ru" by default', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUpsert.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -309,7 +309,7 @@ describe('<DescriptionsStep> — save serialization', () => {
 	})
 
 	test('[S2] empty section → omitted from sections object', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUpsert.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -324,7 +324,7 @@ describe('<DescriptionsStep> — save serialization', () => {
 	})
 
 	test('[S3] non-empty section → included verbatim (trimmed)', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUpsert.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -343,7 +343,7 @@ describe('<DescriptionsStep> — save serialization', () => {
 	})
 
 	test('[S4] empty SEO meta-title → null (NOT empty string)', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUpsert.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -366,7 +366,7 @@ describe('<DescriptionsStep> — save serialization', () => {
 	})
 
 	test('[S5] non-empty SEO meta-title → trimmed verbatim string', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUpsert.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -406,7 +406,7 @@ describe('<DescriptionsStep> — save serialization', () => {
 
 describe('<DescriptionsStep> — save isolation', () => {
 	test('[I1] saving on ru tab → only ru locale in payload (en untouched)', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUpsert.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -438,7 +438,7 @@ const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f
 
 describe('<DescriptionsStep> — idempotency', () => {
 	test('[I1] save includes UUIDv4 Idempotency-Key', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUpsert.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -453,7 +453,7 @@ describe('<DescriptionsStep> — idempotency', () => {
 	})
 
 	test('[I2] two saves → two distinct keys', async () => {
-		const mutateAsync = vi.fn()
+		const mutateAsync = mock()
 		mockedUpsert.mockReturnValue({
 			mutateAsync,
 			isPending: false,

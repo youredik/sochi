@@ -66,29 +66,29 @@ import {
 	VAT_RATE_BPS_VALUES,
 } from '@horeca/shared'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, type Mock, test, mock } from 'bun:test'
 
-vi.mock('../../../lib/use-can.ts', () => ({
-	useCan: vi.fn(() => true),
-	useCurrentRole: vi.fn(() => 'owner'),
+mock.module('../../../lib/use-can.ts', () => ({
+	useCan: mock(() => true),
+	useCurrentRole: mock(() => 'owner'),
 }))
 
-vi.mock('../hooks/use-addons.ts', () => ({
-	useAddons: vi.fn(() => ({ data: [], isLoading: false, error: null })),
-	useCreateAddon: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
-	usePatchAddon: vi.fn(() => ({ mutate: vi.fn() })),
-	useDeleteAddon: vi.fn(() => ({ mutate: vi.fn() })),
+mock.module('../hooks/use-addons.ts', () => ({
+	useAddons: mock(() => ({ data: [], isLoading: false, error: null })),
+	useCreateAddon: mock(() => ({ mutateAsync: mock(), isPending: false })),
+	usePatchAddon: mock(() => ({ mutate: mock() })),
+	useDeleteAddon: mock(() => ({ mutate: mock() })),
 }))
 
 import { useCan } from '../../../lib/use-can.ts'
 import { useAddons, useCreateAddon, useDeleteAddon, usePatchAddon } from '../hooks/use-addons.ts'
 import { AddonsStep } from './addons-step.tsx'
 
-const mockedUseCan = vi.mocked(useCan)
-const mockedUseAddons = vi.mocked(useAddons)
-const mockedCreate = vi.mocked(useCreateAddon)
-const mockedPatch = vi.mocked(usePatchAddon)
-const mockedDelete = vi.mocked(useDeleteAddon)
+const mockedUseCan = useCan as unknown as Mock<typeof useCan>
+const mockedUseAddons = useAddons as unknown as Mock<typeof useAddons>
+const mockedCreate = useCreateAddon as unknown as Mock<typeof useCreateAddon>
+const mockedPatch = usePatchAddon as unknown as Mock<typeof usePatchAddon>
+const mockedDelete = useDeleteAddon as unknown as Mock<typeof useDeleteAddon>
 
 beforeEach(() => {
 	mockedUseCan.mockImplementation(() => true)
@@ -97,7 +97,7 @@ beforeEach(() => {
 		isLoading: false,
 		error: null,
 	} as unknown as ReturnType<typeof useAddons>)
-	const stub = { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }
+	const stub = { mutate: mock(), mutateAsync: mock(), isPending: false }
 	mockedCreate.mockReturnValue(stub as unknown as ReturnType<typeof useCreateAddon>)
 	mockedPatch.mockReturnValue(stub as unknown as ReturnType<typeof usePatchAddon>)
 	mockedDelete.mockReturnValue(stub as unknown as ReturnType<typeof useDeleteAddon>)
@@ -105,11 +105,13 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup()
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 function setRole(role: MemberRole) {
-	mockedUseCan.mockImplementation((perms) => hasPermission(role, perms))
+	mockedUseCan.mockImplementation((perms: Record<string, readonly string[]>) =>
+		hasPermission(role, perms),
+	)
 }
 
 const ADDON_ROW = (overrides: Partial<Addon> = {}): Addon => ({
@@ -356,7 +358,7 @@ describe('<AddonsStep> — seasonal tags', () => {
 	})
 
 	test('[Sg2] check ski-season → present in create payload', async () => {
-		const mutateAsync = vi.fn().mockResolvedValue({})
+		const mutateAsync = mock().mockResolvedValue({})
 		mockedCreate.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -374,7 +376,7 @@ describe('<AddonsStep> — seasonal tags', () => {
 	})
 
 	test('[Sg3] check + uncheck → tag NOT in payload', async () => {
-		const mutateAsync = vi.fn().mockResolvedValue({})
+		const mutateAsync = mock().mockResolvedValue({})
 		mockedCreate.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -396,8 +398,8 @@ describe('<AddonsStep> — seasonal tags', () => {
 // ────────────────────────────────────────────────────────────────────
 
 describe('<AddonsStep> — create serialization', () => {
-	function setCreate(): ReturnType<typeof vi.fn> {
-		const mutateAsync = vi.fn().mockResolvedValue({})
+	function setCreate(): ReturnType<typeof mock> {
+		const mutateAsync = mock().mockResolvedValue({})
 		mockedCreate.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -481,7 +483,7 @@ const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f
 
 describe('<AddonsStep> — idempotency', () => {
 	test('[I1] create includes UUIDv4 Idempotency-Key', async () => {
-		const mutateAsync = vi.fn().mockResolvedValue({})
+		const mutateAsync = mock().mockResolvedValue({})
 		mockedCreate.mockReturnValue({
 			mutateAsync,
 			isPending: false,
@@ -495,8 +497,8 @@ describe('<AddonsStep> — idempotency', () => {
 	})
 
 	test('[I2] patch (toggle) and delete each include their OWN UUIDv4 key', () => {
-		const patchMutate = vi.fn()
-		const delMutate = vi.fn()
+		const patchMutate = mock()
+		const delMutate = mock()
 		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
 			typeof usePatchAddon
 		>)
@@ -560,7 +562,7 @@ describe('<AddonsStep> — row interactions', () => {
 	})
 
 	test('[Rx4] click Деактивировать → patch.mutate called with isActive:false', () => {
-		const mutate = vi.fn()
+		const mutate = mock()
 		mockedPatch.mockReturnValue({ mutate } as unknown as ReturnType<typeof usePatchAddon>)
 		mockedUseAddons.mockReturnValue({
 			data: [ADDON_ROW({ isActive: true, addonId: 'addn_77' })],
@@ -579,7 +581,7 @@ describe('<AddonsStep> — row interactions', () => {
 	})
 
 	test('[Rx5] click Удалить → del.mutate called with addonId', () => {
-		const mutate = vi.fn()
+		const mutate = mock()
 		mockedDelete.mockReturnValue({ mutate } as unknown as ReturnType<typeof useDeleteAddon>)
 		mockedUseAddons.mockReturnValue({
 			data: [ADDON_ROW({ addonId: 'addn_99' })],
@@ -641,7 +643,7 @@ describe('<AddonsStep> — edit existing row', () => {
 	})
 
 	test('[Ed2] save changed name → patch.mutate with diff fields only + idempotencyKey', () => {
-		const patchMutate = vi.fn()
+		const patchMutate = mock()
 		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
 			typeof usePatchAddon
 		>)
@@ -672,7 +674,7 @@ describe('<AddonsStep> — edit existing row', () => {
 	})
 
 	test('[Ed3] save without changes → no mutation fired (empty diff)', () => {
-		const patchMutate = vi.fn()
+		const patchMutate = mock()
 		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
 			typeof usePatchAddon
 		>)
@@ -691,7 +693,7 @@ describe('<AddonsStep> — edit existing row', () => {
 	})
 
 	test('[Ed4] cancel reverts draft and exits edit mode (no mutation)', () => {
-		const patchMutate = vi.fn()
+		const patchMutate = mock()
 		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
 			typeof usePatchAddon
 		>)
@@ -712,7 +714,7 @@ describe('<AddonsStep> — edit existing row', () => {
 	})
 
 	test('[Ed5] price change → priceMicros in patch (rub → micro conversion)', () => {
-		const patchMutate = vi.fn()
+		const patchMutate = mock()
 		mockedPatch.mockReturnValue({ mutate: patchMutate } as unknown as ReturnType<
 			typeof usePatchAddon
 		>)

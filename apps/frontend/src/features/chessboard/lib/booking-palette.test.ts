@@ -1,5 +1,5 @@
 import type { BookingStatus } from '@horeca/shared'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { BOOKING_CELL_STYLES, styleFor } from './booking-palette.ts'
 
 describe('booking-palette (M9.5 Phase B Bnovo-parity tokens)', () => {
@@ -12,12 +12,15 @@ describe('booking-palette (M9.5 Phase B Bnovo-parity tokens)', () => {
 	] as const
 
 	describe('exhaustiveness — every backend status has a style', () => {
-		it.each(ALL_STATUSES)('styleFor(%s) returns style with bg+text+label', (status) => {
-			const s = styleFor(status)
-			expect(s.bg).toMatch(/^bg-status-/)
-			expect(s.text).toMatch(/^text-status-/)
-			expect(s.label.length).toBeGreaterThan(0)
-		})
+		it.each([...ALL_STATUSES])(
+			'styleFor(%s) returns style with bg+text+label',
+			(status: BookingStatus) => {
+				const s = styleFor(status)
+				expect(s.bg).toMatch(/^bg-status-/)
+				expect(s.text).toMatch(/^text-status-/)
+				expect(s.label.length).toBeGreaterThan(0)
+			},
+		)
 	})
 
 	describe('exact-value labels (ru-RU, no accidental drift)', () => {
@@ -60,12 +63,15 @@ describe('booking-palette (M9.5 Phase B Bnovo-parity tokens)', () => {
 	})
 
 	describe('no hardcoded shadcn neutral palette (theme-aware tokens only)', () => {
-		it.each(ALL_STATUSES)('styleFor(%s) NOT use bg-neutral-/bg-blue-/bg-yellow-', (status) => {
-			const bg = styleFor(status).bg
-			expect(bg).not.toMatch(/bg-neutral-/)
-			expect(bg).not.toMatch(/bg-blue-\d/)
-			expect(bg).not.toMatch(/bg-yellow-\d/)
-		})
+		it.each([...ALL_STATUSES])(
+			'styleFor(%s) NOT use bg-neutral-/bg-blue-/bg-yellow-',
+			(status: BookingStatus) => {
+				const bg = styleFor(status).bg
+				expect(bg).not.toMatch(/bg-neutral-/)
+				expect(bg).not.toMatch(/bg-blue-\d/)
+				expect(bg).not.toMatch(/bg-yellow-\d/)
+			},
+		)
 	})
 
 	describe('immutability — frozen-style table', () => {

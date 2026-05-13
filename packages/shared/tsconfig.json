@@ -3,7 +3,8 @@
 	"compilerOptions": {
 		"module": "ESNext",
 		"moduleResolution": "bundler",
-		"rootDir": "./src"
+		"rootDir": "./src",
+		"types": ["bun"]
 	},
 	"include": ["src"]
 }

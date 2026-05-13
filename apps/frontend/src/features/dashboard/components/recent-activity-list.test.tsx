@@ -26,7 +26,7 @@ import type { Activity } from '@horeca/shared'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { RecentActivityList } from './recent-activity-list.tsx'
 
 function setupClient(seed?: Activity[]): QueryClient {

@@ -11,7 +11,7 @@
  *   [F7] resize mutation → returned value updates (ResizeObserver subscription)
  */
 import { renderHook, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { useFitWindowDays } from './use-fit-window-days'
 
 class MockResizeObserver {
@@ -48,7 +48,7 @@ const ORIGINAL_RO = globalThis.ResizeObserver
 afterEach(() => {
 	MockResizeObserver.instances = []
 	globalThis.ResizeObserver = ORIGINAL_RO
-	vi.restoreAllMocks()
+	mock.restore()
 })
 
 function makeRef(width: number) {

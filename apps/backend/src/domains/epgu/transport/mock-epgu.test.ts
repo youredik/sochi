@@ -41,7 +41,7 @@
  *     [D2] errorRateMultiplier=0 → 100% success в 200 trials
  *     [D3] speedUpFactor=1000 → trajectory completes в realtime ms
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { createMockEpguTransport } from './mock-epgu.ts'
 
 function makeRng(seed: number): () => number {

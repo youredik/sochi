@@ -13,7 +13,7 @@
  * sandbox demo-hotel guard hid=8473727 + cross-tenant.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	buildEtgBasicAuthHeader,
 	createOstrovokEtgMock,

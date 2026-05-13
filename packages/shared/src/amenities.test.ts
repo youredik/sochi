@@ -11,7 +11,7 @@
  * Per `feedback_strict_tests.md`: exact-value asserts on counts + sample
  * lookups + adversarial inputs + full-coverage iteration.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	AMENITY_CATALOG,
 	AMENITY_CODE_SET,
@@ -367,15 +367,18 @@ describe('checkAmenityValueInvariant', () => {
 describe('FULL-coverage adversarial: every catalog entry parses through Zod', () => {
 	// Walk every entry and verify it can be used in propertyAmenityInputSchema
 	// with its defaultFreePaid. Failing this means catalog drifted from schema.
-	it.each(AMENITY_CATALOG)('round-trip valid for $code', (a) => {
-		const input = {
-			amenityCode: a.code,
-			freePaid: a.defaultFreePaid,
-			value: a.supportsValue ? '42' : null,
-		}
-		const parsed = propertyAmenityInputSchema.parse(input)
-		expect(parsed.amenityCode).toBe(a.code)
-		// Cross-field invariant must accept the canonical default.
-		expect(checkAmenityValueInvariant(parsed)).toBeNull()
-	})
+	it.each([...AMENITY_CATALOG])(
+		'round-trip valid for $code',
+		(a: (typeof AMENITY_CATALOG)[number]) => {
+			const input = {
+				amenityCode: a.code,
+				freePaid: a.defaultFreePaid,
+				value: a.supportsValue ? '42' : null,
+			}
+			const parsed = propertyAmenityInputSchema.parse(input)
+			expect(parsed.amenityCode).toBe(a.code)
+			// Cross-field invariant must accept the canonical default.
+			expect(checkAmenityValueInvariant(parsed)).toBeNull()
+		},
+	)
 })

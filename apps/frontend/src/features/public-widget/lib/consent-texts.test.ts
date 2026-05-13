@@ -12,7 +12,7 @@
  *   [CT9] Both texts under 10000 chars (backend max validation)
  */
 
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { CONSENT_VERSION, DPA_CONSENT_TEXT, MARKETING_CONSENT_TEXT } from './consent-texts.ts'
 
 describe('consent-texts — frozen v1.0', () => {

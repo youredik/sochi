@@ -11,7 +11,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test'
 import { WidgetApiInputError } from '../lib/widget-api.ts'
 import { useAvailability } from './use-availability.ts'
 
@@ -19,7 +19,7 @@ let originalFetch: typeof globalThis.fetch
 afterEach(() => {
 	cleanup()
 	globalThis.fetch = originalFetch
-	vi.restoreAllMocks()
+	mock.restore()
 })
 beforeEach(() => {
 	originalFetch = globalThis.fetch
@@ -80,7 +80,7 @@ describe('useAvailability', () => {
 			offerings: [],
 			photos: [],
 		}
-		globalThis.fetch = vi.fn().mockResolvedValue(
+		globalThis.fetch = mock().mockResolvedValue(
 			new Response(JSON.stringify({ data: responseData }), {
 				status: 200,
 				headers: { 'content-type': 'application/json' },
@@ -107,9 +107,9 @@ describe('useAvailability', () => {
 	})
 
 	test('[UA2] 404 returns null cleanly', async () => {
-		globalThis.fetch = vi
-			.fn()
-			.mockResolvedValue(new Response('null', { status: 404 })) as unknown as typeof fetch
+		globalThis.fetch = mock().mockResolvedValue(
+			new Response('null', { status: 404 }),
+		) as unknown as typeof fetch
 
 		const capture = { value: null as ReturnType<typeof useAvailability> | null }
 		renderProbe({
@@ -128,14 +128,12 @@ describe('useAvailability', () => {
 	})
 
 	test('[UA3] 422 → query.error instanceof WidgetApiInputError', async () => {
-		globalThis.fetch = vi
-			.fn()
-			.mockResolvedValue(
-				new Response(
-					JSON.stringify({ error: { code: 'INVALID_INPUT', message: 'stay too long' } }),
-					{ status: 422, headers: { 'content-type': 'application/json' } },
-				),
-			) as unknown as typeof fetch
+		globalThis.fetch = mock().mockResolvedValue(
+			new Response(JSON.stringify({ error: { code: 'INVALID_INPUT', message: 'stay too long' } }), {
+				status: 422,
+				headers: { 'content-type': 'application/json' },
+			}),
+		) as unknown as typeof fetch
 
 		const capture = { value: null as ReturnType<typeof useAvailability> | null }
 		renderProbe({
@@ -159,7 +157,7 @@ describe('useAvailability', () => {
 	})
 
 	test('[UA4] enabled=false → no fetch fired', async () => {
-		const fetchSpy = vi.fn()
+		const fetchSpy = mock()
 		globalThis.fetch = fetchSpy as unknown as typeof fetch
 		renderProbe({
 			tenantSlug: 'demo',
@@ -179,9 +177,9 @@ describe('useAvailability', () => {
 	})
 
 	test('[UA6] 500 server error → query.error generic Error (NOT WidgetApiInputError) → caller renders fallback', async () => {
-		globalThis.fetch = vi
-			.fn()
-			.mockResolvedValue(new Response('Internal error', { status: 500 })) as unknown as typeof fetch
+		globalThis.fetch = mock().mockResolvedValue(
+			new Response('Internal error', { status: 500 }),
+		) as unknown as typeof fetch
 
 		const capture = { value: null as ReturnType<typeof useAvailability> | null }
 		renderProbe({
@@ -203,9 +201,9 @@ describe('useAvailability', () => {
 	})
 
 	test('[UA7] network failure (fetch reject) → query.error TypeError (NOT silent loading)', async () => {
-		globalThis.fetch = vi
-			.fn()
-			.mockRejectedValue(new TypeError('Network failure')) as unknown as typeof fetch
+		globalThis.fetch = mock().mockRejectedValue(
+			new TypeError('Network failure'),
+		) as unknown as typeof fetch
 
 		const capture = { value: null as ReturnType<typeof useAvailability> | null }
 		renderProbe({
@@ -224,11 +222,9 @@ describe('useAvailability', () => {
 	})
 
 	test('[UA5] different adults param → different queryKey (no cross-leak)', async () => {
-		const fetchSpy = vi
-			.fn()
-			.mockResolvedValue(
-				new Response(JSON.stringify({ data: {} }), { status: 200 }),
-			) as unknown as typeof fetch
+		const fetchSpy = mock().mockResolvedValue(
+			new Response(JSON.stringify({ data: {} }), { status: 200 }),
+		) as unknown as typeof fetch
 		globalThis.fetch = fetchSpy
 
 		const client = makeQueryClient()
@@ -259,7 +255,9 @@ describe('useAvailability', () => {
 			{ wrapper },
 		)
 		await waitFor(() => {
-			expect((fetchSpy as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(2)
+			expect(
+				(fetchSpy as unknown as ReturnType<typeof mock>).mock.calls.length,
+			).toBeGreaterThanOrEqual(2)
 		})
 	})
 })

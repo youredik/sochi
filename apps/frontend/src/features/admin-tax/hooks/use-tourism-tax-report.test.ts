@@ -15,7 +15,7 @@
  *   Immutability:
  *     [I1] params object NOT mutated by call
  */
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { buildTourismTaxXlsxUrl } from './use-tourism-tax-report.ts'
 
 const ORIGINAL_VITE_API_URL = import.meta.env.VITE_API_URL

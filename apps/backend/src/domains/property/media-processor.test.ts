@@ -13,7 +13,7 @@
  * Plan v2 §7.1 #1 — closes the M8.A.0.4 gap of "no real sharp pipeline".
  */
 import sharp from 'sharp'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import {
 	expectedVariantCount,
 	type ProcessMediaResult,

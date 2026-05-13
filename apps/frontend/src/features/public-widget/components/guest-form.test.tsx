@@ -15,7 +15,7 @@
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import { GuestForm } from './guest-form.tsx'
 
 afterEach(() => {
@@ -62,7 +62,7 @@ describe('GuestForm', () => {
 	})
 
 	test('[GF3] submit с empty fields → onSubmit NOT called', async () => {
-		const onSubmit = vi.fn()
+		const onSubmit = mock()
 		render(
 			<GuestForm onSubmit={onSubmit}>
 				<button type="submit" data-testid="sub">
@@ -77,7 +77,7 @@ describe('GuestForm', () => {
 	})
 
 	test('[GF4] valid submit → onSubmit called с canonicalized values', async () => {
-		const onSubmit = vi.fn()
+		const onSubmit = mock()
 		render(
 			<GuestForm onSubmit={onSubmit}>
 				<button type="submit" data-testid="sub">
@@ -108,7 +108,7 @@ describe('GuestForm', () => {
 	})
 
 	test('[GF5] invalid phone → submit blocked', async () => {
-		const onSubmit = vi.fn()
+		const onSubmit = mock()
 		render(
 			<GuestForm onSubmit={onSubmit}>
 				<button type="submit" data-testid="sub">
@@ -135,7 +135,7 @@ describe('GuestForm', () => {
 	})
 
 	test('[GF7] optional fields → null when empty', async () => {
-		const onSubmit = vi.fn()
+		const onSubmit = mock()
 		render(
 			<GuestForm onSubmit={onSubmit}>
 				<button type="submit" data-testid="sub">

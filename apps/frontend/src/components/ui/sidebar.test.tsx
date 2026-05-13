@@ -65,10 +65,9 @@ import {
 	beforeEach,
 	describe,
 	expect,
-	it,
-	vi,
-	type MockInstance,
-} from 'vitest'
+	it, mock, spyOn,
+	type Mock,
+} from 'bun:test'
 
 import {
 	Sidebar,
@@ -85,8 +84,8 @@ import {
 /*  Helpers                                                                   */
 /* -------------------------------------------------------------------------- */
 
-let warnSpy: MockInstance
-let errorSpy: MockInstance
+let warnSpy: Mock<(...args: unknown[]) => unknown>
+let errorSpy: Mock<(...args: unknown[]) => unknown>
 
 /**
  * Mock window.matchMedia so `useMediaQuery('(min-width: 768px)')` returns
@@ -96,15 +95,15 @@ function mockMatchMedia(isDesktop: boolean) {
 	Object.defineProperty(window, 'matchMedia', {
 		writable: true,
 		configurable: true,
-		value: vi.fn().mockImplementation((query: string) => ({
+		value: mock().mockImplementation((query: string) => ({
 			matches: query.includes('min-width: 768px') ? isDesktop : false,
 			media: query,
 			onchange: null,
-			addEventListener: vi.fn(),
-			removeEventListener: vi.fn(),
-			dispatchEvent: vi.fn(),
-			addListener: vi.fn(),
-			removeListener: vi.fn(),
+			addEventListener: mock(),
+			removeEventListener: mock(),
+			dispatchEvent: mock(),
+			addListener: mock(),
+			removeListener: mock(),
 		})),
 	})
 }
@@ -116,8 +115,8 @@ function clearCookie() {
 beforeEach(() => {
 	mockMatchMedia(true) // desktop default
 	clearCookie()
-	warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-	errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+	warnSpy = spyOn(console, 'warn').mockImplementation(() => {})
+	errorSpy = spyOn(console, 'error').mockImplementation(() => {})
 })
 
 afterEach(() => {
@@ -158,7 +157,7 @@ function renderWithProbe(opts?: { defaultOpen?: boolean }) {
 describe('Sidebar — useSidebar contract', () => {
 	it('[H1] useSidebar() throws outside provider', () => {
 		// Suppress React's error boundary noise for this expected throw.
-		const restore = vi.spyOn(console, 'error').mockImplementation(() => {})
+		const restore = spyOn(console, 'error').mockImplementation(() => {})
 		expect(() =>
 			render(<ContextProbe send={() => {}} />),
 		).toThrowError('useSidebar must be used within a <SidebarProvider>.')
@@ -549,7 +548,7 @@ describe('Sidebar — PATCH-D13 controlled-prop guard (#8176)', () => {
 			children: React.ReactNode
 		}>
 		let captured: ReturnType<typeof useSidebar> | null = null
-		const onOpenChangeSpy = vi.fn()
+		const onOpenChangeSpy = mock()
 		render(
 			<ProviderAny defaultOpen={true} open={true} onOpenChange={onOpenChangeSpy}>
 				<ContextProbe send={(ctx) => (captured = ctx)} />

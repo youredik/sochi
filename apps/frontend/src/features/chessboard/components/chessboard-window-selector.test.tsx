@@ -18,10 +18,10 @@
  */
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-const storageData = vi.hoisted(() => ({ value: new Map<string, string>() }))
-vi.hoisted(() => {
+const storageData = { value: new Map<string, string>() }
+;(() => {
 	const stub = {
 		getItem: (k: string) => storageData.value.get(k) ?? null,
 		setItem: (k: string, v: string) => {
@@ -43,7 +43,7 @@ vi.hoisted(() => {
 		writable: true,
 		configurable: true,
 	})
-})
+})()
 
 const { ChessboardWindowSelector } = await import('./chessboard-window-selector')
 const { useChessboardPrefsStore } = await import('../lib/chessboard-prefs-store')

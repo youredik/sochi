@@ -14,7 +14,7 @@
  *   [UCB11] bookingRetryDelay: includes jitter (variance 0-250ms)
  */
 
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { WidgetBookingCommitError } from '../lib/widget-booking-api.ts'
 import { bookingRetryDelay, shouldRetryBookingMutation } from './use-create-booking.ts'
 

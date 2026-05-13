@@ -15,10 +15,10 @@
  *     [A2] each item has aria-label
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-const storageData = vi.hoisted(() => ({ value: new Map<string, string>() }))
-vi.hoisted(() => {
+const storageData = { value: new Map<string, string>() }
+;(() => {
 	const stub = {
 		getItem: (k: string) => storageData.value.get(k) ?? null,
 		setItem: (k: string, v: string) => {
@@ -38,7 +38,7 @@ vi.hoisted(() => {
 		writable: true,
 		configurable: true,
 	})
-})
+})()
 
 const { useChessboardPrefsStore } = await import('../lib/chessboard-prefs-store')
 const { ChessboardViewModeSelector } = await import('./chessboard-view-mode-selector')

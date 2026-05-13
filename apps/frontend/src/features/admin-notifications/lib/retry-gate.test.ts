@@ -27,7 +27,7 @@
  *     [I1] mutating returned RetryGate.reason does NOT poison subsequent calls
  *     [I2] mutating returned AttemptBadgeConf.label does NOT poison subsequent calls
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { attemptBadgeConf, deriveRetryGate } from './retry-gate.ts'
 
 describe('deriveRetryGate — 2×3 status × canRetry matrix', () => {

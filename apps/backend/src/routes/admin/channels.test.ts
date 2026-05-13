@@ -7,7 +7,7 @@
  */
 
 import { Hono } from 'hono'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import type { ChannelFactory } from '../../domains/channel/channel.factory.ts'
 import type { AppEnv } from '../../factory.ts'
 import { createAdminChannelRoutesInner } from './channels.ts'

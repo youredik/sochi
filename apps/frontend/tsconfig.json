@@ -5,6 +5,7 @@
 		"moduleResolution": "bundler",
 		"rootDir": "./src",
 		"jsx": "react-jsx",
+		"types": ["bun"],
 		"paths": {
 			"@/*": ["./src/*"]
 		}

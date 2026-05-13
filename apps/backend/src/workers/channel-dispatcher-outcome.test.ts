@@ -9,7 +9,7 @@
  *   - budget exhausted → outcome='auto_disabled' (UI shows auto-disabled badge)
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, mock } from 'bun:test'
 import type { ChannelDispatchRow } from '../domains/channel/dispatch.repo.ts'
 import { DISPATCH_MAX_ATTEMPTS } from '../lib/channel-manager/channel-dispatch.ts'
 import { type HttpAttemptResult, startChannelDispatcher } from './channel-dispatcher.ts'
@@ -73,7 +73,7 @@ async function drain(handle: { stop: () => Promise<void> }) {
 describe('channel dispatcher — onDispatchOutcome (OUT1-OUT5)', () => {
 	it('[OUT1] HTTP 200 → outcome=sent', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const onDispatchOutcome = vi.fn(async () => undefined)
+		const onDispatchOutcome = mock(async () => undefined)
 		const handle = startChannelDispatcher({
 			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
@@ -91,7 +91,7 @@ describe('channel dispatcher — onDispatchOutcome (OUT1-OUT5)', () => {
 
 	it('[OUT2] HTTP 500 retryable → outcome=retry', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const onDispatchOutcome = vi.fn(async () => undefined)
+		const onDispatchOutcome = mock(async () => undefined)
 		const handle = startChannelDispatcher({
 			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
@@ -114,7 +114,7 @@ describe('channel dispatcher — onDispatchOutcome (OUT1-OUT5)', () => {
 
 	it('[OUT3] HTTP 400 permanent → outcome=dlq', async () => {
 		const repo = buildInMemoryRepo([buildRow()])
-		const onDispatchOutcome = vi.fn(async () => undefined)
+		const onDispatchOutcome = mock(async () => undefined)
 		const handle = startChannelDispatcher({
 			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,
@@ -137,7 +137,7 @@ describe('channel dispatcher — onDispatchOutcome (OUT1-OUT5)', () => {
 
 	it('[OUT4] budget exhausted → outcome=auto_disabled', async () => {
 		const repo = buildInMemoryRepo([buildRow({ attemptCount: DISPATCH_MAX_ATTEMPTS - 1 })])
-		const onDispatchOutcome = vi.fn(async () => undefined)
+		const onDispatchOutcome = mock(async () => undefined)
 		const handle = startChannelDispatcher({
 			// biome-ignore lint/suspicious/noExplicitAny: in-memory repo intentionally narrow
 			dispatchRepo: repo as any,

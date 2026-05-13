@@ -13,15 +13,15 @@
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, mock } from 'bun:test'
 
-const addPasskeyMock = vi.fn()
-vi.mock('@/lib/auth-client', () => ({
+const addPasskeyMock = mock()
+mock.module('@/lib/auth-client', () => ({
 	authClient: { passkey: { addPasskey: addPasskeyMock } },
 }))
-const toastSuccess = vi.fn()
-const toastError = vi.fn()
-vi.mock('sonner', () => ({
+const toastSuccess = mock()
+const toastError = mock()
+mock.module('sonner', () => ({
 	toast: { success: toastSuccess, error: toastError },
 }))
 
@@ -29,7 +29,7 @@ const { PasskeyEnrollButton } = await import('./passkey-enroll-button')
 
 afterEach(() => {
 	cleanup()
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 })
 
 describe('PasskeyEnrollButton — render', () => {
@@ -50,7 +50,7 @@ describe('PasskeyEnrollButton — passkey enrollment flow', () => {
 		addPasskeyMock.mockResolvedValueOnce({ data: { id: 'pk_test' } })
 		render(<PasskeyEnrollButton />)
 		await userEvent.setup().click(screen.getByRole('button', { name: /Добавить passkey/ }))
-		expect(addPasskeyMock).toHaveBeenCalledOnce()
+		expect(addPasskeyMock).toHaveBeenCalledTimes(1)
 		const arg = addPasskeyMock.mock.calls[0]?.[0] as { name: string }
 		expect(arg.name).toBeTypeOf('string')
 		expect(arg.name.length).toBeGreaterThan(0)
@@ -58,12 +58,12 @@ describe('PasskeyEnrollButton — passkey enrollment flow', () => {
 
 	it('[P3] success → toast.success + onEnrolled', async () => {
 		addPasskeyMock.mockResolvedValueOnce({ data: { id: 'pk_test' } })
-		const onEnrolled = vi.fn()
+		const onEnrolled = mock()
 		render(<PasskeyEnrollButton onEnrolled={onEnrolled} />)
 		await userEvent.setup().click(screen.getByRole('button', { name: /Добавить passkey/ }))
 		await waitFor(() => {
-			expect(toastSuccess).toHaveBeenCalledOnce()
-			expect(onEnrolled).toHaveBeenCalledOnce()
+			expect(toastSuccess).toHaveBeenCalledTimes(1)
+			expect(onEnrolled).toHaveBeenCalledTimes(1)
 		})
 	})
 

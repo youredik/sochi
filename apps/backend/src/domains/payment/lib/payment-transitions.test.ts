@@ -66,9 +66,9 @@
  * Style: exact-value asserts; per-status enumeration (not just representative);
  * fast-check property tests using integer-over-epoch (gotcha-safe).
  */
-import { fc, test } from '@fast-check/vitest'
+import * as fc from 'fast-check'
 import type { PaymentProviderCode, PaymentStatus } from '@horeca/shared'
-import { describe, expect, test as vitestTest } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	assertTransition,
 	assertTransitionForProvider,
@@ -112,14 +112,14 @@ const statusArb = fc.constantFrom<PaymentStatus>(...ALL_STATUSES)
 /* ================================================================== isTerminal */
 
 describe('isTerminal — exhaustive enum', () => {
-	vitestTest('[TR1] all 4 terminal states return true', () => {
+	test('[TR1] all 4 terminal states return true', () => {
 		expect(isTerminal('refunded')).toBe(true)
 		expect(isTerminal('canceled')).toBe(true)
 		expect(isTerminal('failed')).toBe(true)
 		expect(isTerminal('expired')).toBe(true)
 	})
 
-	vitestTest('[TR2] all 5 non-terminal states return false', () => {
+	test('[TR2] all 5 non-terminal states return false', () => {
 		expect(isTerminal('created')).toBe(false)
 		expect(isTerminal('pending')).toBe(false)
 		expect(isTerminal('waiting_for_capture')).toBe(false)
@@ -127,24 +127,28 @@ describe('isTerminal — exhaustive enum', () => {
 		expect(isTerminal('partially_refunded')).toBe(false)
 	})
 
-	test.prop([statusArb])('[TR3] terminal iff no outgoing edges', (status) => {
-		const hasOutgoing = ALL_STATUSES.some(
-			(other) => other !== status && canTransition(status, other),
+	test('[TR3] terminal iff no outgoing edges', () => {
+		void fc.assert(
+			fc.property(statusArb, (status) => {
+				const hasOutgoing = ALL_STATUSES.some(
+					(other) => other !== status && canTransition(status, other),
+				)
+				expect(isTerminal(status)).toBe(!hasOutgoing)
+			}),
 		)
-		expect(isTerminal(status)).toBe(!hasOutgoing)
 	})
 })
 
 /* ============================================== isPostCapture / canRefund */
 
 describe('isPostCapture / canRefund — refund eligibility gates', () => {
-	vitestTest('[PC1] succeeded/partially_refunded/refunded → post-capture', () => {
+	test('[PC1] succeeded/partially_refunded/refunded → post-capture', () => {
 		expect(isPostCapture('succeeded')).toBe(true)
 		expect(isPostCapture('partially_refunded')).toBe(true)
 		expect(isPostCapture('refunded')).toBe(true)
 	})
 
-	vitestTest('[PC2] all other states → not post-capture', () => {
+	test('[PC2] all other states → not post-capture', () => {
 		const nonPost: PaymentStatus[] = [
 			'created',
 			'pending',
@@ -158,7 +162,7 @@ describe('isPostCapture / canRefund — refund eligibility gates', () => {
 		}
 	})
 
-	vitestTest('[PC3] canRefund: only succeeded + partially_refunded (NOT refunded)', () => {
+	test('[PC3] canRefund: only succeeded + partially_refunded (NOT refunded)', () => {
 		expect(canRefund('succeeded')).toBe(true)
 		expect(canRefund('partially_refunded')).toBe(true)
 		// refunded is post-capture but cumulatively full → NO new refunds (canon #1)
@@ -181,40 +185,40 @@ describe('isPostCapture / canRefund — refund eligibility gates', () => {
 /* ============================================================ canTransition */
 
 describe('canTransition — full transition matrix exhaustive', () => {
-	vitestTest('[CT1] created → pending only', () => {
+	test('[CT1] created → pending only', () => {
 		for (const to of ALL_STATUSES) {
 			expect(canTransition('created', to)).toBe(to === 'pending')
 		}
 	})
 
-	vitestTest('[CT2] pending → {waiting_for_capture, succeeded, failed}', () => {
+	test('[CT2] pending → {waiting_for_capture, succeeded, failed}', () => {
 		const allowed = new Set<PaymentStatus>(['waiting_for_capture', 'succeeded', 'failed'])
 		for (const to of ALL_STATUSES) {
 			expect(canTransition('pending', to)).toBe(allowed.has(to))
 		}
 	})
 
-	vitestTest('[CT3] waiting_for_capture → {succeeded, canceled, expired}', () => {
+	test('[CT3] waiting_for_capture → {succeeded, canceled, expired}', () => {
 		const allowed = new Set<PaymentStatus>(['succeeded', 'canceled', 'expired'])
 		for (const to of ALL_STATUSES) {
 			expect(canTransition('waiting_for_capture', to)).toBe(allowed.has(to))
 		}
 	})
 
-	vitestTest('[CT4] succeeded → {partially_refunded, refunded}', () => {
+	test('[CT4] succeeded → {partially_refunded, refunded}', () => {
 		const allowed = new Set<PaymentStatus>(['partially_refunded', 'refunded'])
 		for (const to of ALL_STATUSES) {
 			expect(canTransition('succeeded', to)).toBe(allowed.has(to))
 		}
 	})
 
-	vitestTest('[CT5] partially_refunded → refunded only', () => {
+	test('[CT5] partially_refunded → refunded only', () => {
 		for (const to of ALL_STATUSES) {
 			expect(canTransition('partially_refunded', to)).toBe(to === 'refunded')
 		}
 	})
 
-	vitestTest('[CT6] all 4 terminal states have NO outgoing edges (canon #2)', () => {
+	test('[CT6] all 4 terminal states have NO outgoing edges (canon #2)', () => {
 		for (const from of TERMINAL) {
 			for (const to of ALL_STATUSES) {
 				expect(canTransition(from, to)).toBe(false)
@@ -226,27 +230,27 @@ describe('canTransition — full transition matrix exhaustive', () => {
 /* =========================================================== per-provider gate */
 
 describe('canTransitionForProvider — sbp-no-preauth (canon #17)', () => {
-	vitestTest('[SP1] sbp: pending → waiting_for_capture FORBIDDEN', () => {
+	test('[SP1] sbp: pending → waiting_for_capture FORBIDDEN', () => {
 		expect(canTransitionForProvider('sbp', 'pending', 'waiting_for_capture')).toBe(false)
 	})
 
-	vitestTest('[SP2] sbp: pending → succeeded ALLOWED (autocapture)', () => {
+	test('[SP2] sbp: pending → succeeded ALLOWED (autocapture)', () => {
 		expect(canTransitionForProvider('sbp', 'pending', 'succeeded')).toBe(true)
 	})
 
-	vitestTest('[SP3] yookassa: pending → waiting_for_capture ALLOWED (preauth path)', () => {
+	test('[SP3] yookassa: pending → waiting_for_capture ALLOWED (preauth path)', () => {
 		expect(canTransitionForProvider('yookassa', 'pending', 'waiting_for_capture')).toBe(true)
 	})
 
-	vitestTest('[SP4] tkassa: pending → waiting_for_capture ALLOWED', () => {
+	test('[SP4] tkassa: pending → waiting_for_capture ALLOWED', () => {
 		expect(canTransitionForProvider('tkassa', 'pending', 'waiting_for_capture')).toBe(true)
 	})
 
-	vitestTest('[SP5] stub: pending → succeeded ALLOWED (synchronous)', () => {
+	test('[SP5] stub: pending → succeeded ALLOWED (synchronous)', () => {
 		expect(canTransitionForProvider('stub', 'pending', 'succeeded')).toBe(true)
 	})
 
-	vitestTest('[SP6] sbp passes-through canTransition for non-preauth edges', () => {
+	test('[SP6] sbp passes-through canTransition for non-preauth edges', () => {
 		// All other edges behave like canTransition
 		for (const from of ALL_STATUSES) {
 			for (const to of ALL_STATUSES) {
@@ -260,7 +264,7 @@ describe('canTransitionForProvider — sbp-no-preauth (canon #17)', () => {
 /* =========================================================== holdPeriodHours */
 
 describe('holdPeriodHours / computeHoldExpiresAt / isHoldExpired', () => {
-	vitestTest('[HP1] exact provider hold lifetimes', () => {
+	test('[HP1] exact provider hold lifetimes', () => {
 		expect(holdPeriodHours('yookassa')).toBe(72)
 		expect(holdPeriodHours('tkassa')).toBe(168)
 		expect(holdPeriodHours('sbp')).toBe(0)
@@ -268,37 +272,37 @@ describe('holdPeriodHours / computeHoldExpiresAt / isHoldExpired', () => {
 		expect(holdPeriodHours('digital_ruble')).toBe(0)
 	})
 
-	vitestTest('[HP2] computeHoldExpiresAt returns null for synchronous providers', () => {
+	test('[HP2] computeHoldExpiresAt returns null for synchronous providers', () => {
 		const t0 = new Date('2026-04-25T12:00:00.000Z')
 		expect(computeHoldExpiresAt('sbp', t0)).toBeNull()
 		expect(computeHoldExpiresAt('stub', t0)).toBeNull()
 		expect(computeHoldExpiresAt('digital_ruble', t0)).toBeNull()
 	})
 
-	vitestTest('[HP3] computeHoldExpiresAt(yookassa, t) = t + 72h exactly', () => {
+	test('[HP3] computeHoldExpiresAt(yookassa, t) = t + 72h exactly', () => {
 		const t0 = new Date('2026-04-25T12:00:00.000Z')
 		const expiry = computeHoldExpiresAt('yookassa', t0)
 		expect(expiry).not.toBeNull()
 		expect(expiry?.toISOString()).toBe('2026-04-28T12:00:00.000Z')
 	})
 
-	vitestTest('[HP4] computeHoldExpiresAt(tkassa, t) = t + 168h (7 days) exactly', () => {
+	test('[HP4] computeHoldExpiresAt(tkassa, t) = t + 168h (7 days) exactly', () => {
 		const t0 = new Date('2026-04-25T12:00:00.000Z')
 		const expiry = computeHoldExpiresAt('tkassa', t0)
 		expect(expiry).not.toBeNull()
 		expect(expiry?.toISOString()).toBe('2026-05-02T12:00:00.000Z')
 	})
 
-	vitestTest('[HP5] isHoldExpired with null → false (synchronous never expires)', () => {
+	test('[HP5] isHoldExpired with null → false (synchronous never expires)', () => {
 		expect(isHoldExpired(null, new Date())).toBe(false)
 	})
 
-	vitestTest('[HP6] isHoldExpired at exact boundary → true (now >= expiry)', () => {
+	test('[HP6] isHoldExpired at exact boundary → true (now >= expiry)', () => {
 		const t = new Date('2026-04-28T12:00:00.000Z')
 		expect(isHoldExpired(t, t)).toBe(true)
 	})
 
-	vitestTest('[HP7] isHoldExpired strictly before boundary → false', () => {
+	test('[HP7] isHoldExpired strictly before boundary → false', () => {
 		const expiry = new Date('2026-04-28T12:00:00.000Z')
 		const before = new Date('2026-04-28T11:59:59.999Z')
 		expect(isHoldExpired(expiry, before)).toBe(false)
@@ -306,75 +310,80 @@ describe('holdPeriodHours / computeHoldExpiresAt / isHoldExpired', () => {
 
 	const providerArb = fc.constantFrom<PaymentProviderCode>(...ALL_PROVIDERS)
 
-	test.prop([providerArb])('[HP8] holdPeriodHours always non-negative integer', (p) => {
-		const h = holdPeriodHours(p)
-		expect(Number.isInteger(h)).toBe(true)
-		expect(h).toBeGreaterThanOrEqual(0)
+	test('[HP8] holdPeriodHours always non-negative integer', () => {
+		void fc.assert(
+			fc.property(providerArb, (p) => {
+				const h = holdPeriodHours(p)
+				expect(Number.isInteger(h)).toBe(true)
+				expect(h).toBeGreaterThanOrEqual(0)
+			}),
+		)
 	})
 })
 
 /* ============================================================ deriveRefundStatus */
 
 describe('deriveRefundStatus — refund-projection (canon #23)', () => {
-	vitestTest('[DR1] refundedMinor=0 → succeeded', () => {
+	test('[DR1] refundedMinor=0 → succeeded', () => {
 		expect(deriveRefundStatus(1000n, 0n)).toBe('succeeded')
 	})
 
-	vitestTest('[DR2] refundedMinor=captured → refunded', () => {
+	test('[DR2] refundedMinor=captured → refunded', () => {
 		expect(deriveRefundStatus(1000n, 1000n)).toBe('refunded')
 	})
 
-	vitestTest('[DR3] 0 < refundedMinor < captured → partially_refunded', () => {
+	test('[DR3] 0 < refundedMinor < captured → partially_refunded', () => {
 		expect(deriveRefundStatus(1000n, 1n)).toBe('partially_refunded')
 		expect(deriveRefundStatus(1000n, 500n)).toBe('partially_refunded')
 		expect(deriveRefundStatus(1000n, 999n)).toBe('partially_refunded')
 	})
 
-	vitestTest('[DR4] refundedMinor > captured throws RangeError (canon #1 cap)', () => {
+	test('[DR4] refundedMinor > captured throws RangeError (canon #1 cap)', () => {
 		expect(() => deriveRefundStatus(1000n, 1001n)).toThrow(
 			/refundedMinor \(1001\) must be <= capturedMinor \(1000\)/,
 		)
 	})
 
-	vitestTest('[DR5] negative inputs throw RangeError', () => {
+	test('[DR5] negative inputs throw RangeError', () => {
 		expect(() => deriveRefundStatus(-1n, 0n)).toThrow(/capturedMinor must be >= 0/)
 		expect(() => deriveRefundStatus(100n, -1n)).toThrow(/refundedMinor must be >= 0/)
 	})
 
-	vitestTest(
-		'[DR5b] zero captured + zero refunded → succeeded (boundary distinguishes < from <=)',
-		() => {
-			// Validates that the guard is `< 0n`, not `<= 0n`. With <=, captured=0
-			// would erroneously throw. Zero captured is a legitimate state for a
-			// payment that never reached `succeeded` (e.g. canceled before capture)
-			// — caller should still be able to ask for derivation, getting 'succeeded'
-			// trivially since refunded=0.
-			expect(deriveRefundStatus(0n, 0n)).toBe('succeeded')
-		},
-	)
+	test('[DR5b] zero captured + zero refunded → succeeded (boundary distinguishes < from <=)', () => {
+		// Validates that the guard is `< 0n`, not `<= 0n`. With <=, captured=0
+		// would erroneously throw. Zero captured is a legitimate state for a
+		// payment that never reached `succeeded` (e.g. canceled before capture)
+		// — caller should still be able to ask for derivation, getting 'succeeded'
+		// trivially since refunded=0.
+		expect(deriveRefundStatus(0n, 0n)).toBe('succeeded')
+	})
 
 	const refundArb = fc
 		.tuple(fc.bigInt({ min: 0n, max: 1_000_000_000n }), fc.bigInt({ min: 0n, max: 1_000_000_000n }))
 		.filter(([cap, ref]) => ref <= cap)
 
-	test.prop([refundArb])('[DR6] result classification is exhaustive', ([cap, ref]) => {
-		const status = deriveRefundStatus(cap, ref)
-		if (ref === 0n) expect(status).toBe('succeeded')
-		else if (ref === cap) expect(status).toBe('refunded')
-		else expect(status).toBe('partially_refunded')
+	test('[DR6] result classification is exhaustive', () => {
+		void fc.assert(
+			fc.property(refundArb, ([cap, ref]) => {
+				const status = deriveRefundStatus(cap, ref)
+				if (ref === 0n) expect(status).toBe('succeeded')
+				else if (ref === cap) expect(status).toBe('refunded')
+				else expect(status).toBe('partially_refunded')
+			}),
+		)
 	})
 })
 
 /* ================================================================ assertions */
 
 describe('assertTransition / assertTransitionForProvider', () => {
-	vitestTest('[AT1] allowed transition does not throw', () => {
+	test('[AT1] allowed transition does not throw', () => {
 		expect(() => assertTransition('created', 'pending')).not.toThrow()
 		expect(() => assertTransition('pending', 'succeeded')).not.toThrow()
 		expect(() => assertTransition('partially_refunded', 'refunded')).not.toThrow()
 	})
 
-	vitestTest('[AT2] forbidden transition throws Error with both endpoints', () => {
+	test('[AT2] forbidden transition throws Error with both endpoints', () => {
 		expect(() => assertTransition('created', 'succeeded')).toThrow(
 			/Forbidden Payment SM transition: 'created' → 'succeeded'/,
 		)
@@ -383,13 +392,13 @@ describe('assertTransition / assertTransitionForProvider', () => {
 		)
 	})
 
-	vitestTest('[AT3] sbp pending → waiting_for_capture throws (canon #17)', () => {
+	test('[AT3] sbp pending → waiting_for_capture throws (canon #17)', () => {
 		expect(() => assertTransitionForProvider('sbp', 'pending', 'waiting_for_capture')).toThrow(
 			/Forbidden Payment SM transition for provider 'sbp'.*'pending' → 'waiting_for_capture'/,
 		)
 	})
 
-	vitestTest('[AT3b] same edge allowed for non-sbp providers', () => {
+	test('[AT3b] same edge allowed for non-sbp providers', () => {
 		expect(() =>
 			assertTransitionForProvider('yookassa', 'pending', 'waiting_for_capture'),
 		).not.toThrow()
@@ -402,38 +411,38 @@ describe('assertTransition / assertTransitionForProvider', () => {
 /* ====================================================== captureExcess / exceeds */
 
 describe('captureExcess / exceedsAuthorized — canon #10 capture-amount-bound', () => {
-	vitestTest('[CE1] capturedMinor < authorizedMinor → captureExcess negative', () => {
+	test('[CE1] capturedMinor < authorizedMinor → captureExcess negative', () => {
 		expect(captureExcess(700n, 1000n)).toBe(-300n)
 	})
 
-	vitestTest('[CE2] capturedMinor === authorizedMinor → captureExcess zero', () => {
+	test('[CE2] capturedMinor === authorizedMinor → captureExcess zero', () => {
 		expect(captureExcess(1000n, 1000n)).toBe(0n)
 	})
 
-	vitestTest('[CE3] capturedMinor > authorizedMinor → captureExcess positive', () => {
+	test('[CE3] capturedMinor > authorizedMinor → captureExcess positive', () => {
 		expect(captureExcess(1500n, 1000n)).toBe(500n)
 	})
 
-	vitestTest('[CE4] exceedsAuthorized: sum < authorized → false', () => {
+	test('[CE4] exceedsAuthorized: sum < authorized → false', () => {
 		expect(exceedsAuthorized(300n, 200n, 1000n)).toBe(false)
 	})
 
-	vitestTest('[CE5] exceedsAuthorized: sum === authorized → false (boundary)', () => {
+	test('[CE5] exceedsAuthorized: sum === authorized → false (boundary)', () => {
 		expect(exceedsAuthorized(700n, 300n, 1000n)).toBe(false)
 	})
 
-	vitestTest('[CE6] exceedsAuthorized: sum > authorized → true', () => {
+	test('[CE6] exceedsAuthorized: sum > authorized → true', () => {
 		expect(exceedsAuthorized(700n, 301n, 1000n)).toBe(true)
 		expect(exceedsAuthorized(0n, 1001n, 1000n)).toBe(true)
 	})
 
-	vitestTest('[CE7] negative inputs to exceedsAuthorized throw RangeError', () => {
+	test('[CE7] negative inputs to exceedsAuthorized throw RangeError', () => {
 		expect(() => exceedsAuthorized(-1n, 100n, 1000n)).toThrow(/All amounts must be >= 0/)
 		expect(() => exceedsAuthorized(100n, -1n, 1000n)).toThrow(/All amounts must be >= 0/)
 		expect(() => exceedsAuthorized(100n, 100n, -1n)).toThrow(/All amounts must be >= 0/)
 	})
 
-	vitestTest('[CE7b] zero amounts allowed (boundary distinguishes < from <=)', () => {
+	test('[CE7b] zero amounts allowed (boundary distinguishes < from <=)', () => {
 		// The < 0n guards must NOT trip on zero. Zero request is a legitimate
 		// no-op capture check, zero authorized means "no authorization yet"
 		// (used in pending state pre-condition checks).
@@ -449,11 +458,12 @@ describe('captureExcess / exceedsAuthorized — canon #10 capture-amount-bound',
 		fc.bigInt({ min: 0n, max: 2_000_000n }),
 	)
 
-	test.prop([tripletArb])(
-		'[CE8] exceedsAuthorized iff captured + request > authorized',
-		([captured, request, authorized]) => {
-			const sum = captured + request
-			expect(exceedsAuthorized(captured, request, authorized)).toBe(sum > authorized)
-		},
-	)
+	test('[CE8] exceedsAuthorized iff captured + request > authorized', () => {
+		void fc.assert(
+			fc.property(tripletArb, ([captured, request, authorized]) => {
+				const sum = captured + request
+				expect(exceedsAuthorized(captured, request, authorized)).toBe(sum > authorized)
+			}),
+		)
+	})
 })

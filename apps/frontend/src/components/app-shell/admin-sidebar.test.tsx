@@ -34,11 +34,11 @@ import type { MemberRole, TenantMode } from '@horeca/shared'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render } from '@testing-library/react'
 import type * as React from 'react'
-import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, type Mock, mock, spyOn } from 'bun:test'
 
 // Mock TanStack Router Link так чтобы AdminSidebar тестировался без
 // router-context (canonical pattern from `widget-page.test.tsx`).
-vi.mock('@tanstack/react-router', () => ({
+mock.module('@tanstack/react-router', () => ({
 	Link: ({
 		children,
 		to,
@@ -76,17 +76,17 @@ vi.mock('@tanstack/react-router', () => ({
 // Stub heavy footer consumers to keep this test focused on AdminSidebar's
 // own logic (RBAC × 7 sections rendering + propertyId dispatch + footer
 // composition slots). Each stub is a self-identifying inert element.
-vi.mock('@/features/auth/components/logout-button', () => ({
+mock.module('@/features/auth/components/logout-button', () => ({
 	LogoutButton: () => (
 		<button type="button" data-stub="logout">
 			Выйти
 		</button>
 	),
 }))
-vi.mock('@/features/tenancy/components/org-switcher', () => ({
+mock.module('@/features/tenancy/components/org-switcher', () => ({
 	OrgSwitcher: () => <span data-stub="org-switcher">OrgSwitcher</span>,
 }))
-vi.mock('@/components/mode-toggle', () => ({
+mock.module('@/components/mode-toggle', () => ({
 	ModeToggle: () => (
 		<button type="button" data-stub="mode-toggle">
 			Тема
@@ -101,15 +101,15 @@ function mockMatchMedia(isDesktop: boolean) {
 	Object.defineProperty(window, 'matchMedia', {
 		writable: true,
 		configurable: true,
-		value: vi.fn().mockImplementation((query: string) => ({
+		value: mock().mockImplementation((query: string) => ({
 			matches: query.includes('min-width: 768px') ? isDesktop : false,
 			media: query,
 			onchange: null,
-			addEventListener: vi.fn(),
-			removeEventListener: vi.fn(),
-			dispatchEvent: vi.fn(),
-			addListener: vi.fn(),
-			removeListener: vi.fn(),
+			addEventListener: mock(),
+			removeEventListener: mock(),
+			dispatchEvent: mock(),
+			addListener: mock(),
+			removeListener: mock(),
 		})),
 	})
 }
@@ -120,7 +120,7 @@ import { meQueryOptions } from '@/lib/use-can'
 import { AdminSidebar } from './admin-sidebar'
 
 let queryClient: QueryClient
-let warnSpy: MockInstance
+let warnSpy: Mock<(...args: unknown[]) => unknown>
 
 function seed({
 	role,
@@ -166,14 +166,14 @@ beforeEach(() => {
 	queryClient = new QueryClient({
 		defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } },
 	})
-	warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-	vi.spyOn(console, 'error').mockImplementation(() => {})
+	warnSpy = spyOn(console, 'warn').mockImplementation(() => {})
+	spyOn(console, 'error').mockImplementation(() => {})
 })
 
 afterEach(() => {
 	cleanup()
 	queryClient.clear()
-	vi.restoreAllMocks()
+	mock.restore()
 })
 
 function getRenderedSectionIds(): string[] {

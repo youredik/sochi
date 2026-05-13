@@ -29,7 +29,7 @@
  * later (M6.7.3+).
  */
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { Money } from './money.tsx'
 
 afterEach(cleanup)

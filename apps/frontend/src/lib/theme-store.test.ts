@@ -22,18 +22,21 @@
  *   Adversarial:
  *     [A1] localStorage corrupted JSON → store falls back to default 'system'
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'bun:test'
 
 const STORAGE_KEY = 'horeca-theme'
 
 /**
- * happy-dom 20.9.0 + vitest 4 env имеет broken Storage API
- * (removeItem/clear не functions). Hoist localStorage stub ПЕРЕД import
+ * happy-dom 20.9.0 + bun:test env still has broken Storage API
+ * (removeItem/clear не functions). Top-level stub ПЕРЕД await import
  * useThemeStore — Zustand persist captures localStorage ref на module-load.
+ * bun:test does not have vi.hoisted; static `import` declarations are
+ * hoisted by ESM, then this block runs, then the dynamic `await import`s
+ * pick up our stub.
  */
-const storageData = vi.hoisted(() => ({ value: new Map<string, string>() }))
+const storageData = { value: new Map<string, string>() }
 
-vi.hoisted(() => {
+;(() => {
 	const stub = {
 		getItem: (k: string) => storageData.value.get(k) ?? null,
 		setItem: (k: string, v: string) => {
@@ -55,7 +58,7 @@ vi.hoisted(() => {
 		writable: true,
 		configurable: true,
 	})
-})
+})()
 
 const { useThemeStore } = await import('./theme-store')
 

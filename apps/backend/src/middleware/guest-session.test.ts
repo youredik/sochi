@@ -21,7 +21,7 @@
 
 import { Hono } from 'hono'
 import { setSignedCookie } from 'hono/cookie'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import type { AppEnv } from '../factory.ts'
 import { type GuestSession, guestSessionMiddleware } from './guest-session.ts'
 

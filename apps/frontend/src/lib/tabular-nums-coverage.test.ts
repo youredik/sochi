@@ -18,7 +18,7 @@
  * Tailwind compilation fails OR computed style mismatches. Source-grep CSS
  * declaration redundant + Vite `?raw` doesn't load CSS plugin output.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 
 const FINANCIAL_FILES = import.meta.glob<string>(
 	[

@@ -5,7 +5,7 @@
  * inventoryBuffer respected / overbookingDetected event)».
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	computeAvailability,
 	detectOverbooking,

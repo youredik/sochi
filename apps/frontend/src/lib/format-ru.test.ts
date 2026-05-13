@@ -47,7 +47,7 @@
  *     [I1] currencyDisplay='symbol' produces ₽ (NOT 'narrowSymbol' — Safari iPad bug)
  *     [I2] minimumFractionDigits=2 always shows .00 even for whole rubles
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	formatDateLong,
 	formatDateShort,

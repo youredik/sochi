@@ -11,7 +11,7 @@
  * tests using a real local YDB. These tests exercise the pure-function
  * validator in isolation.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { validateNonOverlap } from './seed-system-constants.ts'
 
 type Entry = Parameters<typeof validateNonOverlap>[0][number]

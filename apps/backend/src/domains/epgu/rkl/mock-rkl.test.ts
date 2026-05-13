@@ -25,7 +25,7 @@
  *     [Raw1] contains status, checked_at, registry_revision
  *     [Raw2] match_type only when status != clean
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { createMockRklCheck } from './mock-rkl.ts'
 
 function makeRng(seed: number): () => number {

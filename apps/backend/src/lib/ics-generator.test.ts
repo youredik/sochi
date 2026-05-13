@@ -27,7 +27,7 @@
  */
 
 import * as nodeIcal from 'node-ical'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { generateBookingIcs } from './ics-generator.ts'
 
 const STANDARD_INPUT = {

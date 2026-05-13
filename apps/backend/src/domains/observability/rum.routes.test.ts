@@ -14,7 +14,7 @@
  */
 
 import { Hono } from 'hono'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import type { AppEnv } from '../../factory.ts'
 import { RumBuffer } from './rum.repo.ts'
 import { createRumRoutes } from './rum.routes.ts'

@@ -12,7 +12,7 @@
  *   - rejection returns null (NEVER throws on attacker-controllable input)
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	validateWidgetMessage,
 	WIDGET_PROTOCOL_NS,

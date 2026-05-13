@@ -8,7 +8,7 @@
  *   [U4] Re-mount with same query — separate listener instance (no leak)
  */
 import { renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { useMediaQuery } from './use-media-query'
 
 interface MqMock extends MediaQueryList {
@@ -21,15 +21,15 @@ function makeMqMock(initialMatches: boolean): MqMock {
 		matches: initialMatches,
 		media: '',
 		onchange: null,
-		addEventListener: vi.fn((_event: string, cb: EventListenerOrEventListenerObject) => {
+		addEventListener: mock((_event: string, cb: EventListenerOrEventListenerObject) => {
 			listener = cb as (event: MediaQueryListEvent) => void
 		}),
-		removeEventListener: vi.fn(() => {
+		removeEventListener: mock(() => {
 			listener = null
 		}),
-		addListener: vi.fn(),
-		removeListener: vi.fn(),
-		dispatchEvent: vi.fn(),
+		addListener: mock(),
+		removeListener: mock(),
+		dispatchEvent: mock(),
 		dispatchChange(matches: boolean) {
 			;(this as unknown as { matches: boolean }).matches = matches
 			if (listener) {
@@ -41,11 +41,11 @@ function makeMqMock(initialMatches: boolean): MqMock {
 }
 
 let mqMock: MqMock
-let matchMediaSpy: ReturnType<typeof vi.spyOn>
+let matchMediaSpy: ReturnType<typeof spyOn>
 
 beforeEach(() => {
 	mqMock = makeMqMock(false)
-	matchMediaSpy = vi.spyOn(window, 'matchMedia').mockReturnValue(mqMock)
+	matchMediaSpy = spyOn(window, 'matchMedia').mockReturnValue(mqMock)
 })
 
 afterEach(() => {

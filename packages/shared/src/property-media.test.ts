@@ -8,7 +8,7 @@
  *   - adversarial: extension / mime / hero+empty-alt combos
  *   - enum FULL coverage on every union
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	buildMediaDerivedKey,
 	buildMediaOriginalKey,

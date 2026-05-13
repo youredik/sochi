@@ -11,15 +11,15 @@
  * batcher MUST NOT receive it (`bufferSize === 0`).
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 
-const onCLSMock = vi.fn()
-const onINPMock = vi.fn()
-const onLCPMock = vi.fn()
-const onFCPMock = vi.fn()
-const onTTFBMock = vi.fn()
+const onCLSMock = mock()
+const onINPMock = mock()
+const onLCPMock = mock()
+const onFCPMock = mock()
+const onTTFBMock = mock()
 
-vi.mock('web-vitals/attribution', () => ({
+mock.module('web-vitals/attribution', () => ({
 	onCLS: onCLSMock,
 	onINP: onINPMock,
 	onLCP: onLCPMock,
@@ -28,8 +28,7 @@ vi.mock('web-vitals/attribution', () => ({
 }))
 
 afterEach(() => {
-	vi.clearAllMocks()
-	vi.resetModules()
+	mock.clearAllMocks()
 })
 
 beforeEach(() => {
@@ -58,11 +57,11 @@ function makeMetric(over: Partial<{ name: string; value: number; rating: string 
 }
 
 const baseTransport = {
-	fetch: vi.fn().mockResolvedValue(new Response('', { status: 200 })),
-	sendBeacon: vi.fn().mockReturnValue(true),
+	fetch: mock().mockResolvedValue(new Response('', { status: 200 })),
+	sendBeacon: mock().mockReturnValue(true),
 	now: () => 1_700_000_000_000,
-	setTimeout: vi.fn(),
-	clearTimeout: vi.fn(),
+	setTimeout: mock(),
+	clearTimeout: mock(),
 	userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.4) AppleWebKit/537.36 Chrome/124.0.0.0',
 	path: '/widget/demo-sirius',
 	tenantSlug: 'demo-sirius',

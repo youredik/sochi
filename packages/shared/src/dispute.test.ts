@@ -14,7 +14,7 @@
  *   [X] reasonCode boundary (1..50 chars)
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	DISPUTE_REPRESENTMENT_BLOCK_DAYS,
 	disputeOpenInput,

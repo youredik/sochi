@@ -27,7 +27,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { DashboardPage } from './dashboard-page.tsx'
 
 function setupClient(): QueryClient {

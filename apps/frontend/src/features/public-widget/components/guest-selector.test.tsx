@@ -14,7 +14,7 @@
  *   [G10] disabled prop сlocks trigger
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import { GuestSelector } from './guest-selector.tsx'
 
 afterEach(() => cleanup())
@@ -62,7 +62,7 @@ describe('<GuestSelector>', () => {
 	})
 
 	test('[G7] adults plus calls onChange with adults+1, children unchanged', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		render(<GuestSelector adults={2} childrenCount={1} onChange={onChange} />)
 		fireEvent.click(screen.getByRole('button'))
 		fireEvent.click(screen.getByTestId('guests-adults-plus'))
@@ -70,7 +70,7 @@ describe('<GuestSelector>', () => {
 	})
 
 	test('[G7b] children plus calls onChange with children+1, adults unchanged', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		render(<GuestSelector adults={2} childrenCount={0} onChange={onChange} />)
 		fireEvent.click(screen.getByRole('button'))
 		fireEvent.click(screen.getByTestId('guests-children-plus'))
@@ -78,7 +78,7 @@ describe('<GuestSelector>', () => {
 	})
 
 	test('[G7c] adults minus calls onChange with adults-1', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		render(<GuestSelector adults={3} childrenCount={0} onChange={onChange} />)
 		fireEvent.click(screen.getByRole('button'))
 		fireEvent.click(screen.getByTestId('guests-adults-minus'))

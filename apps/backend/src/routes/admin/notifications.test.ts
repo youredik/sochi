@@ -28,7 +28,7 @@
  *     [P4] zValidator catches non-typedID → 400
  */
 import type { MemberRole, NotificationDetail, NotificationListPage } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import type { NotificationService } from '../../domains/notification/notification.service.ts'
 import { NotificationAlreadySentError, NotificationNotFoundError } from '../../errors/domain.ts'
 import { onError } from '../../errors/on-error.ts'

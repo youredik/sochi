@@ -45,9 +45,9 @@
  *   [DR4] 9 foreign countries → all 'pending'
  */
 
-import { fc, test as pbTest } from '@fast-check/vitest'
+import * as fc from 'fast-check'
 import type { RatePlan } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	computeCancellationFeeSnapshot,
 	computeNoShowFeeSnapshot,
@@ -208,73 +208,91 @@ const policySourceArb = fc.record({
 })
 
 describe('computeCancellationFeeSnapshot — property-based', () => {
-	pbTest.prop([totalMicrosArb, currencyArb, updatedAtArb, checkInDateArb])(
-		'[FP1] non-refundable branch invariants hold for ALL inputs',
-		(total, currency, updatedAt, checkIn) => {
-			const rp = mkRp({ isRefundable: false, cancellationHours: null, currency, updatedAt })
-			const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
-			expect(snap.amountMicros).toBe(total)
-			expect(snap.dueDate).toBeNull()
-			expect(snap.policyCode).toBe('nonRefundable')
-			expect(snap.currency).toBe(currency)
-			expect(snap.policyVersion).toBe(updatedAt)
-		},
-	)
+	test('[FP1] non-refundable branch invariants hold for ALL inputs', () => {
+		void fc.assert(
+			fc.property(
+				totalMicrosArb,
+				currencyArb,
+				updatedAtArb,
+				checkInDateArb,
+				(total, currency, updatedAt, checkIn) => {
+					const rp = mkRp({ isRefundable: false, cancellationHours: null, currency, updatedAt })
+					const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
+					expect(snap.amountMicros).toBe(total)
+					expect(snap.dueDate).toBeNull()
+					expect(snap.policyCode).toBe('nonRefundable')
+					expect(snap.currency).toBe(currency)
+					expect(snap.policyVersion).toBe(updatedAt)
+				},
+			),
+		)
+	})
 
-	pbTest.prop([totalMicrosArb, cancellationHoursArb, currencyArb, updatedAtArb, checkInDateArb])(
-		'[FP2] flexible branch: dueDate = checkIn minus cancellationHours (UTC day)',
-		(total, hours, currency, updatedAt, checkIn) => {
-			const rp = mkRp({
-				isRefundable: true,
-				cancellationHours: hours,
-				currency,
-				updatedAt,
-			})
-			const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
-			expect(snap.amountMicros).toBe(total)
-			expect(snap.policyCode).toBe('flexible')
-			expect(snap.currency).toBe(currency)
-			expect(snap.policyVersion).toBe(updatedAt)
-			// Recompute the expected dueDate using the same UTC-arithmetic the
-			// implementation uses — fuzz guards against day/month/year rollover.
-			const expected = new Date(`${checkIn}T00:00:00Z`)
-			expected.setUTCHours(expected.getUTCHours() - hours)
-			expect(snap.dueDate).toBe(expected.toISOString().slice(0, 10))
-		},
-	)
+	test('[FP2] flexible branch: dueDate = checkIn minus cancellationHours (UTC day)', () => {
+		void fc.assert(
+			fc.property(
+				totalMicrosArb,
+				cancellationHoursArb,
+				currencyArb,
+				updatedAtArb,
+				checkInDateArb,
+				(total, hours, currency, updatedAt, checkIn) => {
+					const rp = mkRp({
+						isRefundable: true,
+						cancellationHours: hours,
+						currency,
+						updatedAt,
+					})
+					const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
+					expect(snap.amountMicros).toBe(total)
+					expect(snap.policyCode).toBe('flexible')
+					expect(snap.currency).toBe(currency)
+					expect(snap.policyVersion).toBe(updatedAt)
+					// Recompute the expected dueDate using the same UTC-arithmetic the
+					// implementation uses — fuzz guards against day/month/year rollover.
+					const expected = new Date(`${checkIn}T00:00:00Z`)
+					expected.setUTCHours(expected.getUTCHours() - hours)
+					expect(snap.dueDate).toBe(expected.toISOString().slice(0, 10))
+				},
+			),
+		)
+	})
 
-	pbTest.prop([totalMicrosArb, policySourceArb, checkInDateArb])(
-		'[FP4] policyVersion ALWAYS equals ratePlan.updatedAt verbatim',
-		(total, policy, checkIn) => {
-			const rp = mkRp(policy)
-			const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
-			expect(snap.policyVersion).toBe(policy.updatedAt)
-		},
-	)
+	test('[FP4] policyVersion ALWAYS equals ratePlan.updatedAt verbatim', () => {
+		void fc.assert(
+			fc.property(totalMicrosArb, policySourceArb, checkInDateArb, (total, policy, checkIn) => {
+				const rp = mkRp(policy)
+				const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
+				expect(snap.policyVersion).toBe(policy.updatedAt)
+			}),
+		)
+	})
 
-	pbTest.prop([totalMicrosArb, policySourceArb, checkInDateArb])(
-		'[FP-invariant] amountMicros is ALWAYS exactly totalMicros (never partial)',
-		(total, policy, checkIn) => {
-			const rp = mkRp(policy)
-			const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
-			expect(snap.amountMicros).toBe(total)
-		},
-	)
+	test('[FP-invariant] amountMicros is ALWAYS exactly totalMicros (never partial)', () => {
+		void fc.assert(
+			fc.property(totalMicrosArb, policySourceArb, checkInDateArb, (total, policy, checkIn) => {
+				const rp = mkRp(policy)
+				const snap = computeCancellationFeeSnapshot(total, rp, checkIn)
+				expect(snap.amountMicros).toBe(total)
+			}),
+		)
+	})
 })
 
 describe('computeNoShowFeeSnapshot — property-based', () => {
-	pbTest.prop([totalMicrosArb, policySourceArb])(
-		'[FP3] ALL inputs produce fee=total, dueDate=null, code=standardNoShow',
-		(total, policy) => {
-			const rp = mkRp(policy)
-			const snap = computeNoShowFeeSnapshot(total, rp)
-			expect(snap.amountMicros).toBe(total)
-			expect(snap.dueDate).toBeNull()
-			expect(snap.policyCode).toBe('standardNoShow')
-			expect(snap.currency).toBe(policy.currency)
-			expect(snap.policyVersion).toBe(policy.updatedAt)
-		},
-	)
+	test('[FP3] ALL inputs produce fee=total, dueDate=null, code=standardNoShow', () => {
+		void fc.assert(
+			fc.property(totalMicrosArb, policySourceArb, (total, policy) => {
+				const rp = mkRp(policy)
+				const snap = computeNoShowFeeSnapshot(total, rp)
+				expect(snap.amountMicros).toBe(total)
+				expect(snap.dueDate).toBeNull()
+				expect(snap.policyCode).toBe('standardNoShow')
+				expect(snap.currency).toBe(policy.currency)
+				expect(snap.policyVersion).toBe(policy.updatedAt)
+			}),
+		)
+	})
 })
 
 // ----------------------------------------------------------------------------
@@ -327,39 +345,43 @@ const rateBpsArb = fc.integer({ min: 0, max: 500 }) // 0..5% per federal roadmap
 const nightsArb = fc.integer({ min: 1, max: 365 })
 
 describe('computeTourismTax — property-based', () => {
-	pbTest.prop([totalMicrosArb, rateBpsArb, nightsArb])(
-		'[TTP1] result is ALWAYS max(proportional, floor) when rateBps !== null',
-		(base, rateBps, nights) => {
-			const tax = computeTourismTax(base, rateBps, nights)
-			const proportional = (base * BigInt(rateBps)) / 10_000n
-			const floor = 100_000_000n * BigInt(nights)
-			expect(tax).toBe(proportional > floor ? proportional : floor)
-		},
-	)
+	test('[TTP1] result is ALWAYS max(proportional, floor) when rateBps !== null', () => {
+		void fc.assert(
+			fc.property(totalMicrosArb, rateBpsArb, nightsArb, (base, rateBps, nights) => {
+				const tax = computeTourismTax(base, rateBps, nights)
+				const proportional = (base * BigInt(rateBps)) / 10_000n
+				const floor = 100_000_000n * BigInt(nights)
+				expect(tax).toBe(proportional > floor ? proportional : floor)
+			}),
+		)
+	})
 
-	pbTest.prop([totalMicrosArb, nightsArb])(
-		'[TTP2] rateBps=null invariant: tax is ALWAYS 0n, regardless of base/nights',
-		(base, nights) => {
-			expect(computeTourismTax(base, null, nights)).toBe(0n)
-		},
-	)
+	test('[TTP2] rateBps=null invariant: tax is ALWAYS 0n, regardless of base/nights', () => {
+		void fc.assert(
+			fc.property(totalMicrosArb, nightsArb, (base, nights) => {
+				expect(computeTourismTax(base, null, nights)).toBe(0n)
+			}),
+		)
+	})
 
-	pbTest.prop([totalMicrosArb, rateBpsArb])(
-		'[TTP3] nightsCount ≤ 0 invariant: tax is ALWAYS 0n (no stay → no liability)',
-		(base, rateBps) => {
-			expect(computeTourismTax(base, rateBps, 0)).toBe(0n)
-			expect(computeTourismTax(base, rateBps, -1)).toBe(0n)
-		},
-	)
+	test('[TTP3] nightsCount ≤ 0 invariant: tax is ALWAYS 0n (no stay → no liability)', () => {
+		void fc.assert(
+			fc.property(totalMicrosArb, rateBpsArb, (base, rateBps) => {
+				expect(computeTourismTax(base, rateBps, 0)).toBe(0n)
+				expect(computeTourismTax(base, rateBps, -1)).toBe(0n)
+			}),
+		)
+	})
 
-	pbTest.prop([totalMicrosArb, rateBpsArb, nightsArb])(
-		'[TTP4] monotonicity in nights: doubling nights ≥ previous tax (floor scales or prop unchanged)',
-		(base, rateBps, nights) => {
-			const tax1 = computeTourismTax(base, rateBps, nights)
-			const tax2 = computeTourismTax(base, rateBps, nights * 2)
-			expect(tax2 >= tax1).toBe(true)
-		},
-	)
+	test('[TTP4] monotonicity in nights: doubling nights ≥ previous tax (floor scales or prop unchanged)', () => {
+		void fc.assert(
+			fc.property(totalMicrosArb, rateBpsArb, nightsArb, (base, rateBps, nights) => {
+				const tax1 = computeTourismTax(base, rateBps, nights)
+				const tax2 = computeTourismTax(base, rateBps, nights * 2)
+				expect(tax2 >= tax1).toBe(true)
+			}),
+		)
+	})
 })
 
 describe('deriveRegistrationStatus', () => {

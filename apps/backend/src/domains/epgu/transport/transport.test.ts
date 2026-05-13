@@ -6,7 +6,7 @@
  * (when real impls land) is caught immediately. They also verify the
  * `channel` discriminator is correctly set.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	createGostTlsTransport,
 	createProxyViaPartnerTransport,
@@ -69,16 +69,17 @@ describe('EpguTransport stubs', () => {
 
 			it('reserveOrder throws EpguTransportNotImplementedError with channel + method', async () => {
 				const t = build()
+				let caught: EpguTransportNotImplementedError | undefined
 				try {
 					await t.reserveOrder(SAMPLE_ORDER)
-					expect.fail('should have thrown')
 				} catch (err) {
-					expect(err).toBeInstanceOf(EpguTransportNotImplementedError)
-					expect((err as Error).name).toBe('EpguTransportNotImplementedError')
-					expect((err as Error).message).toContain(channel)
-					expect((err as Error).message).toContain('reserveOrder')
-					expect((err as Error).message).toContain('M8.A')
+					caught = err as EpguTransportNotImplementedError
 				}
+				expect(caught).toBeInstanceOf(EpguTransportNotImplementedError)
+				expect(caught?.name).toBe('EpguTransportNotImplementedError')
+				expect(caught?.message).toContain(channel)
+				expect(caught?.message).toContain('reserveOrder')
+				expect(caught?.message).toContain('M8.A')
 			})
 
 			it('pushArchive throws with channel + method', async () => {
@@ -115,11 +116,13 @@ describe('EpguTransport stubs', () => {
 			certificate: 'x',
 			supplierGid: 'x',
 		})
+		let caught: Error | undefined
 		try {
 			await t.reserveOrder(SAMPLE_ORDER)
-			expect.fail()
 		} catch (err) {
-			expect((err as Error).message).toMatch(/wires up in M8\.A/)
+			caught = err as Error
 		}
+		expect(caught).toBeDefined()
+		expect(caught?.message).toMatch(/wires up in M8\.A/)
 	})
 })

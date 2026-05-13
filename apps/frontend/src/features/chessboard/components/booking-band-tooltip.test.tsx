@@ -13,7 +13,7 @@
  *   [G1] missing showPopover API (older browser) — graceful no-op (NOT throw)
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { BookingBandTooltip } from './booking-band-tooltip'
 
 afterEach(() => {
@@ -21,10 +21,10 @@ afterEach(() => {
 })
 
 function renderTooltip(overrides?: Partial<React.ComponentProps<typeof BookingBandTooltip>>) {
-	const onMouseEnterSpy = vi.fn()
-	const onMouseLeaveSpy = vi.fn()
-	const onFocusSpy = vi.fn()
-	const onBlurSpy = vi.fn()
+	const onMouseEnterSpy = mock()
+	const onMouseLeaveSpy = mock()
+	const onFocusSpy = mock()
+	const onBlurSpy = mock()
 	let receivedPopoverId = ''
 	const result = render(
 		<BookingBandTooltip
@@ -109,7 +109,7 @@ describe('BookingBandTooltip — render', () => {
 
 describe('BookingBandTooltip — show/hide handlers', () => {
 	it('[S1] showPopover invoked on mouseenter', () => {
-		const showSpy = vi.fn()
+		const showSpy = mock()
 		HTMLElement.prototype.showPopover = showSpy as unknown as HTMLElement['showPopover']
 		const { getByText } = renderTooltip()
 		fireEvent.mouseEnter(getByText('Band'))
@@ -117,7 +117,7 @@ describe('BookingBandTooltip — show/hide handlers', () => {
 	})
 
 	it('[S2] hidePopover invoked on mouseleave', () => {
-		const hideSpy = vi.fn()
+		const hideSpy = mock()
 		HTMLElement.prototype.hidePopover = hideSpy as unknown as HTMLElement['hidePopover']
 		const { getByText } = renderTooltip()
 		fireEvent.mouseLeave(getByText('Band'))
@@ -125,7 +125,7 @@ describe('BookingBandTooltip — show/hide handlers', () => {
 	})
 
 	it('[S3] showPopover invoked on focus', () => {
-		const showSpy = vi.fn()
+		const showSpy = mock()
 		HTMLElement.prototype.showPopover = showSpy as unknown as HTMLElement['showPopover']
 		const { getByText } = renderTooltip()
 		getByText('Band').focus()
@@ -133,7 +133,7 @@ describe('BookingBandTooltip — show/hide handlers', () => {
 	})
 
 	it('[S4] hidePopover invoked on blur', () => {
-		const hideSpy = vi.fn()
+		const hideSpy = mock()
 		HTMLElement.prototype.hidePopover = hideSpy as unknown as HTMLElement['hidePopover']
 		const { getByText } = renderTooltip()
 		const btn = getByText('Band') as HTMLButtonElement

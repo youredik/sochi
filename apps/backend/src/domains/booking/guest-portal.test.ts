@@ -22,7 +22,7 @@
  *              correct
  */
 
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { computeCancelBoundary } from './guest-portal.routes.ts'
 
 /** Helper: Moscow wall-clock to UTC ms. Moscow is UTC+3 (no DST since 2014). */

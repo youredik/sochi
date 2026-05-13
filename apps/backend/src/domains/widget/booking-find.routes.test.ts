@@ -21,7 +21,7 @@
  *     [BFND-TS6] resetAt monotonic — earlier resetAt for first call
  */
 
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { __testInternals, TupleKeyStore } from './booking-find.routes.ts'
 
 describe('booking-find — internal helpers', () => {

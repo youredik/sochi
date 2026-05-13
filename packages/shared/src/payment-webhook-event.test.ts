@@ -14,7 +14,7 @@
  *   [X] paymentWebhookEventInsert: payloadJson accepts arbitrary unknown
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { newId } from './ids.ts'
 import { paymentWebhookEventInsert, synthesizeYookassaDedupKey } from './payment-webhook-event.ts'
 

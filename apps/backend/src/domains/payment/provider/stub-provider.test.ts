@@ -53,7 +53,7 @@
  *
  * Style: deterministic — clock injected via `now`, delay set to 0 for tests.
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { createStubPaymentProvider } from './stub-provider.ts'
 
 const FROZEN = new Date('2026-04-25T12:00:00.000Z')

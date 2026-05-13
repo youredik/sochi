@@ -30,11 +30,11 @@
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock, spyOn } from 'bun:test'
 
 // Mock TanStack Router Link so component tests don't require a RouterProvider
 // (M9.widget.2 — property cards link к sub-route via TanStack <Link>).
-vi.mock('@tanstack/react-router', () => ({
+mock.module('@tanstack/react-router', () => ({
 	Link: ({
 		children,
 		to,
@@ -65,7 +65,7 @@ import { WidgetPage } from './widget-page.tsx'
 
 afterEach(() => {
 	cleanup()
-	vi.restoreAllMocks()
+	mock.restore()
 })
 
 function renderPage(tenantSlug = 'demo-sirius', onNotFound?: () => void) {
@@ -86,7 +86,7 @@ function renderPage(tenantSlug = 'demo-sirius', onNotFound?: () => void) {
 describe('<WidgetPage> — loading state', () => {
 	test('[L1] isLoading=true → skeleton с role="status" + aria-live="polite"', () => {
 		// Mock listPublicProperties to never resolve (forever-loading)
-		vi.spyOn(widgetApi, 'listPublicProperties').mockImplementation(() => new Promise(() => {}))
+		spyOn(widgetApi, 'listPublicProperties').mockImplementation(() => new Promise(() => {}))
 		renderPage()
 		const status = screen.getByRole('status')
 		expect(status).toBeTruthy()
@@ -94,7 +94,7 @@ describe('<WidgetPage> — loading state', () => {
 	})
 
 	test('[L2] sr-only "Загрузка…" text для screen readers', () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockImplementation(() => new Promise(() => {}))
+		spyOn(widgetApi, 'listPublicProperties').mockImplementation(() => new Promise(() => {}))
 		renderPage()
 		expect(screen.getByText('Загрузка…')).toBeTruthy()
 	})
@@ -102,15 +102,15 @@ describe('<WidgetPage> — loading state', () => {
 
 describe('<WidgetPage> — error / not-found state', () => {
 	test('[E1] API returns null → onNotFound called + h1 "Не найдено"', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue(null)
-		const onNotFound = vi.fn()
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue(null)
+		const onNotFound = mock()
 		renderPage('does-not-exist', onNotFound)
 		await screen.findByRole('heading', { level: 1, name: /Не найдено/ })
 		expect(onNotFound).toHaveBeenCalledTimes(1)
 	})
 
 	test('[E2] tenantSlug rendered в not-found message', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue(null)
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue(null)
 		renderPage('my-typo-slug')
 		await screen.findByRole('heading', { level: 1 })
 		expect(screen.getByText(/my-typo-slug/)).toBeTruthy()
@@ -119,7 +119,7 @@ describe('<WidgetPage> — error / not-found state', () => {
 
 describe('<WidgetPage> — success state header', () => {
 	test('[S1] tenant.name rendered as h1', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'Гостиница Тест', mode: 'demo' },
 			properties: [],
 		})
@@ -128,7 +128,7 @@ describe('<WidgetPage> — success state header', () => {
 	})
 
 	test('[S2] tenant.mode=demo → demo banner visible', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: 'demo' },
 			properties: [],
 		})
@@ -138,7 +138,7 @@ describe('<WidgetPage> — success state header', () => {
 	})
 
 	test('[S3] tenant.mode=production → demo banner HIDDEN', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: 'production' },
 			properties: [],
 		})
@@ -148,7 +148,7 @@ describe('<WidgetPage> — success state header', () => {
 	})
 
 	test('[S4] tenant.mode=null → demo banner HIDDEN', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: [],
 		})
@@ -160,7 +160,7 @@ describe('<WidgetPage> — success state header', () => {
 
 describe('<WidgetPage> — properties list', () => {
 	test('[P1] empty properties → "Этот отель не опубликовал" message', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: [],
 		})
@@ -170,7 +170,7 @@ describe('<WidgetPage> — properties list', () => {
 	})
 
 	test('[P2] non-empty properties → list с N items (scoped к properties section)', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: [
 				{
@@ -200,7 +200,7 @@ describe('<WidgetPage> — properties list', () => {
 	})
 
 	test('[P3] tourism tax 200 bps → "2.0%" rendered (textContent join across spans)', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: [
 				{
@@ -222,7 +222,7 @@ describe('<WidgetPage> — properties list', () => {
 	})
 
 	test('[P4] tourismTaxRateBps=null → no tax string', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: [
 				{
@@ -241,7 +241,7 @@ describe('<WidgetPage> — properties list', () => {
 	})
 
 	test('[P5] property name rendered as h3', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: [
 				{
@@ -264,7 +264,7 @@ describe('<WidgetPage> — properties list', () => {
 
 describe('<WidgetPage> — adversarial', () => {
 	test('[A1] section имеет aria-label для screen readers', async () => {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: [],
 		})
@@ -277,7 +277,7 @@ describe('<WidgetPage> — adversarial', () => {
 
 describe('<WidgetPage> — visual polish elements (post-user-pushback)', () => {
 	function mockWith(propertyCount: number) {
-		vi.spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
+		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue({
 			tenant: { slug: 'a', name: 'A', mode: null },
 			properties: Array.from({ length: propertyCount }, (_, i) => ({
 				id: `p${i + 1}`,

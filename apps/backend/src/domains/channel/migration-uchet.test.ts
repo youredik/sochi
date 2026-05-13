@@ -7,7 +7,7 @@
  *   - MIG3: RU citizen vs foreigner branching
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	assertNoChannelMigrationDelegation,
 	ChannelMigrationDelegationError,
@@ -25,17 +25,18 @@ describe('Migration учёт — D20 NEVER via channel (MIG1-MIG3)', () => {
 	})
 
 	it('[MIG1.b] payload с epguSubmittedAt → rejected', () => {
+		let caught: ChannelMigrationDelegationError | undefined
 		try {
 			assertNoChannelMigrationDelegation({
 				channelId: 'YT',
 				payload: { epguSubmittedAt: '2026-05-04T12:00:00.000Z' },
 			})
-			expect.fail('expected throw')
 		} catch (err) {
-			expect(err).toBeInstanceOf(ChannelMigrationDelegationError)
-			expect((err as ChannelMigrationDelegationError).httpStatus).toBe(422)
-			expect((err as Error).message).toContain('epguSubmittedAt')
+			caught = err as ChannelMigrationDelegationError
 		}
+		expect(caught).toBeInstanceOf(ChannelMigrationDelegationError)
+		expect(caught?.httpStatus).toBe(422)
+		expect(caught?.message).toContain('epguSubmittedAt')
 	})
 
 	it('[MIG1.c] payload с epguStatusCode → rejected', () => {

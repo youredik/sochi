@@ -7,7 +7,7 @@
  *   - adversarial: empty key / non-positive maxBytes rejected
  *   - markDerivedReady idempotent + reports unknown-key correctly
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { __resetAdapterRegistry, getAdapter } from '../../lib/adapters/index.ts'
 import {
 	__resetMediaStorageForTests,

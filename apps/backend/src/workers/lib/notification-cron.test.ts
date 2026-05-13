@@ -1,7 +1,7 @@
 /**
  * Strict unit tests for cron-trigger pure helpers.
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	isCheckinReminderEligible,
 	isInMskHour,

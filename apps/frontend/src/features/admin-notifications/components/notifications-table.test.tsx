@@ -22,7 +22,7 @@
  */
 import type { Notification } from '@horeca/shared'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import { NotificationsTable } from './notifications-table.tsx'
 
 afterEach(cleanup)
@@ -56,7 +56,7 @@ function buildRow(overrides: Partial<Notification> = {}): Notification {
 
 describe('<NotificationsTable> — render correctness', () => {
 	test('[R1] empty items → EmptyState, NO table', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		render(<NotificationsTable items={[]} onRowClick={onRowClick} />)
 		expect(screen.getByRole('heading', { level: 3, name: 'Уведомлений нет' })).toBeDefined()
 		expect(screen.getByText(/С такими фильтрами outbox пуст/)).toBeDefined()
@@ -64,7 +64,7 @@ describe('<NotificationsTable> — render correctness', () => {
 	})
 
 	test('[R2] 3 items → 3 <tr> in tbody (header tr separate)', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		const items = [buildRow({ id: 'ntf_a' }), buildRow({ id: 'ntf_b' }), buildRow({ id: 'ntf_c' })]
 		const { container } = render(<NotificationsTable items={items} onRowClick={onRowClick} />)
 		const bodyRows = container.querySelectorAll('tbody tr')
@@ -73,14 +73,14 @@ describe('<NotificationsTable> — render correctness', () => {
 
 	test('[R3] caption sr-only present', () => {
 		const items = [buildRow()]
-		const { container } = render(<NotificationsTable items={items} onRowClick={vi.fn()} />)
+		const { container } = render(<NotificationsTable items={items} onRowClick={mock()} />)
 		const caption = container.querySelector('caption')
 		expect(caption).not.toBeNull()
 		expect(caption?.className).toContain('sr-only')
 	})
 
 	test('[R4] all 6 column headers rendered scope="col"', () => {
-		const { container } = render(<NotificationsTable items={[buildRow()]} onRowClick={vi.fn()} />)
+		const { container } = render(<NotificationsTable items={[buildRow()]} onRowClick={mock()} />)
 		const headers = container.querySelectorAll('th[scope="col"]')
 		expect(headers.length).toBe(6) // Создано, Тип, Получатель, Канал, Статус, Попыток
 	})
@@ -88,34 +88,37 @@ describe('<NotificationsTable> — render correctness', () => {
 
 describe('<NotificationsTable> — onRowClick contract', () => {
 	test('[C1] click row fires onRowClick(id) — exact id', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		const items = [buildRow({ id: 'ntf_unique_42' })]
 		const { container } = render(<NotificationsTable items={items} onRowClick={onRowClick} />)
 		const row = container.querySelector('tbody tr') as HTMLTableRowElement
 		fireEvent.click(row)
-		expect(onRowClick).toHaveBeenCalledExactlyOnceWith('ntf_unique_42')
+		expect(onRowClick).toHaveBeenCalledTimes(1)
+		expect(onRowClick).toHaveBeenCalledWith('ntf_unique_42')
 	})
 
 	test('[C2] Enter key on focused row fires onRowClick', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		const items = [buildRow({ id: 'ntf_keyed' })]
 		const { container } = render(<NotificationsTable items={items} onRowClick={onRowClick} />)
 		const row = container.querySelector('tbody tr') as HTMLTableRowElement
 		fireEvent.keyDown(row, { key: 'Enter' })
-		expect(onRowClick).toHaveBeenCalledExactlyOnceWith('ntf_keyed')
+		expect(onRowClick).toHaveBeenCalledTimes(1)
+		expect(onRowClick).toHaveBeenCalledWith('ntf_keyed')
 	})
 
 	test('[C3] Space key on focused row fires onRowClick', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		const items = [buildRow({ id: 'ntf_space' })]
 		const { container } = render(<NotificationsTable items={items} onRowClick={onRowClick} />)
 		const row = container.querySelector('tbody tr') as HTMLTableRowElement
 		fireEvent.keyDown(row, { key: ' ' })
-		expect(onRowClick).toHaveBeenCalledExactlyOnceWith('ntf_space')
+		expect(onRowClick).toHaveBeenCalledTimes(1)
+		expect(onRowClick).toHaveBeenCalledWith('ntf_space')
 	})
 
 	test('[C4] other keys (Tab/Escape) do NOT fire onRowClick', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		const { container } = render(
 			<NotificationsTable items={[buildRow()]} onRowClick={onRowClick} />,
 		)
@@ -128,7 +131,7 @@ describe('<NotificationsTable> — onRowClick contract', () => {
 
 	test('[C5] every row has tabIndex=0 (keyboard navigable)', () => {
 		const items = [buildRow({ id: 'a' }), buildRow({ id: 'b' })]
-		const { container } = render(<NotificationsTable items={items} onRowClick={vi.fn()} />)
+		const { container } = render(<NotificationsTable items={items} onRowClick={mock()} />)
 		const rows = container.querySelectorAll('tbody tr')
 		for (const r of rows) {
 			expect((r as HTMLElement).tabIndex).toBe(0)
@@ -138,7 +141,7 @@ describe('<NotificationsTable> — onRowClick contract', () => {
 
 describe('<NotificationsTable> — sorting', () => {
 	test('[S1] default sort: createdAt DESC — newest first', () => {
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		const items = [
 			buildRow({ id: 'ntf_old', createdAt: '2026-01-01T00:00:00.000Z' }),
 			buildRow({ id: 'ntf_new', createdAt: '2026-04-01T00:00:00.000Z' }),
@@ -157,7 +160,7 @@ describe('<NotificationsTable> — sorting', () => {
 			buildRow({ id: 'ntf_r5', retryCount: 5 }),
 			buildRow({ id: 'ntf_r2', retryCount: 2 }),
 		]
-		const onRowClick = vi.fn()
+		const onRowClick = mock()
 		const { container, getByRole } = render(
 			<NotificationsTable items={items} onRowClick={onRowClick} />,
 		)

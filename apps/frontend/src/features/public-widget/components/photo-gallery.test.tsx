@@ -6,7 +6,7 @@
  * М9.widget.2 (М9.widget.8 polish), но tests cover non-empty paths via mocks.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'bun:test'
 import type { PublicPropertyPhoto } from '../lib/widget-api.ts'
 import { PhotoGallery } from './photo-gallery.tsx'
 

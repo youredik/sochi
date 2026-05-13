@@ -16,7 +16,7 @@
  *   [WBA13] STALE_AVAILABILITY code path even с не-409 status (defensive)
  */
 
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import {
 	commitBooking,
 	generateIdempotencyKey,
@@ -82,10 +82,10 @@ describe('commitBooking', () => {
 		paymentMethod: 'card' as const,
 	}
 
-	let fetchSpy: ReturnType<typeof vi.spyOn>
+	let fetchSpy: ReturnType<typeof spyOn>
 
 	beforeEach(() => {
-		fetchSpy = vi.spyOn(globalThis, 'fetch')
+		fetchSpy = spyOn(globalThis, 'fetch')
 	})
 	afterEach(() => {
 		fetchSpy.mockRestore()
@@ -104,7 +104,7 @@ describe('commitBooking', () => {
 			new Response(JSON.stringify({ data: expected }), { status: 200 }),
 		)
 		const result = await commitBooking('acme-hotel', minBody, 'idem-1')
-		expect(result).toEqual(expected)
+		expect(result).toEqual(expected as typeof result)
 	})
 
 	test('[WBA4] 404 → not_found reason', async () => {

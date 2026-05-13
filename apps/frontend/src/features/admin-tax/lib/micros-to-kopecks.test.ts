@@ -25,7 +25,7 @@
  *   Immutability:
  *     [I1] input string unchanged after call
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { microsToKopecks } from './micros-to-kopecks.ts'
 
 describe('microsToKopecks — happy path', () => {

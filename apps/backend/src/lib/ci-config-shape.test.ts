@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // apps/backend/src/lib → repo root (4 levels up).

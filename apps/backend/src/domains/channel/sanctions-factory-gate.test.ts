@@ -9,7 +9,7 @@
  * Re-enable trigger: sanctions lift + RKN re-notify + manual code change.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { sql } from '../../db/index.ts'
 import { createChannelFactory, SanctionedChannelError } from './channel.factory.ts'
 
@@ -25,16 +25,17 @@ describe('Factory sanctions HARD-DISABLE — D16 (SF1-SF4)', () => {
 
 	it('[SF2] registerAdapterFactory("EXP", ...) throws — Expedia sanctioned', () => {
 		const f = createChannelFactory(sql, { enableDispatcher: false })
+		let caught: SanctionedChannelError | undefined
 		try {
 			f.registerAdapterFactory('EXP', async () => {
 				throw new Error('should not reach')
 			})
-			expect.fail('expected throw')
 		} catch (err) {
-			expect(err).toBeInstanceOf(SanctionedChannelError)
-			expect((err as SanctionedChannelError).httpStatus).toBe(451)
-			expect((err as Error).message).toContain('HARD-DISABLED')
+			caught = err as SanctionedChannelError
 		}
+		expect(caught).toBeInstanceOf(SanctionedChannelError)
+		expect(caught?.httpStatus).toBe(451)
+		expect(caught?.message).toContain('HARD-DISABLED')
 	})
 
 	it('[SF3] registerAdapterFactory("ABN", ...) throws — Airbnb sanctioned', () => {

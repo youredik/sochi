@@ -11,7 +11,7 @@
 
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import { PaymentMethodSelector } from './payment-method-selector.tsx'
 
 afterEach(() => {
@@ -46,7 +46,7 @@ describe('PaymentMethodSelector', () => {
 	})
 
 	test('[PMS4] click sbp → onChange("sbp") called', async () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		render(<PaymentMethodSelector value="card" onChange={onChange} />)
 		await userEvent.click(screen.getByRole('radio', { name: /СБП/i }))
 		expect(onChange).toHaveBeenCalledWith('sbp')

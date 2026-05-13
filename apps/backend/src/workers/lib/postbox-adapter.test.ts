@@ -8,7 +8,7 @@
  *   - PostboxAdapter happy path returns sent + messageId
  *   - PostboxAdapter 200 without MessageId → transient (anomaly)
  */
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, test, mock } from 'bun:test'
 import {
 	classifyPostboxError,
 	PostboxAdapter,
@@ -170,7 +170,7 @@ describe('classifyPostboxError — HTTP status code mapping', () => {
 describe('PostboxAdapter — happy path + anomalies', () => {
 	test('sends via SES client + returns messageId from response', async () => {
 		const fakeClient = {
-			send: vi.fn().mockResolvedValue({ MessageId: 'abc-123' }),
+			send: mock().mockResolvedValue({ MessageId: 'abc-123' }),
 		}
 		const captured: unknown[] = []
 		class FakeCommand {
@@ -197,7 +197,7 @@ describe('PostboxAdapter — happy path + anomalies', () => {
 	})
 
 	test('200 without MessageId → transient (anomaly, retry-safe)', async () => {
-		const fakeClient = { send: vi.fn().mockResolvedValue({}) }
+		const fakeClient = { send: mock().mockResolvedValue({}) }
 		class FakeCommand {
 			input: unknown
 			constructor(input: unknown) {
@@ -212,7 +212,7 @@ describe('PostboxAdapter — happy path + anomalies', () => {
 	test('thrown error → routed through classifyPostboxError', async () => {
 		const err = new Error('rejected')
 		err.name = 'MessageRejectedException'
-		const fakeClient = { send: vi.fn().mockRejectedValue(err) }
+		const fakeClient = { send: mock().mockRejectedValue(err) }
 		class FakeCommand {
 			input: unknown
 			constructor(input: unknown) {

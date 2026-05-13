@@ -9,7 +9,7 @@
  * exact failure-mode reason string, multi-key rotation grace.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	computeSignature,
 	ipAllowlistVerify,

@@ -40,7 +40,7 @@
  *     [V7] duplicate scan filenames → throws (ZIP overwrite trap)
  */
 import { unzipSync } from 'fflate'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { createMockArchiveBuilder } from './mock-archive.ts'
 import type { ArchiveInput } from './types.ts'
 

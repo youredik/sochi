@@ -35,7 +35,7 @@
  *   ─── apiConfidenceRaw is ALWAYS 0.0 (matches Yandex broken behaviour) ─
  *     [A1] apiConfidenceRaw === 0 регardless of outcome
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { computeHeuristicConfidence, createMockVisionOcr } from './mock-vision.ts'
 import { PASSPORT_COUNTRY_WHITELIST } from './types.ts'
 

@@ -23,7 +23,7 @@
  *     [A2] CTA aria-label adapts к ready state
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, test, mock } from 'bun:test'
 import type { PublicRateOption, PublicRoomType } from '../lib/widget-api.ts'
 import { StickySummary } from './sticky-summary.tsx'
 
@@ -182,7 +182,7 @@ describe('<StickySummary>', () => {
 	})
 
 	test('[F6] Continue calls onContinue when ready', () => {
-		const onContinue = vi.fn()
+		const onContinue = mock()
 		render(
 			<StickySummary
 				{...baseProps}

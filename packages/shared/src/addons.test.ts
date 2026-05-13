@@ -9,7 +9,7 @@
  *   - VAT enum FULL coverage
  *   - non-integer nights/persons rejected, negative ctx rejected
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
 	type Addon,
 	addonCategoryValues,
@@ -62,7 +62,7 @@ describe('enum surface (regression — fail loud on additions)', () => {
 })
 
 describe('addonVatBpsSchema', () => {
-	it.each(VAT_RATE_BPS_VALUES)('accepts canonical rate %i bps', (rate) => {
+	it.each([...VAT_RATE_BPS_VALUES])('accepts canonical rate %i bps', (rate) => {
 		expect(addonVatBpsSchema.parse(rate)).toBe(rate)
 	})
 

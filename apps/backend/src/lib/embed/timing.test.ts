@@ -5,7 +5,7 @@
  * and rejection propagation.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { constantTailLatency } from './timing.ts'
 
 describe('constantTailLatency', () => {

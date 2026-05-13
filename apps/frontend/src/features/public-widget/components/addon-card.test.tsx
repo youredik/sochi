@@ -36,7 +36,7 @@
  *     [AC19] qty=0 displays «0» в input (NOT empty / NOT hidden)
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, mock } from 'bun:test'
 import type { PublicWidgetAddon } from '../lib/widget-api.ts'
 import { AddonCard } from './addon-card.tsx'
 
@@ -91,7 +91,7 @@ describe('<AddonCard> — opt-in canon ЗоЗПП ст. 16 ч. 3.1', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		const card = screen.getByTestId('addon-card-BREAKFAST')
@@ -105,7 +105,7 @@ describe('<AddonCard> — opt-in canon ЗоЗПП ст. 16 ч. 3.1', () => {
 				quantity={2}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		const card = screen.getByTestId('addon-card-BREAKFAST')
@@ -125,7 +125,7 @@ describe('<AddonCard> — pricing display (ст. 10 ЗоЗПП)', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		// `\s` matches NBSP (U+00A0) — Intl.NumberFormat ru-RU uses NBSP between groups.
@@ -139,7 +139,7 @@ describe('<AddonCard> — pricing display (ст. 10 ЗоЗПП)', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		expect(screen.getByText(/в т\.ч\. НДС 22%/i)).toBeTruthy()
@@ -153,7 +153,7 @@ describe('<AddonCard> — pricing display (ст. 10 ЗоЗПП)', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		expect(screen.queryByText(/в т\.ч\. НДС/)).toBeNull()
@@ -166,7 +166,7 @@ describe('<AddonCard> — pricing display (ст. 10 ЗоЗПП)', () => {
 				quantity={2}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		// transfer PER_STAY × qty=2: net 500_000, gross floor(610_000) = 610_000 → "6 100 ₽"
@@ -182,7 +182,7 @@ describe('<AddonCard> — pricing display (ст. 10 ЗоЗПП)', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		expect(screen.queryByTestId('addon-TRANSFER-total')).toBeNull()
@@ -197,7 +197,7 @@ describe('<AddonCard> — cancellation disclosure (ПП РФ №1912)', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso="2026-06-15"
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		expect(screen.getByText(/Бесплатная отмена до 15 июня 2026/)).toBeTruthy()
@@ -206,7 +206,7 @@ describe('<AddonCard> — cancellation disclosure (ПП РФ №1912)', () => {
 
 describe('<AddonCard> — quantity stepper', () => {
 	test('[AC9] click + → onChangeQuantity(qty + 1)', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		render(
 			<AddonCard
 				addon={transfer}
@@ -221,7 +221,7 @@ describe('<AddonCard> — quantity stepper', () => {
 	})
 
 	test('[AC10] click − → onChangeQuantity(qty - 1)', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		render(
 			<AddonCard
 				addon={transfer}
@@ -242,7 +242,7 @@ describe('<AddonCard> — quantity stepper', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		const dec = screen.getByTestId('addon-TRANSFER-dec') as HTMLButtonElement
@@ -256,7 +256,7 @@ describe('<AddonCard> — quantity stepper', () => {
 				quantity={5}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		const inc = screen.getByTestId('addon-TRANSFER-inc') as HTMLButtonElement
@@ -264,7 +264,7 @@ describe('<AddonCard> — quantity stepper', () => {
 	})
 
 	test('[AC13] native input change → onChangeQuantity called', () => {
-		const onChange = vi.fn()
+		const onChange = mock()
 		render(
 			<AddonCard
 				addon={transfer}
@@ -288,7 +288,7 @@ describe('<AddonCard> — pricing unit labels', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		expect(screen.getByText(/\/ гость \/ ночь/)).toBeTruthy()
@@ -301,7 +301,7 @@ describe('<AddonCard> — pricing unit labels', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		expect(screen.getByText(/\/ час/)).toBeTruthy()
@@ -316,7 +316,7 @@ describe('<AddonCard> — a11y', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		const inc = screen.getByTestId('addon-BREAKFAST-inc')
@@ -332,7 +332,7 @@ describe('<AddonCard> — a11y', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		const input = screen.getByTestId('addon-BREAKFAST-qty')
@@ -348,7 +348,7 @@ describe('<AddonCard> — adversarial', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		expect(screen.queryByText(/Рекоменд/i)).toBeNull()
@@ -363,7 +363,7 @@ describe('<AddonCard> — adversarial', () => {
 				quantity={0}
 				context={ctx}
 				checkInIso={checkIn}
-				onChangeQuantity={vi.fn()}
+				onChangeQuantity={mock()}
 			/>,
 		)
 		const input = screen.getByTestId('addon-BREAKFAST-qty') as HTMLInputElement

@@ -17,14 +17,14 @@
  *     [H1] always uses GET
  *     [H2] sets Accept: application/json header
  */
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { getPublicPropertyDetail, listPublicProperties } from './widget-api.ts'
 
 describe('widget-api — listPublicProperties', () => {
-	let fetchSpy: ReturnType<typeof vi.spyOn>
+	let fetchSpy: ReturnType<typeof spyOn>
 
 	beforeEach(() => {
-		fetchSpy = vi.spyOn(globalThis, 'fetch')
+		fetchSpy = spyOn(globalThis, 'fetch')
 	})
 
 	afterEach(() => {
@@ -91,10 +91,10 @@ describe('widget-api — listPublicProperties', () => {
 })
 
 describe('widget-api — getPublicPropertyDetail', () => {
-	let fetchSpy: ReturnType<typeof vi.spyOn>
+	let fetchSpy: ReturnType<typeof spyOn>
 
 	beforeEach(() => {
-		fetchSpy = vi.spyOn(globalThis, 'fetch')
+		fetchSpy = spyOn(globalThis, 'fetch')
 	})
 
 	afterEach(() => {
@@ -172,10 +172,10 @@ describe('widget-api — getPublicPropertyDetail', () => {
 })
 
 describe('widget-api — HTTP method + headers', () => {
-	let fetchSpy: ReturnType<typeof vi.spyOn>
+	let fetchSpy: ReturnType<typeof spyOn>
 
 	beforeEach(() => {
-		fetchSpy = vi.spyOn(globalThis, 'fetch')
+		fetchSpy = spyOn(globalThis, 'fetch')
 		fetchSpy.mockResolvedValue(
 			new Response(
 				JSON.stringify({ data: { tenant: { slug: 'a', name: 'A', mode: null }, properties: [] } }),

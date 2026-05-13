@@ -16,7 +16,7 @@
  */
 
 import { Hono } from 'hono'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import type { AppEnv } from '../factory.ts'
 import { secPurposeGuard } from './sec-purpose-guard.ts'
 

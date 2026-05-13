@@ -8,7 +8,7 @@
  */
 
 import { Hono } from 'hono'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'bun:test'
 import { __resetAdapterRegistry, listAdapters, registerAdapter } from './index.ts'
 
 type AppMode = 'sandbox' | 'production'

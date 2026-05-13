@@ -10,7 +10,7 @@
  *   summarizeReceivables — empty / single / multi-bucket / KPI math
  */
 import type { Folio } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import { ALL_BUCKETS, bucketForDays, daysBetween, summarizeReceivables } from './aging-buckets.ts'
 
 const NOW = new Date('2026-04-25T12:00:00Z')

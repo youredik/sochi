@@ -10,7 +10,7 @@
  *   - Exhaustive enum sweep — every NotificationKind covered
  */
 import type { NotificationKind } from '@horeca/shared'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'bun:test'
 import {
 	escapeHtml,
 	type PaymentSucceededVars,

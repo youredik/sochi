@@ -30,12 +30,12 @@ import type { Booking, Folio, Notification } from '@horeca/shared'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, spyOn, test } from 'bun:test'
 import * as computeKpis from '../lib/compute-kpis.ts'
 import { KpiStrip } from './kpi-strip.tsx'
 
 // Pin "today" so arrival filtering is deterministic across CI TZ.
-vi.spyOn(computeKpis, 'todayInMoscow').mockReturnValue('2026-05-12')
+spyOn(computeKpis, 'todayInMoscow').mockReturnValue('2026-05-12')
 
 // Build a QueryClient with seeded data + flags that prevent the underlying
 // queryFn from firing. Without `staleTime: Infinity` + `refetchOnMount: false`

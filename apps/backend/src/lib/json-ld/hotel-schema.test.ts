@@ -16,7 +16,7 @@
  *   - Cyrillic + emoji (encoding round-trip)
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { buildHotelJsonLd, renderHotelJsonLdScript } from './hotel-schema.ts'
 import type { RoomTypeForJsonLd } from './hotel-schema-types.ts'
 

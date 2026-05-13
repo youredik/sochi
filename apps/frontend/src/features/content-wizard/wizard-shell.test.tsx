@@ -19,21 +19,21 @@
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test'
 
-const navigateSpy = vi.fn()
-vi.mock('@tanstack/react-router', () => ({
+const navigateSpy = mock()
+mock.module('@tanstack/react-router', () => ({
 	useNavigate: () => navigateSpy,
 }))
 
-vi.mock('./hooks/use-compliance.ts', () => ({
-	useCompliance: vi.fn(() => ({ data: null, isLoading: false, error: null })),
-	usePatchCompliance: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+mock.module('./hooks/use-compliance.ts', () => ({
+	useCompliance: mock(() => ({ data: null, isLoading: false, error: null })),
+	usePatchCompliance: mock(() => ({ mutateAsync: mock(), isPending: false })),
 }))
 
-vi.mock('../../lib/use-can.ts', () => ({
-	useCan: vi.fn(() => true),
-	useCurrentRole: vi.fn(() => 'owner'),
+mock.module('../../lib/use-can.ts', () => ({
+	useCan: mock(() => true),
+	useCurrentRole: mock(() => 'owner'),
 }))
 
 import { ContentWizardShell } from './wizard-shell.tsx'
@@ -41,7 +41,7 @@ import { useContentWizardStore } from './wizard-store.ts'
 
 afterEach(() => {
 	cleanup()
-	vi.clearAllMocks()
+	mock.clearAllMocks()
 	useContentWizardStore.getState().reset()
 })
 
@@ -111,7 +111,7 @@ describe('<ContentWizardShell> — progress indicator', () => {
 			const ol = screen.getByRole('list')
 			const buttons = within(ol).getAllByRole('button')
 			fireEvent.click(buttons[idx] as HTMLButtonElement)
-			expect(useContentWizardStore.getState().step).toBe(expectedOrder[idx])
+			expect(useContentWizardStore.getState().step).toBe(expectedOrder[idx]!)
 		}
 	})
 })

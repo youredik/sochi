@@ -14,7 +14,7 @@
 
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test'
 import { z } from 'zod'
 
 const ETG_BASE = 'https://api-sandbox.worldota.net/api/b2b/v3'
