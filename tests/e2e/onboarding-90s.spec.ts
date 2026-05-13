@@ -1,41 +1,42 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { getMagicLinkUrl, purgeMailpit } from './_mailpit-helper.ts'
 
 /**
  * 90-second onboarding budget — empirical wall-clock measurement of the
  * canonical solo-owner flow per `[[demo_strategy]]` + the canon committed
- * in `0c31ecf` (frontend) + `1d9f344` (backend bulk endpoint).
+ * in `0c31ecf` (frontend) + `1d9f344` (backend bulk endpoint) +
+ * `[[auth-passwordless-canon]]` (magic-link only).
  *
  * Story under measurement:
- *   1. anonymous /signup form fill
- *   2. signup submit → backend creates user + org + redirect to /setup
- *   3. /setup Screen 1 — type ИНН, Найти → DaData preview, Подтвердить →
- *   4. /setup Screen 2 — defaults (10 rooms × 3500₽), Готово →
- *   5. single-tx bulk POST commits property + roomType + N rooms + ratePlan
- *   6. landing on /o/$slug/grid — empty Шахматка с roomheader visible
+ *   1. anonymous /signup → MagicLinkSignUpForm (email + orgName + consent)
+ *   2. submit → BA dispatches magic-link via MailpitAdapter
+ *   3. test fetches link from Mailpit HTTP API and visits it
+ *   4. BA verify creates user JIT + sets cookie → 302 to /welcome?n=<orgName>
+ *   5. /welcome: confirm orgName → organization.create → navigate to /setup
+ *   6. /setup Screen 1 — type ИНН, Найти → DaData preview, Подтвердить →
+ *   7. /setup Screen 2 — defaults (10 rooms × 3500₽), Готово →
+ *   8. single-tx bulk POST commits property + roomType + N rooms + ratePlan
+ *   9. landing on /o/$slug/grid — empty Шахматка с roomheader visible
  *
- * Budget: < 90_000 ms total. Soft threshold — failure here is a real
- * regression (rate-seeding rabbit hole, N+1 in beforeLoad, etc.), not
- * flake. Backend N≤200 inside one tx (per-row UPSERT inside `sql.begin`
- * `[[ydb_as_table_optional_typing]]`) is well-tested below this budget;
- * the gate exists to catch UI-side regressions like accidental sync
- * `setState` storms during the navigate-to-/grid transition.
+ * Budget: < 90_000 ms total measured from signup submit (which dispatches
+ * the magic-link email). Soft threshold — failure here is a real regression
+ * (SMTP delivery delay, bulk-tx slowdown, beforeLoad N+1), не flake. Backend
+ * N≤200 inside one tx (per-row UPSERT inside `sql.begin` per
+ * `[[ydb_as_table_optional_typing]]`) is well-tested below this budget.
  *
- * Anonymous project: no storageState dependency. The spec creates a fresh
- * user inside itself — exercises the full empty-tenant→Шахматка hop. Lives
- * в the `smoke` Playwright project (testMatch tuned in playwright.config.ts)
- * so it does NOT depend on `auth.setup.ts`.
+ * Anonymous project: no storageState dependency. Lives in the `smoke`
+ * Playwright project (testMatch tuned in playwright.config.ts) so it does
+ * NOT depend on `auth.setup.ts`.
  *
- * **Behaviour-faithful mock seam** per `[[behaviour_faithful_mock_canon]]`:
- * the test hits the production `dadata.mock` adapter directly (Playwright
- * `webServer.env.DADATA_API_KEY=''` forces the factory bind to mock). ИНН
- * `2320000001` is the canonical Сочи demo record и passes through the same
- * code path the public hosted demo tenant will use forever per
- * `[[demo_strategy]]`. No HTTP-layer mocking — the seam is the adapter
- * boundary, не the network.
+ * **Behaviour-faithful mock seam** per `[[mock-seam-at-adapter-not-http]]`:
+ * the test hits production `dadata.mock` adapter directly (Playwright
+ * `webServer.env.DADATA_API_KEY=''` forces mock binding). ИНН `2320000001`
+ * is the canonical Сочи demo record и passes through the same code path
+ * the public hosted demo tenant will use forever per `[[demo_strategy]]`.
  *
  * Layer 5 (a11y): axe-core WCAG 2.2 AA scan at three checkpoints —
- * /signup form, /setup Screen 1, /setup Screen 2 — gate per
+ * /signup form, /welcome, /setup Screen 1 — gate per
  * `[[layer_4_5_mandatory_per_subphase]]`. Grid axe scan lives separately
  * in `grid-a11y.spec.ts` (deeper coverage); duplicating here only adds
  * runtime без new signal.
@@ -51,37 +52,52 @@ async function expectAxeClean(page: import('@playwright/test').Page, scope: stri
 	expect(results.violations).toEqual([])
 }
 
-test('signup → ИНН → inventory → Шахматка lands under 90 seconds', async ({ page }) => {
+test('signup → magic-link → /welcome → ИНН → inventory → Шахматка lands under 90 seconds', async ({
+	page,
+	request,
+}) => {
 	const ts = Date.now()
 	const email = `e2e-budget-${ts}@sochi.local`
-	const password = 'playwright-budget-01'
 	const orgName = `Budget Hotel ${ts}`
+
+	await purgeMailpit(request)
 
 	// --- t0: about-to-submit signup ---
 	await page.goto('/signup')
 	await expect(page.getByRole('heading', { name: 'Регистрация' })).toBeVisible()
 
-	await page.getByLabel('Ваше имя').fill('Budget Owner')
 	await page.getByLabel('Email').fill(email)
-	await page.getByLabel('Пароль').fill(password)
 	await page.getByLabel('Название гостиницы').fill(orgName)
 	await page.getByLabel(/согласие/).check()
 
-	// a11y checkpoint #1 — signup form, fully filled (covers focused-input
-	// states, error-free baseline).
+	// a11y checkpoint #1 — signup form filled.
 	await expectAxeClean(page, '/signup form filled')
 
 	const t0 = Date.now()
+	await page.getByRole('button', { name: 'Получить ссылку для регистрации' }).click()
+	await expect(page.getByText('Письмо отправлено')).toBeVisible()
+
+	// --- Fetch magic-link from Mailpit + visit it ---
+	const magicLinkUrl = await getMagicLinkUrl(request, email)
+	await page.goto(magicLinkUrl)
+
+	// --- /welcome ---
+	await expect(page.getByRole('heading', { name: 'Почти готово' })).toBeVisible()
+	const orgNameInput = page.getByLabel('Название гостиницы')
+	await expect(orgNameInput).toHaveValue(orgName)
+
+	// a11y checkpoint #2 — /welcome with orgName prefilled.
+	await expectAxeClean(page, '/welcome prefilled')
 
 	await Promise.all([
-		page.waitForURL(/\/o\/budget-hotel-\d+\/setup$/),
-		page.getByRole('button', { name: 'Создать аккаунт' }).click(),
+		page.waitForURL(/\/o\/[^/]+\/setup$/),
+		page.getByRole('button', { name: 'Создать гостиницу →' }).click(),
 	])
 
-	// --- Screen 1: identify ---
+	// --- /setup Screen 1: identify ---
 	await expect(page.getByLabel('ИНН гостиницы')).toBeVisible()
 
-	// a11y checkpoint #2 — Screen 1 idle (no preview yet).
+	// a11y checkpoint #3 — /setup Screen 1 idle.
 	await expectAxeClean(page, '/setup screen 1 idle')
 
 	// Canonical demo ИНН from `apps/backend/src/domains/identity/dadata/
@@ -91,16 +107,13 @@ test('signup → ИНН → inventory → Шахматка lands under 90 second
 	await expect(page.getByRole('complementary', { name: 'Найденная организация' })).toBeVisible()
 	await page.getByRole('button', { name: /Подтвердить/ }).click()
 
-	// --- Screen 2: inventory ---
+	// --- /setup Screen 2: inventory ---
 	await expect(page.locator('li[aria-current="step"]')).toContainText('Номера и цена')
 	await expect(page.getByLabel('Сколько номеров?')).toHaveValue('10')
 	await expect(page.getByLabel('Цена за ночь, ₽')).toHaveValue('3500')
 
-	// a11y checkpoint #3 — Screen 2 с defaults visible.
-	await expectAxeClean(page, '/setup screen 2 defaults')
-
 	await Promise.all([
-		page.waitForURL(/\/o\/budget-hotel-\d+\/grid$/),
+		page.waitForURL(/\/o\/[^/]+\/grid$/),
 		page.getByRole('button', { name: /Готово/ }).click(),
 	])
 

@@ -10,11 +10,9 @@ import { type CaptchaValidationResult, validateCaptcha } from '../captcha/valida
  * in `auth.ts` is a thin one-liner that delegates here; this file owns the
  * branching logic + parsing.
  *
- * Endpoints protected (all auth-flow entrypoints — anti-enumeration):
- *   - POST /sign-up/email        (BA email+password sign-up)
- *   - POST /sign-in/email        (BA email+password sign-in)
- *   - POST /sign-in/magic-link   (BA magic-link plugin)
- *   - POST /forget-password      (BA email+password reset)
+ * Endpoint protected (the sole auth entrypoint after passwordless canon
+ * shift per `[[auth-passwordless-canon]]` 2026-05-13):
+ *   - POST /sign-in/magic-link   (BA magic-link plugin — JIT signup + sign-in)
  *
  * Activation: env-gated. Unset `SMARTCAPTCHA_SERVER_KEY` (dev / CI / e2e)
  * bypasses validation entirely — frontend widget is not rendered either
@@ -27,12 +25,7 @@ import { type CaptchaValidationResult, validateCaptcha } from '../captcha/valida
  * Yandex SmartCaptcha support — we have to do this manually.
  */
 
-export const CAPTCHA_PATHS = new Set<string>([
-	'/sign-up/email',
-	'/sign-in/email',
-	'/sign-in/magic-link',
-	'/forget-password',
-])
+export const CAPTCHA_PATHS = new Set<string>(['/sign-in/magic-link'])
 
 const captchaBodySchema = z.object({
 	captchaToken: z.string().min(1).optional(),

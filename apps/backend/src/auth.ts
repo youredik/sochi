@@ -22,17 +22,20 @@ const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000
 /**
  * Better Auth instance for HoReCa.
  *
- * Auth methods (canon 2026):
- *   - **Magic-link** — primary passwordless flow. BA built-in plugin (`magic-link`)
- *     with `disableSignUp: false` enables JIT user creation — same button serves
- *     sign-in AND sign-up via email. 5-minute token TTL, single-use.
- *   - **Email + password** — fallback. Pwned-pass check + 8-char min still on.
- *     Email verification OFF на старте so owners can register and click around
- *     без email round-trip. Turn ON before the first real customer.
- *   - **WebAuthn passkey** — power-user upgrade after first sign-in (M9.5 Phase D).
- *   - **Yandex SmartCaptcha** — bot protection. Gates sign-up / sign-in /
- *     magic-link via `before` hook (next commit) when SMARTCAPTCHA_SERVER_KEY
- *     is set; bypassed in dev where the key is unset.
+ * Auth methods (canon 2026 — passwordless, full-stack):
+ *   - **Magic-link** — sole signup AND sign-in entrypoint. BA built-in plugin
+ *     (`magic-link`) with `disableSignUp: false` enables JIT user creation —
+ *     same email-only flow serves both. 5-minute token TTL, single-use.
+ *   - **WebAuthn passkey** — power-user upgrade after first sign-in (M9.5
+ *     Phase D). Bound к platform authenticator (Touch/Face ID / Windows Hello).
+ *   - **Yandex SmartCaptcha** — bot protection. Gates the magic-link `before`
+ *     hook when SMARTCAPTCHA_SERVER_KEY is set; bypassed in dev/CI where unset.
+ *   - **Email + password — DROPPED 2026-05-13** per `[[aggressive_delegacy]]` +
+ *     `[[no_halfway]]`. Greenfield, no legacy users. Phishing surface, password-
+ *     reset flows, lockout policies — all unnecessary for RU HoReCa SMB persona
+ *     where magic-link + passkey covers the whole journey. The full removal
+ *     (frontend + backend + tests + memory) shipped в one atomic commit;
+ *     `auth-passwordless-canon` feedback memory documents the decision.
  *   - Organization plugin owns multi-tenancy — organization.id == tenantId.
  *   - Roles: owner / manager / staff (see access-control.ts).
  *   - Users CAN create organizations на старте. Once we have real customers this
@@ -81,12 +84,8 @@ export const auth = betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
 	baseURL: env.BETTER_AUTH_URL,
 	trustedOrigins,
-	emailAndPassword: {
-		enabled: true,
-		requireEmailVerification: false,
-		autoSignIn: true,
-		minPasswordLength: 8,
-	},
+	// `emailAndPassword` block deliberately omitted — passwordless canon
+	// (magic-link + passkey only) per `[[auth-passwordless-canon]]` 2026-05-13.
 	session: {
 		expiresIn: 60 * 60 * 24 * 7, // 7 days
 		updateAge: 60 * 60 * 24, // re-issue after 1 day of activity

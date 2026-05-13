@@ -20,11 +20,11 @@
  *     [V5] validate() returns bad_response → fail with reason
  *          'bad_response'
  *
- *   ─── Endpoint coverage (all 4 CAPTCHA_PATHS) ─────────────────────
- *     [E1] /sign-up/email gated
- *     [E2] /sign-in/email gated
- *     [E3] /sign-in/magic-link gated
- *     [E4] /forget-password gated
+ *   ─── Endpoint coverage (passwordless canon 2026-05-13 — only magic-link) ─
+ *     [E1] CAPTCHA_PATHS contains exactly /sign-in/magic-link
+ *     [E2] retired email/password endpoints (sign-up/email, sign-in/email,
+ *          forget-password) → not-applicable when serverKey set (BA disables
+ *          the handlers anyway; we keep the gate strict-narrow)
  *
  *   ─── Client IP extraction ───────────────────────────────────────
  *     [I1] X-Forwarded-For first IP wins (proxy chain)
@@ -60,7 +60,7 @@ function mockValidate(result: CaptchaValidationResult): {
 describe('evaluateCaptchaGate', () => {
 	test('[A1] serverKey unset → disabled', async () => {
 		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/email', body: { captchaToken: 'x' } },
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'x' } },
 			{},
 		)
 		expect(res).toEqual({ pass: true, reason: 'disabled' })
@@ -76,7 +76,7 @@ describe('evaluateCaptchaGate', () => {
 
 	test('[T1] missing captchaToken → missing_token', async () => {
 		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/email', body: { email: 'a@b.c' } },
+			{ path: '/sign-in/magic-link', body: { email: 'a@b.c' } },
 			{ serverKey: 'ysc2_x' },
 		)
 		expect(res).toEqual({ pass: false, reason: 'missing_token' })
@@ -84,7 +84,7 @@ describe('evaluateCaptchaGate', () => {
 
 	test('[T2] empty-string captchaToken → missing_token', async () => {
 		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/email', body: { captchaToken: '' } },
+			{ path: '/sign-in/magic-link', body: { captchaToken: '' } },
 			{ serverKey: 'ysc2_x' },
 		)
 		expect(res).toEqual({ pass: false, reason: 'missing_token' })
@@ -92,7 +92,7 @@ describe('evaluateCaptchaGate', () => {
 
 	test('[T3] non-object body → missing_token', async () => {
 		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/email', body: 'not-an-object' },
+			{ path: '/sign-in/magic-link', body: 'not-an-object' },
 			{ serverKey: 'ysc2_x' },
 		)
 		expect(res).toEqual({ pass: false, reason: 'missing_token' })
@@ -101,7 +101,7 @@ describe('evaluateCaptchaGate', () => {
 	test('[V1] validate ok → validated', async () => {
 		const { fn } = mockValidate({ ok: true })
 		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'tok' } },
 			{ serverKey: 'ysc2_x', validate: fn },
 		)
 		expect(res).toEqual({ pass: true, reason: 'validated' })
@@ -110,7 +110,7 @@ describe('evaluateCaptchaGate', () => {
 	test('[V2] validate invalid_token → invalid_token', async () => {
 		const { fn } = mockValidate({ ok: false, reason: 'invalid_token' })
 		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'tok' } },
 			{ serverKey: 'ysc2_x', validate: fn },
 		)
 		expect(res).toEqual({ pass: false, reason: 'invalid_token' })
@@ -119,7 +119,7 @@ describe('evaluateCaptchaGate', () => {
 	test('[V3] validate network_error → network_error', async () => {
 		const { fn } = mockValidate({ ok: false, reason: 'network_error' })
 		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'tok' } },
 			{ serverKey: 'ysc2_x', validate: fn },
 		)
 		expect(res).toEqual({ pass: false, reason: 'network_error' })
@@ -128,7 +128,7 @@ describe('evaluateCaptchaGate', () => {
 	test('[V4] validate timeout → timeout', async () => {
 		const { fn } = mockValidate({ ok: false, reason: 'timeout' })
 		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'tok' } },
 			{ serverKey: 'ysc2_x', validate: fn },
 		)
 		expect(res).toEqual({ pass: false, reason: 'timeout' })
@@ -137,25 +137,30 @@ describe('evaluateCaptchaGate', () => {
 	test('[V5] validate bad_response → bad_response', async () => {
 		const { fn } = mockValidate({ ok: false, reason: 'bad_response' })
 		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'tok' } },
 			{ serverKey: 'ysc2_x', validate: fn },
 		)
 		expect(res).toEqual({ pass: false, reason: 'bad_response' })
 	})
 
-	test('[E1-E4] all four endpoints in CAPTCHA_PATHS', () => {
-		expect(CAPTCHA_PATHS.has('/sign-up/email')).toBe(true)
-		expect(CAPTCHA_PATHS.has('/sign-in/email')).toBe(true)
+	test('[E1] CAPTCHA_PATHS contains exactly /sign-in/magic-link (passwordless canon)', () => {
 		expect(CAPTCHA_PATHS.has('/sign-in/magic-link')).toBe(true)
-		expect(CAPTCHA_PATHS.has('/forget-password')).toBe(true)
-		// Adversarial: nothing else slipped in
-		expect(CAPTCHA_PATHS.size).toBe(4)
+		expect(CAPTCHA_PATHS.size).toBe(1)
+	})
+
+	test('[E2] retired email/password endpoints are no longer in CAPTCHA_PATHS', () => {
+		// Belt-and-braces guard: ensures the password endpoints don't sneak
+		// back into the set if BA's emailAndPassword block is reintroduced
+		// without re-confirming the canon shift.
+		expect(CAPTCHA_PATHS.has('/sign-up/email')).toBe(false)
+		expect(CAPTCHA_PATHS.has('/sign-in/email')).toBe(false)
+		expect(CAPTCHA_PATHS.has('/forget-password')).toBe(false)
 	})
 
 	test('[P1] clientIp propagated through to validate()', async () => {
 		const { fn, calls } = mockValidate({ ok: true })
 		await evaluateCaptchaGate(
-			{ path: '/sign-up/email', body: { captchaToken: 'tok' }, clientIp: '198.51.100.7' },
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'tok' }, clientIp: '198.51.100.7' },
 			{ serverKey: 'ysc2_x', validate: fn },
 		)
 		expect(calls).toEqual([['ysc2_x', 'tok', '198.51.100.7']])

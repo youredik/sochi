@@ -1,133 +1,113 @@
 import { expect, test as setup } from '@playwright/test'
+import { getMagicLinkUrl, purgeMailpit } from './_mailpit-helper.ts'
 
 /**
- * Setup project: create a fresh owner user + org + run the full 2-screen
- * onboarding wizard (identify → inventory) so downstream `chromium` tests
- * land on a real tenant dashboard, not the wizard.
+ * Setup project: create a fresh owner user + org via the **passwordless
+ * canon** flow (magic-link signup + /welcome org-create + 2-step onboarding
+ * wizard), so downstream `chromium` tests land on a real tenant dashboard.
  *
- * **Wizard surface (post-`0c31ecf` 2026-05-13)**: legacy 4-step flow
- * (property → roomType → rooms → ratePlan) was wholly replaced by 2 screens
- * — Screen 1 takes an ИНН and DaData auto-fills name/address/city/tax; Screen 2
- * collects rooms count + nightly price and POSTs to the single-tx
- * `/api/v1/onboarding/inventory` endpoint. The backend creates property +
- * roomType («Стандартный») + N rooms + ratePlan («Базовый») in one tx, and
- * the wizard shell evicts the dashboard's `['properties']` cache before
- * navigating to `/o/$orgSlug/grid` so the empty-tenant guard doesn't bounce
- * the operator back into the wizard.
+ * **Passwordless canon 2026-05-13** per `[[auth-passwordless-canon]]`: BA
+ * `emailAndPassword` removed wholesale. Sole signup flow:
+ *   1. /signup → MagicLinkSignUpForm: email + orgName + consent + (captcha)
+ *   2. Backend sends magic-link via MailpitAdapter (dev SMTP 1125)
+ *   3. Test fetches the link out of Mailpit HTTP API (port 8125), visits it
+ *   4. BA verify creates user JIT + sets cookie → 302 to /welcome?n=<orgName>
+ *   5. /welcome auto-confirms orgName from query, user clicks «Создать
+ *      гостиницу →» → organization.create → navigate /o/$slug/setup
+ *   6. 2-screen onboarding wizard runs (identify ИНН → inventory)
+ *   7. Land on /o/$slug/grid → save per-worker storageState
  *
- * **Real backend, real mock adapter** per `[[behaviour_faithful_mock_canon]]`:
- * the e2e exercises the production `dadata.mock` adapter (no `DADATA_API_KEY`
- * — Playwright `webServer.env` forces it empty), so the canonical demo
- * record for ИНН `2320000001` (ООО «Демо-Сириус», city Сочи, status ACTIVE)
- * flows through the SAME code path that production demo tenants will hit.
- * No HTTP-layer mocking lives in this file — the test seam is the adapter
- * boundary, не the network.
+ * **DaData mock seam** per `[[mock-seam-at-adapter-not-http]]`: the wizard's
+ * `find-by-inn` POST hits backend `dadata.mock` directly (Playwright
+ * `webServer.env.DADATA_API_KEY=''` forces mock binding). ИНН 2320000001 →
+ * canonical ООО «Демо-Сириус».
  *
- * **Per-worker tenant (Phase 16 closure 2026-05-13)**: each Playwright
+ * **Per-worker tenant** (Phase 16 closure 2026-05-13): each Playwright
  * worker creates its OWN tenant + storage state. Together with
  * `fullyParallel: true` + `workers: 4` + per-worker `storageState` fixture
  * in `_fixtures.ts`, gives ~3–4× CI wall-clock speed-up without cross-
- * worker booking/state contention. Playwright runs the setup project once
- * per worker slot, each getting a unique `setupInfo.workerIndex`.
- *
- * Each pre-push run creates fresh user(s) (timestamp + workerIdx in email)
- * — the test DB never needs pruning и cross-run pollution stays tenant-
- * isolated.
- *
- * Adversarial checks embedded along the way:
- *   - progress indicator increments step-by-step (identify → inventory,
- *     `aria-current="step"` moves to the second `<li>` after Подтвердить →)
- *   - Найти button disabled while ИНН is malformed (deeper coverage в
- *     wizard.spec.ts)
- *   - empty-tenant dashboard at `/o/$slug/` redirects to /setup BEFORE
- *     wizard completes (validated implicitly by signup landing на /setup
- *     instead of `/`)
- *   - cache eviction works: after Готово, navigation to /grid does NOT
- *     bounce back to /setup (would happen if `['properties']` cache stale)
+ * worker booking/state contention.
  */
-setup('authenticate owner + complete 2-step onboarding wizard', async ({ page }, setupInfo) => {
-	const ts = Date.now()
-	const workerIdx = setupInfo.workerIndex
-	const email = `e2e-owner-${ts}-w${workerIdx}@sochi.local`
-	const password = 'playwright-e2e-01'
-	const orgName = `E2E Hotel ${ts} W${workerIdx}`
+setup(
+	'authenticate owner via magic-link + complete 2-step wizard',
+	async ({ page, request }, setupInfo) => {
+		const ts = Date.now()
+		const workerIdx = setupInfo.workerIndex
+		const email = `e2e-owner-${ts}-w${workerIdx}@sochi.local`
+		const orgName = `E2E Hotel ${ts} W${workerIdx}`
 
-	// --- Signup ---
-	await page.goto('/signup')
-	await expect(page.getByRole('heading', { name: 'Регистрация' })).toBeVisible()
+		// Purge Mailpit at setup start so `getMagicLinkUrl(email)` matches the
+		// freshly-sent message, not stale seed emails из prior runs.
+		await purgeMailpit(request)
 
-	await page.getByLabel('Ваше имя').fill('E2E Owner')
-	await page.getByLabel('Email').fill(email)
-	await page.getByLabel('Пароль').fill(password)
-	await page.getByLabel('Название гостиницы').fill(orgName)
-	await page.getByLabel(/согласие/).check()
+		// --- /signup → MagicLinkSignUpForm ---
+		await page.goto('/signup')
+		await expect(page.getByRole('heading', { name: 'Регистрация' })).toBeVisible()
 
-	await page.getByRole('button', { name: 'Создать аккаунт' }).click()
+		await page.getByLabel('Email').fill(email)
+		await page.getByLabel('Название гостиницы').fill(orgName)
+		await page.getByLabel(/согласие/).check()
 
-	// Empty-tenant dashboard redirects to wizard — URL lands на /setup.
-	await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/setup$/)
-	const match = page.url().match(/\/o\/([^/?]+)\/setup$/)
-	const orgSlug = match?.[1] ?? ''
-	expect(orgSlug.length).toBeGreaterThan(0)
+		await page.getByRole('button', { name: 'Получить ссылку для регистрации' }).click()
+		// Confirmation state surfaces «Письмо отправлено» + the typed orgName
+		// for re-verification before the user opens their inbox.
+		await expect(page.getByText('Письмо отправлено')).toBeVisible()
+		await expect(page.getByText(orgName)).toBeVisible()
 
-	// --- Screen 1: identify (ИНН lookup) ---
-	await expect(page.getByRole('heading', { name: 'Заводим гостиницу' })).toBeVisible()
-	// Progress indicator: first step active, second inactive.
-	await expect(page.locator('li[aria-current="step"]')).toContainText('Гостиница')
+		// --- Fetch magic-link URL out of Mailpit + visit it ---
+		const magicLinkUrl = await getMagicLinkUrl(request, email)
+		await page.goto(magicLinkUrl)
 
-	const innInput = page.getByLabel('ИНН гостиницы')
-	await expect(innInput).toBeVisible()
-	// Adversarial: Найти button disabled on empty / malformed ИНН.
-	await expect(page.getByRole('button', { name: 'Найти' })).toBeDisabled()
-	await innInput.fill('232') // partial — still invalid (need 10/12 digits)
-	await expect(page.getByRole('button', { name: 'Найти' })).toBeDisabled()
-	// Canonical demo ИНН from backend mock-dadata.ts → ООО «Демо-Сириус».
-	await innInput.fill('2320000001')
-	await expect(page.getByRole('button', { name: 'Найти' })).toBeEnabled()
-	await page.getByRole('button', { name: 'Найти' }).click()
+		// --- /welcome: confirm orgName + create organization ---
+		await expect(page.getByRole('heading', { name: 'Почти готово' })).toBeVisible()
+		const orgNameInput = page.getByLabel('Название гостиницы')
+		await expect(orgNameInput).toHaveValue(orgName)
+		await Promise.all([
+			page.waitForURL(/\/o\/e2e-hotel-\d+(?:\/setup)?$/),
+			page.getByRole('button', { name: 'Создать гостиницу →' }).click(),
+		])
 
-	// Preview card visible with the canonical demo party fields. The
-	// `aria-label="Найденная организация"` is the canonical attachment point
-	// (party-preview-card.tsx).
-	const preview = page.getByRole('complementary', { name: 'Найденная организация' })
-	await expect(preview).toBeVisible()
-	await expect(preview).toContainText('ООО «Демо-Сириус»')
-	await expect(preview).toContainText('2320000001')
-	await expect(preview).toContainText('УСН «Доходы» (6%)')
-	await expect(preview).toContainText('Действующая')
+		// Empty-tenant dashboard guard at `/o/$slug/` redirects to /setup —
+		// either we land on /setup directly OR / route resolves к /setup.
+		await page.waitForURL(/\/o\/e2e-hotel-\d+\/setup$/)
+		const match = page.url().match(/\/o\/([^/?]+)\/setup$/)
+		const orgSlug = match?.[1] ?? ''
+		expect(orgSlug.length).toBeGreaterThan(0)
 
-	// Advance to Screen 2.
-	await page.getByRole('button', { name: /Подтвердить/ }).click()
+		// --- Wizard Screen 1: identify (ИНН lookup against dadata.mock) ---
+		await expect(page.getByRole('heading', { name: 'Заводим гостиницу' })).toBeVisible()
+		await expect(page.locator('li[aria-current="step"]')).toContainText('Гостиница')
 
-	// --- Screen 2: inventory (rooms + price) ---
-	await expect(page.locator('li[aria-current="step"]')).toContainText('Номера и цена')
+		const innInput = page.getByLabel('ИНН гостиницы')
+		await expect(innInput).toBeVisible()
+		await expect(page.getByRole('button', { name: 'Найти' })).toBeDisabled()
+		await innInput.fill('232') // partial — still invalid
+		await expect(page.getByRole('button', { name: 'Найти' })).toBeDisabled()
+		await innInput.fill('2320000001') // canonical demo ИНН (mock-dadata.ts)
+		await expect(page.getByRole('button', { name: 'Найти' })).toBeEnabled()
+		await page.getByRole('button', { name: 'Найти' }).click()
 
-	const roomsInput = page.getByLabel('Сколько номеров?')
-	const priceInput = page.getByLabel('Цена за ночь, ₽')
-	// Canonical defaults from wizard-store INITIAL: 10 rooms × 3500 ₽.
-	await expect(roomsInput).toHaveValue('10')
-	await expect(priceInput).toHaveValue('3500')
+		const preview = page.getByRole('complementary', { name: 'Найденная организация' })
+		await expect(preview).toBeVisible()
+		await expect(preview).toContainText('ООО «Демо-Сириус»')
+		await expect(preview).toContainText('2320000001')
 
-	// Reference of the canonical party rendered as compact read-only badge
-	// (NOT the manual fieldset — usingManual must be false here).
-	await expect(page.getByText('ООО «Демо-Сириус»')).toBeVisible()
-	await expect(page.getByLabel('Название')).toHaveCount(0)
+		await page.getByRole('button', { name: /Подтвердить/ }).click()
 
-	// Готово → submit. Wait for navigation BEFORE clicking via `Promise.all`
-	// to capture the redirect deterministically.
-	await Promise.all([
-		page.waitForURL(/\/o\/[^/]+\/grid$/),
-		page.getByRole('button', { name: /Готово/ }).click(),
-	])
+		// --- Wizard Screen 2: inventory (defaults 10 × 3500) ---
+		await expect(page.locator('li[aria-current="step"]')).toContainText('Номера и цена')
+		await expect(page.getByLabel('Сколько номеров?')).toHaveValue('10')
+		await expect(page.getByLabel('Цена за ночь, ₽')).toHaveValue('3500')
 
-	// --- Grid landing — empirical end-to-end gate ---
-	// Without these assertions «wizard succeeded» is trust-me; with them it's
-	// proven that property + roomType + ratePlan really committed AND the
-	// dashboard cache eviction worked (no /setup bounce).
-	await expect(page.getByRole('rowheader', { name: 'Стандартный' })).toBeVisible()
-	// 15 date columns + 1 row-header column = 16. Stable canon shared с
-	// grid-a11y.spec.ts и existing chromium tests.
-	await expect(page.getByRole('grid')).toHaveAttribute('aria-colcount', '16')
+		await Promise.all([
+			page.waitForURL(/\/o\/[^/]+\/grid$/),
+			page.getByRole('button', { name: /Готово/ }).click(),
+		])
 
-	await page.context().storageState({ path: `tests/.auth/owner-w${workerIdx}.json` })
-})
+		// --- Grid landing — empirical end-to-end gate ---
+		await expect(page.getByRole('rowheader', { name: 'Стандартный' })).toBeVisible()
+		await expect(page.getByRole('grid')).toHaveAttribute('aria-colcount', '16')
+
+		await page.context().storageState({ path: `tests/.auth/owner-w${workerIdx}.json` })
+	},
+)

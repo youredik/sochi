@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
@@ -34,6 +35,11 @@ import { Route as AppOOrgSlugAccountSecurityRouteImport } from './routes/_app.o.
 import { Route as AppOOrgSlugPropertiesPropertyIdContentRouteImport } from './routes/_app.o.$orgSlug.properties.$propertyId.content'
 import { Route as AppOOrgSlugBookingsBookingIdFoliosFolioIdRouteImport } from './routes/_app.o.$orgSlug.bookings.$bookingId.folios.$folioId'
 
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -169,6 +175,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
+  '/welcome': typeof WelcomeRoute
   '/o-select': typeof AppOSelectRoute
   '/booking/$jwt': typeof BookingJwtRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
+  '/welcome': typeof WelcomeRoute
   '/o-select': typeof AppOSelectRoute
   '/booking/$jwt': typeof BookingJwtRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
@@ -219,6 +227,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
+  '/welcome': typeof WelcomeRoute
   '/_app/o-select': typeof AppOSelectRoute
   '/booking/$jwt': typeof BookingJwtRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
@@ -247,6 +256,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/signup'
+    | '/welcome'
     | '/o-select'
     | '/booking/$jwt'
     | '/widget/$tenantSlug'
@@ -271,6 +281,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/signup'
+    | '/welcome'
     | '/o-select'
     | '/booking/$jwt'
     | '/widget/$tenantSlug'
@@ -296,6 +307,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/signup'
+    | '/welcome'
     | '/_app/o-select'
     | '/booking/$jwt'
     | '/widget/$tenantSlug'
@@ -323,6 +335,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
   SignupRoute: typeof SignupRoute
+  WelcomeRoute: typeof WelcomeRoute
   BookingJwtRoute: typeof BookingJwtRoute
   WidgetTenantSlugRoute: typeof WidgetTenantSlugRoute
   BookingGuestPortalBookingIdRoute: typeof BookingGuestPortalBookingIdRoute
@@ -333,6 +346,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -558,6 +578,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
   SignupRoute: SignupRoute,
+  WelcomeRoute: WelcomeRoute,
   BookingJwtRoute: BookingJwtRoute,
   WidgetTenantSlugRoute: WidgetTenantSlugRoute,
   BookingGuestPortalBookingIdRoute: BookingGuestPortalBookingIdRoute,
