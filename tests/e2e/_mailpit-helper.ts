@@ -1,3 +1,4 @@
+import { extractMagicLinkUrl } from '@horeca/shared'
 import type { APIRequestContext } from '@playwright/test'
 
 /**
@@ -86,12 +87,4 @@ export async function getMagicLinkUrl(
  */
 export async function purgeMailpit(request: APIRequestContext): Promise<void> {
 	await request.delete(`${MAILPIT_BASE}/api/v1/messages`)
-}
-
-/** Extract the first magic-link verify URL out of an email body string. */
-function extractMagicLinkUrl(body: string): string | null {
-	// BA verify endpoint pattern: /api/auth/magic-link/verify?... Anchor on
-	// the path так any host/port (8787 dev / staging / prod) matches.
-	const match = body.match(/https?:\/\/[^\s"'<>]+\/api\/auth\/magic-link\/verify\?[^\s"'<>]+/)
-	return match ? match[0] : null
 }

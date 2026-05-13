@@ -47,7 +47,7 @@ test.describe('setup wizard adversarial (2-screen ИНН → inventory)', () => 
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/?$/)
 		const slug = page.url().match(/\/o\/([^/?]+)/)?.[1] ?? ''
-		expect(slug.length).toBeGreaterThan(0)
+		expect(slug).not.toBe('')
 
 		await page.goto(`/o/${slug}/setup`)
 		// Step 1 surface rendered.

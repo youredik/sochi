@@ -27,6 +27,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.4.15
         version: 2.4.15
+      '@horeca/shared':
+        specifier: workspace:*
+        version: link:packages/shared
       '@lhci/cli':
         specifier: 0.15.1
         version: 0.15.1

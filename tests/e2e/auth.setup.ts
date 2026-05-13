@@ -72,7 +72,7 @@ setup(
 		await page.waitForURL(/\/o\/e2e-hotel-\d+\/setup$/)
 		const match = page.url().match(/\/o\/([^/?]+)\/setup$/)
 		const orgSlug = match?.[1] ?? ''
-		expect(orgSlug.length).toBeGreaterThan(0)
+		expect(orgSlug).not.toBe('')
 
 		// --- Wizard Screen 1: identify (ИНН lookup against dadata.mock) ---
 		await expect(page.getByRole('heading', { name: 'Заводим гостиницу' })).toBeVisible()
