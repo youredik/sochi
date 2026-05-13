@@ -31,6 +31,8 @@ import { createVisionRoutes } from './domains/epgu/vision/vision.routes.ts'
 import { createFolioFactory } from './domains/folio/folio.factory.ts'
 import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
 import { createIdentityRoutes } from './domains/identity/identity.routes.ts'
+import { createOnboardingFactory } from './domains/onboarding/onboarding.factory.ts'
+import { createOnboardingRoutes } from './domains/onboarding/onboarding.routes.ts'
 import { createFolioRoutes } from './domains/folio/folio.routes.ts'
 import { createGuestFactory } from './domains/guest/guest.factory.ts'
 import { createGuestRoutes } from './domains/guest/guest.routes.ts'
@@ -171,6 +173,9 @@ registerAdapter({
 // real-вариант hits suggestions.dadata.ru when DADATA_API_KEY is set.
 const dadata = createDaDataAdapter({ apiKey: env.DADATA_API_KEY })
 registerAdapter(dadata.metadata)
+// Bulk-inventory onboarding factory — single-tx property + roomType + N rooms
+// + ratePlan create, replays via Idempotency-Key middleware.
+const onboardingFactory = createOnboardingFactory(sql)
 // M8.A.5.archive — behaviour-faithful Скала-ЕПГУ archive builder. Demo
 // тенанты используют ВСЕГДА (Mock pipeline end-to-end). Real КриптоПро CSP
 // integration land в M8.B при МВД ОВМ onboarding completion. Swap = factory
@@ -729,6 +734,7 @@ const routes = app
 	.route('/api/v1', createMigrationRegistrationRoutes(migrationRegistrationFactory, idempotency))
 	.route('/api/v1', createVisionRoutes(visionOcrAdapter))
 	.route('/api/v1', createIdentityRoutes(dadata.adapter))
+	.route('/api/v1', createOnboardingRoutes(onboardingFactory, idempotency))
 	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
 	.route('/api/admin', createAdminNotificationsRoutes(notificationFactory.service))
 	// M10 / A7.5.fix — admin channel-status overlay backing endpoint.
