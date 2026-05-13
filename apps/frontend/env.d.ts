@@ -11,6 +11,16 @@ interface ImportMetaEnv {
 	 * (backend).
 	 */
 	readonly VITE_YANDEX_CAPTCHA_SITE_KEY?: string
+	/**
+	 * Demo deployment flag — when `'true'`, captcha widget is suppressed
+	 * regardless of `VITE_YANDEX_CAPTCHA_SITE_KEY` per `[[demo_strategy]]`
+	 * (publicly-hosted demo runs friction-free; prospect должен попасть в
+	 * продукт за 0 секунд). Backend pairs via `DEMO_DEPLOYMENT=true` —
+	 * captcha-gate also bypasses validation. Mismatch yields silent
+	 * skip (frontend) или blanket 403 (backend), same canon as
+	 * VITE_YANDEX_CAPTCHA_SITE_KEY.
+	 */
+	readonly VITE_DEMO_DEPLOYMENT?: string
 }
 
 interface ImportMeta {

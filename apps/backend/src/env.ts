@@ -96,6 +96,15 @@ export const envSchema = z.object({
 	// Turnstile) for 152-ФЗ data localization.
 	SMARTCAPTCHA_SERVER_KEY: z.string().optional(),
 
+	// Demo deployment flag — when `true`, captcha-gate bypasses validation
+	// EVEN IF `SMARTCAPTCHA_SERVER_KEY` is set. Per `[[demo_strategy]]`:
+	// public hosted demo (e.g. demo.sochi.ru) runs friction-free for
+	// prospects evaluating product. Frontend pairs via `VITE_DEMO_DEPLOYMENT
+	// =true` — must be set consistently. Mismatch (frontend off, backend on
+	// OR vice-versa) yields blanket 403 because forms cannot mint a token
+	// AND the gate refuses non-tokened requests.
+	DEMO_DEPLOYMENT: z.coerce.boolean().default(false),
+
 	// DaData REST API token (`Token <…>` Authorization header).
 	// Optional: unset / empty / whitespace-only → onboarding identity-lookup
 	// falls back to `dadata.mock` (canonical Сочи demo set; demo tenants

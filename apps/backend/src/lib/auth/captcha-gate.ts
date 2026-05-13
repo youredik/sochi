@@ -33,7 +33,7 @@ const captchaBodySchema = z.object({
 
 /** Result of the gate decision. */
 export type CaptchaGateResult =
-	| { pass: true; reason: 'disabled' | 'not-applicable' | 'validated' }
+	| { pass: true; reason: 'disabled' | 'demo-deployment' | 'not-applicable' | 'validated' }
 	| { pass: false; reason: 'missing_token' | CaptchaValidationResult['reason'] }
 
 export interface CaptchaGateContext {
@@ -45,6 +45,14 @@ export interface CaptchaGateContext {
 
 export interface CaptchaGateDeps {
 	serverKey?: string
+	/**
+	 * Demo deployment flag — when `true`, captcha-gate bypasses validation
+	 * EVEN IF `serverKey` is set. Per `[[demo_strategy]]` public hosted demo
+	 * runs friction-free для prospects. Frontend pairs via
+	 * `VITE_DEMO_DEPLOYMENT=true` (mirrored gate в
+	 * `apps/frontend/src/features/auth/lib/captcha.ts`).
+	 */
+	demoDeployment?: boolean
 	validate?: typeof validateCaptcha
 }
 
@@ -58,6 +66,9 @@ export async function evaluateCaptchaGate(
 	ctx: CaptchaGateContext,
 	deps: CaptchaGateDeps,
 ): Promise<CaptchaGateResult> {
+	if (deps.demoDeployment === true) {
+		return { pass: true, reason: 'demo-deployment' }
+	}
 	const serverKey = deps.serverKey
 	if (!serverKey) {
 		return { pass: true, reason: 'disabled' }

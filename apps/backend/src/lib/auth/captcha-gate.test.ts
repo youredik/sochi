@@ -66,6 +66,35 @@ describe('evaluateCaptchaGate', () => {
 		expect(res).toEqual({ pass: true, reason: 'disabled' })
 	})
 
+	test('[D1] demoDeployment=true bypasses gate EVEN when serverKey set', async () => {
+		// Per `[[demo_strategy]]`: publicly-hosted demo runs friction-free.
+		// demoDeployment short-circuits BEFORE serverKey check — captcha-less
+		// signup is the explicit canon for prospect acquisition.
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: { captchaToken: '' } },
+			{ serverKey: 'ysc2_x', demoDeployment: true },
+		)
+		expect(res).toEqual({ pass: true, reason: 'demo-deployment' })
+	})
+
+	test('[D2] demoDeployment=true bypasses gate EVEN for missing-token path', async () => {
+		// Same canon: demo prospect never sees a captcha widget, so the form
+		// won't supply a token. Gate must accept the empty-body case.
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {} },
+			{ serverKey: 'ysc2_x', demoDeployment: true },
+		)
+		expect(res).toEqual({ pass: true, reason: 'demo-deployment' })
+	})
+
+	test('[D3] demoDeployment=false (explicit) preserves serverKey gate semantics', async () => {
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: { captchaToken: '' } },
+			{ serverKey: 'ysc2_x', demoDeployment: false },
+		)
+		expect(res).toEqual({ pass: false, reason: 'missing_token' })
+	})
+
 	test('[A2] path not in CAPTCHA_PATHS → not-applicable', async () => {
 		const res = await evaluateCaptchaGate(
 			{ path: '/list-sessions', body: {} },

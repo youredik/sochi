@@ -114,7 +114,10 @@ export const auth = betterAuth({
 					body: ctx.body,
 					...(clientIp ? { clientIp } : {}),
 				},
-				env.SMARTCAPTCHA_SERVER_KEY ? { serverKey: env.SMARTCAPTCHA_SERVER_KEY } : {},
+				{
+					...(env.SMARTCAPTCHA_SERVER_KEY ? { serverKey: env.SMARTCAPTCHA_SERVER_KEY } : {}),
+					...(env.DEMO_DEPLOYMENT ? { demoDeployment: true } : {}),
+				},
 			)
 			if (!decision.pass) {
 				if (decision.reason === 'missing_token') {
