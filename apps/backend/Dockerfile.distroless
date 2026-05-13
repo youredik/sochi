@@ -1,4 +1,8 @@
 # Phase 16 (2026-05-13) production Docker — Bun --compile native binary + distroless.
+# Requires DOCKER_BUILDKIT=1 (default in modern Docker / buildx). BuildKit
+# cache-mount on pnpm store turns warm rebuild from ~30s → ~3-5s when
+# lockfile unchanged (canon: pnpm.io/docker + depot.dev 2026 patterns).
+#
 # Verified per research:
 #   - oven/bun:1.3.14 base for build (May 2026 canon, latest stable — released 2026-05-13)
 #   - distroless/base-debian12:nonroot runtime, ~78 MB final image
@@ -8,25 +12,45 @@
 #     fragile under --bytecode --compile (4 OPEN PRs filed 2026-05-12:
 #     oven-sh/bun#30536/38/39/40). Build sourcemaps separately if needed for
 #     Monium traces.
+#   - `pnpm fetch` + `pnpm install --offline` (2026 canonical separation
+#     of resolve+download from install — Nesbitt 2026-02-15 + depot.dev).
+#   - `package-import-method copy` (pnpm/pnpm#6064 EXDEV gotcha — required
+#     when pnpm store on tmpfs cache-mount + workdir on overlayfs).
 #
 # Sources (research ≥2026-05-13):
+#   - pnpm.io/docker (current docs canonical pattern)
 #   - bun.com/blog/bun-v1.3.14 (2026-05-13 release: fs.watch native rewrite,
 #     TLS context caching ~50KB/conn, Bun.Image, --no-orphans, process.execve)
 #   - bun.com/docs/bundler/executables
+#   - nesbitt.io/2026/02/15/separating-download-from-install-in-docker-builds
 #   - distroless/base-debian12 (gcr.io) — non-root by default
 #
 # Yandex Container Registry target: cr.yandex/<folder>/sochi-api:<sha>
 # YC Serverless Containers provisioned=2 for hot /api eliminates cold-start tax.
+# YCR is registry-only — for cross-CI cache persistence, also configure
+# `--cache-to=type=registry,ref=cr.yandex/<folder>/sochi-cache:bk,mode=max`
+# with `--provenance=false` to bypass YCR OCI-manifest rejection (buildx#1513).
 
 FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 
 # pnpm-lock.yaml is the canonical lockfile; install dev+prod deps for build.
-RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate \
+ && pnpm config set store-dir /pnpm/store
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/backend/package.json ./apps/backend/
 COPY packages/shared/package.json ./packages/shared/
-RUN pnpm install --frozen-lockfile --filter @horeca/backend... --filter @horeca/shared...
+# Two-step install with BuildKit cache-mount: `fetch` warms /pnpm/store
+# from lockfile (no package.json needed at this stage), `install --offline`
+# reads from cached store + applies workspace filter. Warm rebuild with
+# unchanged lockfile: store cache hit → ~3-5s vs ~30s cold full resolve.
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
+    pnpm fetch
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
+    pnpm install -r --offline --frozen-lockfile \
+      --filter @horeca/backend... --filter @horeca/shared...
 
 FROM oven/bun:1.3.14-debian AS builder
 WORKDIR /app
