@@ -7,8 +7,10 @@
  * mangle <style> blocks).
  *
  * Security copy: explicitly says «не передавайте эту ссылку никому» and
- * notes the 5-minute TTL. Anti-phishing posture aligned with auth.ts
- * `magicLink({ expiresIn: 300 })`.
+ * notes the TTL (caller passes `expiryMinutes` derived from the same
+ * `MAGIC_LINK_TTL_SECONDS` constant that drives BA's `expiresIn` — see
+ * `auth.ts`). Anti-phishing posture: displayed expiry always matches
+ * actual token life.
  */
 
 export interface MagicLinkEmailInput {

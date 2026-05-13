@@ -47,6 +47,19 @@ const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000
 const emailAdapter = createEmailAdapter(env, logger)
 const emailFromAddress = `"${env.EMAIL_FROM_NAME}" <${env.EMAIL_FROM_ADDRESS}>`
 
+/**
+ * Magic-link token TTL — single source of truth.
+ *
+ * `expiresIn` (BA plugin config) takes seconds; `expiryMinutes` (email
+ * template) takes minutes. Keep them derived from the same constant so
+ * the value displayed to the user always matches the actual token life.
+ *
+ * 5 minutes balances security (short window — narrow phishing reuse) vs
+ * UX (user has time to switch tabs to inbox + read the message).
+ */
+const MAGIC_LINK_TTL_SECONDS = 300
+const MAGIC_LINK_TTL_MINUTES = MAGIC_LINK_TTL_SECONDS / 60
+
 const BA_MODEL_TO_ENTITY: Record<string, EntityKind> = {
 	user: 'user',
 	session: 'session',
@@ -158,12 +171,12 @@ export const auth = betterAuth({
 		 * email-exists-or-not via timing.
 		 */
 		magicLink({
-			expiresIn: 300,
+			expiresIn: MAGIC_LINK_TTL_SECONDS,
 			disableSignUp: false,
 			sendMagicLink: async ({ email, url }) => {
 				const { subject, html, text } = magicLinkEmail({
 					signInUrl: url,
-					expiryMinutes: 5,
+					expiryMinutes: MAGIC_LINK_TTL_MINUTES,
 				})
 				const result = await emailAdapter.send({
 					from: emailFromAddress,
