@@ -164,6 +164,25 @@ describe('assertRefundCap — canon invariant #1 (most critical money check)', (
 		).toThrow(/newAmountMinor must be > 0, got -1/)
 	})
 
+	// Stryker 2026-05-13: kill `< 0n` ↔ `<= 0n` boundary mutants on lines 98/101.
+	// Zero IS a valid value (uncaptured payment can have capturedMinor=0n) — the
+	// guard rejects negatives only. With `<= 0n` mutant the «cap exceeded» path
+	// would be replaced with the «must be >= 0» throw, changing error message.
+	test('[RC6b] zero capturedMinor is valid (boundary: `< 0n` not `<= 0n`)', () => {
+		// Cap-exceeded path fires (0 + 1 > 0), not the «capturedMinor must be >= 0» path.
+		expect(() =>
+			assertRefundCap({ capturedMinor: 0n, currentSumMinor: 0n, newAmountMinor: 1n }),
+		).toThrow(/Refund cap exceeded: 0 \+ 1 > 0/)
+	})
+
+	test('[RC6c] zero currentSumMinor is valid (boundary)', () => {
+		// currentSum=0 + new=100 ≤ cap=1000 → no throw (the `<= 0n` mutant
+		// would throw with «currentSumMinor must be >= 0»).
+		expect(() =>
+			assertRefundCap({ capturedMinor: 1000n, currentSumMinor: 0n, newAmountMinor: 100n }),
+		).not.toThrow()
+	})
+
 	const validArgsArb = fc
 		.tuple(
 			fc.bigInt({ min: 0n, max: 1_000_000n }),
@@ -211,6 +230,21 @@ describe('refundHeadroomMinor', () => {
 		expect(() => refundHeadroomMinor(-1n, 0n)).toThrow(/capturedMinor must be >= 0/)
 		expect(() => refundHeadroomMinor(100n, -1n)).toThrow(/sumSucceededMinor must be >= 0/)
 	})
+
+	// Stryker 2026-05-13: kill `< 0n` ↔ `<= 0n` boundary mutants on lines 122/125.
+	// Zero is a valid input (uncaptured payment); only negatives must throw.
+	test('[HR5] zero capturedMinor returns 0 (boundary: `< 0n` not `<= 0n`)', () => {
+		expect(refundHeadroomMinor(0n, 0n)).toBe(0n)
+	})
+
+	test('[HR6] zero sumSucceededMinor returns full captured (boundary)', () => {
+		expect(refundHeadroomMinor(500n, 0n)).toBe(500n)
+	})
+
+	// Line 129 `headroom > 0n ? headroom : 0n` → `>= 0n` is a Stryker EQUIVALENT
+	// mutant: both branches return 0n when headroom is 0n (one returns the
+	// variable, the other returns the literal — same value). Cannot be killed
+	// by any test; documented here so it stays «known equivalent» across runs.
 })
 
 /* =================================================== hasActiveCausality */
