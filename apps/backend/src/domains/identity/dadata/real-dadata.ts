@@ -78,7 +78,11 @@ function parseTaxRegime(raw: unknown): TaxRegime {
 	if (upper.includes('USN')) return 'USN_DOHODY'
 	if (upper.includes('AUSN_INCOME_OUTCOME')) return 'AUSN_DOHODY_RASHODY'
 	if (upper.includes('AUSN')) return 'AUSN_DOHODY'
-	if (upper.includes('OSNO') || upper.includes('OSN')) return 'OSNO'
+	// DaData sometimes returns `OSNO` (long form) and `OSN` (short) for the
+	// общая система налогообложения — the canonical sochi enum uses `'OSN'`
+	// per `tenant-compliance.ts`, normalize both upstream spellings here.
+	if (upper.includes('OSNO') || upper.includes('OSN')) return 'OSN'
+	if (upper.includes('PSN')) return 'PSN'
 	return 'UNKNOWN'
 }
 

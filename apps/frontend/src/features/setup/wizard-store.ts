@@ -1,71 +1,60 @@
 import { create } from 'zustand'
+import type { DaDataParty } from './lib/dadata.ts'
 
 /**
- * Setup wizard state — Zustand store, NOT TanStack-Query-backed because
- * it's UI-ephemeral (forgotten on page reload is fine and arguably
- * correct: a stale draft from a week ago re-appearing would confuse).
+ * Setup wizard state — Zustand store backing the 2-screen onboarding flow.
  *
- * Steps: property → roomType → rooms. Each step's draft lives here so
- * user can hit "Back" without losing what they typed. IDs of created
- * entities propagate forward (roomType needs `propertyId`, rooms need
- * `roomTypeId`).
+ * Screen 1 «identify» — user enters ИНН, DaData lookup populates `party`.
+ * If DaData has no record OR the user wants to type freely, `manualOverride`
+ * = true and the inventory step still works without a party.
  *
- * `reset()` nukes the whole draft on successful completion or if user
- * explicitly cancels. Not persisted to localStorage for the reason above.
+ * Screen 2 «inventory» — `rooms` count + `avgPriceRub` flow into the bulk
+ * `/onboarding/inventory` POST. On success the wizard shell navigates to
+ * the tenant grid, the orchestrator resets this store, and the user lands
+ * in a fully-wired Шахматка in ≤90 seconds from signup.
+ *
+ * Not persisted to localStorage — a stale draft from a week ago re-
+ * appearing would confuse far more than starting fresh costs.
  */
 
-type WizardStep = 'property' | 'roomType' | 'rooms' | 'ratePlan' | 'done'
+export type WizardStep = 'identify' | 'inventory' | 'done'
 
 interface WizardState {
 	step: WizardStep
-	propertyId: string | null
-	roomTypeId: string | null
+	/** DaData lookup result, or `null` when not yet looked up. */
+	party: DaDataParty | null
 	/**
-	 * Snapshotted `inventoryCount` from the roomType-create response — the
-	 * ratePlan step needs it to seed availability allotment. Keeping it
-	 * on the store (not re-reading from TQ cache) means the ratePlan
-	 * mutation doesn't depend on a query that may or may not be active.
+	 * True when user opted out of the DaData auto-fill (no result OR
+	 * deliberate manual entry). Drives the inventory-step copy + lets the
+	 * orchestrator know whether to trust the party fields or read user-
+	 * edited form values. Phase 1 keeps it boolean; future may swap in
+	 * a discriminated «source» union (`dadata` | `manual` | `edited`).
 	 */
-	roomTypeInventoryCount: number | null
-	roomsCreated: number
-	ratePlanId: string | null
-	goTo: (step: WizardStep) => void
-	setPropertyId: (id: string) => void
-	setRoomTypeId: (id: string, inventoryCount: number) => void
-	incRooms: (n?: number) => void
-	finishRooms: () => void
-	setRatePlanId: (id: string) => void
+	manualOverride: boolean
+	rooms: number
+	avgPriceRub: number
+	setStep: (step: WizardStep) => void
+	setParty: (party: DaDataParty | null) => void
+	setManualOverride: (v: boolean) => void
+	setRooms: (n: number) => void
+	setAvgPriceRub: (n: number) => void
 	reset: () => void
 }
 
-const INITIAL = {
-	step: 'property' as WizardStep,
-	propertyId: null,
-	roomTypeId: null,
-	roomTypeInventoryCount: null,
-	roomsCreated: 0,
-	ratePlanId: null,
+const INITIAL: Pick<WizardState, 'step' | 'party' | 'manualOverride' | 'rooms' | 'avgPriceRub'> = {
+	step: 'identify',
+	party: null,
+	manualOverride: false,
+	rooms: 10,
+	avgPriceRub: 3500,
 }
 
 export const useWizardStore = create<WizardState>((set) => ({
 	...INITIAL,
-	goTo: (step) => set({ step }),
-	setPropertyId: (id) => set({ propertyId: id, step: 'roomType' }),
-	setRoomTypeId: (id, inventoryCount) =>
-		set({ roomTypeId: id, roomTypeInventoryCount: inventoryCount, step: 'rooms' }),
-	incRooms: (n = 1) => set((s) => ({ roomsCreated: s.roomsCreated + n })),
-	finishRooms: () => set({ step: 'ratePlan' }),
-	setRatePlanId: (id) => set({ ratePlanId: id, step: 'done' }),
+	setStep: (step) => set({ step }),
+	setParty: (party) => set({ party }),
+	setManualOverride: (v) => set({ manualOverride: v }),
+	setRooms: (n) => set({ rooms: n }),
+	setAvgPriceRub: (n) => set({ avgPriceRub: n }),
 	reset: () => set(INITIAL),
 }))
-
-/** Ordered steps for progress indicator rendering. */
-export const WIZARD_STEPS: WizardStep[] = ['property', 'roomType', 'rooms', 'ratePlan', 'done']
-
-export const STEP_LABELS: Record<WizardStep, string> = {
-	property: 'Гостиница',
-	roomType: 'Тип номеров',
-	rooms: 'Номера',
-	ratePlan: 'Тариф',
-	done: 'Готово',
-}

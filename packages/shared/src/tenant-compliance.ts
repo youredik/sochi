@@ -64,6 +64,10 @@ export const taxRegimeValues = [
 	'OSN',
 	'AUSN_DOHODY',
 	'AUSN_DOHODY_RASHODY',
+	// `UNKNOWN` — DaData / onboarding sources rarely surface a tax-regime value,
+	// и форсировать пользователя выбрать его одновременно с ИНН-lookup ломает
+	// поток. Хранится как-есть до момента когда compliance-форма дозаполнит.
+	'UNKNOWN',
 ] as const
 export const taxRegimeSchema = z.enum(taxRegimeValues)
 export type TaxRegime = z.infer<typeof taxRegimeSchema>

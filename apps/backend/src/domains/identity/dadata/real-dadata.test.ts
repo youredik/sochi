@@ -73,7 +73,7 @@ describe('createRealDaData — happy-path mapping', () => {
 			legalForm: 'LEGAL',
 			address: '117997, г. Москва, ул. Вавилова, 19',
 			city: 'Москва',
-			taxRegime: 'OSNO',
+			taxRegime: 'OSN',
 			status: 'ACTIVE',
 		})
 	})

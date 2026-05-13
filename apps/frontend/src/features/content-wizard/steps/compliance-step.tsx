@@ -81,6 +81,7 @@ const TAX_REGIME_LABELS: Record<TaxRegime, string> = {
 	OSN: 'ОСН',
 	AUSN_DOHODY: 'АУСН — доходы',
 	AUSN_DOHODY_RASHODY: 'АУСН — доходы минус расходы',
+	UNKNOWN: 'Не указан',
 }
 
 interface FormValues {

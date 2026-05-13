@@ -1,19 +1,27 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useEffect } from 'react'
-import { PropertyStep } from './steps/property-step'
-import { RatePlanStep } from './steps/rate-plan-step'
-import { RoomTypeStep } from './steps/room-type-step'
-import { RoomsStep } from './steps/rooms-step'
-import { STEP_LABELS, useWizardStore, WIZARD_STEPS } from './wizard-store'
+import { IdentifyStep } from './components/identify-step.tsx'
+import { InventoryStep } from './components/inventory-step.tsx'
+import { useWizardStore } from './wizard-store.ts'
+
+const STEP_LABELS: Record<'identify' | 'inventory', string> = {
+	identify: 'Гостиница',
+	inventory: 'Номера и цена',
+}
 
 /**
- * Setup wizard shell. Progress indicator (numbered steps with current/
- * completed styling), + the step-specific form component. Auto-navigates
- * to tenant dashboard once the user finishes step 3 ("done" state).
+ * 2-screen onboarding wizard shell. Tracks the two real steps (identify →
+ * inventory) and auto-navigates to `/o/$orgSlug/grid` once the inventory
+ * mutation flips state to `done`.
  *
- * a11y: `<ol role="list">` for the step indicator, current step marked
- * with `aria-current="step"` per ARIA APG pattern for multi-step flows.
+ * Cache eviction: `removeQueries({queryKey: ['properties']})` deletes the
+ * dashboard guard's cached empty list so its next `ensureQueryData` re-
+ * runs the queryFn and sees the newly-created property. Without this, the
+ * dashboard sees the stale empty cache and bounces us back into /setup.
+ *
+ * a11y: `<ol role="list">` step indicator с `aria-current="step"` per ARIA
+ * APG multi-step pattern.
  */
 export function WizardShell() {
 	const step = useWizardStore((s) => s.step)
@@ -24,39 +32,36 @@ export function WizardShell() {
 
 	useEffect(() => {
 		if (step !== 'done') return
-		// `removeQueries` deletes cached data — the dashboard's next
-		// `ensureQueryData(['properties'])` MUST call queryFn and get fresh
-		// data (now including our created property). `invalidateQueries`
-		// only marks stale; inactive queries don't auto-refetch, so
-		// ensureQueryData could return the old empty cache and loop us
-		// back to /setup.
 		reset()
 		queryClient.removeQueries({ queryKey: ['properties'] })
-		void navigate({ to: '/o/$orgSlug', params: { orgSlug } })
+		void navigate({ to: '/o/$orgSlug/grid', params: { orgSlug } })
 	}, [step, navigate, orgSlug, reset, queryClient])
 
 	return (
-		<main className="mx-auto max-w-lg px-6 py-12">
-			<ProgressIndicator />
+		<main className="mx-auto max-w-xl px-6 py-12">
+			<header className="space-y-1">
+				<h1 className="text-2xl font-semibold tracking-tight">Заводим гостиницу</h1>
+				<p className="text-sm text-muted-foreground">Два шага — и вы в шахматке.</p>
+			</header>
+
+			<ProgressIndicator currentStep={step === 'done' ? 'inventory' : step} />
+
 			<div className="mt-8">
-				{step === 'property' ? <PropertyStep /> : null}
-				{step === 'roomType' ? <RoomTypeStep /> : null}
-				{step === 'rooms' ? <RoomsStep /> : null}
-				{step === 'ratePlan' ? <RatePlanStep /> : null}
+				{step === 'identify' ? <IdentifyStep /> : null}
+				{step === 'inventory' ? <InventoryStep /> : null}
 			</div>
 		</main>
 	)
 }
 
-function ProgressIndicator() {
-	const current = useWizardStore((s) => s.step)
-	const visibleSteps = WIZARD_STEPS.filter((s): s is Exclude<typeof s, 'done'> => s !== 'done')
-	const currentIdx = current === 'done' ? visibleSteps.length : visibleSteps.indexOf(current)
+function ProgressIndicator({ currentStep }: { currentStep: 'identify' | 'inventory' }) {
+	const steps: Array<'identify' | 'inventory'> = ['identify', 'inventory']
+	const currentIdx = steps.indexOf(currentStep)
 
 	return (
-		<ol className="flex items-center gap-2 text-sm">
-			{visibleSteps.map((s, i) => {
-				const isActive = s === current
+		<ol className="mt-6 flex items-center gap-2 text-sm">
+			{steps.map((s, i) => {
+				const isActive = s === currentStep
 				const isDone = i < currentIdx
 				return (
 					<li
