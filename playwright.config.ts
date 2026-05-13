@@ -10,10 +10,18 @@ import { defineConfig, devices } from '@playwright/test'
  *     no storageState dependency). Runs against any BASE_URL.
  *
  * webServer: starts backend + frontend dev servers unless already running.
- * For pre-push (local) reuses — for CI (future) spins fresh.
+ * Locally reuses — CI gets fresh per-run (`reuseExistingServer: !CI`).
  *
- * Keep single-worker in pre-push (auth smoke should cost <20s; parallelism
- * with shared backend session is a rabbit hole).
+ * Workers (Phase 16 speedup 2026-05-13):
+ *   - Local: `workers: 1` (dev process reuse + shared session safety —
+ *     parallelism here is a rabbit hole per stankoff-v2 lineage).
+ *   - CI: `workers: 2` (fresh per-run webServer + tenant created by
+ *     `auth.setup.ts` is reused read-mostly by 21 specs → 2 workers
+ *     parallel-safe per round-2 research 2026-05-13 + Playwright canon
+ *     `playwright.dev/docs/test-parallel`). Expected wall-clock ~1.8×.
+ *   - `fullyParallel: false` (per-file scheduling preserves file-level
+ *     setup affinity; per-test scheduling deferred until per-test
+ *     tenant slug isolation lands).
  */
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5273'
@@ -25,7 +33,7 @@ export default defineConfig({
 	fullyParallel: false,
 	forbidOnly: Boolean(process.env.CI),
 	retries: process.env.CI ? 1 : 0,
-	workers: 1,
+	workers: process.env.CI ? 2 : 1,
 	reporter: process.env.CI ? 'github' : 'line',
 	use: {
 		baseURL: BASE_URL,
