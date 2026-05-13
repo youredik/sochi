@@ -91,7 +91,13 @@ fi
 # Counts `.toBeDefined() / .toBeTruthy() / .toBeFalsy() / .toBeInstanceOf(Array)`
 # in test files. Replace with concrete expected values (`toBe`/`toEqual`) или
 # `schema.parse()` для contract enforcement.
-WEAK_ASSERTIONS=$( { grep -rcE '\.toBeDefined\(\)|\.toBeTruthy\(\)|\.toBeFalsy\(\)|\.toBeInstanceOf\(Array\)' apps packages --include='*.test.ts' --include='*.test.tsx' 2>/dev/null || true; } | awk -F: '{s+=$2} END {print (s==""?0:s)}')
+#
+# `--exclude-dir` set: Stryker leaves untracked sandbox copies of the entire
+# `apps/backend/src/` tree under `.stryker-tmp/sandbox-XXXXXX/` (gitignored)
+# during/after mutation runs — without exclusion the same assertions are
+# counted N+1 times и pre-push falsely fails. node_modules / dist excluded
+# defensively даже though глобы restrict to `.test.{ts,tsx}` already.
+WEAK_ASSERTIONS=$( { grep -rcE '\.toBeDefined\(\)|\.toBeTruthy\(\)|\.toBeFalsy\(\)|\.toBeInstanceOf\(Array\)' apps packages --include='*.test.ts' --include='*.test.tsx' --exclude-dir='.stryker-tmp' --exclude-dir='node_modules' --exclude-dir='dist' 2>/dev/null || true; } | awk -F: '{s+=$2} END {print (s==""?0:s)}')
 WEAK_MAX=$(read_baseline weak_assertions_max)
 if [ "$WEAK_ASSERTIONS" -gt "$WEAK_MAX" ]; then
 	echo "FAIL: weak assertions $WEAK_ASSERTIONS > baseline $WEAK_MAX"
@@ -104,7 +110,7 @@ fi
 # suppress the IMMEDIATELY NEXT line. Multi-line continuations leak. Caught
 # 2026-05-12 in M10 backend tests (channel-dispatcher.test.ts + webhook.routes.test.ts).
 # Counts comment-line-followed-by-comment-line patterns starting with `// biome-ignore`.
-MULTI_BI=$( { grep -rE '^\s*// biome-ignore' apps packages --include='*.ts' --include='*.tsx' -A 1 2>/dev/null | grep -cE '^.*-\s*//[^[:alnum:]]' || true; } | head -1 || echo 0)
+MULTI_BI=$( { grep -rE '^\s*// biome-ignore' apps packages --include='*.ts' --include='*.tsx' --exclude-dir='.stryker-tmp' --exclude-dir='node_modules' --exclude-dir='dist' -A 1 2>/dev/null | grep -cE '^.*-\s*//[^[:alnum:]]' || true; } | head -1 || echo 0)
 MULTI_BI=${MULTI_BI:-0}
 MULTI_BI_MAX=$(read_baseline multi_line_biome_ignore_max)
 if [ "$MULTI_BI" -gt "$MULTI_BI_MAX" ]; then
