@@ -214,7 +214,7 @@ describe('admin tax routes — XLSX endpoint', () => {
 			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 		)
 		const cd = res.headers.get('content-disposition')
-		expect(cd).toBeTruthy()
+		expect(cd).not.toBe(null)
 		expect(cd).toContain("filename*=UTF-8''")
 		// UTF-8 percent-encoded "тур_налог" prefix.
 		expect(cd).toContain(encodeURIComponent('тур_налог'))
@@ -250,7 +250,7 @@ describe('admin tax routes — XLSX endpoint', () => {
 	test('[X7] round-trip: Свод sheet headers + KPI exact values', async () => {
 		const sheets = await fetchXlsxAndParseSheets()
 		const summary = sheets.Свод
-		expect(summary).toBeDefined()
+		expect(summary).not.toBe(undefined)
 		// Header row + 7 KPI rows = 8 rows total.
 		expect(summary?.length).toBe(8)
 		expect(summary?.[0]).toEqual(['Параметр', 'Значение'])
@@ -271,7 +271,7 @@ describe('admin tax routes — XLSX endpoint', () => {
 	test('[X8] round-trip: Помесячно sheet — header + 2 buckets', async () => {
 		const sheets = await fetchXlsxAndParseSheets()
 		const monthly = sheets.Помесячно
-		expect(monthly).toBeDefined()
+		expect(monthly).not.toBe(undefined)
 		expect(monthly?.length).toBe(3) // header + 2 months
 		expect(monthly?.[0]).toEqual([
 			'Месяц',
@@ -287,7 +287,7 @@ describe('admin tax routes — XLSX endpoint', () => {
 	test('[X9] round-trip: Построчно sheet — Cyrillic guest names + dates round-trip', async () => {
 		const sheets = await fetchXlsxAndParseSheets()
 		const lines = sheets.Построчно
-		expect(lines).toBeDefined()
+		expect(lines).not.toBe(undefined)
 		expect(lines?.length).toBe(3) // header + 2 booking rows
 		expect(lines?.[0]).toEqual([
 			'Дата заезда',
@@ -325,6 +325,6 @@ describe('admin tax routes — sanity ref to requirePermission', () => {
 	test('requirePermission permission key is { report: ["read"] }', () => {
 		// Mirror-test: route file uses this exact key. If it diverges, this
 		// breaks immediately and forces both sides to stay in sync.
-		expect(requirePermission({ report: ['read'] })).toBeTruthy()
+		expect(requirePermission({ report: ['read'] })).not.toBe(null)
 	})
 })

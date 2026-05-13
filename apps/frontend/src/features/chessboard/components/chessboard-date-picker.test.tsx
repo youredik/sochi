@@ -25,7 +25,7 @@ afterEach(() => {
 describe('ChessboardDatePicker — render', () => {
 	it('[R1] trigger button с aria-label', () => {
 		render(<ChessboardDatePicker value="2026-04-28" onChange={mock()} />)
-		expect(screen.getByRole('button', { name: 'Перейти к дате' })).toBeDefined()
+		expect(screen.queryByRole('button', { name: 'Перейти к дате' })).not.toBe(null)
 	})
 
 	it('[R2] formatted date label visible на trigger', () => {
@@ -41,7 +41,7 @@ describe('ChessboardDatePicker — open + interaction', () => {
 		const user = userEvent.setup()
 		await user.click(screen.getByRole('button', { name: 'Перейти к дате' }))
 		// react-day-picker v9 renders role="grid" с aria-label включающим месяц.
-		expect(screen.getByRole('grid')).toBeDefined()
+		expect(screen.queryByRole('grid')).not.toBe(null)
 	})
 
 	it('[O2] selected date — gridcell[data-day="2026-04-28"] имеет data-selected="true" (rdp v9 canon)', async () => {

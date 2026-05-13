@@ -237,7 +237,7 @@ describe('migrationRegistration.repo — listPendingPoll', () => {
 		// изолирован между test files; LIMIT=100 может не вернуть нашу row
 		// если ≥100 pending rows накоплено от прошлых тестов.
 		const pending = await repo.listPendingPoll(new Date(now.getTime() + 1000), 10_000)
-		expect(pending.find((r) => r.id === input.id)).toBeDefined()
+		expect(pending.find((r) => r.id === input.id)).not.toBe(undefined)
 	})
 
 	test('[Pol5] tenantId carried through (cron-internal scan, per-row routing)', async () => {

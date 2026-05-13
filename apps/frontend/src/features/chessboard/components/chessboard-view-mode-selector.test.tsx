@@ -55,15 +55,15 @@ afterEach(() => {
 describe('ChessboardViewModeSelector — render', () => {
 	it('[R1] both options rendered', () => {
 		render(<ChessboardViewModeSelector />)
-		expect(screen.getByRole('radio', { name: 'День' })).toBeDefined()
-		expect(screen.getByRole('radio', { name: 'Месяц' })).toBeDefined()
+		expect(screen.queryByRole('radio', { name: 'День' })).not.toBe(null)
+		expect(screen.queryByRole('radio', { name: 'Месяц' })).not.toBe(null)
 	})
 
 	it('[R2] root has aria-label "Режим просмотра шахматки"', () => {
 		render(<ChessboardViewModeSelector />)
 		// Radix ToggleGroup type=single renders <div role="group"> wrapping
 		// <button role="radio"> items (NOT a radiogroup ARIA pattern).
-		expect(screen.getByRole('group', { name: 'Режим просмотра шахматки' })).toBeDefined()
+		expect(screen.queryByRole('group', { name: 'Режим просмотра шахматки' })).not.toBe(null)
 	})
 
 	it('[R3] default state — "День" is data-state=on', () => {

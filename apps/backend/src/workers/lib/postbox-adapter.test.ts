@@ -510,7 +510,7 @@ describe('SendEmailInput с attachments — adapter integration', () => {
 		})
 		expect(result.kind).toBe('sent')
 		expect(adapter.sent).toHaveLength(1)
-		expect(adapter.sent[0]?.attachments).toBeDefined()
+		expect(adapter.sent[0]?.attachments).not.toBe(undefined)
 		expect(adapter.sent[0]?.attachments?.[0]?.filename).toBe('booking-XYZ.ics')
 		expect(adapter.sent[0]?.attachments?.[0]?.contentType).toContain('text/calendar')
 	})

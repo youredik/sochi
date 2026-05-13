@@ -318,7 +318,7 @@ describe('dispatcher — transient retry', () => {
 		const row = await getRow(tenantId, id)
 		expect(row?.status).toBe('pending')
 		expect(row?.retryCount).toBe(1)
-		expect(row?.nextAttemptAt).toBeTruthy()
+		expect(row?.nextAttemptAt).not.toBe(null)
 		expect(row?.failureReason).toBe('503 InternalServerError')
 
 		await dispatcher.stop()
@@ -533,7 +533,7 @@ describe('dispatcher — recipient resolution', () => {
 
 		const row = await getRow(tenantId, id)
 		expect(row?.status).toBe('sent')
-		expect(adapter.sent.find((s) => s.to === 'override@manual.ru')).toBeDefined()
+		expect(adapter.sent.find((s) => s.to === 'override@manual.ru')).not.toBe(undefined)
 		await dispatcher.stop()
 	})
 })

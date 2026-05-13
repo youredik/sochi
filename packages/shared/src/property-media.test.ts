@@ -235,7 +235,7 @@ describe('checkImageDimensions', () => {
 		const r = checkImageDimensions({ widthPx: 4000, heightPx: 3000, isHero: true })
 		expect(r.error).toBeNull()
 		const ratioWarning = r.warnings.find((w) => /16:9/.test(w))
-		expect(ratioWarning).toBeDefined()
+		expect(ratioWarning).not.toBe(undefined)
 	})
 
 	it('non-hero at 4:3 → no ratio warning even if not 16:9', () => {
@@ -252,7 +252,7 @@ describe('checkImageDimensions', () => {
 	it('hero at 16:9 with 5% deviation → ratio warning', () => {
 		// 1920/1140 ≈ 1.684, > 5% off 1.778
 		const r = checkImageDimensions({ widthPx: 1920, heightPx: 1140, isHero: true })
-		expect(r.warnings.find((w) => /16:9/.test(w))).toBeDefined()
+		expect(r.warnings.find((w) => /16:9/.test(w))).not.toBe(undefined)
 	})
 })
 

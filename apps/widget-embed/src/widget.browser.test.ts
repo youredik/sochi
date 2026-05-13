@@ -150,7 +150,7 @@ describe('SochiBookingWidget facade', () => {
 		// no manual timeout option needed.
 		await expect.element(screen.getByTestId('widget-flow')).toBeInTheDocument()
 		// Lazy custom element registered as side-effect.
-		expect(customElements.get(BOOKING_FLOW_TAG)).toBeDefined()
+		expect(customElements.get(BOOKING_FLOW_TAG)).not.toBe(undefined)
 	})
 
 	test('[W9] sochi-widget:event CustomEvent emitted on flow open', async () => {
@@ -165,7 +165,7 @@ describe('SochiBookingWidget facade', () => {
 		// Wait для booking-flow connectedCallback → loadProperty → emit cycle.
 		await new Promise((r) => setTimeout(r, 150))
 		const open = events.find((e) => e.type === 'flow_open')
-		expect(open).toBeDefined()
+		expect(open).not.toBe(undefined)
 		expect(open?.tenant).toBe('sirius')
 	})
 

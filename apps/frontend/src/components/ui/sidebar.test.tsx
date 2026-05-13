@@ -504,7 +504,7 @@ describe('Sidebar — PATCH-D12 mobile dismiss button (#6761)', () => {
 
 	it('[D12.4] mobile sheet has Russian sr-only SheetTitle "Боковое меню"', () => {
 		renderMobileSidebar()
-		expect(screen.getByText('Боковое меню')).toBeDefined()
+		expect(screen.queryByText('Боковое меню')).not.toBe(null)
 	})
 
 	it('[D12.5] mobile sheet does NOT render English-default Sheet auto-close', () => {
@@ -777,7 +777,7 @@ describe('Sidebar — collapsible enum FULL coverage', () => {
 		const slot = document.querySelector('[data-slot="sidebar"]')
 		expect(slot).not.toBeNull()
 		expect(slot?.getAttribute('data-collapsible')).toBeNull()
-		expect(screen.getByText('plain')).toBeDefined()
+		expect(screen.queryByText('plain')).not.toBe(null)
 		// No mobile Sheet (data-mobile attribute) since collapsible="none".
 		expect(document.querySelector('[data-mobile="true"]')).toBeNull()
 	})

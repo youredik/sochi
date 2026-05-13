@@ -166,7 +166,7 @@ describe('RegistrationService — enqueue', () => {
 		)
 		const { id } = await svc.enqueue(ENQ_INPUT)
 		const row = repo.rows.get(id)
-		expect(row).toBeDefined()
+		expect(row).not.toBe(undefined)
 		expect(row?.statusCode).toBe(0) // draft
 	})
 
@@ -191,7 +191,7 @@ describe('RegistrationService — enqueue', () => {
 			idGen,
 		)
 		const { id } = await svc.enqueue(ENQ_INPUT)
-		expect(repo.rows.get(id)).toBeDefined()
+		expect(repo.rows.get(id)).not.toBe(undefined)
 	})
 })
 
@@ -285,7 +285,7 @@ describe('RegistrationService — pollOne', () => {
 		const beforeRetry = before?.retryCount ?? 0
 		const result = await svc.pollOne(ENQ_INPUT.tenantId, id)
 		const after = repo.rows.get(id)
-		expect(after).toBeDefined()
+		expect(after).not.toBe(undefined)
 		expect(after?.retryCount).toBe(beforeRetry + 1)
 		// FSM may or may not have advanced depending on trajectory + time
 		expect([1, 2, 17, 21, 3] as ReadonlyArray<number | undefined>).toContain(after?.statusCode)

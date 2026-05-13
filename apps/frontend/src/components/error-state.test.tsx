@@ -23,25 +23,25 @@ afterEach(() => {
 describe('ErrorState — render', () => {
 	it('[R1] role="alert" present', () => {
 		render(<ErrorState />)
-		expect(screen.getByRole('alert')).toBeDefined()
+		expect(screen.queryByRole('alert')).not.toBe(null)
 	})
 
 	it('[R2] default title "Что-то пошло не так"', () => {
 		render(<ErrorState />)
-		expect(screen.getByText('Что-то пошло не так')).toBeDefined()
+		expect(screen.queryByText('Что-то пошло не так')).not.toBe(null)
 	})
 
 	it('[R3] custom title overrides default', () => {
 		render(<ErrorState title="Custom error" />)
-		expect(screen.getByText('Custom error')).toBeDefined()
+		expect(screen.queryByText('Custom error')).not.toBe(null)
 		expect(screen.queryByText('Что-то пошло не так')).toBeNull()
 	})
 
 	it('[R4] error.message в <details> when provided', () => {
 		const err = new Error('boom')
 		render(<ErrorState error={err} />)
-		expect(screen.getByText('Подробнее')).toBeDefined()
-		expect(screen.getByText('boom')).toBeDefined()
+		expect(screen.queryByText('Подробнее')).not.toBe(null)
+		expect(screen.queryByText('boom')).not.toBe(null)
 	})
 
 	it('[R5] details collapsed by default', () => {

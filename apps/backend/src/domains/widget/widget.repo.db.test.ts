@@ -163,7 +163,7 @@ describe('widget.repo', () => {
 		expect(fromB).toHaveLength(0)
 		// Sanity: tenantA still sees own property
 		const fromA = await repo.listPublicProperties(tenantA)
-		expect(fromA.find((p) => p.id === propertyId)).toBeDefined()
+		expect(fromA.find((p) => p.id === propertyId)).not.toBe(undefined)
 	})
 
 	test('[T2] cross-tenant: getPublicProperty from wrong tenant returns null', async () => {

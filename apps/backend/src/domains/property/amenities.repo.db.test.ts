@@ -103,7 +103,7 @@ describe('property.amenities.repo', () => {
 	test('[U4] upsert update path: preserves createdAt, updates updatedAt + freePaid', async () => {
 		const before = await repo.listByProperty(TENANT_A, PROPERTY_A1)
 		const restaurant = before.find((a) => a.amenityCode === 'AMN_RESTAURANT')
-		expect(restaurant).toBeDefined()
+		expect(restaurant).not.toBe(undefined)
 		const originalCreated = restaurant?.createdAt
 		const originalUpdated = restaurant?.updatedAt
 
@@ -116,7 +116,7 @@ describe('property.amenities.repo', () => {
 			{ amenityCode: 'AMN_RESTAURANT', freePaid: 'free', value: null }, // freePaid changed
 			ACTOR,
 		)
-		expect(originalCreated).toBeDefined()
+		expect(originalCreated).not.toBe(undefined)
 		expect(out.createdAt).toBe(originalCreated as string) // immutable
 		expect(out.updatedAt).not.toBe(originalUpdated)
 		expect(new Date(out.updatedAt).getTime()).toBeGreaterThan(
@@ -185,7 +185,7 @@ describe('property.amenities.repo', () => {
 			ACTOR,
 		)
 		const before = await repo.listByProperty(TENANT_A, PROPERTY_A2)
-		expect(before.find((a) => a.amenityCode === 'AMN_AC')).toBeDefined()
+		expect(before.find((a) => a.amenityCode === 'AMN_AC')).not.toBe(undefined)
 
 		const removed = await repo.remove(TENANT_A, PROPERTY_A2, 'AMN_AC')
 		expect(removed).toBe(true)
@@ -315,9 +315,9 @@ describe('property.amenities.repo', () => {
 
 		const aList = await repo.listByProperty(TENANT_A, PROPERTY_A2)
 		const bList = await repo.listByProperty(TENANT_B, PROPERTY_B1)
-		expect(aList.find((a) => a.amenityCode === 'AMN_BAR')).toBeDefined()
+		expect(aList.find((a) => a.amenityCode === 'AMN_BAR')).not.toBe(undefined)
 		expect(aList.find((a) => a.amenityCode === 'AMN_AC')).toBeUndefined() // not from A2
-		expect(bList.find((a) => a.amenityCode === 'AMN_AC')).toBeDefined()
+		expect(bList.find((a) => a.amenityCode === 'AMN_AC')).not.toBe(undefined)
 		expect(bList.find((a) => a.amenityCode === 'AMN_BAR')).toBeUndefined()
 	})
 
@@ -328,7 +328,7 @@ describe('property.amenities.repo', () => {
 		expect(result).toBe(false) // didn't see the row → no-op
 
 		const bList = await repo.listByProperty(TENANT_B, PROPERTY_B1)
-		expect(bList.find((a) => a.amenityCode === 'AMN_AC')).toBeDefined() // still there
+		expect(bList.find((a) => a.amenityCode === 'AMN_AC')).not.toBe(undefined) // still there
 	})
 
 	test('[CP1] cross-property (same tenant): same amenity coexists on two properties', async () => {
@@ -347,8 +347,8 @@ describe('property.amenities.repo', () => {
 
 		const a1 = await repo.listByProperty(TENANT_A, PROPERTY_A1)
 		const a2 = await repo.listByProperty(TENANT_A, PROPERTY_A2)
-		expect(a1.find((a) => a.amenityCode === 'AMN_FRONT_DESK_24H')).toBeDefined()
-		expect(a2.find((a) => a.amenityCode === 'AMN_FRONT_DESK_24H')).toBeDefined()
+		expect(a1.find((a) => a.amenityCode === 'AMN_FRONT_DESK_24H')).not.toBe(undefined)
+		expect(a2.find((a) => a.amenityCode === 'AMN_FRONT_DESK_24H')).not.toBe(undefined)
 	})
 
 	test('[I1] insert preserves freePaid override (operator paid → free swap)', async () => {

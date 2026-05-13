@@ -37,7 +37,7 @@ describe('<PhotoGallery>', () => {
 
 	test('[PG2] single photo → 1 thumb, NO +N badge', () => {
 		render(<PhotoGallery photos={[photo({ mediaId: 'a' })]} />)
-		expect(screen.getByTestId('photo-thumb-a')).toBeTruthy()
+		expect(screen.queryByTestId('photo-thumb-a')).not.toBe(null)
 		expect(screen.queryByText(/\+\d+/)).toBeNull()
 	})
 
@@ -69,8 +69,8 @@ describe('<PhotoGallery>', () => {
 			photo({ mediaId: 'r2', roomTypeId: 'rt-B' }), // room B
 		]
 		render(<PhotoGallery photos={photos} roomTypeId="rt-A" />)
-		expect(screen.getByTestId('photo-thumb-p1')).toBeTruthy()
-		expect(screen.getByTestId('photo-thumb-r1')).toBeTruthy()
+		expect(screen.queryByTestId('photo-thumb-p1')).not.toBe(null)
+		expect(screen.queryByTestId('photo-thumb-r1')).not.toBe(null)
 		expect(screen.queryByTestId('photo-thumb-r2')).toBeNull()
 	})
 
@@ -80,16 +80,16 @@ describe('<PhotoGallery>', () => {
 			photo({ mediaId: 'b', roomTypeId: 'rt-B' }),
 		]
 		render(<PhotoGallery photos={photos} />)
-		expect(screen.getByTestId('photo-thumb-a')).toBeTruthy()
-		expect(screen.getByTestId('photo-thumb-b')).toBeTruthy()
+		expect(screen.queryByTestId('photo-thumb-a')).not.toBe(null)
+		expect(screen.queryByTestId('photo-thumb-b')).not.toBe(null)
 	})
 
 	test('[PG7] click thumb opens lightbox dialog (DialogTrigger)', () => {
 		render(<PhotoGallery photos={[photo({ mediaId: 'a' }), photo({ mediaId: 'b' })]} />)
 		fireEvent.click(screen.getByTestId('photo-thumb-a'))
 		// Dialog renders portal, prev/next visible когда photos.length > 1
-		expect(screen.queryByTestId('photo-next')).toBeTruthy()
-		expect(screen.queryByTestId('photo-prev')).toBeTruthy()
+		expect(screen.queryByTestId('photo-next')).not.toBe(null)
+		expect(screen.queryByTestId('photo-prev')).not.toBe(null)
 	})
 
 	test('[PG8] single photo → no prev/next в lightbox', () => {

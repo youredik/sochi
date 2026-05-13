@@ -252,7 +252,7 @@ describe('widget booking-create routes — HTTP', () => {
 		})
 		expect(res.status).toBe(200)
 		const csp = res.headers.get('content-security-policy')
-		expect(csp).toBeTruthy()
+		expect(csp).not.toBe(null)
 		expect(csp).toContain('https://yookassa.ru')
 		expect(csp).toContain('https://smartcaptcha.cloud.yandex.ru')
 	})
@@ -284,7 +284,7 @@ describe('widget booking-create routes — HTTP', () => {
 			headers: { Origin: 'https://hotel.example.com' },
 		})
 		expect(res.status).toBeLessThan(400)
-		expect(res.headers.get('access-control-allow-origin')).toBeTruthy()
+		expect(res.headers.get('access-control-allow-origin')).not.toBe(null)
 	})
 
 	test('[BCR5] CORS allows Idempotency-Key header', async () => {
@@ -369,7 +369,7 @@ describe('widget booking-create routes — HTTP', () => {
 		expect(body.data.paymentId).toMatch(/^pay_/)
 		expect(body.data.paymentStatus).toBe('succeeded')
 		expect(body.data.totalKopecks).toBe(1_530_000)
-		expect(body.data.confirmationToken).toBeTruthy()
+		expect(body.data.confirmationToken).not.toBe(null)
 	})
 
 	test('[BCR11] Idempotency replay (same key + body) → cached response', async () => {

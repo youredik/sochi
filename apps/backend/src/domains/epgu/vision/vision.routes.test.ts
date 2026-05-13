@@ -113,7 +113,7 @@ describe('vision.routes — RBAC matrix', () => {
 		expect(typeof body.data.outcome).toBe('string')
 		expect(typeof body.data.latencyMs).toBe('number')
 		expect(typeof body.data.httpStatus).toBe('number')
-		expect(body.data.entities).toBeDefined()
+		expect(body.data.entities).not.toBe(undefined)
 	})
 })
 

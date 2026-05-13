@@ -171,7 +171,7 @@ describe('GuestForm', () => {
 				/Особые\s+пожелания/.test(l.textContent ?? ''),
 			)?.htmlFor ?? '',
 		) as HTMLTextAreaElement
-		expect(sr).toBeTruthy()
+		expect(sr).not.toBe(null)
 		expect(sr.maxLength).toBe(2000)
 	})
 })

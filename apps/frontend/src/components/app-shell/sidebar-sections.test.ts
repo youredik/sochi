@@ -80,7 +80,7 @@ describe('sidebar-sections — schema integrity', () => {
 
 	it('[I5] every section has icon component (lucide forwardRef object)', () => {
 		for (const section of SIDEBAR_SECTIONS) {
-			expect(section.icon).toBeDefined()
+			expect(section.icon).not.toBe(undefined)
 			// lucide icons are forwardRef objects (not plain functions).
 			expect(['function', 'object']).toContain(typeof section.icon)
 		}
@@ -128,7 +128,7 @@ describe('sidebar-sections — RBAC × 3 roles × 7 sections (21 visibility cell
 			const expected = expectedVisible.has(id)
 			it(`[V ${role}-${id}] role=${role}, section=${id} → expected ${expected}`, () => {
 				const section = SIDEBAR_SECTIONS_BY_ID[id]
-				expect(section).toBeDefined()
+				expect(section).not.toBe(undefined)
 				expect(section!.isVisible(role)).toBe(expected)
 			})
 		}

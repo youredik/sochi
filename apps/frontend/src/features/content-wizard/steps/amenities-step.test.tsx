@@ -137,7 +137,7 @@ describe('<AmenitiesStep> — RBAC matrix', () => {
 	test('[R3] staff — save disabled + readonly Alert', () => {
 		setRole('staff')
 		render(<AmenitiesStep propertyId="prop_x" />)
-		expect(screen.getByText('Только просмотр')).toBeTruthy()
+		expect(screen.queryByText('Только просмотр')).not.toBe(null)
 		expect((screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement).disabled).toBe(
 			true,
 		)
@@ -156,7 +156,7 @@ describe('<AmenitiesStep> — branches', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useAmenities>)
 		render(<AmenitiesStep propertyId="prop_x" />)
-		expect(screen.getByText('Загрузка…')).toBeTruthy()
+		expect(screen.queryByText('Загрузка…')).not.toBe(null)
 		expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull()
 	})
 
@@ -167,8 +167,8 @@ describe('<AmenitiesStep> — branches', () => {
 			error: { message: 'boom' } as unknown as Error,
 		} as unknown as ReturnType<typeof useAmenities>)
 		render(<AmenitiesStep propertyId="prop_x" />)
-		expect(screen.getByText('Ошибка загрузки')).toBeTruthy()
-		expect(screen.getByText('boom')).toBeTruthy()
+		expect(screen.queryByText('Ошибка загрузки')).not.toBe(null)
+		expect(screen.queryByText('boom')).not.toBe(null)
 		expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull()
 	})
 })
@@ -190,7 +190,7 @@ describe('<AmenitiesStep> — catalog rendering', () => {
 		// Counter has a <strong> wrapping just the number — exact-value assert
 		// via that landmark, no accidental sibling-DOM bleed-in.
 		const counter = within(section).getAllByText(/Выбрано:/)[0]
-		expect(counter).toBeDefined()
+		expect(counter).not.toBe(undefined)
 		const strong = counter?.querySelector('strong')
 		expect(strong?.textContent).toBe('0')
 		expect(counter?.textContent).toContain(`из ${AMENITY_CATALOG.length}`)
@@ -264,7 +264,7 @@ describe('<AmenitiesStep> — toggle', () => {
 		expect(screen.queryByLabelText(/Значение для Высокоскоростной Wi-Fi/)).toBeNull()
 		fireEvent.click(checkbox)
 		// After checking: value input appears
-		expect(screen.getByLabelText(/Значение для Высокоскоростной Wi-Fi/)).toBeTruthy()
+		expect(screen.queryByLabelText(/Значение для Высокоскоростной Wi-Fi/)).not.toBe(null)
 	})
 })
 
@@ -391,7 +391,7 @@ describe('<AmenitiesStep> — a11y', () => {
 			const labelId = cb.getAttribute('id')
 			if (!labelId) continue
 			const label = document.querySelector(`label[for="${labelId}"]`)
-			expect(label?.textContent?.trim()).toBeTruthy()
+			expect((label?.textContent ?? '').trim()).not.toBe('')
 		}
 	})
 })

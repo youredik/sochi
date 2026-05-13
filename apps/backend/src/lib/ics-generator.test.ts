@@ -111,7 +111,7 @@ describe('ics-generator', () => {
 		)
 		expect(events).toHaveLength(1)
 		const event = events[0]
-		expect(event).toBeDefined()
+		expect(event).not.toBe(undefined)
 		if (!event) throw new Error('VEVENT not parsed')
 		expect((event as { uid: string }).uid).toBe('BK-2026-A1B2C3@sirius.sochi.app')
 		const start = (event as { start: Date }).start
@@ -129,7 +129,7 @@ describe('ics-generator', () => {
 		const event = Object.values(parsed).find(
 			(e): e is NonNullable<typeof e> => e !== undefined && e.type === 'VEVENT',
 		) as { summary: string } | undefined
-		expect(event).toBeDefined()
+		expect(event).not.toBe(undefined)
 		expect(event?.summary).toContain('Бронь №BK-2026-A1B2C3')
 		expect(event?.summary).toContain('Гостиница Сириус')
 	})

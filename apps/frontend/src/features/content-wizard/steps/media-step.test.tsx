@@ -153,7 +153,7 @@ describe('<MediaStep> — RBAC matrix', () => {
 	test('[R3] staff — readonly Alert + file input disabled', () => {
 		setRole('staff')
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByText('Только просмотр')).toBeTruthy()
+		expect(screen.queryByText('Только просмотр')).not.toBe(null)
 		expect((screen.getByLabelText('Выбрать файл') as HTMLInputElement).disabled).toBe(true)
 	})
 })
@@ -170,7 +170,7 @@ describe('<MediaStep> — branches', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByText('Загрузка…')).toBeTruthy()
+		expect(screen.queryByText('Загрузка…')).not.toBe(null)
 		expect(screen.queryByLabelText('Выбрать файл')).toBeNull()
 	})
 
@@ -181,8 +181,8 @@ describe('<MediaStep> — branches', () => {
 			error: { message: 'oops' } as unknown as Error,
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByText('Ошибка загрузки')).toBeTruthy()
-		expect(screen.getByText('oops')).toBeTruthy()
+		expect(screen.queryByText('Ошибка загрузки')).not.toBe(null)
+		expect(screen.queryByText('oops')).not.toBe(null)
 	})
 })
 
@@ -193,8 +193,8 @@ describe('<MediaStep> — branches', () => {
 describe('<MediaStep> — list rendering', () => {
 	test('[L1] empty list → placeholder + "Загружено: 0 файлов"', () => {
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByText('Пока нет фото.')).toBeTruthy()
-		expect(screen.getByText(/Загружено: 0 файлов/)).toBeTruthy()
+		expect(screen.queryByText('Пока нет фото.')).not.toBe(null)
+		expect(screen.queryByText(/Загружено: 0 файлов/)).not.toBe(null)
 	})
 
 	test('[L2] one media → counter "1 файл" (RU singular)', () => {
@@ -204,7 +204,7 @@ describe('<MediaStep> — list rendering', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByText('Загружено: 1 файл')).toBeTruthy()
+		expect(screen.queryByText('Загружено: 1 файл')).not.toBe(null)
 	})
 
 	test('[L3] three media → counter "3 файлов"', () => {
@@ -214,7 +214,7 @@ describe('<MediaStep> — list rendering', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByText('Загружено: 3 файлов')).toBeTruthy()
+		expect(screen.queryByText('Загружено: 3 файлов')).not.toBe(null)
 	})
 })
 
@@ -228,7 +228,7 @@ describe('<MediaStep> — preflight', () => {
 		const input = screen.getByLabelText('Выбрать файл') as HTMLInputElement
 		const empty = fileWithSize('empty.jpg', 'image/jpeg', 0)
 		fireEvent.change(input, { target: { files: [empty] } })
-		expect(screen.getByText('Файл пуст')).toBeTruthy()
+		expect(screen.queryByText('Файл пуст')).not.toBe(null)
 		// File panel should NOT appear
 		expect(screen.queryByText(/altRu \(обязательно\)/)).toBeNull()
 	})
@@ -238,7 +238,7 @@ describe('<MediaStep> — preflight', () => {
 		const input = screen.getByLabelText('Выбрать файл') as HTMLInputElement
 		const huge = fileWithSize('huge.jpg', 'image/jpeg', 50 * 1024 * 1024 + 1)
 		fireEvent.change(input, { target: { files: [huge] } })
-		expect(screen.getByText('Файл больше 50 МБ')).toBeTruthy()
+		expect(screen.queryByText('Файл больше 50 МБ')).not.toBe(null)
 	})
 
 	test('[P3] disallowed MIME → alert mentions MIME and supported list', () => {
@@ -247,8 +247,8 @@ describe('<MediaStep> — preflight', () => {
 		const txt = fileWithSize('bad.txt', 'text/plain', 1024)
 		fireEvent.change(input, { target: { files: [txt] } })
 		expect(
-			screen.getByText('Неподдерживаемый формат: text/plain. Разрешены JPEG/PNG/HEIC/WebP.'),
-		).toBeTruthy()
+			screen.queryByText('Неподдерживаемый формат: text/plain. Разрешены JPEG/PNG/HEIC/WebP.'),
+		).not.toBe(null)
 	})
 
 	test('[P4] valid JPEG → no error, altRu input panel appears', () => {
@@ -257,8 +257,8 @@ describe('<MediaStep> — preflight', () => {
 		const ok = fileWithSize('ok.jpg', 'image/jpeg', 1024)
 		fireEvent.change(input, { target: { files: [ok] } })
 		expect(screen.queryByText('Не удалось принять файл')).toBeNull()
-		expect(screen.getByLabelText('altRu (обязательно)')).toBeTruthy()
-		expect(screen.getByLabelText('altEn (опционально)')).toBeTruthy()
+		expect(screen.queryByLabelText('altRu (обязательно)')).not.toBe(null)
+		expect(screen.queryByLabelText('altEn (опционально)')).not.toBe(null)
 	})
 })
 
@@ -451,8 +451,8 @@ describe('<MediaStep> — delete confirm dialog', () => {
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
 		fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
-		expect(screen.getByRole('dialog')).toBeTruthy()
-		expect(screen.getByRole('heading', { name: 'Удалить фото?' })).toBeTruthy()
+		expect(screen.queryByRole('dialog')).not.toBe(null)
+		expect(screen.queryByRole('heading', { name: 'Удалить фото?' })).not.toBe(null)
 		expect(delMutate).not.toHaveBeenCalled()
 	})
 
@@ -502,7 +502,7 @@ describe('<MediaStep> — delete confirm dialog', () => {
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
 		fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
-		expect(screen.getByText('Это hero-фото')).toBeTruthy()
+		expect(screen.queryByText('Это hero-фото')).not.toBe(null)
 	})
 })
 
@@ -585,7 +585,7 @@ describe('<MediaStep> — media row interactions', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByText('Обработано')).toBeTruthy()
+		expect(screen.queryByText('Обработано')).not.toBe(null)
 		expect(screen.queryByText('В обработке')).toBeNull()
 	})
 
@@ -596,7 +596,7 @@ describe('<MediaStep> — media row interactions', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByText('В обработке')).toBeTruthy()
+		expect(screen.queryByText('В обработке')).not.toBe(null)
 		expect(screen.queryByText('Обработано')).toBeNull()
 	})
 
@@ -607,7 +607,7 @@ describe('<MediaStep> — media row interactions', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByText('Hero')).toBeTruthy()
+		expect(screen.queryByText('Hero')).not.toBe(null)
 		expect(screen.queryByRole('button', { name: 'Сделать hero' })).toBeNull()
 	})
 
@@ -618,7 +618,7 @@ describe('<MediaStep> — media row interactions', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useMediaList>)
 		render(<MediaStep propertyId="prop_x" />)
-		expect(screen.getByRole('button', { name: 'Сделать hero' })).toBeTruthy()
+		expect(screen.queryByRole('button', { name: 'Сделать hero' })).not.toBe(null)
 	})
 
 	test('[M5] isHero=false + altRu="" → setHero button disabled (invariant guard)', () => {

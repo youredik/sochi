@@ -28,7 +28,7 @@ describe('EmptyState — render', () => {
 
 	it('[R2] description rendered when provided', () => {
 		render(<EmptyState title="Empty" description="Nothing here yet." />)
-		expect(screen.getByText('Nothing here yet.')).toBeDefined()
+		expect(screen.queryByText('Nothing here yet.')).not.toBe(null)
 	})
 
 	it('[R3] description hidden when not provided', () => {
@@ -45,7 +45,7 @@ describe('EmptyState — render', () => {
 
 	it('[R5] action rendered when provided', () => {
 		render(<EmptyState title="Empty" action={<button type="button">Create</button>} />)
-		expect(screen.getByRole('button', { name: 'Create' })).toBeDefined()
+		expect(screen.queryByRole('button', { name: 'Create' })).not.toBe(null)
 	})
 
 	it('[R6] action absent when null', () => {

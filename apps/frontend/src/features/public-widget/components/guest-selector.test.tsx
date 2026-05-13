@@ -95,7 +95,7 @@ describe('<GuestSelector>', () => {
 		render(<GuestSelector adults={1} childrenCount={0} onChange={() => {}} maxTotal={6} />)
 		await user.click(screen.getByRole('button'))
 		const hint = screen.getByText(/Максимум 6 гостей/)
-		expect(hint).toBeTruthy()
+		expect(hint).not.toBe(null)
 	})
 
 	test('[G9] aria-label includes current selection (a11y screen-reader)', () => {

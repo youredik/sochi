@@ -97,7 +97,7 @@ const baseProps = {
 describe('<StickySummary>', () => {
 	test('[E1] No selection → "Выберите номер" placeholder', () => {
 		render(<StickySummary {...baseProps} selectedRoomType={null} selectedRate={null} />)
-		expect(screen.getByText(/Выберите номер/)).toBeTruthy()
+		expect(screen.queryByText(/Выберите номер/)).not.toBe(null)
 	})
 
 	test('[E2] Continue disabled when nothing selected', () => {
@@ -178,7 +178,7 @@ describe('<StickySummary>', () => {
 			/>,
 		)
 		expect(screen.queryByTestId('summary-cancel-deadline')).toBeNull()
-		expect(screen.getByText(/Тариф невозвратный/)).toBeTruthy()
+		expect(screen.queryByText(/Тариф невозвратный/)).not.toBe(null)
 	})
 
 	test('[F6] Continue calls onContinue when ready', () => {
@@ -261,7 +261,7 @@ describe('<StickySummary>', () => {
 			/>,
 		)
 		// Section header rendered
-		expect(screen.getByText(/Дополнения/i)).toBeTruthy()
+		expect(screen.queryByText(/Дополнения/i)).not.toBe(null)
 		// Each line item rendered
 		expect(screen.getByTestId('summary-addon-addn_brk').textContent).toMatch(/Завтрак-буфет.*×.*2/)
 		expect(screen.getByTestId('summary-addon-addn_park').textContent).toMatch(/Парковка/)
@@ -290,6 +290,6 @@ describe('<StickySummary>', () => {
 
 	test('[F8] Footer shows OTA-savings value-prop', () => {
 		render(<StickySummary {...baseProps} selectedRoomType={null} selectedRate={null} />)
-		expect(screen.getByText(/экономия до 17%/i)).toBeTruthy()
+		expect(screen.queryByText(/экономия до 17%/i)).not.toBe(null)
 	})
 })

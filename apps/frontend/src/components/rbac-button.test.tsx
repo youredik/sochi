@@ -42,7 +42,7 @@ describe('<RbacButton> — can=true (granted)', () => {
 
 	test('[G3] children content rendered', () => {
 		render(<RbacButton can={true}>Возврат платежа</RbacButton>)
-		expect(screen.getByRole('button', { name: 'Возврат платежа' })).toBeTruthy()
+		expect(screen.queryByRole('button', { name: 'Возврат платежа' })).not.toBe(null)
 	})
 })
 
@@ -85,7 +85,7 @@ describe('<RbacButton> — can=false (denied)', () => {
 
 	test('[D4] children still rendered when denied (label visible to SR)', () => {
 		render(<RbacButton can={false}>Возврат платежа</RbacButton>)
-		expect(screen.getByRole('button', { name: 'Возврат платежа' })).toBeTruthy()
+		expect(screen.queryByRole('button', { name: 'Возврат платежа' })).not.toBe(null)
 	})
 
 	test('default deniedReason fallback when not provided', () => {
@@ -93,7 +93,7 @@ describe('<RbacButton> — can=false (denied)', () => {
 		// presence без hover не тестируется здесь (Radix Tooltip lazy mounts).
 		// Здесь тестируем что button рендерится корректно с дефолтным reason.
 		render(<RbacButton can={false}>Возврат</RbacButton>)
-		expect(screen.getByRole('button', { name: 'Возврат' })).toBeTruthy()
+		expect(screen.queryByRole('button', { name: 'Возврат' })).not.toBe(null)
 	})
 })
 
@@ -116,6 +116,6 @@ describe('<RbacButton> — adversarial', () => {
 		)
 		const btn = screen.getByRole('button', { name: 'Возврат' })
 		// shadcn variant adds specific classes — at minimum "outline" rendered
-		expect(btn).toBeTruthy()
+		expect(btn).not.toBe(null)
 	})
 })

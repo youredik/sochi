@@ -58,8 +58,8 @@ describe('<NotificationsTable> — render correctness', () => {
 	test('[R1] empty items → EmptyState, NO table', () => {
 		const onRowClick = mock()
 		render(<NotificationsTable items={[]} onRowClick={onRowClick} />)
-		expect(screen.getByRole('heading', { level: 3, name: 'Уведомлений нет' })).toBeDefined()
-		expect(screen.getByText(/С такими фильтрами outbox пуст/)).toBeDefined()
+		expect(screen.queryByRole('heading', { level: 3, name: 'Уведомлений нет' })).not.toBe(null)
+		expect(screen.queryByText(/С такими фильтрами outbox пуст/)).not.toBe(null)
 		expect(screen.queryByRole('table')).toBeNull()
 	})
 

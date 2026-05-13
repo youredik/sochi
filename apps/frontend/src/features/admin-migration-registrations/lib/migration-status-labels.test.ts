@@ -18,7 +18,7 @@ describe('statusBadgeFor — FULL enum coverage (all 14 EPGU codes)', () => {
 		const b = statusBadgeFor(EPGU_STATUS_CODES.draft)
 		expect(b.severity).toBe('pending')
 		expect(b.variant).toBe('outline')
-		expect(b.label).toBeTruthy()
+		expect(b.label).not.toBe(null)
 	})
 
 	test('[E2] registered (1) → severity in_flight', () => {

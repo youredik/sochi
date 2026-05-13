@@ -67,7 +67,7 @@ describe('ResponsiveSheet — desktop (≥768px)', () => {
 		mockMatchMedia(true)
 		renderResponsiveSheet()
 		// Sheet uses Radix Dialog → role="dialog".
-		expect(screen.getByRole('dialog')).toBeDefined()
+		expect(screen.queryByRole('dialog')).not.toBe(null)
 	})
 
 	it('[D2] SheetContent has data-slot="sheet-content"', () => {
@@ -89,7 +89,7 @@ describe('ResponsiveSheet — mobile (<768px)', () => {
 	it('[M1] renders Drawer primitive (Vaul)', () => {
 		mockMatchMedia(false)
 		renderResponsiveSheet()
-		expect(screen.getByRole('dialog')).toBeDefined()
+		expect(screen.queryByRole('dialog')).not.toBe(null)
 	})
 
 	it('[M2] DrawerContent has data-slot="drawer-content"', () => {
@@ -112,14 +112,14 @@ describe('ResponsiveSheet — controlled open propagation', () => {
 	it('[C1] open=true propagates: dialog visible on desktop', () => {
 		mockMatchMedia(true)
 		renderResponsiveSheet()
-		expect(screen.getByText('Test Title')).toBeDefined()
-		expect(screen.getByText('Body content')).toBeDefined()
+		expect(screen.queryByText('Test Title')).not.toBe(null)
+		expect(screen.queryByText('Body content')).not.toBe(null)
 	})
 
 	it('[C1.b] open=true propagates: dialog visible on mobile', () => {
 		mockMatchMedia(false)
 		renderResponsiveSheet()
-		expect(screen.getByText('Test Title')).toBeDefined()
-		expect(screen.getByText('Body content')).toBeDefined()
+		expect(screen.queryByText('Test Title')).not.toBe(null)
+		expect(screen.queryByText('Body content')).not.toBe(null)
 	})
 })

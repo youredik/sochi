@@ -214,7 +214,7 @@ describe('property.addons.repo', () => {
 		created.push({ tenantId: TENANT_A, propertyId: PROPERTY_A2, addonId: id })
 
 		const transfer = await repo.listByProperty(TENANT_A, PROPERTY_A2, { category: 'TRANSFER' })
-		expect(transfer.find((a) => a.code === 'AIRPORT_TRANSFER')).toBeDefined()
+		expect(transfer.find((a) => a.code === 'AIRPORT_TRANSFER')).not.toBe(undefined)
 		expect(transfer.find((a) => a.code === 'ACTIVE_X')).toBeUndefined() // filtered out
 	})
 

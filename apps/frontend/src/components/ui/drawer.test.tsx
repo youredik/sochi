@@ -89,9 +89,9 @@ describe('Drawer — render visibility', () => {
 
 	it('[R2] open=true → Title + Description + children rendered', () => {
 		renderOpen()
-		expect(screen.getByText('Test Title')).toBeDefined()
-		expect(screen.getByText('Test description')).toBeDefined()
-		expect(screen.getByText('Body content')).toBeDefined()
+		expect(screen.queryByText('Test Title')).not.toBe(null)
+		expect(screen.queryByText('Test description')).not.toBe(null)
+		expect(screen.queryByText('Body content')).not.toBe(null)
 	})
 
 	it('[R3] DrawerContent has data-slot="drawer-content" (migration guard)', () => {
@@ -122,7 +122,7 @@ describe('Drawer — ARIA + semantic HTML (Base UI canon)', () => {
 
 	it('[A3] Open drawer has role="dialog"', () => {
 		renderOpen()
-		expect(screen.getByRole('dialog')).toBeDefined()
+		expect(screen.queryByRole('dialog')).not.toBe(null)
 	})
 })
 
@@ -140,9 +140,9 @@ describe('Drawer — composition (no built-in Header/Footer в Base UI)', () => 
 	it('[C3+C4+C5] Title + Description + children accessible by getByText', () => {
 		renderOpen()
 		// Triple-check explicit text accessibility (consumer API contract).
-		expect(screen.getByText('Test Title')).toBeDefined()
-		expect(screen.getByText('Test description')).toBeDefined()
-		expect(screen.getByText('Body content')).toBeDefined()
+		expect(screen.queryByText('Test Title')).not.toBe(null)
+		expect(screen.queryByText('Test description')).not.toBe(null)
+		expect(screen.queryByText('Body content')).not.toBe(null)
 	})
 })
 

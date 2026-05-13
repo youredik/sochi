@@ -133,7 +133,7 @@ describe('adapter registry', () => {
 			} catch (e) {
 				caught = e as Error
 			}
-			expect(caught).toBeDefined()
+			expect(caught).not.toBe(undefined)
 			expect(caught!.message).toContain('2 adapter(s)')
 			expect(caught!.message).toContain('a (category=payment, mode=mock)')
 			expect(caught!.message).toContain('b (category=epgu, mode=sandbox)')
@@ -172,7 +172,7 @@ describe('adapter registry', () => {
 			} catch (e) {
 				caught = e as Error
 			}
-			expect(caught).toBeDefined()
+			expect(caught).not.toBe(undefined)
 			// Whitelisted name MUST NOT appear in offender list
 			expect(caught!.message).toContain('payment.stub')
 			expect(caught!.message).not.toContain('- epgu.stub (category=')

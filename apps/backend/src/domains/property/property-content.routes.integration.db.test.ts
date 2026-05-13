@@ -385,7 +385,7 @@ describe('property-content routes — real-YDB integration', () => {
 		// TENANT_A has the media row from FLOW; TENANT_B tries to process it
 		const list = await factoryDeps.media.listByProperty(TENANT_A, PROPERTY)
 		const mediaId = list[0]?.mediaId
-		expect(mediaId).toBeDefined()
+		expect(mediaId).not.toBe(undefined)
 		const res = await buildApp(ctx(TENANT_B)).request(
 			`/api/v1/properties/${PROPERTY}/media/${mediaId}/process`,
 			{ method: 'POST' },

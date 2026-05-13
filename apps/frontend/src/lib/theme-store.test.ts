@@ -129,7 +129,7 @@ describe('theme-store — Adversarial', () => {
 		// Force re-hydration. Zustand persist swallows JSON parse errors (canonical safe).
 		void useThemeStore.persist.rehydrate()
 		// Store stays operational regardless of corruption — ничего не throw'ит
-		expect(useThemeStore.getState().theme).toBeDefined()
+		expect(useThemeStore.getState().theme).not.toBe(undefined)
 		expect(['light', 'dark', 'system']).toContain(useThemeStore.getState().theme)
 	})
 })

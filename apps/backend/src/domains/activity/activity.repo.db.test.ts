@@ -399,9 +399,9 @@ describe('activity.repo', () => {
 		expect(limited).toHaveLength(3)
 		expect(ids).toHaveLength(5)
 		const [, , id2, id3, id4] = ids
-		expect(id2).toBeDefined()
-		expect(id3).toBeDefined()
-		expect(id4).toBeDefined()
+		expect(id2).not.toBe(undefined)
+		expect(id3).not.toBe(undefined)
+		expect(id4).not.toBe(undefined)
 		// Latest three inserted (indexes 4, 3, 2 in DESC order).
 		expect(limited.map((r) => r.id)).toEqual([id4!, id3!, id2!])
 	})

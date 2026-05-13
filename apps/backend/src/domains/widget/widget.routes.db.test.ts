@@ -92,7 +92,7 @@ describe('widget.routes — HTTP', () => {
 		})
 		expect(res.status).toBeLessThan(400)
 		// Hono cors middleware sets allow-origin header
-		expect(res.headers.get('access-control-allow-origin')).toBeTruthy()
+		expect(res.headers.get('access-control-allow-origin')).not.toBe(null)
 	})
 
 	test('[R1] GET known tenant → 200 + tenant + properties', async () => {
@@ -119,7 +119,7 @@ describe('widget.routes — HTTP', () => {
 			data: { tenant: unknown; property: { id: string }; roomTypes: unknown[] }
 		}
 		expect(body.data.property.id).toBe(propertyId)
-		expect(body.data.roomTypes).toBeInstanceOf(Array)
+		expect(Array.isArray(body.data.roomTypes)).toBe(true)
 	})
 
 	test('[R4] GET unknown property → 404 (timing-safe — same shape as unknown tenant)', async () => {
@@ -152,7 +152,7 @@ describe('widget.routes — HTTP', () => {
 		const { slug } = await seedTenant(`s1-${Date.now().toString(36)}`)
 		const res = await app.request(`/api/public/widget/${slug}/properties`)
 		const csp = res.headers.get('content-security-policy')
-		expect(csp).toBeTruthy()
+		expect(csp).not.toBe(null)
 		expect(csp).toContain("default-src 'self'")
 		expect(csp).toContain('https://yookassa.ru')
 		expect(csp).toContain('https://captcha.yandex.com')

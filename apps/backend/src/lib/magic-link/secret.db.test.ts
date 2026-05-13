@@ -132,7 +132,7 @@ describe('magic-link/secret', () => {
 				WHERE organizationId = ${tenantId}
 			`.idempotent(true)
 			const stored = rows[0]?.magicLinkSecret
-			expect(stored).toBeDefined()
+			expect(stored).not.toBe(undefined)
 			expect(stored).not.toBeNull()
 			// At least one of the resolved values matches stored (winner overwrite ОК).
 			expect([a, b, c]).toContain(stored as string)

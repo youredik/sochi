@@ -267,7 +267,7 @@ describe('TravelLine Mock — D3 OAuth + rate-limit (TL7-TL10)', () => {
 			guestCount: 1,
 		})
 		const jwt2 = tl.__test_inspect().jwt?.accessToken
-		expect(jwt1).toBeDefined()
+		expect(jwt1).not.toBe(undefined)
 		expect(jwt1).toBe(jwt2)
 	})
 
@@ -291,7 +291,7 @@ describe('TravelLine Mock — D3 OAuth + rate-limit (TL7-TL10)', () => {
 		})
 		const jwt2 = tl.__test_inspect().jwt?.accessToken
 		expect(jwt2).not.toBe(jwt1)
-		expect(jwt2).toBeDefined()
+		expect(jwt2).not.toBe(undefined)
 	})
 
 	it('[TL9] rate-limit per-IP: 4th request in same second → 429 with Retry-After', async () => {
@@ -363,9 +363,9 @@ describe('TravelLine Mock — D4 verify→create two-step (TL11-TL15)', () => {
 		})
 		expect(create.externalId.startsWith('tl-res-')).toBe(true)
 		const inspected = tl.__test_inspect()
-		expect(
-			inspected.reservations.find((r) => r.tlReservationId === create.externalId),
-		).toBeDefined()
+		expect(inspected.reservations.find((r) => r.tlReservationId === create.externalId)).not.toBe(
+			undefined,
+		)
 	})
 
 	it('[TL13] createBooking with TAMPERED checksum → 409 CHECKSUM_MISMATCH', async () => {

@@ -102,8 +102,8 @@ describe('budgets.json (D2 separate budgets canon)', () => {
 	it('[BG2] iframe budget tighter than SPA widget (smaller surface)', () => {
 		const iframe = budgets.find((b) => b.path === '/api/embed/v1/iframe/*')
 		const widget = budgets.find((b) => b.path === '/widget/*')
-		expect(iframe).toBeDefined()
-		expect(widget).toBeDefined()
+		expect(iframe).not.toBe(undefined)
+		expect(widget).not.toBe(undefined)
 		const iframeTotal = iframe?.resourceSizes.find((r) => r.resourceType === 'total')?.budget ?? 0
 		const widgetTotal = widget?.resourceSizes.find((r) => r.resourceType === 'total')?.budget ?? 0
 		expect(iframeTotal).toBeLessThan(widgetTotal)
@@ -119,7 +119,7 @@ describe('budgets.json (D2 separate budgets canon)', () => {
 	it('[BG4] LCP budget ≤2500ms на каждом surface', () => {
 		for (const b of budgets) {
 			const lcp = b.timings.find((t) => t.metric === 'largest-contentful-paint')
-			expect(lcp).toBeDefined()
+			expect(lcp).not.toBe(undefined)
 			expect(lcp?.budget).toBeLessThanOrEqual(2500)
 		}
 	})

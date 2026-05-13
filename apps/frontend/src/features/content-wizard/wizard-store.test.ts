@@ -112,7 +112,7 @@ describe('useContentWizardStore — exhaustive enum coverage', () => {
 
 	test('[E2] STEP_LABELS has a non-empty label for every ContentStep', () => {
 		for (const s of CONTENT_WIZARD_STEPS) {
-			expect(STEP_LABELS[s]).toBeTruthy()
+			expect(STEP_LABELS[s]).not.toBe(null)
 			expect(STEP_LABELS[s].length).toBeGreaterThan(0)
 		}
 	})

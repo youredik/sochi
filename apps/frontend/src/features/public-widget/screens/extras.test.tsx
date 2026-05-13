@@ -278,7 +278,7 @@ describe('<Extras> — 404 + error fallback', () => {
 		await waitFor(() => {
 			expect(props.onNotFound).toHaveBeenCalled()
 		})
-		expect(screen.getByText(/Не найдено/)).toBeTruthy()
+		expect(screen.queryByText(/Не найдено/)).not.toBe(null)
 	})
 
 	test('[E10] query.error → error fallback с retry + skip buttons', async () => {
@@ -288,7 +288,7 @@ describe('<Extras> — 404 + error fallback', () => {
 		const fallback = await screen.findByTestId('extras-error-fallback', undefined, {
 			timeout: 5000,
 		})
-		expect(fallback).toBeTruthy()
+		expect(fallback).not.toBe(null)
 		const errSkip = screen.getByTestId('extras-error-skip')
 		fireEvent.click(errSkip)
 		expect(props.onSkip).toHaveBeenCalled()
@@ -305,7 +305,7 @@ describe('<Extras> — loading', () => {
 				}),
 		) as unknown as typeof globalThis.fetch
 		renderExtras()
-		expect(screen.getByTestId('extras-loading')).toBeTruthy()
+		expect(screen.queryByTestId('extras-loading')).not.toBe(null)
 	})
 })
 

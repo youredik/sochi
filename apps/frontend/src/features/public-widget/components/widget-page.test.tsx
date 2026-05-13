@@ -89,14 +89,14 @@ describe('<WidgetPage> — loading state', () => {
 		spyOn(widgetApi, 'listPublicProperties').mockImplementation(() => new Promise(() => {}))
 		renderPage()
 		const status = screen.getByRole('status')
-		expect(status).toBeTruthy()
+		expect(status).not.toBe(null)
 		expect(status.getAttribute('aria-live')).toBe('polite')
 	})
 
 	test('[L2] sr-only "Загрузка…" text для screen readers', () => {
 		spyOn(widgetApi, 'listPublicProperties').mockImplementation(() => new Promise(() => {}))
 		renderPage()
-		expect(screen.getByText('Загрузка…')).toBeTruthy()
+		expect(screen.queryByText('Загрузка…')).not.toBe(null)
 	})
 })
 
@@ -113,7 +113,7 @@ describe('<WidgetPage> — error / not-found state', () => {
 		spyOn(widgetApi, 'listPublicProperties').mockResolvedValue(null)
 		renderPage('my-typo-slug')
 		await screen.findByRole('heading', { level: 1 })
-		expect(screen.getByText(/my-typo-slug/)).toBeTruthy()
+		expect(screen.queryByText(/my-typo-slug/)).not.toBe(null)
 	})
 })
 
@@ -166,7 +166,7 @@ describe('<WidgetPage> — properties list', () => {
 		})
 		renderPage()
 		await screen.findByRole('heading', { level: 1 })
-		expect(screen.getByText(/не опубликовал объекты/)).toBeTruthy()
+		expect(screen.queryByText(/не опубликовал объекты/)).not.toBe(null)
 	})
 
 	test('[P2] non-empty properties → list с N items (scoped к properties section)', async () => {
@@ -256,9 +256,9 @@ describe('<WidgetPage> — properties list', () => {
 		})
 		renderPage()
 		await screen.findByRole('heading', { level: 1 })
-		expect(
-			screen.getByRole('heading', { level: 3, name: 'Уникальное имя номера 12345' }),
-		).toBeTruthy()
+		expect(screen.getByRole('heading', { level: 3, name: 'Уникальное имя номера 12345' })).not.toBe(
+			null,
+		)
 	})
 })
 
@@ -271,7 +271,7 @@ describe('<WidgetPage> — adversarial', () => {
 		renderPage()
 		await screen.findByRole('heading', { level: 1 })
 		const section = screen.getByRole('region', { name: 'Список объектов размещения' })
-		expect(section).toBeTruthy()
+		expect(section).not.toBe(null)
 	})
 })
 
@@ -294,7 +294,7 @@ describe('<WidgetPage> — visual polish elements (post-user-pushback)', () => {
 		mockWith(1)
 		renderPage()
 		await screen.findByRole('heading', { level: 1 })
-		expect(screen.getByText(/Прямое бронирование · Сочи/i)).toBeTruthy()
+		expect(screen.queryByText(/Прямое бронирование · Сочи/i)).not.toBe(null)
 	})
 
 	test('[V2] count badge: 1 → «1 объект» (RU plural one)', async () => {
@@ -352,7 +352,7 @@ describe('<WidgetPage> — visual polish elements (post-user-pushback)', () => {
 		mockWith(1)
 		renderPage()
 		await screen.findByRole('heading', { level: 1 })
-		expect(screen.getByText(/экономия до 17% против OTA/)).toBeTruthy()
+		expect(screen.queryByText(/экономия до 17% против OTA/)).not.toBe(null)
 	})
 
 	test('[V9] property card → <Link> (М9.widget.2 sub-route nav) с aria-label «Забронировать {name}»', async () => {
@@ -360,7 +360,7 @@ describe('<WidgetPage> — visual polish elements (post-user-pushback)', () => {
 		renderPage()
 		await screen.findByRole('heading', { level: 1 })
 		const link = screen.getByRole('link', { name: 'Забронировать Property 1' })
-		expect(link).toBeTruthy()
+		expect(link).not.toBe(null)
 		expect(link.tagName).toBe('A')
 		expect(link.getAttribute('href')).toContain('/widget/$tenantSlug/$propertyId')
 	})

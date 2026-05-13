@@ -116,7 +116,7 @@ describe('iframe-html.routes', () => {
 		})
 		const res = await app.request(`/v1/iframe/${slug}/${propertyId}.html`)
 		const csp = res.headers.get('content-security-policy')
-		expect(csp).toBeDefined()
+		expect(csp).not.toBe(undefined)
 		expect(csp).toContain('frame-ancestors https://hotel-aurora.ru https://www.hotel-aurora.ru')
 		expect(csp).toContain("default-src 'self'")
 		expect(csp).toContain("base-uri 'self'")
@@ -419,7 +419,7 @@ describe('iframe-html.routes', () => {
 			expect(addr.addressLocality).toBe('Sochi')
 			expect(parsed.starRating).toEqual({ '@type': 'Rating', ratingValue: '4' })
 			expect(parsed.aggregateRating).toBeUndefined() // D5 omitted
-			expect(parsed.image).toBeDefined()
+			expect(parsed.image).not.toBe(undefined)
 			expect((parsed.image as Array<string>).length).toBeGreaterThanOrEqual(3) // Google Hotel rich-results spec
 			const containsPlace = parsed.containsPlace as Array<Record<string, unknown>>
 			expect(containsPlace).toHaveLength(1)

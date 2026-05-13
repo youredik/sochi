@@ -164,11 +164,11 @@ describe('property.media.repo', () => {
 		created.push({ tenantId: TENANT_A, propertyId: PROPERTY_A1, mediaId: idR })
 
 		const propScope = await repo.listByProperty(TENANT_A, PROPERTY_A1, { roomTypeId: null })
-		expect(propScope.find((m) => m.mediaId === idP)).toBeDefined()
+		expect(propScope.find((m) => m.mediaId === idP)).not.toBe(undefined)
 		expect(propScope.find((m) => m.mediaId === idR)).toBeUndefined()
 
 		const roomScope = await repo.listByProperty(TENANT_A, PROPERTY_A1, { roomTypeId: ROOM_A })
-		expect(roomScope.find((m) => m.mediaId === idR)).toBeDefined()
+		expect(roomScope.find((m) => m.mediaId === idR)).not.toBe(undefined)
 		expect(roomScope.find((m) => m.mediaId === idP)).toBeUndefined()
 	})
 

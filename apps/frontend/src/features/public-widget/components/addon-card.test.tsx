@@ -129,7 +129,7 @@ describe('<AddonCard> — pricing display (ст. 10 ЗоЗПП)', () => {
 			/>,
 		)
 		// `\s` matches NBSP (U+00A0) — Intl.NumberFormat ru-RU uses NBSP between groups.
-		expect(screen.getByText(/9\s150/)).toBeTruthy()
+		expect(screen.queryByText(/9\s150/)).not.toBe(null)
 	})
 
 	test('[AC4] renders «в т.ч. НДС 22%» when vatBps=2200', () => {
@@ -142,7 +142,7 @@ describe('<AddonCard> — pricing display (ст. 10 ЗоЗПП)', () => {
 				onChangeQuantity={mock()}
 			/>,
 		)
-		expect(screen.getByText(/в т\.ч\. НДС 22%/i)).toBeTruthy()
+		expect(screen.queryByText(/в т\.ч\. НДС 22%/i)).not.toBe(null)
 	})
 
 	test('[AC5] no NDS note when vatBps=0', () => {
@@ -200,7 +200,7 @@ describe('<AddonCard> — cancellation disclosure (ПП РФ №1912)', () => {
 				onChangeQuantity={mock()}
 			/>,
 		)
-		expect(screen.getByText(/Бесплатная отмена до 15 июня 2026/)).toBeTruthy()
+		expect(screen.queryByText(/Бесплатная отмена до 15 июня 2026/)).not.toBe(null)
 	})
 })
 
@@ -291,7 +291,7 @@ describe('<AddonCard> — pricing unit labels', () => {
 				onChangeQuantity={mock()}
 			/>,
 		)
-		expect(screen.getByText(/\/ гость \/ ночь/)).toBeTruthy()
+		expect(screen.queryByText(/\/ гость \/ ночь/)).not.toBe(null)
 	})
 
 	test('[AC15] PER_HOUR shows «/ час»', () => {
@@ -304,7 +304,7 @@ describe('<AddonCard> — pricing unit labels', () => {
 				onChangeQuantity={mock()}
 			/>,
 		)
-		expect(screen.getByText(/\/ час/)).toBeTruthy()
+		expect(screen.queryByText(/\/ час/)).not.toBe(null)
 	})
 })
 

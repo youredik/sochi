@@ -100,7 +100,7 @@ describe('DemoModeBadge — RU label canon (D15 + §11)', () => {
 	it('[L1] demo display text = ДЕМО (Cyrillic)', () => {
 		seedMe('demo')
 		renderBadge()
-		expect(screen.getByText('ДЕМО')).toBeDefined()
+		expect(screen.queryByText('ДЕМО')).not.toBe(null)
 	})
 
 	it('[L2] demo aria-label = Демо-режим', () => {
@@ -113,7 +113,7 @@ describe('DemoModeBadge — RU label canon (D15 + §11)', () => {
 	it('[L3] production display text = LIVE', () => {
 		seedMe('production')
 		renderBadge()
-		expect(screen.getByText('LIVE')).toBeDefined()
+		expect(screen.queryByText('LIVE')).not.toBe(null)
 	})
 
 	it('[L4] production aria-label = Продакшн-режим', () => {

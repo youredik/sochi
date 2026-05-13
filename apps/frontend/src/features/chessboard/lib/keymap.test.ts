@@ -324,7 +324,7 @@ describe('nextFocusPosition — adversarial + edge cases', () => {
 				] as const) {
 					const result = nextFocusPosition(model3Rows, pos(r, start), action)
 					const targetRow = model3Rows.rows[result.rowIdx]
-					expect(targetRow).toBeDefined()
+					expect(targetRow).not.toBe(undefined)
 					expect(targetRow?.cellStarts).toContain(result.colIdx)
 				}
 			}
@@ -428,7 +428,7 @@ describe('NavAction enum coverage (hunt missing action handler)', () => {
 		const pos: FocusPosition = { rowIdx: 0, colIdx: 2 }
 		for (const action of ALL_ACTIONS) {
 			const result = nextFocusPosition(model3Rows, pos, action)
-			expect(result).toBeDefined()
+			expect(result).not.toBe(undefined)
 			expect(typeof result.rowIdx).toBe('number')
 			expect(typeof result.colIdx).toBe('number')
 		}

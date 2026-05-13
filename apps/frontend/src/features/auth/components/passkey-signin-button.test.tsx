@@ -31,7 +31,7 @@ afterEach(() => {
 describe('PasskeySigninButton', () => {
 	it('[R1] button label «Войти через passkey»', () => {
 		render(<PasskeySigninButton />)
-		expect(screen.getByRole('button', { name: /Войти через passkey/ })).toBeDefined()
+		expect(screen.queryByRole('button', { name: /Войти через passkey/ })).not.toBe(null)
 	})
 
 	it('[P1] click → signIn.passkey called', async () => {

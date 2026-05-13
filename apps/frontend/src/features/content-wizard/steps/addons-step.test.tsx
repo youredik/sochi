@@ -173,7 +173,7 @@ describe('<AddonsStep> — RBAC matrix', () => {
 	test('[R3] staff — readonly Alert + create fieldset has disabled attribute', () => {
 		setRole('staff')
 		render(<AddonsStep propertyId="prop_x" />)
-		expect(screen.getByText('Только просмотр')).toBeTruthy()
+		expect(screen.queryByText('Только просмотр')).not.toBe(null)
 		// Browser propagates `disabled` from <fieldset>, but happy-dom doesn't
 		// always — assert on the fieldset element directly (prop is what we
 		// control). UX-wise the inputs render visually disabled via CSS.
@@ -195,7 +195,7 @@ describe('<AddonsStep> — branches', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useAddons>)
 		render(<AddonsStep propertyId="prop_x" />)
-		expect(screen.getByText('Загрузка…')).toBeTruthy()
+		expect(screen.queryByText('Загрузка…')).not.toBe(null)
 		expect(screen.queryByText('Новая услуга')).toBeNull()
 	})
 
@@ -206,8 +206,8 @@ describe('<AddonsStep> — branches', () => {
 			error: { message: 'load fail' } as unknown as Error,
 		} as unknown as ReturnType<typeof useAddons>)
 		render(<AddonsStep propertyId="prop_x" />)
-		expect(screen.getByText('Ошибка загрузки')).toBeTruthy()
-		expect(screen.getByText('load fail')).toBeTruthy()
+		expect(screen.queryByText('Ошибка загрузки')).not.toBe(null)
+		expect(screen.queryByText('load fail')).not.toBe(null)
 	})
 })
 
@@ -218,7 +218,7 @@ describe('<AddonsStep> — branches', () => {
 describe('<AddonsStep> — list', () => {
 	test('[L1] empty list → "Пока ничего не добавлено."', () => {
 		render(<AddonsStep propertyId="prop_x" />)
-		expect(screen.getByText('Пока ничего не добавлено.')).toBeTruthy()
+		expect(screen.queryByText('Пока ничего не добавлено.')).not.toBe(null)
 	})
 
 	test('[L2] two addons → both names rendered', () => {
@@ -231,8 +231,8 @@ describe('<AddonsStep> — list', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useAddons>)
 		render(<AddonsStep propertyId="prop_x" />)
-		expect(screen.getByText('Завтрак')).toBeTruthy()
-		expect(screen.getByText('Трансфер из аэропорта')).toBeTruthy()
+		expect(screen.queryByText('Завтрак')).not.toBe(null)
+		expect(screen.queryByText('Трансфер из аэропорта')).not.toBe(null)
 	})
 })
 
@@ -325,7 +325,12 @@ describe('<AddonsStep> — default form values', () => {
 	test('[D3] isActive default checked', () => {
 		render(<AddonsStep propertyId="prop_x" />)
 		const cb = screen.getByLabelText('Активна')
-		expect(cb.getAttribute('aria-checked') ?? (cb as HTMLInputElement).checked).toBeTruthy()
+		// Radix Checkbox renders an `aria-checked` attribute ("true"|"false")
+		// OR plain DOM `checked` boolean. Either signals «checked»: assert
+		// neither sentinel-falsy form (`'false'`, `false`, `null`) appears.
+		const ariaChecked = cb.getAttribute('aria-checked')
+		const domChecked = (cb as HTMLInputElement).checked
+		expect(ariaChecked === 'true' || domChecked === true).toBe(true)
 	})
 
 	test('[D4] isMandatory default unchecked', () => {
@@ -354,7 +359,7 @@ describe('<AddonsStep> — seasonal tags', () => {
 			'Майские праздники',
 		]
 		expect(seasonal).toHaveLength(addonSeasonalTagValues.length)
-		for (const lbl of seasonal) expect(screen.getByLabelText(lbl)).toBeTruthy()
+		for (const lbl of seasonal) expect(screen.queryByLabelText(lbl)).not.toBe(null)
 	})
 
 	test('[Sg2] check ski-season → present in create payload', async () => {
@@ -533,7 +538,7 @@ describe('<AddonsStep> — row interactions', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useAddons>)
 		render(<AddonsStep propertyId="prop_x" />)
-		expect(screen.getByRole('button', { name: 'Деактивировать' })).toBeTruthy()
+		expect(screen.queryByRole('button', { name: 'Деактивировать' })).not.toBe(null)
 		expect(screen.queryByText('Неактивна')).toBeNull()
 	})
 
@@ -544,8 +549,8 @@ describe('<AddonsStep> — row interactions', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useAddons>)
 		render(<AddonsStep propertyId="prop_x" />)
-		expect(screen.getByText('Неактивна')).toBeTruthy()
-		expect(screen.getByRole('button', { name: 'Активировать' })).toBeTruthy()
+		expect(screen.queryByText('Неактивна')).not.toBe(null)
+		expect(screen.queryByRole('button', { name: 'Активировать' })).not.toBe(null)
 	})
 
 	test('[Rx3] mandatory=true → Обязательная badge in row (NOT the create-form checkbox)', () => {
@@ -558,7 +563,7 @@ describe('<AddonsStep> — row interactions', () => {
 		// Both the create-form checkbox label and the row badge contain
 		// "Обязательная". Scope to the addon list <ul>.
 		const list = screen.getByRole('list')
-		expect(within(list).getByText('Обязательная')).toBeTruthy()
+		expect(within(list).queryByText('Обязательная')).not.toBe(null)
 	})
 
 	test('[Rx4] click Деактивировать → patch.mutate called with isActive:false', () => {
@@ -611,8 +616,8 @@ describe('<AddonsStep> — row interactions', () => {
 		render(<AddonsStep propertyId="prop_x" />)
 		// Same labels exist in the create-form Checkbox area; scope to <ul>.
 		const list = screen.getByRole('list')
-		expect(within(list).getByText('Лыжный сезон (15.12-15.04)')).toBeTruthy()
-		expect(within(list).getByText('Новогодние праздники')).toBeTruthy()
+		expect(within(list).queryByText('Лыжный сезон (15.12-15.04)')).not.toBe(null)
+		expect(within(list).queryByText('Новогодние праздники')).not.toBe(null)
 	})
 })
 
@@ -639,7 +644,7 @@ describe('<AddonsStep> — edit existing row', () => {
 		// the create form's empty + this row's editor pre-filled).
 		const ruInputs = screen.getAllByLabelText('Название (ru)') as HTMLInputElement[]
 		const filled = ruInputs.find((i) => i.value === 'Завтрак-A')
-		expect(filled).toBeDefined()
+		expect(filled).not.toBe(undefined)
 	})
 
 	test('[Ed2] save changed name → patch.mutate with diff fields only + idempotencyKey', () => {
@@ -709,7 +714,7 @@ describe('<AddonsStep> — edit existing row', () => {
 		fireEvent.change(targetInput as HTMLInputElement, { target: { value: 'Discarded' } })
 		fireEvent.click(screen.getByRole('button', { name: 'Отмена' }))
 		// Editing collapsed → "Редактировать" button visible again
-		expect(screen.getByRole('button', { name: 'Редактировать' })).toBeTruthy()
+		expect(screen.queryByRole('button', { name: 'Редактировать' })).not.toBe(null)
 		expect(patchMutate).not.toHaveBeenCalled()
 	})
 

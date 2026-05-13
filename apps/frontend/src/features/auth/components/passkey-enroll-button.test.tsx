@@ -35,7 +35,7 @@ afterEach(() => {
 describe('PasskeyEnrollButton — render', () => {
 	it('[R1] button с label «Добавить passkey»', () => {
 		render(<PasskeyEnrollButton />)
-		expect(screen.getByRole('button', { name: /Добавить passkey/ })).toBeDefined()
+		expect(screen.queryByRole('button', { name: /Добавить passkey/ })).not.toBe(null)
 	})
 
 	it('[R2] disabled=false initial', () => {

@@ -264,7 +264,7 @@ describe('backfill-folios', () => {
 		const folios = await readFoliosForBooking({ tenantId, bookingId: b.id })
 		expect(folios.length).toBeGreaterThanOrEqual(1)
 		const linked = folios.find((f) => f.id === linkedFolioId)
-		expect(linked).toBeDefined()
+		expect(linked).not.toBe(undefined)
 		expect(linked?.kind).toBe('guest')
 		expect(linked?.currency).toBe('RUB') // [B6] matches booking
 		expect(BigInt(linked?.balanceMinor ?? 0)).toBe(0n)

@@ -155,7 +155,7 @@ describe('<DescriptionsStep> — RBAC matrix', () => {
 	test('[R3] staff — readonly Alert + save disabled', () => {
 		setRole('staff')
 		render(<DescriptionsStep propertyId="prop_x" />)
-		expect(screen.getByText('Только просмотр')).toBeTruthy()
+		expect(screen.queryByText('Только просмотр')).not.toBe(null)
 		expect((screen.getByRole('button', { name: /^Сохранить/ }) as HTMLButtonElement).disabled).toBe(
 			true,
 		)
@@ -174,7 +174,7 @@ describe('<DescriptionsStep> — branches', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useDescriptions>)
 		render(<DescriptionsStep propertyId="prop_x" />)
-		expect(screen.getByText('Загрузка…')).toBeTruthy()
+		expect(screen.queryByText('Загрузка…')).not.toBe(null)
 		expect(screen.queryByRole('button', { name: /^Сохранить/ })).toBeNull()
 	})
 
@@ -185,8 +185,8 @@ describe('<DescriptionsStep> — branches', () => {
 			error: { message: 'load failed' } as unknown as Error,
 		} as unknown as ReturnType<typeof useDescriptions>)
 		render(<DescriptionsStep propertyId="prop_x" />)
-		expect(screen.getByText('Ошибка загрузки')).toBeTruthy()
-		expect(screen.getByText('load failed')).toBeTruthy()
+		expect(screen.queryByText('Ошибка загрузки')).not.toBe(null)
+		expect(screen.queryByText('load failed')).not.toBe(null)
 	})
 })
 
@@ -198,8 +198,8 @@ describe('<DescriptionsStep> — tabs', () => {
 	test('[T1] both locales rendered as tab triggers (enum coverage)', () => {
 		render(<DescriptionsStep propertyId="prop_x" />)
 		// Tabs render as role=tab buttons
-		expect(screen.getByRole('tab', { name: 'Русский' })).toBeTruthy()
-		expect(screen.getByRole('tab', { name: 'English' })).toBeTruthy()
+		expect(screen.queryByRole('tab', { name: 'Русский' })).not.toBe(null)
+		expect(screen.queryByRole('tab', { name: 'English' })).not.toBe(null)
 	})
 
 	test('[T2] "ru" tab is active (selected) by default', () => {
@@ -262,8 +262,10 @@ describe('<DescriptionsStep> — min required', () => {
 			true,
 		)
 		expect(
-			screen.getByText('Заполните «Заголовок» и «Краткое описание» — обязательны для сохранения.'),
-		).toBeTruthy()
+			screen.queryByText(
+				'Заполните «Заголовок» и «Краткое описание» — обязательны для сохранения.',
+			),
+		).not.toBe(null)
 	})
 
 	test('[M2] only title filled → save still disabled', () => {
@@ -396,7 +398,7 @@ describe('<DescriptionsStep> — save serialization', () => {
 			'С питомцами',
 		]
 		expect(labels).toHaveLength(propertyDescriptionSectionKeys.length)
-		for (const l of labels) expect(screen.getByLabelText(l)).toBeTruthy()
+		for (const l of labels) expect(screen.queryByLabelText(l)).not.toBe(null)
 	})
 })
 

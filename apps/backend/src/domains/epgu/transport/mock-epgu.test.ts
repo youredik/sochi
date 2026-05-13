@@ -293,7 +293,7 @@ describe('MockEpguTransport — refused FSM + errorCategory coverage', () => {
 		nowVal = 120 * 60_000
 		const s = await m.getStatus({ orderId })
 		expect(s.statusCode).toBe(4)
-		expect(s.reasonRefuse).toBeDefined()
+		expect(s.reasonRefuse).not.toBe(undefined)
 		expect(s.reasonRefuse?.length ?? 0).toBeGreaterThan(20)
 	})
 

@@ -382,9 +382,9 @@ describe('widget booking-create service', () => {
 		const service = createWidgetBookingCreateService(deps)
 		const result = await service.commit(buildInput())
 
-		expect(result.bookingId).toBeTruthy()
-		expect(result.guestId).toBeTruthy()
-		expect(result.paymentId).toBeTruthy()
+		expect(result.bookingId).not.toBe(null)
+		expect(result.guestId).not.toBe(null)
+		expect(result.paymentId).not.toBe(null)
 		expect(result.paymentStatus).toBe('succeeded')
 		expect(result.totalKopecks).toBe(1_530_000)
 		expect(mocks.getAvailability).toHaveBeenCalledTimes(1)
@@ -406,7 +406,7 @@ describe('widget booking-create service', () => {
 		const result = await service.commit(
 			buildInput({ consents: { acceptedDpa: true, acceptedMarketing: false } }),
 		)
-		expect(result.bookingId).toBeTruthy()
+		expect(result.bookingId).not.toBe(null)
 	})
 
 	test('[BC4] StaleAvailabilityError when roomTypeId missing from offerings', async () => {
@@ -479,7 +479,7 @@ describe('widget booking-create service', () => {
 		const result = await service.commit(
 			buildInput({ consents: { acceptedDpa: true, acceptedMarketing: true } }),
 		)
-		expect(result.bookingId).toBeTruthy()
+		expect(result.bookingId).not.toBe(null)
 	})
 
 	test('[BC11] D9 placeholder — guest.create called с documentType="pending"', async () => {

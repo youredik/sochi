@@ -73,12 +73,12 @@ describe('ModeToggle — render', () => {
 	it('[R1] trigger button has aria-label "Тема оформления"', () => {
 		render(<ModeToggle />)
 		const trigger = screen.getByRole('button', { name: /Тема оформления/i })
-		expect(trigger).toBeDefined()
+		expect(trigger).not.toBe(undefined)
 	})
 
 	it('[R2] sr-only fallback text "Переключить тему" present', () => {
 		render(<ModeToggle />)
-		expect(screen.getByText('Переключить тему')).toBeDefined()
+		expect(screen.queryByText('Переключить тему')).not.toBe(null)
 	})
 })
 
@@ -89,10 +89,10 @@ describe('ModeToggle — interaction', () => {
 		await user.click(screen.getByRole('button', { name: /Тема оформления/i }))
 
 		await waitFor(() => {
-			expect(screen.getByRole('menuitem', { name: /Светлая/i })).toBeDefined()
+			expect(screen.queryByRole('menuitem', { name: /Светлая/i })).not.toBe(null)
 		})
-		expect(screen.getByRole('menuitem', { name: /Тёмная/i })).toBeDefined()
-		expect(screen.getByRole('menuitem', { name: /Системная/i })).toBeDefined()
+		expect(screen.queryByRole('menuitem', { name: /Тёмная/i })).not.toBe(null)
+		expect(screen.queryByRole('menuitem', { name: /Системная/i })).not.toBe(null)
 	})
 
 	it('[I2] click "Светлая" → setTheme("light") exact', async () => {

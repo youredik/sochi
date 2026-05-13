@@ -98,7 +98,7 @@ describe('POST /api/rum/v1/web-vitals', () => {
 		})
 		expect(res.status).toBe(200)
 		const stored = buffer.peek()
-		expect(stored).toBeDefined()
+		expect(stored).not.toBe(undefined)
 		// Leftmost IP (203.0.113.42) → last octet zeroed (203.0.113.0).
 		expect(stored?.truncatedIp).toBe('203.0.113.0')
 		expect(stored?.id).toBe('v5-inp-anon')

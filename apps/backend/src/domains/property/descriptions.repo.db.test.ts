@@ -139,7 +139,7 @@ describe('property.descriptions.repo', () => {
 		const before = await repo.getByLocale(TENANT_A, PROPERTY_A1, 'ru')
 		const originalCreated = before?.createdAt
 		const originalUpdated = before?.updatedAt
-		expect(originalCreated).toBeDefined()
+		expect(originalCreated).not.toBe(undefined)
 
 		await new Promise((r) => setTimeout(r, 5))
 		const out = await repo.upsert(

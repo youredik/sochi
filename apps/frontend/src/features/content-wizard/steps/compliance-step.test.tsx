@@ -151,7 +151,7 @@ describe('<ComplianceStep> — RBAC matrix', () => {
 	test('[R2] manager — readonly Alert + submit disabled', () => {
 		setRole('manager')
 		render(<ComplianceStep />)
-		expect(screen.getByText('Только просмотр')).toBeTruthy()
+		expect(screen.queryByText('Только просмотр')).not.toBe(null)
 		const submit = screen.getByRole('button', { name: 'Сохранить' })
 		expect((submit as HTMLButtonElement).disabled).toBe(true)
 	})
@@ -159,7 +159,7 @@ describe('<ComplianceStep> — RBAC matrix', () => {
 	test('[R3] staff — readonly Alert + submit disabled', () => {
 		setRole('staff')
 		render(<ComplianceStep />)
-		expect(screen.getByText('Только просмотр')).toBeTruthy()
+		expect(screen.queryByText('Только просмотр')).not.toBe(null)
 		const submit = screen.getByRole('button', { name: 'Сохранить' })
 		expect((submit as HTMLButtonElement).disabled).toBe(true)
 	})
@@ -177,7 +177,7 @@ describe('<ComplianceStep> — branches', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useCompliance>)
 		render(<ComplianceStep />)
-		expect(screen.getByText('Загрузка…')).toBeTruthy()
+		expect(screen.queryByText('Загрузка…')).not.toBe(null)
 		expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull()
 	})
 
@@ -190,7 +190,7 @@ describe('<ComplianceStep> — branches', () => {
 		render(<ComplianceStep />)
 		// Form renders, NOT a destructive alert
 		expect(screen.queryByText(/^Ошибка$/)).toBeNull()
-		expect(screen.getByRole('button', { name: 'Сохранить' })).toBeTruthy()
+		expect(screen.queryByRole('button', { name: 'Сохранить' })).not.toBe(null)
 	})
 
 	test('[B3] non-NOT_FOUND error → destructive Alert', () => {
@@ -200,8 +200,8 @@ describe('<ComplianceStep> — branches', () => {
 			error: { code: 'INTERNAL', message: 'boom' } as unknown as Error,
 		} as unknown as ReturnType<typeof useCompliance>)
 		render(<ComplianceStep />)
-		expect(screen.getByText('Ошибка')).toBeTruthy()
-		expect(screen.getByText('boom')).toBeTruthy()
+		expect(screen.queryByText('Ошибка')).not.toBe(null)
+		expect(screen.queryByText('boom')).not.toBe(null)
 		// Form NOT rendered
 		expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull()
 	})
@@ -235,10 +235,10 @@ describe('<ComplianceStep> — guest-house invariant', () => {
 	test('[G1] guest_house + fz127=null → exact warning text', () => {
 		renderWithCompliance({ ksrCategory: 'guest_house', guestHouseFz127Registered: null })
 		expect(
-			screen.getByText(
+			screen.queryByText(
 				'Для гостевых домов обязательно указать участие в эксперименте ФЗ-127 (ПП-1345)',
 			),
-		).toBeTruthy()
+		).not.toBe(null)
 	})
 
 	test('[G2] guest_house + fz127=true → no warning', () => {
@@ -270,14 +270,14 @@ describe('<ComplianceStep> — tax-regime invariant', () => {
 
 	test('[T2] npd + USN_DOHODY → exact warning "может применять только режим NPD"', () => {
 		renderWithCompliance({ legalEntityType: 'npd', taxRegime: 'USN_DOHODY' })
-		expect(screen.getByText('Самозанятый (НПД) может применять только режим NPD')).toBeTruthy()
+		expect(screen.queryByText('Самозанятый (НПД) может применять только режим NPD')).not.toBe(null)
 	})
 
 	test('[T3] ip + NPD → exact warning "доступен только для legalEntityType=npd"', () => {
 		renderWithCompliance({ legalEntityType: 'ip', taxRegime: 'NPD' })
 		expect(
-			screen.getByText('Режим NPD доступен только для legalEntityType=npd (самозанятый)'),
-		).toBeTruthy()
+			screen.queryByText('Режим NPD доступен только для legalEntityType=npd (самозанятый)'),
+		).not.toBe(null)
 	})
 
 	test('[T4] ip + AUSN_DOHODY → no warning', () => {
@@ -287,7 +287,9 @@ describe('<ComplianceStep> — tax-regime invariant', () => {
 
 	test('[T5] ip + AUSN_DOHODY_RASHODY → exact warning "могут применять только AUSN_DOHODY"', () => {
 		renderWithCompliance({ legalEntityType: 'ip', taxRegime: 'AUSN_DOHODY_RASHODY' })
-		expect(screen.getByText('ИП на АУСН могут применять только AUSN_DOHODY (доходы)')).toBeTruthy()
+		expect(screen.queryByText('ИП на АУСН могут применять только AUSN_DOHODY (доходы)')).not.toBe(
+			null,
+		)
 	})
 })
 
@@ -310,8 +312,8 @@ describe('<ComplianceStep> — threshold boundaries', () => {
 			annualRevenueEstimateMicroRub: 3_800_000_000_000n,
 		})
 		expect(
-			screen.getByText('Превышен лимит НПД 2026 (3,8 млн ₽). Необходим переход на ИП/ООО.'),
-		).toBeTruthy()
+			screen.queryByText('Превышен лимит НПД 2026 (3,8 млн ₽). Необходим переход на ИП/ООО.'),
+		).not.toBe(null)
 	})
 
 	test('[N3] npd + revenue=10_000_000 → warning', () => {
@@ -319,7 +321,7 @@ describe('<ComplianceStep> — threshold boundaries', () => {
 			legalEntityType: 'npd',
 			annualRevenueEstimateMicroRub: 10_000_000_000_000n,
 		})
-		expect(screen.getByText(/Превышен лимит НПД 2026/)).toBeTruthy()
+		expect(screen.queryByText(/Превышен лимит НПД 2026/)).not.toBe(null)
 	})
 
 	test('[U1] USN_DOHODY + revenue<80% of 60M (47_999_999) → no warning', () => {
@@ -336,8 +338,10 @@ describe('<ComplianceStep> — threshold boundaries', () => {
 			annualRevenueEstimateMicroRub: 48_000_000_000_000n,
 		})
 		expect(
-			screen.getByText('Приближаетесь к порогу УСН-60 млн ₽ (376-ФЗ). Рассмотрите переход на ОСН.'),
-		).toBeTruthy()
+			screen.queryByText(
+				'Приближаетесь к порогу УСН-60 млн ₽ (376-ФЗ). Рассмотрите переход на ОСН.',
+			),
+		).not.toBe(null)
 	})
 
 	test('[U3] USN_DOHODY_RASHODY + revenue=60_000_000 → warning', () => {
@@ -345,7 +349,7 @@ describe('<ComplianceStep> — threshold boundaries', () => {
 			taxRegime: 'USN_DOHODY_RASHODY',
 			annualRevenueEstimateMicroRub: 60_000_000_000_000n,
 		})
-		expect(screen.getByText(/УСН-60 млн ₽/)).toBeTruthy()
+		expect(screen.queryByText(/УСН-60 млн ₽/)).not.toBe(null)
 	})
 })
 
@@ -571,8 +575,8 @@ describe('<ComplianceStep> — a11y', () => {
 		render(<ComplianceStep />)
 		// `getByLabelText` succeeds iff <label for=id> binds to an element with
 		// matching id. Throws if not — exact assertion via no-throw.
-		expect(screen.getByLabelText(/Категория КСР/)).toBeTruthy()
-		expect(screen.getByLabelText(/Организационно-правовая форма/)).toBeTruthy()
-		expect(screen.getByLabelText(/Налоговый режим/)).toBeTruthy()
+		expect(screen.queryByLabelText(/Категория КСР/)).not.toBe(null)
+		expect(screen.queryByLabelText(/Организационно-правовая форма/)).not.toBe(null)
+		expect(screen.queryByLabelText(/Налоговый режим/)).not.toBe(null)
 	})
 })

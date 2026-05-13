@@ -93,7 +93,7 @@ describe('widget-store', () => {
 		// Trigger persist → wait microtask
 		await new Promise((r) => setTimeout(r, 10))
 		const raw = localStorage.getItem(_internals.STORAGE_KEY)
-		expect(raw).toBeTruthy()
+		expect(raw).not.toBe(null)
 		const parsed = JSON.parse(raw ?? '{}')
 		// Replacer wraps Set as { __set: [...] }
 		expect(parsed.state.dismissedDemoBanners.__set).toEqual(

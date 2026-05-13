@@ -59,15 +59,15 @@ describe('MigrationRegistrationsTable — render', () => {
 	test('[T1] empty items → EmptyState, NO table', () => {
 		render(<MigrationRegistrationsTable items={[]} onRowClick={mock()} />)
 		expect(screen.queryByRole('table')).toBeNull()
-		expect(screen.getByRole('heading', { level: 3, name: 'Нет регистраций' })).toBeTruthy()
+		expect(screen.queryByRole('heading', { level: 3, name: 'Нет регистраций' })).not.toBe(null)
 		expect(
 			screen.getByText(/Миграционный учёт создаётся автоматически при заселении гостя/),
-		).toBeTruthy()
+		).not.toBe(null)
 	})
 
 	test('[T2] non-empty → table rendered с column headers', () => {
 		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={mock()} />)
-		expect(screen.getByRole('table')).toBeTruthy()
+		expect(screen.queryByRole('table')).not.toBe(null)
 		// Headers: Создано / Бронь / Гость / Пребывание / Канал / Статус / Опрошено
 		const headers = screen.getAllByRole('columnheader')
 		expect(headers.length).toBe(7)
@@ -75,8 +75,8 @@ describe('MigrationRegistrationsTable — render', () => {
 
 	test('[T3] row contains bookingId + guestId', () => {
 		render(<MigrationRegistrationsTable items={[FIXTURE]} onRowClick={mock()} />)
-		expect(screen.getByText('book_001')).toBeTruthy()
-		expect(screen.getByText('gst_001')).toBeTruthy()
+		expect(screen.queryByText('book_001')).not.toBe(null)
+		expect(screen.queryByText('gst_001')).not.toBe(null)
 	})
 })
 

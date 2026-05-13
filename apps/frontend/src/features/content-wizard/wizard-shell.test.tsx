@@ -66,12 +66,12 @@ function renderShell() {
 describe('<ContentWizardShell> — header + initial render', () => {
 	test('[H1] h1 "Профиль гостиницы" rendered', () => {
 		renderShell()
-		expect(screen.getByRole('heading', { level: 1, name: 'Профиль гостиницы' })).toBeTruthy()
+		expect(screen.queryByRole('heading', { level: 1, name: 'Профиль гостиницы' })).not.toBe(null)
 	})
 
 	test('[R1] step=compliance default → ComplianceStep section visible', () => {
 		renderShell()
-		expect(screen.getByRole('region', { name: /Compliance — нормативные данные/ })).toBeTruthy()
+		expect(screen.queryByRole('region', { name: /Compliance — нормативные данные/ })).not.toBe(null)
 	})
 })
 

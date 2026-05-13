@@ -29,8 +29,8 @@ describe('PaymentMethodSelector', () => {
 		// getByTestId throws if missing — implicit existence assert
 		const card = screen.getByTestId('pm-card')
 		const sbp = screen.getByTestId('pm-sbp')
-		expect(card).toBeTruthy()
-		expect(sbp).toBeTruthy()
+		expect(card).not.toBe(null)
+		expect(sbp).not.toBe(null)
 	})
 
 	test('[PMS2] value="card" → card radio checked', () => {

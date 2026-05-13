@@ -61,18 +61,18 @@ describe('ChessboardWindowSelector — render', () => {
 	it('[R1] trigger button has aria-label "Размер окна Шахматки"', () => {
 		render(<ChessboardWindowSelector />)
 		const trigger = screen.getByRole('button', { name: /Размер окна/i })
-		expect(trigger).toBeDefined()
+		expect(trigger).not.toBe(undefined)
 	})
 
 	it('[R2] visible label = "15 дней" по default', () => {
 		render(<ChessboardWindowSelector />)
-		expect(screen.getByText('15 дней')).toBeDefined()
+		expect(screen.queryByText('15 дней')).not.toBe(null)
 	})
 
 	it('[R2.b] visible label sync с store change', () => {
 		useChessboardPrefsStore.setState({ windowDays: 7 })
 		render(<ChessboardWindowSelector />)
-		expect(screen.getByText('7 дней')).toBeDefined()
+		expect(screen.queryByText('7 дней')).not.toBe(null)
 	})
 })
 

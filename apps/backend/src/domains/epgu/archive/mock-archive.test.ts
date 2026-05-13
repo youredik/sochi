@@ -92,8 +92,8 @@ describe('MockArchiveBuilder — structure', () => {
 			}),
 		)
 		const entries = unzipSync(out.archive)
-		expect(entries['scan_passport_main.jpg']).toBeDefined()
-		expect(entries['scan_passport_main.jpg.sig']).toBeDefined()
+		expect(entries['scan_passport_main.jpg']).not.toBe(undefined)
+		expect(entries['scan_passport_main.jpg.sig']).not.toBe(undefined)
 	})
 
 	test('[S3] empty scans → 4 entries (req/attach + 2 sigs)', async () => {

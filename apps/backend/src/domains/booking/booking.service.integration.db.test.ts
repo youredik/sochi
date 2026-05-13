@@ -870,7 +870,7 @@ describe('booking.service integration (M4e end-to-end)', () => {
 			propertyId: prop.id,
 		})
 		const ourRow = report.rows.find((r) => r.bookingId === b.id)
-		expect(ourRow).toBeDefined()
+		expect(ourRow).not.toBe(undefined)
 		expect(ourRow?.status).toBe('in_house')
 	})
 

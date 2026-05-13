@@ -136,7 +136,7 @@ describe('ETG Mock — D9 partner_order_id rotation (ETG8-ETG10)', () => {
 			partnerOrderId: prebook.partnerOrderId,
 			bookHash: prebook.bookHash,
 		})
-		expect(book.partnerOrderIdRotated).toBeDefined()
+		expect(book.partnerOrderIdRotated).not.toBe(undefined)
 		expect(book.partnerOrderIdRotated).not.toBe(prebook.partnerOrderId)
 	})
 

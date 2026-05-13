@@ -112,7 +112,7 @@ describe('validateNonOverlap', () => {
 		} catch (e) {
 			caught = e as Error
 		}
-		expect(caught).toBeDefined()
+		expect(caught).not.toBe(undefined)
 		expect(caught!.message).toContain('limit::usn_threshold')
 	})
 })

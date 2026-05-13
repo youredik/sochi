@@ -108,8 +108,8 @@ describe('<RateCard>', () => {
 				nights={5}
 			/>,
 		)
-		expect(screen.getByTestId('rate-option-BAR_FLEX')).toBeTruthy()
-		expect(screen.getByTestId('rate-option-BAR_NR')).toBeTruthy()
+		expect(screen.queryByTestId('rate-option-BAR_FLEX')).not.toBe(null)
+		expect(screen.queryByTestId('rate-option-BAR_NR')).not.toBe(null)
 	})
 
 	test('[R3] Default rate gets «Рекомендуем» badge', () => {
@@ -227,7 +227,7 @@ describe('<RateCard>', () => {
 				nights={5}
 			/>,
 		)
-		expect(screen.getByTestId('unsellable-badge')).toBeTruthy()
+		expect(screen.queryByTestId('unsellable-badge')).not.toBe(null)
 		expect(screen.queryByTestId('rate-option-BAR_FLEX')).toBeNull()
 	})
 
@@ -281,7 +281,7 @@ describe('<RateCard>', () => {
 				nights={5}
 			/>,
 		)
-		expect(screen.getByText(/балкон с видом на море/)).toBeTruthy()
+		expect(screen.queryByText(/балкон с видом на море/)).not.toBe(null)
 	})
 
 	test('[A2] maxOccupancy badge shown', () => {
@@ -308,7 +308,7 @@ describe('<RateCard>', () => {
 			/>,
 		)
 		expect(container.querySelector('img')).toBeNull()
-		expect(container.querySelector('svg')).toBeTruthy()
+		expect(container.querySelector('svg')).not.toBe(null)
 	})
 
 	test('[A4] Total price exact RU money formatting (4 080 000 коп = 40 800 ₽)', () => {

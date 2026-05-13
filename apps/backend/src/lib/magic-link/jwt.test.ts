@@ -125,9 +125,9 @@ describe('magic-link/jwt', () => {
 		const headerB64 = parts[0]
 		const payloadB64 = parts[1]
 		const sigB64 = parts[2]
-		expect(headerB64).toBeDefined()
-		expect(payloadB64).toBeDefined()
-		expect(sigB64).toBeDefined()
+		expect(headerB64).not.toBe(undefined)
+		expect(payloadB64).not.toBe(undefined)
+		expect(sigB64).not.toBe(undefined)
 		// Decode payload, mutate sub, re-encode (signature не пересчитается).
 		const payloadJson = JSON.parse(Buffer.from(payloadB64 as string, 'base64url').toString('utf8'))
 		payloadJson.sub = 'book_TAMPERED'

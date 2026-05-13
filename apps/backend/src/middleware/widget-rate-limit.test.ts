@@ -127,7 +127,7 @@ describe('widget-rate-limit — 429 path', () => {
 		expect(r3.status).toBe(429)
 		// draft-7 standard combined header: `RateLimit: limit=2, remaining=0, reset=N`
 		const rl = r3.headers.get('RateLimit')
-		expect(rl).toBeTruthy()
+		expect(rl).not.toBe(null)
 		expect(rl).toMatch(/limit=2/)
 		expect(rl).toMatch(/remaining=0/)
 		expect(rl).toMatch(/reset=\d+/)

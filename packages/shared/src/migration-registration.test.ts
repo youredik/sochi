@@ -71,7 +71,7 @@ describe('migration-registration — enums', () => {
 	test('[E3] EPGU_STATUS_LABELS_RU covers all observed codes', () => {
 		const observedCodes = [0, 1, 2, 3, 4, 5, 9, 10, 14, 15, 17, 21, 22, 24]
 		for (const code of observedCodes) {
-			expect(EPGU_STATUS_LABELS_RU[code]).toBeDefined()
+			expect(EPGU_STATUS_LABELS_RU[code]).not.toBe(undefined)
 			expect(EPGU_STATUS_LABELS_RU[code]?.length).toBeGreaterThan(0)
 		}
 	})

@@ -55,7 +55,7 @@ describe('<DateRangePicker>', () => {
 
 	test('[D5] Trigger label has eyebrow text "Даты проживания"', () => {
 		render(<DateRangePicker checkIn="2026-06-01" checkOut="2026-06-06" onChange={() => {}} />)
-		expect(screen.getByText('Даты проживания')).toBeTruthy()
+		expect(screen.queryByText('Даты проживания')).not.toBe(null)
 	})
 
 	test('[D6] Cross-month range correctly formatted в trigger', () => {

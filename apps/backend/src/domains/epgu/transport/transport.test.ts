@@ -122,7 +122,7 @@ describe('EpguTransport stubs', () => {
 		} catch (err) {
 			caught = err as Error
 		}
-		expect(caught).toBeDefined()
+		expect(caught).not.toBe(undefined)
 		expect(caught?.message).toMatch(/wires up in M8\.A/)
 	})
 })

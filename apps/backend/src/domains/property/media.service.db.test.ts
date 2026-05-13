@@ -102,7 +102,7 @@ describe('media.service', () => {
 
 		// Verify storage actually has bytes for every derived key
 		const snap = storage.debugDerivedSnapshot?.()
-		expect(snap).toBeDefined()
+		expect(snap).not.toBe(undefined)
 		for (const k of out.derivedKeys) {
 			expect(snap?.has(k)).toBe(true)
 			expect(snap?.get(k)).toBeGreaterThan(0)
