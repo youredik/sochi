@@ -1,0 +1,198 @@
+/**
+ * Captcha gate — strict tests (per `feedback_strict_tests.md`).
+ *
+ *   ─── Activation gating ──────────────────────────────────────────
+ *     [A1] serverKey unset → pass with reason 'disabled' (dev bypass)
+ *     [A2] path not in CAPTCHA_PATHS → pass with reason 'not-applicable'
+ *
+ *   ─── Token presence ─────────────────────────────────────────────
+ *     [T1] no captchaToken in body → fail with reason 'missing_token'
+ *     [T2] empty-string captchaToken → fail with reason 'missing_token'
+ *     [T3] non-object body (string) → fail with reason 'missing_token'
+ *
+ *   ─── Validation result passthrough ──────────────────────────────
+ *     [V1] validate() returns ok → pass with reason 'validated'
+ *     [V2] validate() returns invalid_token → fail with reason
+ *          'invalid_token'
+ *     [V3] validate() returns network_error → fail with reason
+ *          'network_error'
+ *     [V4] validate() returns timeout → fail with reason 'timeout'
+ *     [V5] validate() returns bad_response → fail with reason
+ *          'bad_response'
+ *
+ *   ─── Endpoint coverage (all 4 CAPTCHA_PATHS) ─────────────────────
+ *     [E1] /sign-up/email gated
+ *     [E2] /sign-in/email gated
+ *     [E3] /sign-in/magic-link gated
+ *     [E4] /forget-password gated
+ *
+ *   ─── Client IP extraction ───────────────────────────────────────
+ *     [I1] X-Forwarded-For first IP wins (proxy chain)
+ *     [I2] X-Real-IP fallback when XFF absent
+ *     [I3] both absent → undefined
+ *     [I4] XFF whitespace handling — trim each comma-segment
+ *
+ *   ─── IP propagation ─────────────────────────────────────────────
+ *     [P1] clientIp passed through to validate()
+ */
+import { describe, expect, mock, test } from 'bun:test'
+import { CAPTCHA_PATHS, evaluateCaptchaGate, extractClientIp } from './captcha-gate.ts'
+import type { CaptchaValidationResult } from '../captcha/validate.ts'
+
+type ValidateFn = (
+	serverKey: string,
+	token: string,
+	clientIp?: string,
+) => Promise<CaptchaValidationResult>
+
+function mockValidate(result: CaptchaValidationResult): {
+	fn: ValidateFn
+	calls: Array<[string, string, string | undefined]>
+} {
+	const calls: Array<[string, string, string | undefined]> = []
+	const fn: ValidateFn = async (sk, t, ip) => {
+		calls.push([sk, t, ip])
+		return result
+	}
+	return { fn, calls }
+}
+
+describe('evaluateCaptchaGate', () => {
+	test('[A1] serverKey unset → disabled', async () => {
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/email', body: { captchaToken: 'x' } },
+			{},
+		)
+		expect(res).toEqual({ pass: true, reason: 'disabled' })
+	})
+
+	test('[A2] path not in CAPTCHA_PATHS → not-applicable', async () => {
+		const res = await evaluateCaptchaGate(
+			{ path: '/list-sessions', body: {} },
+			{ serverKey: 'ysc2_x' },
+		)
+		expect(res).toEqual({ pass: true, reason: 'not-applicable' })
+	})
+
+	test('[T1] missing captchaToken → missing_token', async () => {
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/email', body: { email: 'a@b.c' } },
+			{ serverKey: 'ysc2_x' },
+		)
+		expect(res).toEqual({ pass: false, reason: 'missing_token' })
+	})
+
+	test('[T2] empty-string captchaToken → missing_token', async () => {
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/email', body: { captchaToken: '' } },
+			{ serverKey: 'ysc2_x' },
+		)
+		expect(res).toEqual({ pass: false, reason: 'missing_token' })
+	})
+
+	test('[T3] non-object body → missing_token', async () => {
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/email', body: 'not-an-object' },
+			{ serverKey: 'ysc2_x' },
+		)
+		expect(res).toEqual({ pass: false, reason: 'missing_token' })
+	})
+
+	test('[V1] validate ok → validated', async () => {
+		const { fn } = mockValidate({ ok: true })
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ serverKey: 'ysc2_x', validate: fn },
+		)
+		expect(res).toEqual({ pass: true, reason: 'validated' })
+	})
+
+	test('[V2] validate invalid_token → invalid_token', async () => {
+		const { fn } = mockValidate({ ok: false, reason: 'invalid_token' })
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ serverKey: 'ysc2_x', validate: fn },
+		)
+		expect(res).toEqual({ pass: false, reason: 'invalid_token' })
+	})
+
+	test('[V3] validate network_error → network_error', async () => {
+		const { fn } = mockValidate({ ok: false, reason: 'network_error' })
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ serverKey: 'ysc2_x', validate: fn },
+		)
+		expect(res).toEqual({ pass: false, reason: 'network_error' })
+	})
+
+	test('[V4] validate timeout → timeout', async () => {
+		const { fn } = mockValidate({ ok: false, reason: 'timeout' })
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ serverKey: 'ysc2_x', validate: fn },
+		)
+		expect(res).toEqual({ pass: false, reason: 'timeout' })
+	})
+
+	test('[V5] validate bad_response → bad_response', async () => {
+		const { fn } = mockValidate({ ok: false, reason: 'bad_response' })
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/email', body: { captchaToken: 'tok' } },
+			{ serverKey: 'ysc2_x', validate: fn },
+		)
+		expect(res).toEqual({ pass: false, reason: 'bad_response' })
+	})
+
+	test('[E1-E4] all four endpoints in CAPTCHA_PATHS', () => {
+		expect(CAPTCHA_PATHS.has('/sign-up/email')).toBe(true)
+		expect(CAPTCHA_PATHS.has('/sign-in/email')).toBe(true)
+		expect(CAPTCHA_PATHS.has('/sign-in/magic-link')).toBe(true)
+		expect(CAPTCHA_PATHS.has('/forget-password')).toBe(true)
+		// Adversarial: nothing else slipped in
+		expect(CAPTCHA_PATHS.size).toBe(4)
+	})
+
+	test('[P1] clientIp propagated through to validate()', async () => {
+		const { fn, calls } = mockValidate({ ok: true })
+		await evaluateCaptchaGate(
+			{ path: '/sign-up/email', body: { captchaToken: 'tok' }, clientIp: '198.51.100.7' },
+			{ serverKey: 'ysc2_x', validate: fn },
+		)
+		expect(calls).toEqual([['ysc2_x', 'tok', '198.51.100.7']])
+	})
+})
+
+describe('extractClientIp', () => {
+	test('[I1] leftmost X-Forwarded-For wins over X-Real-IP', () => {
+		const h = new Headers({
+			'x-forwarded-for': '203.0.113.1, 192.0.2.50, 10.0.0.1',
+			'x-real-ip': '10.0.0.99',
+		})
+		expect(extractClientIp(h)).toBe('203.0.113.1')
+	})
+
+	test('[I2] X-Real-IP fallback when XFF absent', () => {
+		const h = new Headers({ 'x-real-ip': '203.0.113.2' })
+		expect(extractClientIp(h)).toBe('203.0.113.2')
+	})
+
+	test('[I3] both absent → undefined', () => {
+		const h = new Headers()
+		expect(extractClientIp(h)).toBeUndefined()
+	})
+
+	test('[I4] XFF whitespace trimmed per segment', () => {
+		const h = new Headers({ 'x-forwarded-for': '   203.0.113.3   , 10.0.0.1' })
+		expect(extractClientIp(h)).toBe('203.0.113.3')
+	})
+
+	test('[I5] empty XFF → fallback to X-Real-IP', () => {
+		const h = new Headers({ 'x-forwarded-for': '', 'x-real-ip': '203.0.113.4' })
+		expect(extractClientIp(h)).toBe('203.0.113.4')
+	})
+
+	test('[I6] noop mock not called', () => {
+		const m = mock(() => undefined)
+		expect(m.mock.calls.length).toBe(0)
+	})
+})

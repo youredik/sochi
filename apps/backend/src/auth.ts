@@ -1,6 +1,7 @@
 import { passkey } from '@better-auth/passkey'
 import { type EntityKind, newId } from '@horeca/shared'
 import { betterAuth } from 'better-auth'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { magicLink } from 'better-auth/plugins/magic-link'
 import { organization } from 'better-auth/plugins/organization'
 import { ac, manager, owner, staff } from './access-control.ts'
@@ -8,6 +9,7 @@ import { ydbAdapter } from './db/better-auth-adapter.ts'
 import { sql } from './db/index.ts'
 import { toTs } from './db/ydb-helpers.ts'
 import { env } from './env.ts'
+import { evaluateCaptchaGate, extractClientIp } from './lib/auth/captcha-gate.ts'
 import { magicLinkEmail } from './lib/auth/magic-link-email.ts'
 import { logger } from './logger.ts'
 import { createEmailAdapter } from './workers/lib/postbox-adapter.ts'
@@ -79,6 +81,43 @@ export const auth = betterAuth({
 			enabled: true,
 			maxAge: 5 * 60,
 		},
+	},
+	hooks: {
+		/**
+		 * Captcha gate — runs BEFORE BA's own endpoint handler. Required to
+		 * be first because the gate is anti-enumeration: if it ran after,
+		 * an attacker could observe 200/403 timing differences on the auth
+		 * endpoints and infer which emails exist without ever solving a
+		 * captcha. Captcha-first ⇒ each enumeration probe costs the
+		 * attacker one SmartCaptcha solution.
+		 *
+		 * Dev / CI: `SMARTCAPTCHA_SERVER_KEY` unset → gate returns
+		 * `disabled` and we let the request through.
+		 */
+		before: createAuthMiddleware(async (ctx) => {
+			const clientIp = ctx.request ? extractClientIp(ctx.request.headers) : undefined
+			const decision = await evaluateCaptchaGate(
+				{
+					path: ctx.path,
+					body: ctx.body,
+					...(clientIp ? { clientIp } : {}),
+				},
+				env.SMARTCAPTCHA_SERVER_KEY ? { serverKey: env.SMARTCAPTCHA_SERVER_KEY } : {},
+			)
+			if (!decision.pass) {
+				if (decision.reason === 'missing_token') {
+					throw new APIError('FORBIDDEN', {
+						message: 'Captcha verification required',
+						code: 'CAPTCHA_REQUIRED',
+					})
+				}
+				logger.warn({ path: ctx.path, reason: decision.reason }, 'Captcha gate rejected request')
+				throw new APIError('FORBIDDEN', {
+					message: 'Captcha verification failed',
+					code: 'CAPTCHA_FAILED',
+				})
+			}
+		}),
 	},
 	databaseHooks: {
 		session: {

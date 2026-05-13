@@ -24,9 +24,9 @@
  *   ─── Token logging hygiene ────────────────────────────────────────
  *     [L1] only first 8 chars of token appear in any reachable log call
  *
- * Anti-pattern guard: NO `expect(result.ok).toBeTruthy()`. Always exact
- * equality on the full `CaptchaValidationResult` shape — that's why we
- * track `reason` too.
+ * Anti-pattern guard per `feedback_strict_tests.md`: NO existence-only
+ * assertions. Always exact equality on the full `CaptchaValidationResult`
+ * shape — that's why we track `reason` too.
  */
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { validateCaptcha } from './validate.ts'
@@ -63,9 +63,9 @@ describe('validateCaptcha', () => {
 	test('[H2] omits `ip` param when clientIp not provided', async () => {
 		mockFetch.mockResolvedValueOnce(jsonResponse(200, { status: 'ok' }))
 		await validateCaptcha('ysc2_secret', 'tok_xxxxxxxx_rest')
-		const callArg = mockFetch.mock.calls[0]?.[1] as RequestInit | undefined
-		expect(callArg).toBeDefined()
-		const params = callArg?.body as URLSearchParams
+		expect(mockFetch.mock.calls.length).toBe(1)
+		const callArg = mockFetch.mock.calls[0]?.[1] as RequestInit
+		const params = callArg.body as URLSearchParams
 		expect(params.get('ip')).toBeNull()
 	})
 
