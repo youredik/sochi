@@ -9,7 +9,8 @@
 		"shadcn",
 		"axe-core",
 		"happy-dom",
-		"bun"
+		"bun",
+		"@stryker-mutator/command-runner"
 	],
 	"ignoreExportsUsedInFile": true,
 	"workspaces": {
