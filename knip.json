@@ -6,7 +6,6 @@
 		"@lingui/cli",
 		"@fontsource-variable/geist",
 		"tw-animate-css",
-		"shadcn",
 		"axe-core",
 		"happy-dom",
 		"bun",
