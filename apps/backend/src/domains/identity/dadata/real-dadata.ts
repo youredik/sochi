@@ -108,7 +108,11 @@ function mapSuggestion(s: DaDataApiSuggestion): DaDataParty | null {
 	)
 	return {
 		inn,
-		ogrn: typeof d.ogrn === 'string' ? d.ogrn : null,
+		// ОГРН: empty-string upstream → null (DaData sometimes returns "" for
+		// freshly-registered entities still в process). Length validation
+		// (13d ЮЛ / 15d ИП) lives в `daDataPartySchema` at the route boundary
+		// per P4 hardening 2026-05-13.
+		ogrn: typeof d.ogrn === 'string' && d.ogrn.length > 0 ? d.ogrn : null,
 		name,
 		legalForm: parseLegalForm(d.type),
 		address,

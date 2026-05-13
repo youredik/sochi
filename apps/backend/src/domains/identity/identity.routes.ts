@@ -1,7 +1,9 @@
+import { parseDaDataParty } from '@horeca/shared'
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from '../../factory.ts'
+import { logger } from '../../logger.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
 import type { DaDataAdapter } from './dadata/types.ts'
@@ -38,7 +40,24 @@ export function createIdentityRoutesInner(adapter: DaDataAdapter) {
 		async (c) => {
 			const { inn } = c.req.valid('json')
 			const party = await adapter.findByInn(inn)
-			return c.json({ data: party }, 200)
+			if (party === null) {
+				return c.json({ data: null }, 200)
+			}
+			// Strict-schema validation at the trust boundary (P4 hardening
+			// 2026-05-13): adapters may produce technically-typed values that
+			// fail the harder DaDataParty contract (e.g. ОГРН length wrong
+			// for legalForm). Fail-soft к `{ data: null }` — UI offers manual
+			// override the same way as «not found». Bad upstream surfaces as
+			// a warn-log для observability.
+			const validated = parseDaDataParty(party)
+			if (validated === null) {
+				logger.warn(
+					{ inn, raw: party },
+					'DaData adapter returned party that failed daDataPartySchema — fail-soft to null',
+				)
+				return c.json({ data: null }, 200)
+			}
+			return c.json({ data: validated }, 200)
 		},
 	)
 }
