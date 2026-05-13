@@ -86,6 +86,16 @@ export const envSchema = z.object({
 	EMAIL_FROM_ADDRESS: z.email(),
 	EMAIL_FROM_NAME: z.string().default('HoReCa'),
 
+	// Yandex SmartCaptcha server key (`ysc2_...`) for POST /validate.
+	// Optional: when unset, captcha enforcement is disabled (dev / CI).
+	// When set, the Better Auth `before` hook rejects sign-up / sign-in /
+	// magic-link without a valid captchaToken in the request body.
+	// Bootstrapped via `yc smartcaptcha captcha get-secret-key <id>` into
+	// Yandex Lockbox after first Terraform apply. Per
+	// `feedback_yandex_cloud_only.md` — Yandex Cloud captcha (not Cloudflare
+	// Turnstile) for 152-ФЗ data localization.
+	SMARTCAPTCHA_SERVER_KEY: z.string().optional(),
+
 	// M9.widget.6 / А4.3 — `clientCommitToken` HMAC sliding-window rotation
 	// (D25). Both base64url-encoded ≥32-byte secrets. Production seeded из
 	// Yandex Lockbox at boot; dev defaults are dev-only stubs (rejected при

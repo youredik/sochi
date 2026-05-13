@@ -126,7 +126,12 @@ export default {
 		tsPreCompilationDeps: true,
 		combinedDependencies: true,
 		doNotFollow: { path: 'node_modules' },
-		exclude: { path: '(^|/)dist/' },
+		// `(^|/)dist/`     — built output, not source.
+		// `\\.stryker-tmp` — Stryker mutation-testing sandbox (untracked,
+		//   gitignored). Without exclusion every `pnpm mutate` leaves a
+		//   full copy of `apps/backend/src/` that depcruise then double-
+		//   counts as orphan modules. Same bug as ratchet weak_assertions.
+		exclude: { path: '(^|/)dist/|\\.stryker-tmp' },
 		enhancedResolveOptions: {
 			exportsFields: ['exports'],
 			conditionNames: ['import', 'require', 'node', 'default', 'types'],
