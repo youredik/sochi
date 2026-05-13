@@ -56,6 +56,14 @@ pre-commit:
       glob: '*.{ts,tsx}'
       run: pnpm depcruise
 
+    - name: decorator-canary
+      # Block Lit @customElement classes with `static (get|set)` accessor —
+      # crashes tsgo TS 7 per microsoft/typescript-go#3817 + #3801 (OPEN
+      # 2026-05-13). See scripts/decorator-canary.sh header for context +
+      # removal trigger.
+      glob: 'apps/widget-embed/src/**/*.{ts,tsx}'
+      run: bash scripts/decorator-canary.sh
+
 # Pre-push: minimal blocking gate (≤5s hard cap).
 # Skip via `LEFTHOOK=0 git push` (built-in env override; не --no-verify).
 #
