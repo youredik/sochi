@@ -128,6 +128,44 @@ mock.module('sonner', () => ({
 	Toaster: () => null,
 }))
 
+/**
+ * Block real network calls in unit tests (Phase 16 closure 2026-05-13).
+ *
+ * Tests should pre-populate `queryClient.setQueryData([...], seed)` for any
+ * useQuery their components render. When they don't, RQ kicks off a real
+ * fetch to e.g. `http://localhost:8787` — which either returns 401 (dev
+ * backend running) or ECONNREFUSED (clean env). Both pollute stderr and
+ * mask genuine test failures.
+ *
+ * Replacement: synchronous reject with `TestFetchBlocked` error. RQ's
+ * `retry: false` default in tests catches → `data: undefined` → component
+ * renders pending/empty state, same as the original (deeper) 401 path.
+ *
+ * Escape hatch: a test that genuinely wants to assert fetch behaviour can
+ * `globalThis.fetch = realFetch` per-test (or use msw if introduced later).
+ *
+ * Per [[bun-test-canons-2026-05-13]] §7 «Tests must NOT issue real network
+ * calls».
+ */
+class TestFetchBlocked extends Error {
+	constructor(url: string) {
+		super(
+			`Test fetch blocked: ${url}. Seed your useQuery via ` +
+				`queryClient.setQueryData([…], data) before render.`,
+		)
+		this.name = 'TestFetchBlocked'
+	}
+}
+
+const _originalFetch = globalThis.fetch
+globalThis.fetch = ((input: RequestInfo | URL, _init?: RequestInit) => {
+	const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+	return Promise.reject(new TestFetchBlocked(url))
+}) as typeof fetch
+
+// Expose original for explicit opt-out (not used yet; future-proof).
+;(globalThis as unknown as { __originalFetch: typeof fetch }).__originalFetch = _originalFetch
+
 // Reset call history every test (clear, NOT reset — preserves the vi.fn impls
 // set above; resetAllMocks would wipe them and tests would crash).
 beforeEach(() => {
