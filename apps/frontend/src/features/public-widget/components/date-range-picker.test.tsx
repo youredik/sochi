@@ -11,11 +11,14 @@
  * react-day-picker focus/click pixel-perfect; component contract verified
  * через behavior asserts above + E2E happy path для full keyboard nav.
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
+import { userEvent } from '@testing-library/user-event'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { DateRangePicker } from './date-range-picker.tsx'
 
 afterEach(() => cleanup())
+
+const user = userEvent.setup()
 
 describe('<DateRangePicker>', () => {
 	test('[D1] Trigger renders с formatted range', () => {
@@ -39,9 +42,12 @@ describe('<DateRangePicker>', () => {
 		expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(true)
 	})
 
-	test('[D4] Click trigger opens popover with grid (react-day-picker rendered)', () => {
+	test('[D4] Click trigger opens popover with grid (react-day-picker rendered)', async () => {
 		render(<DateRangePicker checkIn="2026-06-01" checkOut="2026-06-06" onChange={() => {}} />)
-		fireEvent.click(screen.getByRole('button'))
+		// userEvent (vs fireEvent) awaits all microtasks + wraps в act, suppressing
+		// Radix PopperContent/FocusScope/DismissableLayer/Presence act-warnings under
+		// React 19 strict-mode (react.dev/link/wrap-tests-with-act canon).
+		await user.click(screen.getByRole('button'))
 		// react-day-picker v9 renders role="grid" с aria-label содержащим месяц
 		const grids = screen.getAllByRole('grid')
 		expect(grids.length).toBeGreaterThanOrEqual(1)

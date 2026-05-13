@@ -10,7 +10,7 @@
  *   [F6] custom rowHeaderWidth=200 + minDayWidth=50 → applied correctly
  *   [F7] resize mutation → returned value updates (ResizeObserver subscription)
  */
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { useFitWindowDays } from './use-fit-window-days'
 
@@ -109,9 +109,13 @@ describe('useFitWindowDays', () => {
 		const { result } = renderHook(() => useFitWindowDays(ref))
 		expect(result.current).toBe(15)
 
-		// Mutate width + trigger ResizeObserver callback.
+		// Mutate width + trigger ResizeObserver callback (wrapped в act — React 19
+		// strict-mode requires state-mutating side effects wrapped; without act() the
+		// setState inside the ResizeObserver callback emits act-warning to stderr).
 		Object.defineProperty(ref.current!, 'offsetWidth', { value: 1200, configurable: true })
-		MockResizeObserver.instances[0]!.trigger()
+		act(() => {
+			MockResizeObserver.instances[0]!.trigger()
+		})
 
 		await waitFor(() => {
 			expect(result.current).toBe(25)

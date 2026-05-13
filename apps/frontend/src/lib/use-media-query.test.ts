@@ -7,7 +7,7 @@
  *   [U3] State updates когда MediaQueryListEvent fires
  *   [U4] Re-mount with same query — separate listener instance (no leak)
  */
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { useMediaQuery } from './use-media-query'
 
@@ -74,15 +74,19 @@ describe('useMediaQuery', () => {
 		expect(mqMock.removeEventListener).toHaveBeenCalledWith('change', expect.any(Function))
 	})
 
-	it('[U3] state updates when MediaQueryListEvent fires', async () => {
+	it('[U3] state updates when MediaQueryListEvent fires', () => {
 		const { result, rerender } = renderHook(() => useMediaQuery('(prefers-color-scheme: dark)'))
 		expect(result.current).toBe(false)
 
-		mqMock.dispatchChange(true)
+		act(() => {
+			mqMock.dispatchChange(true)
+		})
 		rerender()
 		expect(result.current).toBe(true)
 
-		mqMock.dispatchChange(false)
+		act(() => {
+			mqMock.dispatchChange(false)
+		})
 		rerender()
 		expect(result.current).toBe(false)
 	})

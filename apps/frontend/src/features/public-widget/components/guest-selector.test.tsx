@@ -13,11 +13,17 @@
  *   [G9] aria-label на trigger разъясняет current selection
  *   [G10] disabled prop сlocks trigger
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
+import { userEvent } from '@testing-library/user-event'
 import { afterEach, describe, expect, test, mock } from 'bun:test'
 import { GuestSelector } from './guest-selector.tsx'
 
 afterEach(() => cleanup())
+
+// userEvent awaits microtasks + wraps в act — needed for Radix Popover triggers
+// под React 19 strict-mode (PopperContent/FocusScope/DismissableLayer/Presence
+// state updates fire async after click → vanilla fireEvent leaves act-warning).
+const user = userEvent.setup()
 
 describe('<GuestSelector>', () => {
 	test('[G1] trigger label uses CLDR plural — 1 adult → "взрослый"', () => {
@@ -40,54 +46,54 @@ describe('<GuestSelector>', () => {
 		expect(screen.getByRole('button').textContent).not.toMatch(/реб/)
 	})
 
-	test('[G4] adults plus disabled when total reaches maxTotal', () => {
+	test('[G4] adults plus disabled when total reaches maxTotal', async () => {
 		render(<GuestSelector adults={4} childrenCount={2} onChange={() => {}} maxTotal={6} />)
-		fireEvent.click(screen.getByRole('button'))
+		await user.click(screen.getByRole('button'))
 		const plusBtn = screen.getByTestId('guests-adults-plus')
 		expect((plusBtn as HTMLButtonElement).disabled).toBe(true)
 	})
 
-	test('[G5] adults minus disabled when adults === 1', () => {
+	test('[G5] adults minus disabled when adults === 1', async () => {
 		render(<GuestSelector adults={1} childrenCount={0} onChange={() => {}} />)
-		fireEvent.click(screen.getByRole('button'))
+		await user.click(screen.getByRole('button'))
 		const minusBtn = screen.getByTestId('guests-adults-minus')
 		expect((minusBtn as HTMLButtonElement).disabled).toBe(true)
 	})
 
-	test('[G6] children minus disabled when children === 0', () => {
+	test('[G6] children minus disabled when children === 0', async () => {
 		render(<GuestSelector adults={2} childrenCount={0} onChange={() => {}} />)
-		fireEvent.click(screen.getByRole('button'))
+		await user.click(screen.getByRole('button'))
 		const minusBtn = screen.getByTestId('guests-children-minus')
 		expect((minusBtn as HTMLButtonElement).disabled).toBe(true)
 	})
 
-	test('[G7] adults plus calls onChange with adults+1, children unchanged', () => {
+	test('[G7] adults plus calls onChange with adults+1, children unchanged', async () => {
 		const onChange = mock()
 		render(<GuestSelector adults={2} childrenCount={1} onChange={onChange} />)
-		fireEvent.click(screen.getByRole('button'))
-		fireEvent.click(screen.getByTestId('guests-adults-plus'))
+		await user.click(screen.getByRole('button'))
+		await user.click(screen.getByTestId('guests-adults-plus'))
 		expect(onChange).toHaveBeenCalledWith({ adults: 3, childrenCount: 1 })
 	})
 
-	test('[G7b] children plus calls onChange with children+1, adults unchanged', () => {
+	test('[G7b] children plus calls onChange with children+1, adults unchanged', async () => {
 		const onChange = mock()
 		render(<GuestSelector adults={2} childrenCount={0} onChange={onChange} />)
-		fireEvent.click(screen.getByRole('button'))
-		fireEvent.click(screen.getByTestId('guests-children-plus'))
+		await user.click(screen.getByRole('button'))
+		await user.click(screen.getByTestId('guests-children-plus'))
 		expect(onChange).toHaveBeenCalledWith({ adults: 2, childrenCount: 1 })
 	})
 
-	test('[G7c] adults minus calls onChange with adults-1', () => {
+	test('[G7c] adults minus calls onChange with adults-1', async () => {
 		const onChange = mock()
 		render(<GuestSelector adults={3} childrenCount={0} onChange={onChange} />)
-		fireEvent.click(screen.getByRole('button'))
-		fireEvent.click(screen.getByTestId('guests-adults-minus'))
+		await user.click(screen.getByRole('button'))
+		await user.click(screen.getByTestId('guests-adults-minus'))
 		expect(onChange).toHaveBeenCalledWith({ adults: 2, childrenCount: 0 })
 	})
 
-	test('[G8] hint mentions max guests с RU plural', () => {
+	test('[G8] hint mentions max guests с RU plural', async () => {
 		render(<GuestSelector adults={1} childrenCount={0} onChange={() => {}} maxTotal={6} />)
-		fireEvent.click(screen.getByRole('button'))
+		await user.click(screen.getByRole('button'))
 		const hint = screen.getByText(/Максимум 6 гостей/)
 		expect(hint).toBeTruthy()
 	})
@@ -103,9 +109,9 @@ describe('<GuestSelector>', () => {
 		expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(true)
 	})
 
-	test('[G11] adults value display shows actual number (tabular-nums)', () => {
+	test('[G11] adults value display shows actual number (tabular-nums)', async () => {
 		render(<GuestSelector adults={3} childrenCount={0} onChange={() => {}} />)
-		fireEvent.click(screen.getByRole('button'))
+		await user.click(screen.getByRole('button'))
 		expect(screen.getByTestId('guests-adults-value').textContent).toBe('3')
 	})
 })
