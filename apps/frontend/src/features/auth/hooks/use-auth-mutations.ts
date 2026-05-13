@@ -13,6 +13,24 @@ type BAError = {
 	code?: string | undefined
 }
 
+/**
+ * Build the optional second-arg `fetchOptions` for Better Auth client calls
+ * that need to inject a captcha token into the request body.
+ *
+ * Why a 2nd arg `{ body }` and not a 1st-arg field: BA's typed endpoints
+ * (`signIn.email`, `signUp.email`, `signIn.magicLink`) strip unknown fields
+ * via `z.core.$strip`. The 2nd-arg pattern from `better-call` merges
+ * additional fields into the outgoing body BEFORE strict parse, so the
+ * backend `before` hook (captcha-gate.ts) reads `captchaToken` from raw
+ * `ctx.body` before BA's z.parse drops it.
+ */
+function captchaFetchOptions(
+	captchaToken: string | undefined,
+): { body: { captchaToken: string } } | undefined {
+	if (!captchaToken) return undefined
+	return { body: { captchaToken } }
+}
+
 /** Sign in with email + password. On success: invalidate session + navigate to home. */
 export function useSignInEmail() {
 	const queryClient = useQueryClient()
@@ -20,10 +38,18 @@ export function useSignInEmail() {
 	return useMutation<
 		void,
 		LocalizedError,
-		{ email: string; password: string; redirect?: string | undefined }
+		{
+			email: string
+			password: string
+			redirect?: string | undefined
+			captchaToken?: string | undefined
+		}
 	>({
-		mutationFn: async ({ email, password }) => {
-			const { error } = await authClient.signIn.email({ email, password })
+		mutationFn: async ({ email, password, captchaToken }) => {
+			const { error } = await authClient.signIn.email(
+				{ email, password },
+				captchaFetchOptions(captchaToken),
+			)
 			if (error) throw mapAuthError(error as BAError)
 		},
 		onSuccess: async (_data, vars) => {
@@ -32,6 +58,41 @@ export function useSignInEmail() {
 		},
 		onError: (err) => {
 			logger.warn('auth.signIn failed', { code: (err as LocalizedError).title })
+		},
+	})
+}
+
+/**
+ * Sign in via magic-link — passwordless. Posts the email to
+ * `/api/auth/sign-in/magic-link`; backend sends an email with a one-time
+ * verify URL valid for `MAGIC_LINK_TTL_SECONDS` (5 min). The user clicks the
+ * link → BA verify endpoint sets the session cookie → 302 to `callbackURL`.
+ *
+ * No success-navigation here: this mutation's job is only to dispatch the
+ * email. The route guard at `_app/` handles the post-verify redirect to the
+ * tenant home after the verify hop sets the cookie.
+ *
+ * callbackURL MUST be absolute (caller's responsibility). BA prepends
+ * `BETTER_AUTH_URL` (backend :8787) to relative paths → the verify hop
+ * 302s into the backend route table and 404s. The MagicLinkForm component
+ * always builds an absolute URL via `window.location.origin`.
+ */
+export function useSignInMagicLink() {
+	return useMutation<
+		void,
+		LocalizedError,
+		{ email: string; callbackURL: string; captchaToken?: string | undefined }
+	>({
+		mutationFn: async ({ email, callbackURL, captchaToken }) => {
+			// biome-ignore lint/style/useNamingConvention: Better Auth API contract (callbackURL)
+			const { error } = await authClient.signIn.magicLink(
+				{ email, callbackURL },
+				captchaFetchOptions(captchaToken),
+			)
+			if (error) throw mapAuthError(error as BAError)
+		},
+		onError: (err) => {
+			logger.warn('auth.signInMagicLink failed', { code: err.title })
 		},
 	})
 }
@@ -56,16 +117,20 @@ export function useSignUp() {
 			password: string
 			orgName: string
 			consentPersonalData: boolean
+			captchaToken?: string | undefined
 		}
 	>({
-		mutationFn: async ({ name, email, password, orgName, consentPersonalData }) => {
+		mutationFn: async ({ name, email, password, orgName, consentPersonalData, captchaToken }) => {
 			if (!consentPersonalData) {
 				throw {
 					title: 'Требуется согласие на обработку персональных данных',
 					description: 'Отметьте галочку согласия с политикой конфиденциальности.',
 				} satisfies LocalizedError
 			}
-			const signUpRes = await authClient.signUp.email({ name, email, password })
+			const signUpRes = await authClient.signUp.email(
+				{ name, email, password },
+				captchaFetchOptions(captchaToken),
+			)
 			if (signUpRes.error) throw mapAuthError(signUpRes.error as BAError)
 
 			const slug = slugify(orgName)

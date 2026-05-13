@@ -5,8 +5,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useSignUp } from '../hooks/use-auth-mutations.ts'
+import { captchaEnforced } from '../lib/captcha.ts'
 import type { LocalizedError } from '../lib/errors.ts'
 import { slugify } from '../lib/slugify.ts'
+import { CaptchaField } from './captcha-field.tsx'
 
 /**
  * Sign-up form. Collects user + organization in one shot — for a solo
@@ -37,6 +39,8 @@ export function SignUpForm() {
 	const [password, setPassword] = useState('')
 	const [orgName, setOrgName] = useState('')
 	const [consent, setConsent] = useState(false)
+	const [captchaToken, setCaptchaToken] = useState('')
+	const [captchaResetKey, setCaptchaResetKey] = useState(0)
 
 	const signUp = useSignUp()
 	const error: LocalizedError | undefined = signUp.error ?? undefined
@@ -44,7 +48,17 @@ export function SignUpForm() {
 
 	const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
 		e.preventDefault()
-		signUp.mutate({ name, email, password, orgName, consentPersonalData: consent })
+		signUp.mutate(
+			{ name, email, password, orgName, consentPersonalData: consent, captchaToken },
+			{
+				// Yandex SmartCaptcha tokens are single-use; force a fresh challenge
+				// after every server rejection so the next submit isn't pre-doomed.
+				onError: () => {
+					setCaptchaToken('')
+					setCaptchaResetKey((k) => k + 1)
+				},
+			},
+		)
 	}
 
 	return (
@@ -147,11 +161,17 @@ export function SignUpForm() {
 				</Label>
 			</div>
 
+			{captchaEnforced ? (
+				<CaptchaField resetKey={captchaResetKey} onToken={setCaptchaToken} />
+			) : null}
+
 			<Button
 				type="submit"
 				size="lg"
 				className="w-full"
-				disabled={signUp.isPending || error?.blocking === true}
+				disabled={
+					signUp.isPending || error?.blocking === true || (captchaEnforced && !captchaToken)
+				}
 			>
 				{signUp.isPending ? 'Создаём…' : 'Создать аккаунт'}
 			</Button>

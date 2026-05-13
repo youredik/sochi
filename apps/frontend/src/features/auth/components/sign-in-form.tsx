@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useSignInEmail } from '../hooks/use-auth-mutations.ts'
+import { captchaEnforced } from '../lib/captcha.ts'
 import type { LocalizedError } from '../lib/errors.ts'
+import { CaptchaField } from './captcha-field.tsx'
 import { PasskeySigninButton } from './passkey-signin-button.tsx'
 
 /**
@@ -28,12 +30,24 @@ export function SignInForm({ redirect }: { redirect?: string | undefined }) {
 	const errorId = useId()
 	const [email, setEmail] = useState('')
 	const [password, setPassword] = useState('')
+	const [captchaToken, setCaptchaToken] = useState('')
+	const [captchaResetKey, setCaptchaResetKey] = useState(0)
 	const signIn = useSignInEmail()
 	const error: LocalizedError | undefined = signIn.error ?? undefined
 
 	const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
 		e.preventDefault()
-		signIn.mutate({ email, password, redirect })
+		signIn.mutate(
+			{ email, password, redirect, captchaToken },
+			{
+				// Yandex SmartCaptcha tokens are single-use; force a fresh challenge
+				// after every server rejection so the next submit isn't pre-doomed.
+				onError: () => {
+					setCaptchaToken('')
+					setCaptchaResetKey((k) => k + 1)
+				},
+			},
+		)
 	}
 
 	return (
@@ -80,11 +94,17 @@ export function SignInForm({ redirect }: { redirect?: string | undefined }) {
 				/>
 			</div>
 
+			{captchaEnforced ? (
+				<CaptchaField resetKey={captchaResetKey} onToken={setCaptchaToken} />
+			) : null}
+
 			<Button
 				type="submit"
 				size="lg"
 				className="w-full"
-				disabled={signIn.isPending || error?.blocking === true}
+				disabled={
+					signIn.isPending || error?.blocking === true || (captchaEnforced && !captchaToken)
+				}
 			>
 				{signIn.isPending ? 'Входим…' : 'Войти'}
 			</Button>
