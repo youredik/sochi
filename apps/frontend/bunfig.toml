@@ -1,4 +1,13 @@
-# Frontend Bun test config (Phase 16 — 2026-05-12).
+# Frontend Bun test config (Phase 16 — 2026-05-12, fixed 2026-05-13).
 # Replaces apps/frontend/vitest.config.ts environment + setupFiles.
+#
+# IMPORTANT order: bun-preload.ts FIRST (registers happy-dom globals),
+# then global-mocks.ts. Both must be SYNCHRONOUSLY loaded — using a
+# single preload that does `await import` produced a race condition where
+# `beforeEach`/`afterEach` hooks registered AFTER test files started
+# (Bun 1.3.14 preload promise not fully awaited before parallel workers
+# pick up test files). Symptom: «Cannot call beforeEach() inside a test»
+# + indeterministic --parallel failures (verified empirically 2026-05-13:
+# 5 same-input runs → 0/1/2 failures non-deterministic).
 [test]
-preload = ["./src/tests/bun-preload.ts"]
+preload = ["./src/tests/bun-preload.ts", "./src/tests/global-mocks.ts"]
