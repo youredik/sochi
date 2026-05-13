@@ -1,0 +1,20 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"outDir": "./dist",
+		"declaration": false,
+		"sourceMap": true,
+		"erasableSyntaxOnly": false
+	},
+	"exclude": [
+		"**/*.test.ts",
+		"**/*.test.tsx",
+		"**/*.db.test.ts",
+		"**/*.test-d.ts",
+		"**/*.bun-spike.test.ts",
+		"src/tests/**",
+		"src/db/bench-schema-prefix.ts",
+		"src/db/spike-bun-ydb.ts"
+	]
+}
