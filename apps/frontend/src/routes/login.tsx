@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { MagicLinkForm } from '../features/auth/components/magic-link-form.tsx'
+import { PasskeySigninButton } from '../features/auth/components/passkey-signin-button.tsx'
 import { sessionQueryOptions } from '../lib/auth-client.ts'
 
 /**
@@ -8,11 +9,10 @@ import { sessionQueryOptions } from '../lib/auth-client.ts'
  * from a protected route). `reloadDocument` on the return hop so the router
  * context rehydrates cleanly после auth state change.
  *
- * **Passwordless canon 2026-05-13** per `[[auth-passwordless-canon]]`:
- * MagicLinkForm is the sole sign-in entrypoint here. Password fallback was
- * dropped wholesale (email+password flow disabled in BA config; SignInForm
- * component deleted). Passkey upgrades surface via the auth-passkey-button
- * после first sign-in — visible on /o/$slug/account/security, не on /login.
+ * **Passwordless canon 2026-05-13** per `[[auth-passwordless-canon]]`: two
+ * auth surfaces only — MagicLinkForm primary (email → ссылка для входа) +
+ * PasskeySigninButton secondary (returning users with enrolled passkey).
+ * Email+password fallback was dropped wholesale.
  */
 export const Route = createFileRoute('/login')({
 	validateSearch: (search: Record<string, unknown>) => ({
@@ -35,6 +35,14 @@ function LoginPage() {
 			<p className="mt-1 text-muted-foreground text-sm">HoReCa-портал для Сочи</p>
 			<div className="mt-8">
 				<MagicLinkForm callbackPath={redirectTarget ?? '/'} />
+			</div>
+			<div className="mt-6 flex items-center gap-3 text-xs text-muted-foreground">
+				<span className="bg-border h-px flex-1" />
+				<span>или</span>
+				<span className="bg-border h-px flex-1" />
+			</div>
+			<div className="mt-4">
+				<PasskeySigninButton />
 			</div>
 		</main>
 	)
