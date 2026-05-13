@@ -41,6 +41,20 @@ const DEMO_COMPANIES: Record<string, DaDataParty> = {
 		taxRegime: 'NPD',
 		status: 'ACTIVE',
 	},
+	// LIQUIDATED adversarial fixture — exercises the wizard's destructive-
+	// styled banner + Подтвердить-button-disabled branch. Lives in the canon
+	// (not in test-side scaffolding) so the demo tenant per `[[demo_strategy]]`
+	// can showcase this protection to prospects via the public hosted demo.
+	'2320000099': {
+		inn: '2320000099',
+		ogrn: '1232300000099',
+		name: 'ООО «Демо-Ликвидированная»',
+		legalForm: 'LEGAL',
+		address: '354340, Краснодарский край, г. Сочи, Имеретинская низменность, д. 99',
+		city: 'Сочи',
+		taxRegime: 'USN_DOHODY',
+		status: 'LIQUIDATED',
+	},
 }
 
 /**

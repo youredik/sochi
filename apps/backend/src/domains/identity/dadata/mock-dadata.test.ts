@@ -5,10 +5,11 @@
  *   [R1] returns ООО «Демо-Сириус» for ИНН 2320000001 (10 digits / LEGAL / Сочи / USN)
  *   [R2] returns Гостевой дом «Демо-Адлер» for ИНН 2320000002 (LEGAL / Сочи / NPD)
  *   [R3] returns ИП Демонстрационный К.П. for ИНН 232000000003 (12 digits / INDIVIDUAL / Красная Поляна)
+ *   [R4] returns ООО «Демо-Ликвидированная» for ИНН 2320000099 (LIQUIDATED — adversarial canon fixture)
  *   [N1] returns null for unknown ИНН (10-digit)
  *   [N2] returns null for unknown ИНН (12-digit)
  *   [N3] returns null for empty string
- *   [I1] each canonical record satisfies the DaDataParty contract (status='ACTIVE', name non-empty)
+ *   [I1] each ACTIVE canonical record satisfies the DaDataParty contract (status='ACTIVE', name non-empty)
  *   [I2] mock is deterministic across repeated calls (same ИНН → same reference-equal record)
  */
 import { describe, expect, it } from 'bun:test'
@@ -52,6 +53,21 @@ describe('createMockDaData — canonical demo set', () => {
 		expect(party?.city).toBe('Красная Поляна')
 		expect(party?.ogrn).toBe(null)
 	})
+
+	it('[R4] returns ООО «Демо-Ликвидированная» for ИНН 2320000099 (LIQUIDATED adversarial)', async () => {
+		const adapter = createMockDaData()
+		const party = await adapter.findByInn('2320000099')
+		expect(party).toEqual({
+			inn: '2320000099',
+			ogrn: '1232300000099',
+			name: 'ООО «Демо-Ликвидированная»',
+			legalForm: 'LEGAL',
+			address: '354340, Краснодарский край, г. Сочи, Имеретинская низменность, д. 99',
+			city: 'Сочи',
+			taxRegime: 'USN_DOHODY',
+			status: 'LIQUIDATED',
+		})
+	})
 })
 
 describe('createMockDaData — unknown lookups', () => {
@@ -72,7 +88,9 @@ describe('createMockDaData — unknown lookups', () => {
 })
 
 describe('createMockDaData — contract invariants', () => {
-	it('[I1] every canonical record has non-empty name + ACTIVE status', async () => {
+	it('[I1] every ACTIVE canonical record has non-empty name + ACTIVE status', async () => {
+		// ИНН 2320000099 is the LIQUIDATED adversarial fixture — covered by
+		// [R4] separately. This invariant scans only the happy-path active set.
 		const adapter = createMockDaData()
 		for (const inn of ['2320000001', '2320000002', '232000000003']) {
 			const party = await adapter.findByInn(inn)

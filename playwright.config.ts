@@ -61,12 +61,12 @@ export default defineConfig({
 			},
 			dependencies: ['setup'],
 			testMatch: /.*\.spec\.ts/,
-			testIgnore: /(smoke|embed|perf-a11y|iframe-noscript|demo-tour)\.spec\.ts/,
+			testIgnore: /(smoke|embed|perf-a11y|iframe-noscript|demo-tour|onboarding-90s)\.spec\.ts/,
 		},
 		{
 			name: 'smoke',
 			use: { ...devices['Desktop Chrome'] },
-			testMatch: /(smoke|embed|perf-a11y|iframe-noscript|demo-tour)\.spec\.ts/,
+			testMatch: /(smoke|embed|perf-a11y|iframe-noscript|demo-tour|onboarding-90s)\.spec\.ts/,
 		},
 	],
 	webServer: isRemote
@@ -79,6 +79,14 @@ export default defineConfig({
 					timeout: 120_000,
 					stdout: 'pipe',
 					stderr: 'pipe',
+					// Force the `dadata.mock` adapter binding per
+					// `[[behaviour_faithful_mock_canon]]`: e2e exercises the
+					// production mock surface (canonical Сочи demo records),
+					// not the live DaData API. When Playwright spawns the
+					// backend, this env override wins; on `reuseExistingServer`
+					// the assumption is that the running dev backend is also in
+					// mock mode (документировано в README / playbook).
+					env: { DADATA_API_KEY: '' },
 				},
 				{
 					command: 'pnpm --filter @horeca/frontend dev',
