@@ -1,0 +1,4 @@
+# Frontend Bun test config (Phase 16 — 2026-05-12).
+# Replaces apps/frontend/vitest.config.ts environment + setupFiles.
+[test]
+preload = ["./src/tests/bun-preload.ts"]
