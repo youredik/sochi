@@ -7,14 +7,20 @@
 		"@fontsource-variable/geist",
 		"tw-animate-css",
 		"shadcn",
-		"axe-core"
+		"axe-core",
+		"happy-dom",
+		"bun"
 	],
 	"ignoreExportsUsedInFile": true,
 	"workspaces": {
 		"apps/backend": {
 			"includeEntryExports": true,
 			"project": ["src/**/*.ts"],
-			"entry": ["src/lib/channel-manager/index.ts"],
+			"entry": [
+				"src/lib/channel-manager/index.ts",
+				"src/db/bench-schema-prefix.ts",
+				"src/db/spike-bun-ydb.ts"
+			],
 			"ignore": ["src/tests/**"]
 		},
 		"apps/frontend": {

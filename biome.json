@@ -147,12 +147,25 @@
 			}
 		},
 		{
-			"includes": ["**/*.test.ts", "**/*.test.tsx"],
+			"includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.db.test.ts", "**/*.db.test.tsx"],
 			"linter": {
 				"rules": {
 					"style": {
 						"noNonNullAssertion": "off",
 						"useComponentExportOnlyModules": "off"
+					},
+					"correctness": {
+						"noUnresolvedImports": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["apps/frontend/src/tests/**"],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noUnresolvedImports": "off"
 					}
 				}
 			}

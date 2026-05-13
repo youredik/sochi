@@ -32,19 +32,19 @@ export default {
 		// so `dependencyTypesNot: ['type-only']` excludes them. Runtime
 		// cross-domain imports still fail this rule with an error.
 		//
-		// `*.integration.test.ts` files are exempted because integration tests
-		// legitimately orchestrate factories from multiple domains to prove
-		// end-to-end behavior (e.g. booking.service creating a reservation
-		// requires property + roomType + ratePlan + rate + availability
-		// factories to be wired). Production code is still locked in.
+		// `*.integration.test.ts` AND `*.integration.db.test.ts` files are exempted
+		// because integration tests legitimately orchestrate factories from
+		// multiple domains to prove end-to-end behavior (e.g. booking.service
+		// creating a reservation requires property + roomType + ratePlan + rate
+		// + availability factories to be wired). Production code is still locked in.
 		{
 			name: 'no-cross-domain',
 			comment:
-				'Domains must not import runtime code from other domains — use type-only imports for DI wiring. Integration tests (*.integration.test.ts) are exempted.',
+				'Domains must not import runtime code from other domains — use type-only imports for DI wiring. Integration tests (*.integration.{db.,}test.ts) are exempted.',
 			severity: 'error',
 			from: {
 				path: '^apps/backend/src/domains/([^/]+)/',
-				pathNot: '\\.integration\\.test\\.ts$',
+				pathNot: '\\.integration\\.(db\\.)?test\\.ts$',
 			},
 			to: {
 				path: '^apps/backend/src/domains/([^/]+)/',
@@ -112,6 +112,10 @@ export default {
 					// Vitest setupFile (referenced from vitest.config.ts setupFiles
 					// only — no direct import).
 					'apps/backend/src/tests/env-defaults\\.ts$',
+					// Phase 16 Bun + tsgo migration empirical evidence — standalone
+					// benchmark/spike scripts run via `bun run`. Not imported by
+					// production code; their purpose is one-off measurement.
+					'apps/backend/src/db/(bench-schema-prefix|spike-bun-ydb)\\.ts$',
 				],
 			},
 			to: {},
