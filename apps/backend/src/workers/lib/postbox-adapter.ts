@@ -33,32 +33,22 @@
  *   - MailpitAdapter (SMTP): MIME multipart/mixed boundary
  *   - StubAdapter: stored verbatim для test assertions
  */
-export interface EmailAttachment {
-	/** Filename presented к recipient (e.g. `booking-BK-2026-A1B2C3.ics`). */
-	filename: string
-	/** Raw content (UTF-8 string для text/calendar; base64 для binary). */
-	content: string
-	/** MIME type (e.g. `text/calendar; method=PUBLISH; charset=utf-8`). */
-	contentType: string
-}
+// EmailAttachment, SendEmailInput, SendEmailResult, EmailAdapter — moved
+// to `./email-adapter.types.ts` to break the circular dep между
+// `postbox-adapter.ts` (factory imports DemoInboxAdapter) и
+// `demo-inbox-adapter.ts` (imports the contract). Re-exported here как
+// `export *` для backward compatibility с existing callers.
+export type {
+	EmailAdapter,
+	EmailAttachment,
+	SendEmailInput,
+	SendEmailResult,
+} from './email-adapter.types.ts'
 
-export interface SendEmailInput {
-	from: string
-	to: string
-	subject: string
-	html: string
-	text: string
-	attachments?: ReadonlyArray<EmailAttachment>
-}
-
-export type SendEmailResult =
-	| { kind: 'sent'; messageId: string }
-	| { kind: 'permanent'; reason: string }
-	| { kind: 'transient'; reason: string }
-
-export interface EmailAdapter {
-	send(input: SendEmailInput): Promise<SendEmailResult>
-}
+// Local-import shadow so PostboxAdapter / MailpitAdapter / StubAdapter
+// type-annotate against the same identifiers без duplicating the public
+// re-export.
+import type { EmailAdapter, SendEmailInput, SendEmailResult } from './email-adapter.types.ts'
 
 /* ----------------------------------------------------------------- StubAdapter */
 
@@ -223,6 +213,38 @@ export function classifyPostboxError(err: unknown): SendEmailResult {
 
 import * as net from 'node:net'
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
+import { DemoInboxAdapter } from './demo-inbox-adapter.ts'
+
+/**
+ * Process-singleton DemoInboxAdapter — the email factory and the
+ * `/api/v1/public/demo/inbox` route MUST share the SAME instance so captures
+ * from `EmailAdapter.send()` are visible к the polling route. Lazy-init на
+ * first `createEmailAdapter` call с `DEMO_DEPLOYMENT=true` OR на first
+ * `getDemoInboxIfActive()` (route handler).
+ */
+let demoInboxSingleton: DemoInboxAdapter | null = null
+
+function getOrCreateDemoInbox(): DemoInboxAdapter {
+	if (!demoInboxSingleton) {
+		demoInboxSingleton = new DemoInboxAdapter()
+	}
+	return demoInboxSingleton
+}
+
+/**
+ * Module-level accessor для the demo inbox singleton. Used by the public
+ * route handler в `apps/backend/src/domains/demo/inbox.routes.ts`. Returns
+ * `null` when `createEmailAdapter` has not yet routed к the demo path —
+ * the route handler treats this as «inbox empty» (200 + null), не a 500.
+ */
+export function getDemoInboxIfActive(): DemoInboxAdapter | null {
+	return demoInboxSingleton
+}
+
+/** Test-only reset hook — `__resetForTesting()` pattern per bun-test canons. */
+export function __resetDemoInboxForTesting(): void {
+	demoInboxSingleton = null
+}
 
 /**
  * Plain-SMTP adapter for local dev — speaks raw SMTP via `node:net`. Mailpit
@@ -379,6 +401,12 @@ interface EmailAdapterEnv {
 	POSTBOX_ENDPOINT: string
 	SMTP_HOST: string
 	SMTP_PORT: number
+	/**
+	 * Demo deployment flag — when `true`, factory returns a `DemoInboxAdapter`
+	 * (capture-only, in-process). Paired with `VITE_DEMO_DEPLOYMENT=true` on
+	 * the frontend per `[[demo_strategy]]`.
+	 */
+	DEMO_DEPLOYMENT?: boolean
 }
 
 interface FactoryLogger {
@@ -389,6 +417,11 @@ interface FactoryLogger {
 /**
  * Pick the right adapter based on environment.
  *
+ *   DEMO_DEPLOYMENT=true → DemoInboxAdapter (capture-only, public-hosted demo
+ *                          per `[[demo_strategy]]` — short-circuits BEFORE
+ *                          Postbox/Mailpit so prospect emails are never
+ *                          actually transmitted, only surfaced inline in
+ *                          frontend DemoInboxPanel)
  *   POSTBOX_ENABLED=true + creds → PostboxAdapter (Yandex Cloud production)
  *   POSTBOX_ENABLED=true + missing creds → log-only (StubAdapter) + warn
  *   POSTBOX_ENABLED=false + SMTP_HOST set → MailpitAdapter (local dev)
@@ -398,6 +431,13 @@ interface FactoryLogger {
  * + DKIM/SPF/DMARC records on sender domain (set in infra-фаза, not here).
  */
 export function createEmailAdapter(env: EmailAdapterEnv, log: FactoryLogger): EmailAdapter {
+	if (env.DEMO_DEPLOYMENT) {
+		log.info(
+			{},
+			'Email adapter: DemoInboxAdapter (capture-only — public demo deployment per [[demo_strategy]])',
+		)
+		return getOrCreateDemoInbox()
+	}
 	if (env.POSTBOX_ENABLED) {
 		if (!env.POSTBOX_ACCESS_KEY_ID || !env.POSTBOX_SECRET_ACCESS_KEY) {
 			log.warn(

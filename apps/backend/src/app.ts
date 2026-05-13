@@ -30,6 +30,7 @@ import { createMockVisionOcr } from './domains/epgu/vision/mock-vision.ts'
 import { createVisionRoutes } from './domains/epgu/vision/vision.routes.ts'
 import { createFolioFactory } from './domains/folio/folio.factory.ts'
 import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
+import { createDemoInboxRoutes } from './domains/demo/inbox.routes.ts'
 import { createIdentityRoutes } from './domains/identity/identity.routes.ts'
 import { createOnboardingFactory } from './domains/onboarding/onboarding.factory.ts'
 import { createOnboardingRoutes } from './domains/onboarding/onboarding.routes.ts'
@@ -173,6 +174,23 @@ registerAdapter({
 // real-вариант hits suggestions.dadata.ru when DADATA_API_KEY is set.
 const dadata = createDaDataAdapter({ apiKey: env.DADATA_API_KEY })
 registerAdapter(dadata.metadata)
+
+// Demo inbox adapter — registered ONLY when DEMO_DEPLOYMENT=true so the
+// production deployment never carries a Mock email adapter (which would
+// fail `assertProductionReady()` без explicit whitelist). The actual
+// adapter instance is the singleton owned by `postbox-adapter.ts` factory;
+// registry entry is purely для /api/health/adapters introspection.
+if (env.DEMO_DEPLOYMENT) {
+	registerAdapter({
+		name: 'email.demo-inbox',
+		category: 'email',
+		mode: 'mock',
+		description:
+			'In-process Demo Inbox — captures magic-link emails per recipient for the public demo flow ' +
+			'per [[demo_strategy]] + [[behaviour_faithful_mock_canon]]. ' +
+			'Activated by DEMO_DEPLOYMENT=true env var; paired с frontend VITE_DEMO_DEPLOYMENT=true.',
+	})
+}
 // Bulk-inventory onboarding factory — single-tx property + roomType + N rooms
 // + ratePlan create, replays via Idempotency-Key middleware.
 const onboardingFactory = createOnboardingFactory(sql)
@@ -735,6 +753,12 @@ const routes = app
 	.route('/api/v1', createVisionRoutes(visionOcrAdapter))
 	.route('/api/v1', createIdentityRoutes(dadata.adapter))
 	.route('/api/v1', createOnboardingRoutes(onboardingFactory, idempotency))
+	// Demo inbox public route. Always mounted at the public path, but the
+	// handler itself рассматривает `env.DEMO_DEPLOYMENT` — when false, returns
+	// 404 (route literally has no inbox to surface). Belt-and-braces поверх
+	// the email-factory env-gating per [[demo_strategy]]: production deployments
+	// can't accidentally leak captures because the singleton is never created.
+	.route('/api/public/demo', createDemoInboxRoutes({ enabled: env.DEMO_DEPLOYMENT }))
 	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
 	.route('/api/admin', createAdminNotificationsRoutes(notificationFactory.service))
 	// M10 / A7.5.fix — admin channel-status overlay backing endpoint.

@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useSignInMagicLink } from '../hooks/use-auth-mutations.ts'
 import { captchaEnforced } from '../lib/captcha.ts'
+import { isDemoDeployment } from '../lib/demo-deployment.ts'
 import type { LocalizedError } from '../lib/errors.ts'
 import { slugify } from '../lib/slugify.ts'
 import { CaptchaField } from './captcha-field.tsx'
+import { DemoInboxPanel } from './demo-inbox-panel.tsx'
 
 const MAX_ORG_NAME_LENGTH = 80
 
@@ -80,31 +82,34 @@ export function MagicLinkSignUpForm() {
 
 	if (sent) {
 		return (
-			<div
-				role="status"
-				aria-live="polite"
-				className="rounded-md border border-primary/40 bg-primary/5 px-4 py-3 text-sm"
-			>
-				<p className="font-medium">Письмо отправлено</p>
-				<p className="mt-1 text-muted-foreground">
-					Мы отправили ссылку для регистрации на <strong>{email}</strong>. Откройте письмо и нажмите
-					кнопку — после подтверждения email мы сразу создадим гостиницу <strong>{orgName}</strong>.
-					Ссылка действительна 5 минут.
-				</p>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					className="mt-3"
-					onClick={() => {
-						setSent(false)
-						setEmail('')
-						setCaptchaToken('')
-						setCaptchaResetKey((k) => k + 1)
-					}}
+			<div className="space-y-3">
+				<div
+					role="status"
+					aria-live="polite"
+					className="rounded-md border border-primary/40 bg-primary/5 px-4 py-3 text-sm"
 				>
-					Отправить на другой email
-				</Button>
+					<p className="font-medium">Письмо отправлено</p>
+					<p className="mt-1 text-muted-foreground">
+						Мы отправили ссылку для регистрации на <strong>{email}</strong>. Откройте письмо и
+						нажмите кнопку — после подтверждения email мы сразу создадим гостиницу{' '}
+						<strong>{orgName}</strong>. Ссылка действительна 5 минут.
+					</p>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="mt-3"
+						onClick={() => {
+							setSent(false)
+							setEmail('')
+							setCaptchaToken('')
+							setCaptchaResetKey((k) => k + 1)
+						}}
+					>
+						Отправить на другой email
+					</Button>
+				</div>
+				{isDemoDeployment ? <DemoInboxPanel email={email} /> : null}
 			</div>
 		)
 	}
