@@ -96,6 +96,15 @@ export const envSchema = z.object({
 	// Turnstile) for 152-ФЗ data localization.
 	SMARTCAPTCHA_SERVER_KEY: z.string().optional(),
 
+	// DaData REST API token (`Token <…>` Authorization header).
+	// Optional: unset / empty / whitespace-only → onboarding identity-lookup
+	// falls back to `dadata.mock` (canonical Сочи demo set; demo tenants
+	// continue to work без аккаунта). When set, real `suggestions.dadata.ru`
+	// auto-fills ИНН → имя/адрес/налог.режим. Free tier 10k req/day suffices
+	// для SMB volume. Tokens provisioned via dadata.ru account dashboard;
+	// production seeded из Yandex Lockbox.
+	DADATA_API_KEY: z.string().optional(),
+
 	// M9.widget.6 / А4.3 — `clientCommitToken` HMAC sliding-window rotation
 	// (D25). Both base64url-encoded ≥32-byte secrets. Production seeded из
 	// Yandex Lockbox at boot; dev defaults are dev-only stubs (rejected при

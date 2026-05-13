@@ -29,6 +29,8 @@ import { createMockEpguTransport } from './domains/epgu/transport/mock-epgu.ts'
 import { createMockVisionOcr } from './domains/epgu/vision/mock-vision.ts'
 import { createVisionRoutes } from './domains/epgu/vision/vision.routes.ts'
 import { createFolioFactory } from './domains/folio/folio.factory.ts'
+import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
+import { createIdentityRoutes } from './domains/identity/identity.routes.ts'
 import { createFolioRoutes } from './domains/folio/folio.routes.ts'
 import { createGuestFactory } from './domains/guest/guest.factory.ts'
 import { createGuestRoutes } from './domains/guest/guest.routes.ts'
@@ -163,6 +165,12 @@ registerAdapter({
 		'computeHeuristicConfidence ввиду apiConfidenceRaw broken upstream). Real Yandex AI Studio ' +
 		'integration после empirical-verify (M8.A.6.empirical script ready).',
 })
+// DaData identity-lookup adapter — auto-fills ИНН → org name/address/tax regime
+// в 2-step onboarding wizard. Mock-вариант возвращает canonical demo dataset
+// (Сочи/Сириус/Красная Поляна) для demo тенантов per [[demo_strategy]];
+// real-вариант hits suggestions.dadata.ru when DADATA_API_KEY is set.
+const dadata = createDaDataAdapter({ apiKey: env.DADATA_API_KEY })
+registerAdapter(dadata.metadata)
 // M8.A.5.archive — behaviour-faithful Скала-ЕПГУ archive builder. Demo
 // тенанты используют ВСЕГДА (Mock pipeline end-to-end). Real КриптоПро CSP
 // integration land в M8.B при МВД ОВМ onboarding completion. Swap = factory
@@ -720,6 +728,7 @@ const routes = app
 	.route('/api/v1', createRefundRoutes(refundFactory, idempotency))
 	.route('/api/v1', createMigrationRegistrationRoutes(migrationRegistrationFactory, idempotency))
 	.route('/api/v1', createVisionRoutes(visionOcrAdapter))
+	.route('/api/v1', createIdentityRoutes(dadata.adapter))
 	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
 	.route('/api/admin', createAdminNotificationsRoutes(notificationFactory.service))
 	// M10 / A7.5.fix — admin channel-status overlay backing endpoint.

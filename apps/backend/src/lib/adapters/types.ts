@@ -57,6 +57,7 @@ export type AdapterCategory =
 	| 'maps'
 	| 'storage'
 	| 'ai'
+	| 'identity-lookup'
 
 /**
  * Static metadata registered once at app startup. Mode is fixed at
