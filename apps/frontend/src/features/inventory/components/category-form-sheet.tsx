@@ -170,7 +170,7 @@ export function CategoryFormSheet({
 							}}
 						>
 							{(field) => (
-								<Field>
+								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 									<FieldLabel htmlFor={field.name}>Гостей</FieldLabel>
 									<Input
 										id={field.name}
@@ -181,6 +181,9 @@ export function CategoryFormSheet({
 										value={field.state.value}
 										onChange={(e) => field.handleChange(e.target.value)}
 									/>
+									{field.state.meta.errors[0] ? (
+										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+									) : null}
 								</Field>
 							)}
 						</form.Field>
@@ -192,7 +195,7 @@ export function CategoryFormSheet({
 							}}
 						>
 							{(field) => (
-								<Field>
+								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 									<FieldLabel htmlFor={field.name}>Кроватей</FieldLabel>
 									<Input
 										id={field.name}
@@ -203,6 +206,9 @@ export function CategoryFormSheet({
 										value={field.state.value}
 										onChange={(e) => field.handleChange(e.target.value)}
 									/>
+									{field.state.meta.errors[0] ? (
+										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+									) : null}
 								</Field>
 							)}
 						</form.Field>
@@ -214,7 +220,7 @@ export function CategoryFormSheet({
 							}}
 						>
 							{(field) => (
-								<Field>
+								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 									<FieldLabel htmlFor={field.name}>Сколько номеров</FieldLabel>
 									<Input
 										id={field.name}
@@ -225,6 +231,9 @@ export function CategoryFormSheet({
 										value={field.state.value}
 										onChange={(e) => field.handleChange(e.target.value)}
 									/>
+									{field.state.meta.errors[0] ? (
+										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+									) : null}
 								</Field>
 							)}
 						</form.Field>

@@ -18,7 +18,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { Button } from '../../../components/ui/button.tsx'
 import { Checkbox } from '../../../components/ui/checkbox.tsx'
-import { Field, FieldLabel } from '../../../components/ui/field.tsx'
+import { Field, FieldError, FieldLabel } from '../../../components/ui/field.tsx'
 import { Input } from '../../../components/ui/input.tsx'
 import {
 	ResponsiveSheet,
@@ -175,7 +175,7 @@ export function RatePlanFormSheet({
 						}}
 					>
 						{(field) => (
-							<Field>
+							<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 								<FieldLabel htmlFor={field.name}>Название</FieldLabel>
 								<Input
 									id={field.name}
@@ -185,6 +185,9 @@ export function RatePlanFormSheet({
 									autoComplete="off"
 									required
 								/>
+								{field.state.meta.errors[0] ? (
+									<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+								) : null}
 							</Field>
 						)}
 					</form.Field>
@@ -198,7 +201,7 @@ export function RatePlanFormSheet({
 							}}
 						>
 							{(field) => (
-								<Field>
+								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 									<FieldLabel htmlFor={field.name}>Код тарифа</FieldLabel>
 									<Input
 										id={field.name}
@@ -209,6 +212,9 @@ export function RatePlanFormSheet({
 										autoComplete="off"
 										required
 									/>
+									{field.state.meta.errors[0] ? (
+										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+									) : null}
 								</Field>
 							)}
 						</form.Field>
@@ -263,7 +269,7 @@ export function RatePlanFormSheet({
 									}}
 								>
 									{(field) => (
-										<Field>
+										<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 											<FieldLabel htmlFor={field.name}>
 												За сколько часов до заезда возможна бесплатная отмена
 											</FieldLabel>
@@ -276,6 +282,9 @@ export function RatePlanFormSheet({
 												value={field.state.value}
 												onChange={(e) => field.handleChange(e.target.value)}
 											/>
+											{field.state.meta.errors[0] ? (
+												<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+											) : null}
 										</Field>
 									)}
 								</form.Field>
@@ -314,7 +323,7 @@ export function RatePlanFormSheet({
 							}}
 						>
 							{(field) => (
-								<Field>
+								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 									<FieldLabel htmlFor={field.name}>Мин. ночей</FieldLabel>
 									<Input
 										id={field.name}
@@ -325,6 +334,9 @@ export function RatePlanFormSheet({
 										value={field.state.value}
 										onChange={(e) => field.handleChange(e.target.value)}
 									/>
+									{field.state.meta.errors[0] ? (
+										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+									) : null}
 								</Field>
 							)}
 						</form.Field>

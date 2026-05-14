@@ -11,13 +11,13 @@
  *   - [F4] Validation: endNumber ≥ startNumber; cap 500 per call.
  *   - [A1] `<ResponsiveSheetTitle>` обязателен.
  */
-import { useForm } from '@tanstack/react-form'
+import { useForm, useStore } from '@tanstack/react-form'
 import type { RoomType } from '@horeca/shared'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { Button } from '../../../components/ui/button.tsx'
-import { Field, FieldDescription, FieldLabel } from '../../../components/ui/field.tsx'
+import { Field, FieldDescription, FieldError, FieldLabel } from '../../../components/ui/field.tsx'
 import { Input } from '../../../components/ui/input.tsx'
 import {
 	ResponsiveSheet,
@@ -102,12 +102,16 @@ export function RoomsBulkAddSheet({
 		},
 	})
 
-	const rangeSize = (() => {
-		const a = Number(form.state.values.startNumber)
-		const b = Number(form.state.values.endNumber)
+	// Reactive computation — subscribes к the store so rangeSize re-renders
+	// when user types. Reading `form.state.values` directly captures only the
+	// snapshot at first render (bug: submit button stays «Создать номеров» с
+	// rangeSize=0 forever).
+	const rangeSize = useStore(form.store, (state) => {
+		const a = Number(state.values.startNumber)
+		const b = Number(state.values.endNumber)
 		if (!Number.isInteger(a) || !Number.isInteger(b) || a < 1 || b < a) return 0
 		return b - a + 1
-	})()
+	})
 
 	return (
 		<ResponsiveSheet open={open} onOpenChange={onOpenChange}>
@@ -140,7 +144,7 @@ export function RoomsBulkAddSheet({
 							}}
 						>
 							{(field) => (
-								<Field>
+								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 									<FieldLabel htmlFor={field.name}>Первый номер</FieldLabel>
 									<Input
 										id={field.name}
@@ -151,6 +155,9 @@ export function RoomsBulkAddSheet({
 										onChange={(e) => field.handleChange(e.target.value)}
 										placeholder="201"
 									/>
+									{field.state.meta.errors[0] ? (
+										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+									) : null}
 								</Field>
 							)}
 						</form.Field>
@@ -162,7 +169,7 @@ export function RoomsBulkAddSheet({
 							}}
 						>
 							{(field) => (
-								<Field>
+								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 									<FieldLabel htmlFor={field.name}>Последний номер</FieldLabel>
 									<Input
 										id={field.name}
@@ -173,6 +180,9 @@ export function RoomsBulkAddSheet({
 										onChange={(e) => field.handleChange(e.target.value)}
 										placeholder="210"
 									/>
+									{field.state.meta.errors[0] ? (
+										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+									) : null}
 								</Field>
 							)}
 						</form.Field>

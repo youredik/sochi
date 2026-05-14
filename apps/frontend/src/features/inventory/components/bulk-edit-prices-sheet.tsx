@@ -19,7 +19,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { Button } from '../../../components/ui/button.tsx'
 import { Checkbox } from '../../../components/ui/checkbox.tsx'
-import { Field, FieldDescription, FieldLabel } from '../../../components/ui/field.tsx'
+import { Field, FieldDescription, FieldError, FieldLabel } from '../../../components/ui/field.tsx'
 import { Input } from '../../../components/ui/input.tsx'
 import {
 	ResponsiveSheet,
@@ -149,7 +149,7 @@ export function BulkEditPricesSheet({
 							}}
 						>
 							{(field) => (
-								<Field>
+								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 									<FieldLabel htmlFor={field.name}>С даты</FieldLabel>
 									<Input
 										id={field.name}
@@ -157,6 +157,9 @@ export function BulkEditPricesSheet({
 										value={field.state.value}
 										onChange={(e) => field.handleChange(e.target.value)}
 									/>
+									{field.state.meta.errors[0] ? (
+										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+									) : null}
 								</Field>
 							)}
 						</form.Field>
@@ -168,7 +171,7 @@ export function BulkEditPricesSheet({
 							}}
 						>
 							{(field) => (
-								<Field>
+								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 									<FieldLabel htmlFor={field.name}>По дату</FieldLabel>
 									<Input
 										id={field.name}
@@ -176,6 +179,9 @@ export function BulkEditPricesSheet({
 										value={field.state.value}
 										onChange={(e) => field.handleChange(e.target.value)}
 									/>
+									{field.state.meta.errors[0] ? (
+										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+									) : null}
 								</Field>
 							)}
 						</form.Field>
@@ -257,7 +263,7 @@ export function BulkEditPricesSheet({
 						}}
 					>
 						{(field) => (
-							<Field>
+							<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 								<FieldLabel htmlFor={field.name}>Цена за ночь, ₽</FieldLabel>
 								<Input
 									id={field.name}
@@ -269,6 +275,9 @@ export function BulkEditPricesSheet({
 									onChange={(e) => field.handleChange(e.target.value)}
 									placeholder="4500"
 								/>
+								{field.state.meta.errors[0] ? (
+									<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+								) : null}
 								<FieldDescription>
 									Применится ко всем выбранным ячейкам (дата × тариф). Относительные операции (+%,
 									+сумма) — в следующей версии.
