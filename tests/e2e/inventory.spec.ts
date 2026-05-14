@@ -22,6 +22,14 @@ import { test } from './_fixtures.ts'
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] as const
 
+async function axeClean(page: import('@playwright/test').Page, context: string): Promise<void> {
+	const results = await new AxeBuilder({ page }).withTags([...WCAG_TAGS]).analyze()
+	if (results.violations.length > 0) {
+		console.error(`axe violations (${context}):`, JSON.stringify(results.violations, null, 2))
+	}
+	expect(results.violations).toEqual([])
+}
+
 test.describe('inventory — rooms page (Phase II)', () => {
 	test('navigates from sidebar, renders 3 tabs + opens category sheet, axe-clean', async ({
 		page,
@@ -66,13 +74,38 @@ test.describe('inventory — rooms page (Phase II)', () => {
 		await expect(page.getByText('Новая категория номеров')).not.toBeVisible()
 
 		// Layer 5 — WCAG 2.2 AA axe scan on the rendered page.
-		const results = await new AxeBuilder({ page }).withTags([...WCAG_TAGS]).analyze()
-		if (results.violations.length > 0) {
-			console.error(
-				'axe violations (inventory-rooms):',
-				JSON.stringify(results.violations, null, 2),
-			)
-		}
-		expect(results.violations).toEqual([])
+		await axeClean(page, 'inventory-rooms')
+	})
+})
+
+test.describe('inventory — rate-plans page (Phase III)', () => {
+	test('switches к «Тарифы» tab, renders rate-plans surface + opens form sheet, axe-clean', async ({
+		page,
+	}) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+
+		await page.locator('[data-section-id="inventory"]').click()
+		await expect(page).toHaveURL(/\/inventory\/rooms$/)
+
+		// Click the «Тарифы» tab in the inventory tablist.
+		await page.getByRole('tab', { name: 'Тарифы' }).click()
+		await expect(page).toHaveURL(/\/inventory\/rate-plans$/)
+
+		// Page-level h2 visible (rate-plans section heading).
+		await expect(page.getByRole('heading', { name: 'Тарифные планы' })).toBeVisible()
+
+		// «+ Тариф» CTA должен быть enabled (the e2e tenant has the «Стандартный»
+		// category seeded в auth.setup).
+		const addCta = page.getByRole('button', { name: /Тариф/ }).first()
+		await expect(addCta).toBeEnabled()
+		await addCta.click()
+
+		// Sheet title surfaces.
+		await expect(page.getByText('Новый тариф')).toBeVisible()
+		await page.keyboard.press('Escape')
+		await expect(page.getByText('Новый тариф')).not.toBeVisible()
+
+		await axeClean(page, 'inventory-rate-plans')
 	})
 })
