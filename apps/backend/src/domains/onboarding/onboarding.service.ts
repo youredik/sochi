@@ -1,7 +1,7 @@
 import type { City } from '@horeca/shared'
 import { newId } from '@horeca/shared'
 import type { sql as SQL } from '../../db/index.ts'
-import { NULL_INT32, NULL_TEXT, toTs } from '../../db/ydb-helpers.ts'
+import { dateFromIso, NULL_INT32, NULL_TEXT, toTs } from '../../db/ydb-helpers.ts'
 
 type SqlInstance = typeof SQL
 
@@ -13,18 +13,16 @@ type SqlInstance = typeof SQL
  * tenant with a partially-wired property — the wizard rerun would then
  * collide on room numbers and confuse the user.
  *
- * What we create (4 entity classes, 1 transaction):
+ * What we create (5 entity classes, 1 transaction):
  *   1. `property` × 1            — name / address / city / timezone / tourism-tax
  *   2. `roomType` × 1            — «Стандартный», capacity 2, default beds
  *   3. `room`     × N            — numbers `101`..`100+N` on floor 1
  *   4. `ratePlan` × 1            — «Базовый», refundable, RUB, default plan
- *
- * Rates (date × roomType × ratePlan price rows) are intentionally NOT seeded
- * here; Шахматка renders empty cells and the operator fills them per the
- * existing rate-management UI. Seeding 365 default rates per onboarding
- * inflates the tx and rolls the «90-second» target back into territory
- * where individual rate edits become friction. Deferred to a later pass
- * if usage data shows it matters.
+ *   5. `rate`     × `RATE_SEED_DAYS` — per-night price rows, today..+N-1, at
+ *      `avgPriceRub`. Seeded so Шахматка is immediately bookable (the user's
+ *      «always-on demo» canon — empty rate rows = unsellable inventory and
+ *      friction for the FIRST booking attempt). Operator can rewrite later
+ *      via the existing `POST /rate-plans/:id/rates` bulk-upsert endpoint.
  */
 export interface CreateInventoryPropertyInput {
 	readonly name: string
@@ -51,6 +49,23 @@ const DEFAULT_TIMEZONE = 'Europe/Moscow'
 const DEFAULT_ROOM_TYPE_NAME = 'Стандартный'
 const DEFAULT_RATE_PLAN_NAME = 'Базовый'
 const DEFAULT_RATE_PLAN_CODE = 'BASE'
+
+/**
+ * Days of price-row seeding window starting today (inclusive). 90 ≈ 3 months
+ * — long enough to cover the usual booking-far-ahead horizon for Сочи SMB
+ * (typical demand peaks 60-90 days out for summer), short enough to keep
+ * the onboarding tx well under the 90-second human budget (90 rows × ratePlan
+ * × roomType = 90 UPSERTs ≈ 1-2 s on local YDB).
+ */
+const RATE_SEED_DAYS = 90
+
+/** ISO YYYY-MM-DD string for `today + offset` days (UTC anchor). */
+function isoDateOffset(offset: number): string {
+	const d = new Date()
+	d.setUTCHours(0, 0, 0, 0)
+	d.setUTCDate(d.getUTCDate() + offset)
+	return d.toISOString().slice(0, 10)
+}
 
 /** Hotel-floor-1 numbering: room index 1 → '101', 2 → '102', …, 100 → '200'. */
 function roomNumberFor(index: number): string {
@@ -169,13 +184,32 @@ export function createOnboardingService(sql: SqlInstance): OnboardingService {
 						${nowTs}, ${nowTs}
 					)
 				`
+
+				// 5. rate × RATE_SEED_DAYS — flat `avgPriceRub` for today..+89.
+				// Per-row UPSERT inside the same tx (same pattern as `room` × N
+				// above) — N≤90 stays well inside YDB's tx-statement budget and
+				// keeps the onboarding round-trip ≤ 2 s on local infra. The
+				// operator overrides via `POST /api/v1/rate-plans/:id/rates`.
+				const amountMicros = BigInt(input.avgPriceRub) * 1_000_000n
+				for (let dayOffset = 0; dayOffset < RATE_SEED_DAYS; dayOffset += 1) {
+					const dateBind = dateFromIso(isoDateOffset(dayOffset))
+					await tx`
+						UPSERT INTO rate (
+							\`tenantId\`, \`propertyId\`, \`roomTypeId\`, \`ratePlanId\`, \`date\`,
+							\`amountMicros\`, \`currency\`, \`createdAt\`, \`updatedAt\`
+						) VALUES (
+							${tenantId}, ${propertyId}, ${roomTypeId}, ${ratePlanId}, ${dateBind},
+							${amountMicros}, ${currencyRub}, ${nowTs}, ${nowTs}
+						)
+					`
+				}
 			})
 
-			// `avgPriceRub` is intentionally not persisted to ratePlan: rate
-			// rows live in a separate `rate` table keyed по (date, ratePlan,
-			// roomType). The wizard frontend will use this value as the
-			// suggested default in Шахматка's "fill calendar" affordance —
-			// echoed back in the response so the wizard can hand-off cleanly.
+			// `avgPriceRub` is now persisted as `RATE_SEED_DAYS` rate rows (see
+			// step 5 above) so Шахматка is immediately sellable from the moment
+			// the wizard finishes. We echo `avgPriceRub` back in the response
+			// for the frontend's «suggested default» affordance в the
+			// fill-calendar UI when the operator wants to extend the horizon.
 			return { propertyId, roomTypeId, ratePlanId, roomIds }
 		},
 	}
