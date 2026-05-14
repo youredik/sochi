@@ -127,7 +127,7 @@ describe('IdentifyStep — placeholder-as-default auto-rename', () => {
 	it('[A3] BA org.update rejects → wizard still advances (fail-soft)', async () => {
 		seedActiveOrgName(DEFAULT_WELCOME_ORG_NAME)
 		useWizardStore.setState({ party: PARTY, manualOverride: false })
-		organizationUpdateMock.mockReturnValue(Promise.reject(new Error('boom')))
+		organizationUpdateMock.mockImplementation(() => Promise.reject(new Error('boom')))
 
 		renderWithQuery(<IdentifyStep />)
 		await waitFor(() => {
