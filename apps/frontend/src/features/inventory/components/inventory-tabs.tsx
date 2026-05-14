@@ -43,31 +43,28 @@ interface Props {
 
 export function InventoryTabs({ orgSlug, propertyId, current }: Props) {
 	return (
-		<div role="tablist" aria-label="Разделы инвентаря" className="border-b">
-			<ul className="-mb-px flex gap-1">
-				{TABS.map((tab) => {
-					const isActive = tab.id === current
-					return (
-						<li key={tab.id} role="presentation">
-							<Link
-								to={tab.to}
-								params={{ orgSlug, propertyId }}
-								role="tab"
-								aria-selected={isActive}
-								aria-controls={`inventory-panel-${tab.id}`}
-								className={cn(
-									'inline-block border-b-2 px-4 py-2 text-sm font-medium transition-colors',
-									isActive
-										? 'border-primary text-foreground'
-										: 'text-muted-foreground hover:text-foreground border-transparent hover:border-muted-foreground/40',
-								)}
-							>
-								{tab.labelRu}
-							</Link>
-						</li>
-					)
-				})}
-			</ul>
+		<div role="tablist" aria-label="Разделы инвентаря" className="-mb-px flex gap-1 border-b">
+			{TABS.map((tab) => {
+				const isActive = tab.id === current
+				return (
+					<Link
+						key={tab.id}
+						to={tab.to}
+						params={{ orgSlug, propertyId }}
+						role="tab"
+						aria-selected={isActive}
+						aria-controls={`inventory-panel-${tab.id}`}
+						className={cn(
+							'inline-block border-b-2 px-4 py-2 text-sm font-medium transition-colors',
+							isActive
+								? 'border-primary text-foreground'
+								: 'text-muted-foreground hover:text-foreground border-transparent hover:border-muted-foreground/40',
+						)}
+					>
+						{tab.labelRu}
+					</Link>
+				)
+			})}
 		</div>
 	)
 }
