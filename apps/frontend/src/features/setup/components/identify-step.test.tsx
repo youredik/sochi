@@ -23,7 +23,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as React from 'react'
+import type * as React from 'react'
 import type { DaDataParty } from '../lib/dadata.ts'
 
 const organizationUpdateMock = mock()
@@ -44,7 +44,7 @@ mock.module('@/lib/auth-client', () => ({
 
 const { IdentifyStep } = await import('./identify-step.tsx')
 const { useWizardStore } = await import('../wizard-store.ts')
-const { DEFAULT_WELCOME_ORG_NAME } = await import('@/features/auth/components/welcome-form')
+const { DEFAULT_WELCOME_ORG_NAME } = await import('@/features/auth/lib/welcome-defaults')
 
 const PARTY: DaDataParty = {
 	inn: '7709758887',
