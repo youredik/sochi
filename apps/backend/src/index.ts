@@ -5,6 +5,23 @@ import { env } from './env.ts'
 import { assertProductionReady, listAdapters } from './lib/adapters/index.ts'
 import { logger } from './logger.ts'
 
+/**
+ * Symmetric to `[N1]` localhost canon in `captcha-gate.ts`: production MUST
+ * have captcha actually configured. Without this guard a missed env var
+ * would silently disable email-enumeration protection on the public surface
+ * — the gate falls through to `reason: 'disabled'` and every magic-link
+ * request goes ungated. Demo deployments (`DEMO_DEPLOYMENT=true`) are
+ * exempt — they're publicly friction-free by design per `[[demo_strategy]]`.
+ */
+function assertProductionCaptchaConfigured(e: typeof env): void {
+	if (e.DEMO_DEPLOYMENT) return
+	if (e.SMARTCAPTCHA_SERVER_KEY && e.SMARTCAPTCHA_SERVER_KEY.length > 0) return
+	throw new Error(
+		'Refusing to start in APP_MODE=production: SMARTCAPTCHA_SERVER_KEY is unset and DEMO_DEPLOYMENT=false. ' +
+			'Either configure SmartCaptcha (see env.ts SMARTCAPTCHA_SERVER_KEY) or flip DEMO_DEPLOYMENT=true for public demo builds.',
+	)
+}
+
 async function main(): Promise<void> {
 	// Pre-warm YDB connection so /health/db is fast on first call.
 	await readyDriver()
@@ -16,6 +33,7 @@ async function main(): Promise<void> {
 	// (unless explicitly whitelisted via APP_MODE_PERMITTED_MOCK_ADAPTERS).
 	if (env.APP_MODE === 'production') {
 		assertProductionReady({ permittedMockAdapters: env.APP_MODE_PERMITTED_MOCK_ADAPTERS })
+		assertProductionCaptchaConfigured(env)
 	}
 	logger.info(
 		{
