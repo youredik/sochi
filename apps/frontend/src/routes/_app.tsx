@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { AdminSidebar } from '../components/app-shell/admin-sidebar.tsx'
 import { InstallPrompt } from '../components/install-prompt.tsx'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar.tsx'
+import { orgListQueryOptions } from '../features/tenancy/hooks/use-active-org.ts'
 import { authClient, sessionQueryOptions } from '../lib/auth-client.ts'
 import { subscribeAuthBroadcasts } from '../lib/broadcast-auth.ts'
 
@@ -39,8 +40,7 @@ export const Route = createFileRoute('/_app')({
 			throw redirect({ to: '/login', search: { redirect: location.href } })
 		}
 		if (!session.session.activeOrganizationId) {
-			const res = await authClient.organization.list()
-			const orgs = res.data ?? []
+			const orgs = await context.queryClient.ensureQueryData(orgListQueryOptions)
 			if (orgs.length === 0) {
 				// Session + zero orgs is the canonical post-magic-link-verify state
 				// under the passwordless canon (commit `3b0b486`): BA's verify

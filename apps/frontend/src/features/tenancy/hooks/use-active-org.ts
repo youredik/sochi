@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import { authClient, sessionQueryOptions } from '../../../lib/auth-client.ts'
 
 /**
@@ -15,16 +15,25 @@ import { authClient, sessionQueryOptions } from '../../../lib/auth-client.ts'
  * session's active org matches the URL slug.
  */
 
+/**
+ * Canonical query options для BA org list — used by route `beforeLoad`
+ * via `queryClient.ensureQueryData()` AND by component `useQuery`. Same
+ * queryKey + queryFn = one cached entry shared across the app, so hover-
+ * preload Link prefetching doesn't fire fresh fetches every time
+ * (TanStack Router canon май 2026).
+ */
+export const orgListQueryOptions = queryOptions({
+	queryKey: ['auth', 'organizations'] as const,
+	queryFn: async () => {
+		const res = await authClient.organization.list()
+		if (res.error) throw new Error(res.error.message ?? 'Не удалось получить список организаций')
+		return res.data ?? []
+	},
+	staleTime: 60_000,
+})
+
 export function useOrgList() {
-	return useQuery({
-		queryKey: ['auth', 'organizations'] as const,
-		queryFn: async () => {
-			const res = await authClient.organization.list()
-			if (res.error) throw new Error(res.error.message ?? 'Не удалось получить список организаций')
-			return res.data ?? []
-		},
-		staleTime: 60_000,
-	})
+	return useQuery(orgListQueryOptions)
 }
 
 export function useActiveOrg() {

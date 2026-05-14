@@ -54,6 +54,13 @@ export type SidebarSection = {
 	readonly icon: LucideIcon
 	readonly to: string
 	readonly needsPropertyId?: boolean
+	/**
+	 * If true, sidebar entry stays active for any URL prefix-matching `to`.
+	 * Use for sections с sub-tabs (e.g. `inventory` has `/rooms` / `/rate-
+	 * plans` / `/prices` tabs — all should highlight the parent menu item).
+	 * Defaults к false (`activeOptions={{ exact: true }}` per A.bis.2 D22).
+	 */
+	readonly activeOnPrefix?: boolean
 	readonly isVisible: (role: MemberRole) => boolean
 }
 
@@ -91,8 +98,14 @@ export const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
 		labelRu: 'Инвентарь',
 		ariaLabelRu: 'Номера, категории, тарифные планы, цены и ограничения',
 		icon: LayersIcon,
-		to: '/o/$orgSlug/properties/$propertyId/inventory/rooms',
+		// `to` points к the parent layout — its beforeLoad redirects к /rooms
+		// by default. Sub-tab siblings (/rooms / /rate-plans / /prices) all
+		// live under /inventory, so `activeOnPrefix=true` + Link `exact:false`
+		// highlights the menu entry across all three. Pointing `to` at a leaf
+		// would only highlight on that one tab (children-only relation).
+		to: '/o/$orgSlug/properties/$propertyId/inventory',
 		needsPropertyId: true,
+		activeOnPrefix: true,
 		// Inventory admin = owner+manager only. Staff has room:read / ratePlan:read
 		// для front-desk visibility но не управляет каталогом (canon per
 		// rbac.ts staff block).

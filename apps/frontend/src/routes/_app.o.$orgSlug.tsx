@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
+import { orgListQueryOptions } from '../features/tenancy/hooks/use-active-org.ts'
 import { authClient, sessionQueryOptions } from '../lib/auth-client.ts'
 
 /**
@@ -18,8 +19,12 @@ import { authClient, sessionQueryOptions } from '../lib/auth-client.ts'
  */
 export const Route = createFileRoute('/_app/o/$orgSlug')({
 	beforeLoad: async ({ context, params }) => {
-		const res = await authClient.organization.list()
-		const orgs = res.data ?? []
+		// Use queryClient.ensureQueryData to hit the cached org-list (60s
+		// staleTime) instead of fresh authClient.organization.list() each call.
+		// TanStack Router preload="intent" on Link hover fires this beforeLoad
+		// once per hover; without cache that triggers a fresh /auth/organization
+		// /list request → user-visible network spam (caught 2026-05-14).
+		const orgs = await context.queryClient.ensureQueryData(orgListQueryOptions)
 		const target = orgs.find((o) => o.slug === params.orgSlug)
 		if (!target) {
 			throw redirect({ to: '/' })

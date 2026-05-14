@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { authClient, sessionQueryOptions } from '../lib/auth-client.ts'
+import { orgListQueryOptions } from '../features/tenancy/hooks/use-active-org.ts'
+import { sessionQueryOptions } from '../lib/auth-client.ts'
 
 /**
  * / — post-authentication entry. The parent `_app` guard has already
@@ -15,8 +16,8 @@ export const Route = createFileRoute('/_app/')({
 		const session = await context.queryClient.ensureQueryData(sessionQueryOptions)
 		const activeId = session?.session?.activeOrganizationId
 		if (!activeId) throw redirect({ to: '/o-select' })
-		const res = await authClient.organization.list()
-		const org = (res.data ?? []).find((o) => o.id === activeId)
+		const orgs = await context.queryClient.ensureQueryData(orgListQueryOptions)
+		const org = orgs.find((o) => o.id === activeId)
 		if (!org) throw redirect({ to: '/o-select' })
 		throw redirect({ to: '/o/$orgSlug', params: { orgSlug: org.slug } })
 	},

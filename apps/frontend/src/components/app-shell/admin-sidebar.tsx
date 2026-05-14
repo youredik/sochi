@@ -108,7 +108,13 @@ export function AdminSidebar({ orgSlug }: AdminSidebarProps) {
 													// biome-ignore lint/suspicious/noExplicitAny: TanStack Router typed routes vs dynamic params dispatch — narrowing would require a per-section switch over 7 routes; runtime params are route-aware (orgSlug always; propertyId iff needed).
 													params={params as any}
 													activeProps={{ 'aria-current': 'page' }}
-													activeOptions={{ exact: true }}
+													activeOptions={
+														section.activeOnPrefix === true
+															? // For sections с sub-tabs (e.g. inventory с /rooms+/rate-plans+/prices),
+																// strip the leaf segment from `to` so any /inventory/* path highlights.
+																{ exact: false }
+															: { exact: true }
+													}
 													data-section-id={section.id}
 												>
 													<Icon aria-hidden="true" />
