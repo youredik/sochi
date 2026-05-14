@@ -31,7 +31,13 @@ import {
 import { useBulkUpsertRates, useDeleteRate } from '../hooks/use-rates.ts'
 
 const formSchema = z.object({
-	price: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Число, до 2 знаков после точки'),
+	// Strict positive amount — server `singleRateSchema.amount` also forbids
+	// negative. Caught regex tightening 2026-05-14 (frontend was `/^-?\d+/`
+	// в bulk-edit, allowed negative submit → server 400; UX-bad).
+	price: z
+		.string()
+		.min(1, 'Введите цену')
+		.regex(/^\d+(\.\d{1,2})?$/, 'Число, до 2 знаков после точки'),
 })
 
 export interface SingleRateEditTarget {
@@ -55,7 +61,10 @@ export function SingleRateEditSheet({ open, onOpenChange, target }: SingleRateEd
 
 	const form = useForm({
 		defaultValues: {
-			price: target.currentAmount ?? '4000',
+			// Empty default когда no current amount — заставить user явно ввести
+			// price (placeholder-as-default trap caught earlier с inventoryCount /
+			// orgName; applying same canon here). При edit-mode prefill existing.
+			price: target.currentAmount ?? '',
 		},
 		onSubmit: async ({ value }) => {
 			setSubmitError(null)

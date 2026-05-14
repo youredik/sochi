@@ -96,10 +96,25 @@ export function BulkEditPricesSheet({
 			dow: [true, true, true, true, true, true, true] as ReadonlyArray<boolean>,
 			ratePlanIds: ratePlans.map((p) => p.id) as ReadonlyArray<string>,
 			mode: 'set' as ActionMode,
-			price: '4000',
+			// Empty default — force operator к ввести explicit value. Placeholder
+			// «4500» / «10» / «500» в input просто намёк, не default value.
+			// Caught 2026-05-14: '4000' default + all 90 days × all rate plans
+			// selected → submit without read overwrites everything = data-loss trap.
+			price: '',
 		} satisfies FormValues,
 		onSubmit: async ({ value }) => {
 			setResult(null)
+			// Field-level validator catches empty + non-numeric (see formSchema.price).
+			// TanStack Form's handleSubmit skips user-onSubmit when field validation
+			// fails, так что empty/NaN paths shown как inline FieldError, not toast.
+			const factor = Number(value.price)
+			// Strict-positive для set mode (Mews / Bnovo canon: цена ≥ 0).
+			// Для relative ops (percent / amount) — отрицательные допустимы
+			// (скидка), но финальная сумма clamped к 0 ниже + warned.
+			if (value.mode === 'set' && factor < 0) {
+				toast.error('Цена не может быть отрицательной')
+				return
+			}
 			const allowedJsDow = new Set(
 				value.dow.flatMap((on, idx) => (on ? [DOW_JS_BY_INDEX[idx] ?? -1] : [])),
 			)
@@ -112,10 +127,10 @@ export function BulkEditPricesSheet({
 				toast.error('Выберите хотя бы один тариф')
 				return
 			}
-			const factor = Number(value.price)
 			const failedPlans: string[] = []
 			let totalUpdated = 0
 			let skippedNoBase = 0
+			let clampedNegative = 0
 			const tasks = value.ratePlanIds.map(async (ratePlanId) => {
 				const planRates = existingRates.get(ratePlanId)
 				const rates: { date: string; amount: string; currency: 'RUB' }[] = []
@@ -131,6 +146,9 @@ export function BulkEditPricesSheet({
 							continue
 						}
 						newAmount = value.mode === 'percent' ? current * (1 + factor / 100) : current + factor
+					}
+					if (newAmount < 0) {
+						clampedNegative += 1
 					}
 					// Clamp к non-negative integer kopeck precision.
 					const rounded = Math.max(0, Math.round(newAmount * 100) / 100)
@@ -151,6 +169,11 @@ export function BulkEditPricesSheet({
 			if (skippedNoBase > 0) {
 				toast.info(
 					`Пропущено ${skippedNoBase} ячеек без базовой цены (для % / ₽ нужна текущая цена)`,
+				)
+			}
+			if (clampedNegative > 0) {
+				toast.warning(
+					`У ${clampedNegative} ячеек итог был отрицательным — установлено в 0 ₽. Проверь скидку.`,
 				)
 			}
 			setResult({ updated: totalUpdated, failedPlans })
