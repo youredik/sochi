@@ -31,19 +31,33 @@ import {
 } from '../../../components/ui/responsive-sheet.tsx'
 import { generateDatesInRange, isoDateOffset, useBulkUpsertRates } from '../hooks/use-rates.ts'
 
+type ActionMode = 'set' | 'percent' | 'amount'
+
 interface FormValues {
 	from: string
 	to: string
 	dow: ReadonlyArray<boolean>
 	ratePlanIds: ReadonlyArray<string>
+	mode: ActionMode
 	price: string
 }
 
 const formSchema = z.object({
 	from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD'),
 	to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD'),
-	price: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Число, до 2 знаков после точки'),
+	// For 'set' mode: positive decimal. For 'percent' / 'amount': signed
+	// decimal (минус для скидок). Validation deliberately loose at schema
+	// level — runtime check inside submit handler.
+	price: z
+		.string()
+		.regex(/^-?\d+(\.\d{1,2})?$/, 'Число (можно с минусом), до 2 знаков после точки'),
 })
+
+const MODE_LABELS: Record<ActionMode, string> = {
+	set: 'Установить цену',
+	percent: 'Изменить на %',
+	amount: 'Изменить на ₽',
+}
 
 /**
  * RU week order ПН-ВТ-СР-ЧТ-ПТ-СБ-ВС, matching Bnovo + 1С:Отель display.
@@ -59,6 +73,8 @@ export interface BulkEditPricesSheetProps {
 	onOpenChange: (open: boolean) => void
 	ratePlans: ReadonlyArray<RatePlan>
 	roomTypes: ReadonlyArray<RoomType>
+	/** ratePlanId → date → current amount (string). Used для relative ops. */
+	existingRates: ReadonlyMap<string, ReadonlyMap<string, string>>
 }
 
 export function BulkEditPricesSheet({
@@ -66,6 +82,7 @@ export function BulkEditPricesSheet({
 	onOpenChange,
 	ratePlans,
 	roomTypes,
+	existingRates,
 }: BulkEditPricesSheetProps) {
 	const [result, setResult] = useState<{ updated: number; failedPlans: string[] } | null>(null)
 	const bulk = useBulkUpsertRates()
@@ -78,6 +95,7 @@ export function BulkEditPricesSheet({
 			to: isoDateOffset(89),
 			dow: [true, true, true, true, true, true, true] as ReadonlyArray<boolean>,
 			ratePlanIds: ratePlans.map((p) => p.id) as ReadonlyArray<string>,
+			mode: 'set' as ActionMode,
 			price: '4000',
 		} satisfies FormValues,
 		onSubmit: async ({ value }) => {
@@ -94,16 +112,35 @@ export function BulkEditPricesSheet({
 				toast.error('Выберите хотя бы один тариф')
 				return
 			}
-			const amount = value.price
+			const factor = Number(value.price)
 			const failedPlans: string[] = []
 			let totalUpdated = 0
+			let skippedNoBase = 0
 			const tasks = value.ratePlanIds.map(async (ratePlanId) => {
+				const planRates = existingRates.get(ratePlanId)
+				const rates: { date: string; amount: string; currency: 'RUB' }[] = []
+				for (const date of dates) {
+					let newAmount: number
+					if (value.mode === 'set') {
+						newAmount = factor
+					} else {
+						const current = Number(planRates?.get(date) ?? NaN)
+						if (Number.isNaN(current)) {
+							// Skip: relative op needs a base value to multiply / add against.
+							skippedNoBase += 1
+							continue
+						}
+						newAmount = value.mode === 'percent' ? current * (1 + factor / 100) : current + factor
+					}
+					// Clamp к non-negative integer kopeck precision.
+					const rounded = Math.max(0, Math.round(newAmount * 100) / 100)
+					rates.push({ date, amount: rounded.toString(), currency: 'RUB' })
+				}
+				if (rates.length === 0) return
 				try {
 					const updated = await bulk.mutateAsync({
 						ratePlanId,
-						input: {
-							rates: dates.map((date) => ({ date, amount, currency: 'RUB' })),
-						},
+						input: { rates },
 					})
 					totalUpdated += updated.length
 				} catch (err) {
@@ -111,6 +148,11 @@ export function BulkEditPricesSheet({
 				}
 			})
 			await Promise.all(tasks)
+			if (skippedNoBase > 0) {
+				toast.info(
+					`Пропущено ${skippedNoBase} ячеек без базовой цены (для % / ₽ нужна текущая цена)`,
+				)
+			}
 			setResult({ updated: totalUpdated, failedPlans })
 			if (failedPlans.length === 0) {
 				toast.success(`Обновлено ${totalUpdated} ячеек`)
@@ -255,36 +297,75 @@ export function BulkEditPricesSheet({
 						)}
 					</form.Field>
 
-					<form.Field
-						name="price"
-						validators={{
-							onChange: ({ value }) =>
-								formSchema.shape.price.safeParse(value).error?.issues[0]?.message,
-						}}
-					>
+					<form.Field name="mode">
 						{(field) => (
-							<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
-								<FieldLabel htmlFor={field.name}>Цена за ночь, ₽</FieldLabel>
-								<Input
-									id={field.name}
-									type="number"
-									inputMode="decimal"
-									step="0.01"
-									min={0}
-									value={field.state.value}
-									onChange={(e) => field.handleChange(e.target.value)}
-									placeholder="4500"
-								/>
-								{field.state.meta.errors[0] ? (
-									<FieldError>{String(field.state.meta.errors[0])}</FieldError>
-								) : null}
-								<FieldDescription>
-									Применится ко всем выбранным ячейкам (дата × тариф). Относительные операции (+%,
-									+сумма) — в следующей версии.
-								</FieldDescription>
-							</Field>
+							<fieldset className="space-y-2">
+								<legend className="text-sm font-medium">Действие</legend>
+								<div className="flex flex-wrap gap-3 text-sm">
+									{(Object.keys(MODE_LABELS) as ActionMode[]).map((m) => {
+										const id = `bulk-mode-${m}`
+										const checked = field.state.value === m
+										return (
+											<div key={m} className="flex items-center gap-1.5">
+												<input
+													id={id}
+													type="radio"
+													name={field.name}
+													checked={checked}
+													onChange={() => field.handleChange(m)}
+													className="size-4 accent-primary"
+												/>
+												<label htmlFor={id} className="cursor-pointer">
+													{MODE_LABELS[m]}
+												</label>
+											</div>
+										)
+									})}
+								</div>
+							</fieldset>
 						)}
 					</form.Field>
+
+					<form.Subscribe selector={(s) => s.values.mode}>
+						{(mode) => (
+							<form.Field
+								name="price"
+								validators={{
+									onChange: ({ value }) =>
+										formSchema.shape.price.safeParse(value).error?.issues[0]?.message,
+								}}
+							>
+								{(field) => (
+									<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
+										<FieldLabel htmlFor={field.name}>
+											{mode === 'set'
+												? 'Цена за ночь, ₽'
+												: mode === 'percent'
+													? 'Изменение, % (положительное = +, отрицательное = −)'
+													: 'Изменение, ₽ (положительное = +, отрицательное = −)'}
+										</FieldLabel>
+										<Input
+											id={field.name}
+											type="number"
+											inputMode="decimal"
+											step="0.01"
+											value={field.state.value}
+											onChange={(e) => field.handleChange(e.target.value)}
+											placeholder={mode === 'set' ? '4500' : mode === 'percent' ? '10' : '500'}
+										/>
+										{field.state.meta.errors[0] ? (
+											<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+										) : null}
+										<FieldDescription>
+											{mode === 'set'
+												? 'Применится абсолютной ценой ко всем выбранным ячейкам.'
+												: 'Применится относительно текущей цены. Ячейки без базовой цены будут пропущены.'}
+										</FieldDescription>
+									</Field>
+								)}
+							</form.Field>
+						)}
+					</form.Subscribe>
 
 					{result && result.failedPlans.length > 0 ? (
 						<div

@@ -18,7 +18,7 @@
  * power-user shortcuts not needed when modal-driven editing covers 100% of
  * the operator's intent. Defer big lib to когда the workflow demands it.
  */
-import type { Rate, RatePlan } from '@horeca/shared'
+import type { Rate, RatePlan, RoomType } from '@horeca/shared'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Loader2, Pencil } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -27,6 +27,7 @@ import { ratePlansQueryOptions } from '../hooks/use-rate-plans.ts'
 import { roomTypesQueryOptions } from '../hooks/use-room-types.ts'
 import { isoDateOffset, ratesRangeQueryOptions } from '../hooks/use-rates.ts'
 import { BulkEditPricesSheet } from './bulk-edit-prices-sheet.tsx'
+import { type SingleRateEditTarget, SingleRateEditSheet } from './single-rate-edit-sheet.tsx'
 
 const WINDOW_DAYS = 90
 
@@ -41,6 +42,7 @@ export function InventoryPricesPage({ propertyId }: InventoryPricesPageProps) {
 	const roomTypes = roomTypesQuery.data ?? []
 
 	const [sheetOpen, setSheetOpen] = useState(false)
+	const [singleEditTarget, setSingleEditTarget] = useState<SingleRateEditTarget | null>(null)
 
 	const fromDate = useMemo(() => isoDateOffset(0), [])
 	const toDate = useMemo(() => isoDateOffset(WINDOW_DAYS - 1), [])
@@ -71,6 +73,7 @@ export function InventoryPricesPage({ propertyId }: InventoryPricesPageProps) {
 	}, [ratePlans, rateQueries])
 
 	const roomTypeNameById = new Map(roomTypes.map((rt) => [rt.id, rt.name] as const))
+	const roomTypeById = new Map(roomTypes.map((rt) => [rt.id, rt] as const))
 
 	return (
 		<div className="space-y-4">
@@ -104,6 +107,16 @@ export function InventoryPricesPage({ propertyId }: InventoryPricesPageProps) {
 					roomTypeNameById={roomTypeNameById}
 					dateRow={dateRow}
 					ratesByPlan={ratesByPlan}
+					onCellClick={(date, plan) => {
+						const rt = roomTypeById.get(plan.roomTypeId)
+						if (!rt) return
+						setSingleEditTarget({
+							date,
+							ratePlan: plan,
+							roomType: rt,
+							currentAmount: ratesByPlan.get(plan.id)?.get(date),
+						})
+					}}
 				/>
 			)}
 
@@ -112,7 +125,18 @@ export function InventoryPricesPage({ propertyId }: InventoryPricesPageProps) {
 				onOpenChange={setSheetOpen}
 				ratePlans={ratePlans}
 				roomTypes={roomTypes}
+				existingRates={ratesByPlan}
 			/>
+			{singleEditTarget ? (
+				<SingleRateEditSheet
+					key={`${singleEditTarget.ratePlan.id}-${singleEditTarget.date}`}
+					open
+					onOpenChange={(open) => {
+						if (!open) setSingleEditTarget(null)
+					}}
+					target={singleEditTarget}
+				/>
+			) : null}
 		</div>
 	)
 }
@@ -122,9 +146,16 @@ interface PricesGridProps {
 	readonly roomTypeNameById: ReadonlyMap<string, string>
 	readonly dateRow: ReadonlyArray<string>
 	readonly ratesByPlan: ReadonlyMap<string, ReadonlyMap<string, string>>
+	readonly onCellClick: (date: string, plan: RatePlan) => void
 }
 
-function PricesGrid({ ratePlans, roomTypeNameById, dateRow, ratesByPlan }: PricesGridProps) {
+function PricesGrid({
+	ratePlans,
+	roomTypeNameById,
+	dateRow,
+	ratesByPlan,
+	onCellClick,
+}: PricesGridProps) {
 	return (
 		<section
 			className="max-h-[60vh] overflow-auto rounded-lg border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -166,8 +197,15 @@ function PricesGrid({ ratePlans, roomTypeNameById, dateRow, ratesByPlan }: Price
 								{ratePlans.map((plan) => {
 									const amount = ratesByPlan.get(plan.id)?.get(iso)
 									return (
-										<td key={plan.id} className="px-3 py-1.5 text-right tabular-nums">
-											{amount ? formatPrice(amount) : '—'}
+										<td key={plan.id} className="p-0">
+											<button
+												type="button"
+												onClick={() => onCellClick(iso, plan)}
+												className="block w-full px-3 py-1.5 text-right tabular-nums hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+												aria-label={`Изменить цену ${iso} · ${plan.code}`}
+											>
+												{amount ? formatPrice(amount) : '—'}
+											</button>
 										</td>
 									)
 								})}

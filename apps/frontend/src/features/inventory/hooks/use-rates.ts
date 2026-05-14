@@ -13,6 +13,23 @@ import type { Rate, RateBulkUpsertInput } from '@horeca/shared'
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../lib/api.ts'
 
+export function useDeleteRate() {
+	const queryClient = useQueryClient()
+	return useMutation<{ success: boolean }, Error, { ratePlanId: string; date: string }>({
+		mutationFn: async ({ ratePlanId, date }) => {
+			const res = await api.api.v1['rate-plans'][':ratePlanId'].rates[':date'].$delete({
+				param: { ratePlanId, date },
+			})
+			if (!res.ok) throw new Error(`rates.delete HTTP ${res.status}`)
+			const body = (await res.json()) as { data: { success: boolean } }
+			return body.data
+		},
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: ['inventory', 'rates'] })
+		},
+	})
+}
+
 export const ratesQueryKey = (ratePlanId: string, from: string, to: string) =>
 	['inventory', 'rates', { ratePlanId, from, to }] as const
 

@@ -205,7 +205,10 @@ interface CategoryRowProps {
 
 function CategoryRow({ rt, rooms, onEdit, onBulkAdd, onDelete, onDeleteRoom }: CategoryRowProps) {
 	const panelId = useId()
-	const [expanded, setExpanded] = useState(false)
+	// Default expanded when category has rooms — Mews / Cloudbeds / Bnovo
+	// canon: operator immediately sees inventory без лишних кликов. Empty
+	// categories collapse by default так they don't add visual noise.
+	const [expanded, setExpanded] = useState(rooms.length > 0)
 	const roomCount = rooms.length
 
 	return (
@@ -247,7 +250,7 @@ function CategoryRow({ rt, rooms, onEdit, onBulkAdd, onDelete, onDeleteRoom }: C
 						aria-label={`Добавить номера в категорию «${rt.name}»`}
 					>
 						<Plus className="size-4" aria-hidden="true" />
-						Номера
+						Добавить
 					</Button>
 					<Button
 						variant="ghost"
