@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { formatDateShort } from '@/lib/format-ru'
+import { formatDayOnly } from '@/lib/format-ru'
 
 interface Props {
 	value: string
@@ -37,7 +37,7 @@ export function ChessboardDatePicker({ value, onChange }: Props) {
 			<PopoverTrigger asChild>
 				<Button variant="outline" size="sm" aria-label="Перейти к дате">
 					<CalendarIcon className="size-4" aria-hidden="true" />
-					<span>{formatDateShort(value)}</span>
+					<span>{formatDayOnly(value)}</span>
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-auto p-0">

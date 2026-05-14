@@ -112,6 +112,7 @@ const DATE_SHORT_FMT = new Intl.DateTimeFormat('ru-RU', {
 	dateStyle: 'short',
 	timeStyle: 'short',
 })
+const DATE_ONLY_FMT = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short' })
 const RTF = new Intl.RelativeTimeFormat('ru-RU', { numeric: 'auto' })
 
 /** "25 апреля 2026 г., 17:30" — for log/timeline/audit. */
@@ -119,9 +120,20 @@ export function formatDateLong(d: Date | string): string {
 	return DATE_LONG_FMT.format(typeof d === 'string' ? new Date(d) : d)
 }
 
-/** "25.04.2026, 17:30" — compact for tables. */
+/** "25.04.2026, 17:30" — compact для tables with timestamp columns. */
 export function formatDateShort(d: Date | string): string {
 	return DATE_SHORT_FMT.format(typeof d === 'string' ? new Date(d) : d)
+}
+
+/**
+ * "25.04.2026" — date-only, no time component. Use для calendar day pickers /
+ * grid headers / anywhere the underlying value is a YYYY-MM-DD ISO date
+ * без time-of-day semantics. `formatDateShort` artificially adds 00:00 →
+ * MSK render → ", 03:00" appended (UTC-anchored `new Date('2026-05-14')`
+ * shifts forward 3h в TZ='Europe/Moscow') which is noise here.
+ */
+export function formatDayOnly(d: Date | string): string {
+	return DATE_ONLY_FMT.format(typeof d === 'string' ? new Date(d) : d)
 }
 
 /**

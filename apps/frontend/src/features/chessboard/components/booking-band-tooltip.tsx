@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import { createPortal } from 'react-dom'
-import { formatDateShort } from '@/lib/format-ru'
+import { formatDayOnly } from '@/lib/format-ru'
 
 interface PopoverHandlers {
 	popoverId: string
@@ -83,9 +83,9 @@ export function BookingBandTooltip({
 			<div className="font-medium">{statusLabel}</div>
 			<div className="text-muted-foreground mt-1">{roomTypeName}</div>
 			<div className="text-muted-foreground mt-1">
-				<time dateTime={checkIn}>{formatDateShort(checkIn)}</time>
+				<time dateTime={checkIn}>{formatDayOnly(checkIn)}</time>
 				{' — '}
-				<time dateTime={checkOut}>{formatDateShort(checkOut)}</time>
+				<time dateTime={checkOut}>{formatDayOnly(checkOut)}</time>
 			</div>
 		</div>
 	)

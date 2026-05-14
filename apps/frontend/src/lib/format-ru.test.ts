@@ -51,6 +51,7 @@ import { describe, expect, test } from 'bun:test'
 import {
 	formatDateLong,
 	formatDateShort,
+	formatDayOnly,
 	formatMoney,
 	formatMoneyA11y,
 	formatPercent,
@@ -241,6 +242,22 @@ describe('formatDateLong / formatDateShort / formatRelative', () => {
 
 	test('[D5] formatDate accepts both Date and ISO string', () => {
 		expect(formatDateShort(fixedDate)).toBe(formatDateShort('2026-04-25T17:30:00Z'))
+	})
+
+	test('[D6] formatDayOnly omits time component (MSK 03:00 trap)', () => {
+		// Surfaced 2026-05-14: chessboard date-picker rendered "14.05.2026, 03:00"
+		// because formatDateShort always includes timeStyle. For a calendar
+		// day picker (value is plain YYYY-MM-DD ISO), `new Date('2026-05-14')`
+		// is UTC midnight → MSK +03:00 → ", 03:00" appended. formatDayOnly
+		// drops time entirely.
+		const out = formatDayOnly('2026-05-14')
+		expect(out).toMatch(/^14\.05\.2026$/)
+		expect(out).not.toMatch(/\d{1,2}:\d{2}/)
+	})
+
+	test('[D7] formatDayOnly: ISO string with explicit T00:00 still shows just date', () => {
+		const out = formatDayOnly('2026-04-25T17:30:00Z')
+		expect(out).toMatch(/^\d{2}\.\d{2}\.2026$/)
 	})
 })
 

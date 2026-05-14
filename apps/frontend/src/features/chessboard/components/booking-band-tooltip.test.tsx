@@ -92,9 +92,10 @@ describe('BookingBandTooltip — render', () => {
 		const tooltip = screen.getByRole('tooltip')
 		expect(tooltip.textContent).toContain('Подтверждена')
 		expect(tooltip.textContent).toContain('Стандарт')
-		// formatDateShort('2026-04-28') = e.g. '28 апр'
-		expect(tooltip.textContent).toMatch(/28/)
-		expect(tooltip.textContent).toMatch(/30/)
+		// formatDayOnly('2026-04-28') = "28.04.2026"; no time component.
+		expect(tooltip.textContent).toMatch(/28\.04\.2026/)
+		expect(tooltip.textContent).toMatch(/30\.04\.2026/)
+		expect(tooltip.textContent).not.toMatch(/\d{1,2}:\d{2}/)
 	})
 
 	it('[R4] popoverId unique per bookingId', () => {
