@@ -18,7 +18,7 @@
  * power-user shortcuts not needed when modal-driven editing covers 100% of
  * the operator's intent. Defer big lib to когда the workflow demands it.
  */
-import type { Rate, RatePlan, RoomType } from '@horeca/shared'
+import type { Rate, RatePlan } from '@horeca/shared'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Loader2, Pencil } from 'lucide-react'
 import { useMemo, useState } from 'react'
