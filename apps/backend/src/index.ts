@@ -43,6 +43,23 @@ async function main(): Promise<void> {
 		'Adapter registry ready',
 	)
 
+	// Dev-only mock visibility — surfaces «forgot to restart after editing .env»
+	// trap immediately on startup instead of при первом live-зависимом запросе
+	// (Node's `--env-file-if-exists` reads .env once at process start; unlike
+	// Bun's `--watch`, it is NOT reactive to .env edits). If user wants live
+	// DaData but the dev server была started before `DADATA_API_KEY` landed
+	// в `.env`, this warning fires and a single Ctrl+C / restart fixes it.
+	if (env.NODE_ENV === 'development' && env.APP_MODE === 'sandbox') {
+		if (!env.DADATA_API_KEY) {
+			logger.warn(
+				'DaData runs в mock-режиме: DADATA_API_KEY is unset. Mock returns canonical ' +
+					'demo set only (Сочи/Сириус/Красная Поляна) — real ИНН lookups will ' +
+					'return null. Set DADATA_API_KEY в .env and restart the backend ' +
+					'(Node --env-file is non-reactive to .env edits).',
+			)
+		}
+	}
+
 	const server = serve(
 		{
 			fetch: app.fetch,
