@@ -78,6 +78,36 @@ test.describe('inventory — rooms page (Phase II)', () => {
 	})
 })
 
+test.describe('inventory — prices page (Phase IV)', () => {
+	test('switches к «Цены и ограничения» tab, renders grid + opens bulk-edit sheet, axe-clean', async ({
+		page,
+	}) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+
+		await page.locator('[data-section-id="inventory"]').click()
+		await expect(page).toHaveURL(/\/inventory\/rooms$/)
+		await page.getByRole('tab', { name: 'Цены и ограничения' }).click()
+		await expect(page).toHaveURL(/\/inventory\/prices$/)
+
+		await expect(page.getByRole('heading', { name: 'Цены и ограничения' })).toBeVisible()
+
+		// «Изменить цены» CTA должен быть enabled (e2e tenant has default
+		// «Базовый» plan seeded в auth.setup).
+		const editCta = page.getByRole('button', { name: /Изменить цены/ }).first()
+		await expect(editCta).toBeEnabled()
+		await editCta.click()
+
+		// Sheet contents: «Дни недели» legend visible (exact-match — Sheet
+		// description copy also contains «дни недели» phrase).
+		await expect(page.getByText('Дни недели', { exact: true })).toBeVisible()
+		await page.keyboard.press('Escape')
+		await expect(page.getByText('Дни недели', { exact: true })).not.toBeVisible()
+
+		await axeClean(page, 'inventory-prices')
+	})
+})
+
 test.describe('inventory — rate-plans page (Phase III)', () => {
 	test('switches к «Тарифы» tab, renders rate-plans surface + opens form sheet, axe-clean', async ({
 		page,

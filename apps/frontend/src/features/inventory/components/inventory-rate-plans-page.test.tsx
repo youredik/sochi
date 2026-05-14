@@ -26,6 +26,7 @@ mock.module('@tanstack/react-query', () => ({
 		return { data: undefined, error: null, isPending: false }
 	},
 	useMutation: () => ({ mutate: () => {}, mutateAsync: async () => ({}), isPending: false }),
+	useQueries: () => [],
 	useQueryClient: () => ({ invalidateQueries: () => {} }),
 	queryOptions: <T,>(opts: T) => opts,
 }))
