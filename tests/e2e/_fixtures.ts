@@ -27,12 +27,29 @@
  * name keeps `testMatch: /.*\.spec\.ts/` from picking it up as a test.
  */
 
+import { existsSync } from 'node:fs'
 import { test as base } from '@playwright/test'
+
+/**
+ * Per-worker storage path with fallback. `auth.setup.ts` ALWAYS writes
+ * `owner-w0.json` (its own `setupInfo.workerIndex` is 0). When chromium tests
+ * start in a separate worker pool, Playwright sometimes assigns workerIndex=1
+ * (or higher) — locally `workers:1` doesn't guarantee project pools share
+ * indices. Falling back to `owner-w0.json` if the per-worker file isn't found
+ * keeps tests green в the single-worker local config while still using
+ * per-worker tenants when setup ran multiple workers (CI `workers:4` +
+ * `fullyParallel:true`).
+ */
+function pickStorageStatePath(workerIndex: number): string {
+	const specific = `tests/.auth/owner-w${workerIndex}.json`
+	if (existsSync(specific)) return specific
+	return 'tests/.auth/owner-w0.json'
+}
 
 export const test = base.extend<{ storageState: string }, { workerStorageState: string }>({
 	workerStorageState: [
 		async ({}, use, workerInfo) => {
-			await use(`tests/.auth/owner-w${workerInfo.workerIndex}.json`)
+			await use(pickStorageStatePath(workerInfo.workerIndex))
 		},
 		{ scope: 'worker' },
 	],

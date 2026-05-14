@@ -18,10 +18,10 @@ import { expect } from '@playwright/test'
 test.describe('reservation grid', () => {
 	test('dashboard link → grid renders with role=grid + aria metadata', async ({ page }) => {
 		await page.goto('/')
-		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/?$/)
+		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+-w\d+\/?$/)
 
 		await page.locator('[data-section-id="grid"]').first().click()
-		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/grid$/)
+		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+-w\d+\/grid$/)
 
 		// Grid container present with correct ARIA metadata.
 		const grid = page.getByRole('grid')
@@ -75,7 +75,7 @@ test.describe('reservation grid', () => {
 		// Positive assertion: must land on owner's OWN /o/e2e-hotel-…/ path,
 		// not just "anywhere but the adversarial slug". Prevents false-positive
 		// passes (e.g. blank page / error page that also lacks the slug).
-		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/?$/)
+		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+-w\d+\/?$/)
 	})
 
 	test('Назад button shifts window back (symmetric to Вперёд)', async ({ page }) => {

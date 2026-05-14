@@ -63,13 +63,13 @@ setup(
 		const orgNameInput = page.getByLabel('Название гостиницы')
 		await expect(orgNameInput).toHaveValue(orgName)
 		await Promise.all([
-			page.waitForURL(/\/o\/e2e-hotel-\d+(?:\/setup)?$/),
+			page.waitForURL(/\/o\/e2e-hotel-\d+-w\d+(?:\/setup)?$/),
 			page.getByRole('button', { name: 'Создать гостиницу →' }).click(),
 		])
 
 		// Empty-tenant dashboard guard at `/o/$slug/` redirects to /setup —
 		// either we land on /setup directly OR / route resolves к /setup.
-		await page.waitForURL(/\/o\/e2e-hotel-\d+\/setup$/)
+		await page.waitForURL(/\/o\/e2e-hotel-\d+-w\d+\/setup$/)
 		const match = page.url().match(/\/o\/([^/?]+)\/setup$/)
 		const orgSlug = match?.[1] ?? ''
 		expect(orgSlug).not.toBe('')

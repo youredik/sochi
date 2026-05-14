@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { test } from './_fixtures.ts'
 import { expect } from '@playwright/test'
+import { getMagicLinkUrl, purgeMailpit } from './_mailpit-helper.ts'
 /**
  * App-wide WCAG 2.2 AA audit (M5e.3.4).
  *
@@ -202,21 +203,36 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		await runAxe(page, 'wizard-addons-step')
 	})
 
-	test('/o/{slug}/setup wizard (in progress) passes WCAG 2.2 AA', async ({ page, context }) => {
-		// Fresh tenant so we can land on /setup. Sign up a brand-new user
-		// in THIS test's context (can't reuse owner.json which has a fully-
-		// configured tenant).
+	test('/o/{slug}/setup wizard (in progress) passes WCAG 2.2 AA', async ({
+		page,
+		context,
+		request,
+	}) => {
+		// Fresh tenant so we can land on /setup mid-onboarding (owner.json's
+		// wizard is finished). Magic-link canon per [[auth-passwordless-canon]]
+		// 2026-05-13 — старый email+password flow здесь был removed wholesale.
+		test.setTimeout(60_000)
 		await context.clearCookies()
-		await page.goto('/signup')
+		await purgeMailpit(request)
 		const ts = Date.now()
-		await page.getByLabel('Ваше имя').fill('A11y Wizard')
-		await page.getByLabel('Email').fill(`a11y-wizard-${ts}@sochi.local`)
-		await page.getByLabel('Пароль').fill('playwright-e2e-01')
-		await page.getByLabel('Название гостиницы').fill(`A11y Wizard ${ts}`)
+		const email = `a11y-wizard-${ts}@sochi.local`
+		const orgName = `A11y Wizard ${ts}`
+
+		await page.goto('/signup')
+		await page.getByLabel('Email').fill(email)
+		await page.getByLabel('Название гостиницы').fill(orgName)
 		await page.getByLabel(/согласие/).check()
-		await page.getByRole('button', { name: 'Создать аккаунт' }).click()
-		await expect(page).toHaveURL(/\/setup$/)
-		await expect(page.getByLabel('Название гостиницы')).toBeVisible()
+		await page.getByRole('button', { name: 'Получить ссылку для регистрации' }).click()
+		await expect(page.getByText('Письмо отправлено')).toBeVisible()
+
+		const magicLinkUrl = await getMagicLinkUrl(request, email)
+		await page.goto(magicLinkUrl)
+		await expect(page.getByRole('heading', { name: 'Почти готово' })).toBeVisible()
+		await Promise.all([
+			page.waitForURL(/\/o\/[^/]+\/setup$/),
+			page.getByRole('button', { name: 'Создать гостиницу →' }).click(),
+		])
+		await expect(page.getByLabel('ИНН гостиницы')).toBeVisible()
 		await runAxe(page, 'wizard-property-step')
 	})
 })

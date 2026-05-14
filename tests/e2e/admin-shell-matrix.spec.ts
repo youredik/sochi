@@ -54,7 +54,12 @@ const VIEWPORTS: readonly Viewport[] = [
 type ThemeName = 'light' | 'dark' | 'forced-colors'
 const THEMES: readonly ThemeName[] = ['light', 'dark', 'forced-colors'] as const
 
-const STORAGE_STATE = 'tests/.auth/owner.json'
+// Phase 16 per-worker storage state convention — `auth.setup.ts` writes
+// `owner-w{workerIdx}.json` (locally workerIdx=0). Old single-shared
+// `owner.json` path was orphaned by the per-worker migration. For multi-
+// worker CI scenarios the file is shared between workers (acceptable for
+// these read-only a11y matrix scans).
+const STORAGE_STATE = 'tests/.auth/owner-w0.json'
 
 /**
  * Wait for the admin shell to fully settle before scan/snapshot:

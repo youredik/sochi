@@ -45,7 +45,7 @@ test.describe('setup wizard adversarial (2-screen ИНН → inventory)', () => 
 		// only — direct navigation MUST start at step 1 (identify), not step 2
 		// (inventory) even if a prior session typed values.
 		await page.goto('/')
-		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+\/?$/)
+		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+-w\d+\/?$/)
 		const slug = page.url().match(/\/o\/([^/?]+)/)?.[1] ?? ''
 		expect(slug).not.toBe('')
 
@@ -59,6 +59,7 @@ test.describe('setup wizard adversarial (2-screen ИНН → inventory)', () => 
 
 	test('invalid ИНН keeps Найти disabled (10/12 digits regex enforced)', async ({ page }) => {
 		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+-w\d+\/?$/)
 		const slug = page.url().match(/\/o\/([^/?]+)/)?.[1] ?? ''
 		await page.goto(`/o/${slug}/setup`)
 
@@ -89,6 +90,7 @@ test.describe('setup wizard adversarial (2-screen ИНН → inventory)', () => 
 		page,
 	}) => {
 		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+-w\d+\/?$/)
 		const slug = page.url().match(/\/o\/([^/?]+)/)?.[1] ?? ''
 		await page.goto(`/o/${slug}/setup`)
 
@@ -113,6 +115,7 @@ test.describe('setup wizard adversarial (2-screen ИНН → inventory)', () => 
 		page,
 	}) => {
 		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+-w\d+\/?$/)
 		const slug = page.url().match(/\/o\/([^/?]+)/)?.[1] ?? ''
 		await page.goto(`/o/${slug}/setup`)
 
@@ -121,9 +124,12 @@ test.describe('setup wizard adversarial (2-screen ИНН → inventory)', () => 
 		await page.getByLabel('ИНН гостиницы').fill('9999999990')
 		await page.getByRole('button', { name: 'Найти' }).click()
 
-		// «Не нашли» banner + Заполнить вручную CTA.
-		const banner = page.getByRole('status')
-		await expect(banner).toContainText('не найдена')
+		// «Не нашли» banner + Заполнить вручную CTA. Scope to the identify-step
+		// banner specifically — the page-level DemoModeBadge also carries
+		// `role="status"` (LIVE/DEMO chip), so a bare getByRole('status')
+		// returns multiple locators and toContainText fails strict-mode.
+		const banner = page.getByRole('status').filter({ hasText: 'Организация не найдена' })
+		await expect(banner).toBeVisible()
 
 		await page.getByRole('button', { name: 'Заполнить вручную →' }).click()
 
