@@ -1,10 +1,10 @@
 /**
- * AdminSidebar — strict integration tests (A.bis.2 RBAC × 7 sections mount).
+ * AdminSidebar — strict integration tests (A.bis.2 RBAC × 8 sections mount).
  *
  * Pre-done audit (per `feedback_strict_tests.md`):
  *   RBAC mount × 3 roles (full enum coverage):
- *     [R-owner]   role=owner   → 7 sections rendered (full)
- *     [R-manager] role=manager → 7 sections rendered (full)
+ *     [R-owner]   role=owner   → 8 sections rendered (full)
+ *     [R-manager] role=manager → 8 sections rendered (full)
  *     [R-staff]   role=staff   → 3 sections rendered (grid + profile + guests)
  *     [R-staff-hidden-recv]    receivables NOT in DOM
  *     [R-staff-hidden-channels] channels NOT in DOM
@@ -74,7 +74,7 @@ mock.module('@tanstack/react-router', () => ({
 }))
 
 // Stub heavy footer consumers to keep this test focused on AdminSidebar's
-// own logic (RBAC × 7 sections rendering + propertyId dispatch + footer
+// own logic (RBAC × 8 sections rendering + propertyId dispatch + footer
 // composition slots). Each stub is a self-identifying inert element.
 mock.module('@/features/auth/components/logout-button', () => ({
 	LogoutButton: () => (
@@ -187,21 +187,39 @@ function getRenderedSectionIds(): string[] {
 /* -------------------------------------------------------------------------- */
 
 describe('AdminSidebar — RBAC × 3 roles (mounted section ids)', () => {
-	it('[R-owner] role=owner → 7 sections rendered (full)', () => {
+	it('[R-owner] role=owner → 8 sections rendered (full)', () => {
 		seed({ role: 'owner' })
 		renderSidebar()
 		const ids = getRenderedSectionIds().sort()
 		expect(ids).toEqual(
-			['channels', 'grid', 'guests', 'notifications', 'profile', 'receivables', 'tax'].sort(),
+			[
+				'channels',
+				'grid',
+				'guests',
+				'inventory',
+				'notifications',
+				'profile',
+				'receivables',
+				'tax',
+			].sort(),
 		)
 	})
 
-	it('[R-manager] role=manager → 7 sections rendered (full)', () => {
+	it('[R-manager] role=manager → 8 sections rendered (full)', () => {
 		seed({ role: 'manager' })
 		renderSidebar()
 		const ids = getRenderedSectionIds().sort()
 		expect(ids).toEqual(
-			['channels', 'grid', 'guests', 'notifications', 'profile', 'receivables', 'tax'].sort(),
+			[
+				'channels',
+				'grid',
+				'guests',
+				'inventory',
+				'notifications',
+				'profile',
+				'receivables',
+				'tax',
+			].sort(),
 		)
 	})
 
@@ -263,7 +281,7 @@ describe('AdminSidebar — composition / structure', () => {
 		seed({ role: 'owner' })
 		renderSidebar()
 		const items = document.querySelectorAll('[data-sidebar="menu-item"]')
-		expect(items.length).toBe(7)
+		expect(items.length).toBe(8)
 		for (const item of items) {
 			const link = item.querySelector('[data-section-id]')
 			expect(link).not.toBeNull()

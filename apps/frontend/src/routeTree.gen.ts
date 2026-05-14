@@ -32,7 +32,11 @@ import { Route as AppOOrgSlugAdminNotificationsRouteImport } from './routes/_app
 import { Route as AppOOrgSlugAdminMigrationRegistrationsRouteImport } from './routes/_app.o.$orgSlug.admin.migration-registrations'
 import { Route as AppOOrgSlugAdminChannelsRouteImport } from './routes/_app.o.$orgSlug.admin.channels'
 import { Route as AppOOrgSlugAccountSecurityRouteImport } from './routes/_app.o.$orgSlug.account.security'
+import { Route as AppOOrgSlugPropertiesPropertyIdInventoryRouteImport } from './routes/_app.o.$orgSlug.properties.$propertyId.inventory'
 import { Route as AppOOrgSlugPropertiesPropertyIdContentRouteImport } from './routes/_app.o.$orgSlug.properties.$propertyId.content'
+import { Route as AppOOrgSlugPropertiesPropertyIdInventoryRoomsRouteImport } from './routes/_app.o.$orgSlug.properties.$propertyId.inventory.rooms'
+import { Route as AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRouteImport } from './routes/_app.o.$orgSlug.properties.$propertyId.inventory.rate-plans'
+import { Route as AppOOrgSlugPropertiesPropertyIdInventoryPricesRouteImport } from './routes/_app.o.$orgSlug.properties.$propertyId.inventory.prices'
 import { Route as AppOOrgSlugBookingsBookingIdFoliosFolioIdRouteImport } from './routes/_app.o.$orgSlug.bookings.$bookingId.folios.$folioId'
 
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -157,11 +161,35 @@ const AppOOrgSlugAccountSecurityRoute =
     path: '/account/security',
     getParentRoute: () => AppOOrgSlugRoute,
   } as any)
+const AppOOrgSlugPropertiesPropertyIdInventoryRoute =
+  AppOOrgSlugPropertiesPropertyIdInventoryRouteImport.update({
+    id: '/properties/$propertyId/inventory',
+    path: '/properties/$propertyId/inventory',
+    getParentRoute: () => AppOOrgSlugRoute,
+  } as any)
 const AppOOrgSlugPropertiesPropertyIdContentRoute =
   AppOOrgSlugPropertiesPropertyIdContentRouteImport.update({
     id: '/properties/$propertyId/content',
     path: '/properties/$propertyId/content',
     getParentRoute: () => AppOOrgSlugRoute,
+  } as any)
+const AppOOrgSlugPropertiesPropertyIdInventoryRoomsRoute =
+  AppOOrgSlugPropertiesPropertyIdInventoryRoomsRouteImport.update({
+    id: '/rooms',
+    path: '/rooms',
+    getParentRoute: () => AppOOrgSlugPropertiesPropertyIdInventoryRoute,
+  } as any)
+const AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRoute =
+  AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRouteImport.update({
+    id: '/rate-plans',
+    path: '/rate-plans',
+    getParentRoute: () => AppOOrgSlugPropertiesPropertyIdInventoryRoute,
+  } as any)
+const AppOOrgSlugPropertiesPropertyIdInventoryPricesRoute =
+  AppOOrgSlugPropertiesPropertyIdInventoryPricesRouteImport.update({
+    id: '/prices',
+    path: '/prices',
+    getParentRoute: () => AppOOrgSlugPropertiesPropertyIdInventoryRoute,
   } as any)
 const AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute =
   AppOOrgSlugBookingsBookingIdFoliosFolioIdRouteImport.update({
@@ -194,7 +222,11 @@ export interface FileRoutesByFullPath {
   '/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
   '/o/$orgSlug/properties/$propertyId/content': typeof AppOOrgSlugPropertiesPropertyIdContentRoute
+  '/o/$orgSlug/properties/$propertyId/inventory': typeof AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren
   '/o/$orgSlug/bookings/$bookingId/folios/$folioId': typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
+  '/o/$orgSlug/properties/$propertyId/inventory/prices': typeof AppOOrgSlugPropertiesPropertyIdInventoryPricesRoute
+  '/o/$orgSlug/properties/$propertyId/inventory/rate-plans': typeof AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRoute
+  '/o/$orgSlug/properties/$propertyId/inventory/rooms': typeof AppOOrgSlugPropertiesPropertyIdInventoryRoomsRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -219,7 +251,11 @@ export interface FileRoutesByTo {
   '/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
   '/o/$orgSlug/properties/$propertyId/content': typeof AppOOrgSlugPropertiesPropertyIdContentRoute
+  '/o/$orgSlug/properties/$propertyId/inventory': typeof AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren
   '/o/$orgSlug/bookings/$bookingId/folios/$folioId': typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
+  '/o/$orgSlug/properties/$propertyId/inventory/prices': typeof AppOOrgSlugPropertiesPropertyIdInventoryPricesRoute
+  '/o/$orgSlug/properties/$propertyId/inventory/rate-plans': typeof AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRoute
+  '/o/$orgSlug/properties/$propertyId/inventory/rooms': typeof AppOOrgSlugPropertiesPropertyIdInventoryRoomsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -247,7 +283,11 @@ export interface FileRoutesById {
   '/_app/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/_app/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
   '/_app/o/$orgSlug/properties/$propertyId/content': typeof AppOOrgSlugPropertiesPropertyIdContentRoute
+  '/_app/o/$orgSlug/properties/$propertyId/inventory': typeof AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren
   '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId': typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
+  '/_app/o/$orgSlug/properties/$propertyId/inventory/prices': typeof AppOOrgSlugPropertiesPropertyIdInventoryPricesRoute
+  '/_app/o/$orgSlug/properties/$propertyId/inventory/rate-plans': typeof AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRoute
+  '/_app/o/$orgSlug/properties/$propertyId/inventory/rooms': typeof AppOOrgSlugPropertiesPropertyIdInventoryRoomsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -275,7 +315,11 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/admin/notifications'
     | '/o/$orgSlug/admin/tax'
     | '/o/$orgSlug/properties/$propertyId/content'
+    | '/o/$orgSlug/properties/$propertyId/inventory'
     | '/o/$orgSlug/bookings/$bookingId/folios/$folioId'
+    | '/o/$orgSlug/properties/$propertyId/inventory/prices'
+    | '/o/$orgSlug/properties/$propertyId/inventory/rate-plans'
+    | '/o/$orgSlug/properties/$propertyId/inventory/rooms'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -300,7 +344,11 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/admin/notifications'
     | '/o/$orgSlug/admin/tax'
     | '/o/$orgSlug/properties/$propertyId/content'
+    | '/o/$orgSlug/properties/$propertyId/inventory'
     | '/o/$orgSlug/bookings/$bookingId/folios/$folioId'
+    | '/o/$orgSlug/properties/$propertyId/inventory/prices'
+    | '/o/$orgSlug/properties/$propertyId/inventory/rate-plans'
+    | '/o/$orgSlug/properties/$propertyId/inventory/rooms'
   id:
     | '__root__'
     | '/_app'
@@ -327,7 +375,11 @@ export interface FileRouteTypes {
     | '/_app/o/$orgSlug/admin/notifications'
     | '/_app/o/$orgSlug/admin/tax'
     | '/_app/o/$orgSlug/properties/$propertyId/content'
+    | '/_app/o/$orgSlug/properties/$propertyId/inventory'
     | '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId'
+    | '/_app/o/$orgSlug/properties/$propertyId/inventory/prices'
+    | '/_app/o/$orgSlug/properties/$propertyId/inventory/rate-plans'
+    | '/_app/o/$orgSlug/properties/$propertyId/inventory/rooms'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -507,12 +559,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugAccountSecurityRouteImport
       parentRoute: typeof AppOOrgSlugRoute
     }
+    '/_app/o/$orgSlug/properties/$propertyId/inventory': {
+      id: '/_app/o/$orgSlug/properties/$propertyId/inventory'
+      path: '/properties/$propertyId/inventory'
+      fullPath: '/o/$orgSlug/properties/$propertyId/inventory'
+      preLoaderRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
+    }
     '/_app/o/$orgSlug/properties/$propertyId/content': {
       id: '/_app/o/$orgSlug/properties/$propertyId/content'
       path: '/properties/$propertyId/content'
       fullPath: '/o/$orgSlug/properties/$propertyId/content'
       preLoaderRoute: typeof AppOOrgSlugPropertiesPropertyIdContentRouteImport
       parentRoute: typeof AppOOrgSlugRoute
+    }
+    '/_app/o/$orgSlug/properties/$propertyId/inventory/rooms': {
+      id: '/_app/o/$orgSlug/properties/$propertyId/inventory/rooms'
+      path: '/rooms'
+      fullPath: '/o/$orgSlug/properties/$propertyId/inventory/rooms'
+      preLoaderRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryRoomsRouteImport
+      parentRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryRoute
+    }
+    '/_app/o/$orgSlug/properties/$propertyId/inventory/rate-plans': {
+      id: '/_app/o/$orgSlug/properties/$propertyId/inventory/rate-plans'
+      path: '/rate-plans'
+      fullPath: '/o/$orgSlug/properties/$propertyId/inventory/rate-plans'
+      preLoaderRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRouteImport
+      parentRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryRoute
+    }
+    '/_app/o/$orgSlug/properties/$propertyId/inventory/prices': {
+      id: '/_app/o/$orgSlug/properties/$propertyId/inventory/prices'
+      path: '/prices'
+      fullPath: '/o/$orgSlug/properties/$propertyId/inventory/prices'
+      preLoaderRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryPricesRouteImport
+      parentRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryRoute
     }
     '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId': {
       id: '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId'
@@ -523,6 +603,27 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AppOOrgSlugPropertiesPropertyIdInventoryRouteChildren {
+  AppOOrgSlugPropertiesPropertyIdInventoryPricesRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryPricesRoute
+  AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRoute
+  AppOOrgSlugPropertiesPropertyIdInventoryRoomsRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryRoomsRoute
+}
+
+const AppOOrgSlugPropertiesPropertyIdInventoryRouteChildren: AppOOrgSlugPropertiesPropertyIdInventoryRouteChildren =
+  {
+    AppOOrgSlugPropertiesPropertyIdInventoryPricesRoute:
+      AppOOrgSlugPropertiesPropertyIdInventoryPricesRoute,
+    AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRoute:
+      AppOOrgSlugPropertiesPropertyIdInventoryRatePlansRoute,
+    AppOOrgSlugPropertiesPropertyIdInventoryRoomsRoute:
+      AppOOrgSlugPropertiesPropertyIdInventoryRoomsRoute,
+  }
+
+const AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren =
+  AppOOrgSlugPropertiesPropertyIdInventoryRoute._addFileChildren(
+    AppOOrgSlugPropertiesPropertyIdInventoryRouteChildren,
+  )
 
 interface AppOOrgSlugRouteChildren {
   AppOOrgSlugGridRoute: typeof AppOOrgSlugGridRoute
@@ -535,6 +636,7 @@ interface AppOOrgSlugRouteChildren {
   AppOOrgSlugAdminNotificationsRoute: typeof AppOOrgSlugAdminNotificationsRoute
   AppOOrgSlugAdminTaxRoute: typeof AppOOrgSlugAdminTaxRoute
   AppOOrgSlugPropertiesPropertyIdContentRoute: typeof AppOOrgSlugPropertiesPropertyIdContentRoute
+  AppOOrgSlugPropertiesPropertyIdInventoryRoute: typeof AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren
   AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute: typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
 }
 
@@ -551,6 +653,8 @@ const AppOOrgSlugRouteChildren: AppOOrgSlugRouteChildren = {
   AppOOrgSlugAdminTaxRoute: AppOOrgSlugAdminTaxRoute,
   AppOOrgSlugPropertiesPropertyIdContentRoute:
     AppOOrgSlugPropertiesPropertyIdContentRoute,
+  AppOOrgSlugPropertiesPropertyIdInventoryRoute:
+    AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren,
   AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute:
     AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute,
 }

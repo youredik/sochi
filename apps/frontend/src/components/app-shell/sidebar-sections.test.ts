@@ -32,6 +32,7 @@ const ALL_SECTION_IDS = [
 	'grid',
 	'receivables',
 	'profile',
+	'inventory',
 	'guests',
 	'channels',
 	'tax',
@@ -52,13 +53,13 @@ const VISIBILITY_MATRIX: Record<MemberRole, readonly (typeof ALL_SECTION_IDS)[nu
 /* -------------------------------------------------------------------------- */
 
 describe('sidebar-sections — schema integrity', () => {
-	it('[I1] exactly 7 sections (no vapor / no disabled-future per D30)', () => {
-		expect(SIDEBAR_SECTIONS.length).toBe(7)
+	it('[I1] exactly 8 sections (no vapor / no disabled-future per D30)', () => {
+		expect(SIDEBAR_SECTIONS.length).toBe(8)
 	})
 
 	it('[I2] all section ids unique', () => {
 		const ids = SIDEBAR_SECTIONS.map((s) => s.id)
-		expect(new Set(ids).size).toBe(7)
+		expect(new Set(ids).size).toBe(8)
 	})
 
 	it('[I3] every section has labelRu (non-empty)', () => {
@@ -92,11 +93,9 @@ describe('sidebar-sections — schema integrity', () => {
 		}
 	})
 
-	it('[I7] exactly 1 section has needsPropertyId=true (profile)', () => {
-		const dynamic = SIDEBAR_SECTIONS.filter((s) => s.needsPropertyId === true)
-		expect(dynamic.length).toBe(1)
-		expect(dynamic[0]?.id).toBe('profile')
-		expect(dynamic[0]?.to).toBe('/o/$orgSlug/properties/$propertyId/content')
+	it('[I7] sections with needsPropertyId=true are exactly {profile, inventory}', () => {
+		const dynamic = SIDEBAR_SECTIONS.filter((s) => s.needsPropertyId === true).map((s) => s.id)
+		expect(dynamic.sort()).toEqual(['inventory', 'profile'])
 	})
 
 	it('[I8] every section has isVisible function', () => {
@@ -106,7 +105,7 @@ describe('sidebar-sections — schema integrity', () => {
 	})
 
 	it('[I9] SIDEBAR_SECTIONS_BY_ID cardinality matches list (no missing/extra)', () => {
-		expect(Object.keys(SIDEBAR_SECTIONS_BY_ID).length).toBe(7)
+		expect(Object.keys(SIDEBAR_SECTIONS_BY_ID).length).toBe(8)
 		for (const id of ALL_SECTION_IDS) {
 			expect(SIDEBAR_SECTIONS_BY_ID[id]?.id).toBe(id)
 		}
@@ -140,10 +139,10 @@ describe('sidebar-sections — RBAC × 3 roles × 7 sections (21 visibility cell
 /* -------------------------------------------------------------------------- */
 
 describe('sidebar-sections — Enum FULL coverage', () => {
-	it('[E1] role × section matrix dims = 3 × 7 = 21 cells covered', () => {
-		// Sanity: matrix declared above iterates 3 roles × 7 ids = 21 cells.
+	it('[E1] role × section matrix dims = 3 × 8 = 24 cells covered', () => {
+		// Sanity: matrix declared above iterates 3 roles × 8 ids = 24 cells.
 		const cellCount = Object.keys(VISIBILITY_MATRIX).length * ALL_SECTION_IDS.length
-		expect(cellCount).toBe(21)
+		expect(cellCount).toBe(24)
 	})
 
 	it('[E2] staff-visible set EXACTLY {grid, profile, guests}', () => {
@@ -153,7 +152,7 @@ describe('sidebar-sections — Enum FULL coverage', () => {
 		expect(visible).toEqual([...STAFF_VISIBLE].sort())
 	})
 
-	it('[E3] owner-visible set = manager-visible set = ALL 7 sections (exact)', () => {
+	it('[E3] owner-visible set = manager-visible set = ALL 8 sections (exact)', () => {
 		const ownerVisible = SIDEBAR_SECTIONS.filter((s) => s.isVisible('owner'))
 			.map((s) => s.id)
 			.sort()

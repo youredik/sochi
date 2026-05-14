@@ -13,12 +13,13 @@
  *   | grid            |   ✓   |    ✓    |   ✓   | booking:read                               |
  *   | receivables     |   ✓   |    ✓    |   ✗   | report:read                                |
  *   | profile         |   ✓   |    ✓    |   ✓   | compliance:read OR amenity:read            |
+ *   | inventory       |   ✓   |    ✓    |   ✗   | room:update                                |
  *   | guests          |   ✓   |    ✓    |   ✓   | migrationRegistration:read                 |
  *   | channels        |   ✓   |    ✓    |   ✗   | report:read                                |
  *   | tax             |   ✓   |    ✓    |   ✗   | report:read                                |
  *   | notifications   |   ✓   |    ✓    |   ✗   | notification:read                          |
  *
- *   Staff sees 3 (grid + profile + guests). Manager + owner see all 7.
+ *   Staff sees 3 (grid + profile + guests). Manager + owner see all 8.
  *
  * Adding a new section:
  *   1. Land the route file under `apps/frontend/src/routes/`.
@@ -33,6 +34,7 @@ import {
 	Building2Icon,
 	CalendarRangeIcon,
 	FileSpreadsheetIcon,
+	LayersIcon,
 	type LucideIcon,
 	NetworkIcon,
 	UsersIcon,
@@ -83,6 +85,18 @@ export const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
 		// still see the section because the OR fans out. Plan §10.
 		isVisible: (role) =>
 			hasPermission(role, { compliance: ['read'] }) || hasPermission(role, { amenity: ['read'] }),
+	},
+	{
+		id: 'inventory',
+		labelRu: 'Инвентарь',
+		ariaLabelRu: 'Номера, категории, тарифные планы, цены и ограничения',
+		icon: LayersIcon,
+		to: '/o/$orgSlug/properties/$propertyId/inventory/rooms',
+		needsPropertyId: true,
+		// Inventory admin = owner+manager only. Staff has room:read / ratePlan:read
+		// для front-desk visibility но не управляет каталогом (canon per
+		// rbac.ts staff block).
+		isVisible: (role) => hasPermission(role, { room: ['update'] }),
 	},
 	{
 		id: 'guests',
