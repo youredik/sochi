@@ -11,6 +11,7 @@
 import { describe, expect, test, mock } from 'bun:test'
 import {
 	classifyPostboxError,
+	extractEnvelopeAddress,
 	PostboxAdapter,
 	type SendEmailInput,
 	StubAdapter,
@@ -325,6 +326,66 @@ describe('createEmailAdapter — selection logic', () => {
 	})
 })
 
+/* ============================================================ extractEnvelopeAddress — RFC 5321 path extraction */
+
+describe('extractEnvelopeAddress — RFC 5321 path extraction from RFC 5322 mailbox', () => {
+	test('bare addr-spec stays as-is', () => {
+		expect(extractEnvelopeAddress('noreply@horeca.local')).toBe('noreply@horeca.local')
+	})
+
+	test('angle-addr without display name unwraps to addr-spec', () => {
+		expect(extractEnvelopeAddress('<noreply@horeca.local>')).toBe('noreply@horeca.local')
+	})
+
+	test('quoted display name + angle-addr → addr-spec only', () => {
+		expect(extractEnvelopeAddress('"HoReCa" <noreply@horeca.local>')).toBe('noreply@horeca.local')
+	})
+
+	test('unquoted display name + angle-addr → addr-spec only', () => {
+		expect(extractEnvelopeAddress('HoReCa <noreply@horeca.local>')).toBe('noreply@horeca.local')
+	})
+
+	test('Cyrillic display name + angle-addr → addr-spec only', () => {
+		expect(extractEnvelopeAddress('"Сочи HoReCa" <noreply@horeca.local>')).toBe(
+			'noreply@horeca.local',
+		)
+	})
+
+	test('display name containing angle brackets uses LAST `<…>` pair (not first)', () => {
+		expect(extractEnvelopeAddress('"Mr. <Cool>" <noreply@horeca.local>')).toBe(
+			'noreply@horeca.local',
+		)
+	})
+
+	test('leading/trailing whitespace stripped', () => {
+		expect(extractEnvelopeAddress('  noreply@horeca.local  ')).toBe('noreply@horeca.local')
+		expect(extractEnvelopeAddress('  <noreply@horeca.local>  ')).toBe('noreply@horeca.local')
+		expect(extractEnvelopeAddress('"X" < noreply@horeca.local >')).toBe('noreply@horeca.local')
+	})
+
+	test('empty <> bracket pair returns empty (RFC 5321 null reverse-path)', () => {
+		expect(extractEnvelopeAddress('<>')).toBe('')
+	})
+
+	test('empty input returns empty (caller validates)', () => {
+		expect(extractEnvelopeAddress('')).toBe('')
+		expect(extractEnvelopeAddress('   ')).toBe('')
+	})
+
+	test('plus-addressing and dotted local part preserved', () => {
+		expect(extractEnvelopeAddress('"Edward" <youredik+tag@gmail.com>')).toBe(
+			'youredik+tag@gmail.com',
+		)
+		expect(extractEnvelopeAddress('first.last@sub.example.ru')).toBe('first.last@sub.example.ru')
+	})
+
+	test('malformed input without angle brackets returns trimmed-as-is (best-effort)', () => {
+		// Caller is expected to pass a well-formed RFC 5322 mailbox; this is the
+		// fall-through path. We don't sanitise — just hand off whatever's there.
+		expect(extractEnvelopeAddress('not an email')).toBe('not an email')
+	})
+})
+
 /* ============================================================ MailpitAdapter unit — multi-line SMTP parser */
 
 describe('MailpitAdapter — multi-line SMTP response parser', () => {
@@ -427,6 +488,114 @@ describe('MailpitAdapter — multi-line SMTP response parser', () => {
 		expect(result.kind).toBe('sent')
 		// Canonical order — no command fired before the previous one was ACKed.
 		expect(received).toEqual(['EHLO', 'MAIL_FROM', 'RCPT_TO', 'DATA', 'DATA_END', 'QUIT'])
+	})
+
+	/**
+	 * Regression guard for the silent-drop bug uncovered 2026-05-14:
+	 * `EMAIL_FROM_NAME` defaults to `"HoReCa"` in env, so
+	 * `auth.ts` composes `emailAdapter.send({ from: '"HoReCa" <noreply@…>' })`.
+	 * The earlier adapter wrote that verbatim into the SMTP envelope,
+	 * producing `MAIL FROM:<"HoReCa" <noreply@…>>` — Mailpit rejects
+	 * with `501 5.5.4 Syntax error in parameters or arguments
+	 * (invalid FROM parameter)`. Better Auth still returned `{status:true}`
+	 * (anti-enumeration policy), so the UI showed «Письмо отправлено»
+	 * while no email reached Mailpit.
+	 *
+	 * Asserts both envelope commands carry the BARE addr-spec, and the
+	 * MIME `From:` / `To:` headers in DATA keep the display-named form
+	 * so client mailboxes still render «HoReCa» as the sender label.
+	 */
+	test('display-named From/To produces bare addr-spec in SMTP envelope + named form in MIME headers', async () => {
+		const net = await import('node:net')
+		const captured = {
+			mailFromLine: '',
+			rcptToLine: '',
+			dataBody: '',
+		}
+		let quitResolve: (() => void) | null = null
+		const quitArrived = new Promise<void>((r) => {
+			quitResolve = r
+		})
+
+		const server = net.createServer((socket) => {
+			let receiveBuffer = ''
+			let dataMode = false
+			const dataChunks: string[] = []
+			socket.setEncoding('utf8')
+			socket.write('220 mailpit-test.local ESMTP Service ready\r\n')
+			socket.on('data', (chunk: string | Buffer) => {
+				receiveBuffer += chunk
+				if (!receiveBuffer.includes('\r\n')) return
+				const lines = receiveBuffer.split('\r\n')
+				receiveBuffer = lines.pop() ?? ''
+				for (const line of lines) {
+					if (dataMode) {
+						if (line === '.') {
+							dataMode = false
+							captured.dataBody = dataChunks.join('\r\n')
+							socket.write('250 2.0.0 Ok: queued as ABC\r\n')
+						} else {
+							dataChunks.push(line)
+						}
+						continue
+					}
+					if (line.startsWith('EHLO')) {
+						socket.write(
+							'250-mailpit-test.local greets you\r\n' +
+								'250-SIZE 0\r\n' +
+								'250-AUTH LOGIN PLAIN\r\n' +
+								'250-ENHANCEDSTATUSCODES\r\n' +
+								'250-8BITMIME\r\n' +
+								'250 SMTPUTF8\r\n',
+						)
+					} else if (line.startsWith('MAIL FROM')) {
+						captured.mailFromLine = line
+						socket.write('250 2.1.0 Ok\r\n')
+					} else if (line.startsWith('RCPT TO')) {
+						captured.rcptToLine = line
+						socket.write('250 2.1.5 Ok\r\n')
+					} else if (line === 'DATA') {
+						dataMode = true
+						socket.write('354 Start mail input; end with <CR><LF>.<CR><LF>\r\n')
+					} else if (line === 'QUIT') {
+						socket.write('221 2.0.0 Bye\r\n')
+						socket.end()
+						quitResolve?.()
+					}
+				}
+			})
+		})
+
+		await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+		const addr = server.address()
+		if (!addr || typeof addr === 'string') {
+			server.close()
+			throw new Error('failed to bind test SMTP server')
+		}
+
+		const { MailpitAdapter: Mailpit } = await import('./postbox-adapter.ts')
+		const adapter = new Mailpit('127.0.0.1', addr.port)
+		const result = await adapter.send({
+			from: '"HoReCa" <noreply@horeca.local>',
+			to: '"Edward" <youredik@gmail.com>',
+			subject: 'envelope vs header regression',
+			html: '<p>x</p>',
+			text: 'x',
+		})
+		await quitArrived
+		server.close()
+
+		expect(result.kind).toBe('sent')
+
+		// Envelope (SMTP commands) — bare addr-spec only, no display name,
+		// no nested angle brackets. Exact-match canon.
+		expect(captured.mailFromLine).toBe('MAIL FROM:<noreply@horeca.local>')
+		expect(captured.rcptToLine).toBe('RCPT TO:<youredik@gmail.com>')
+
+		// MIME headers (DATA body) — full RFC 5322 mailbox preserved so the
+		// recipient's MUA still shows «HoReCa» as the sender label.
+		expect(captured.dataBody).toContain('From: "HoReCa" <noreply@horeca.local>')
+		expect(captured.dataBody).toContain('To: "Edward" <youredik@gmail.com>')
 	})
 })
 

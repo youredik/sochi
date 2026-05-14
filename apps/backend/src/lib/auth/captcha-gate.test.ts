@@ -58,6 +58,58 @@ function mockValidate(result: CaptchaValidationResult): {
 }
 
 describe('evaluateCaptchaGate', () => {
+	/*  ─── nodeEnv short-circuit — localhost / CI / test always bypass ──── */
+
+	test('[N1] nodeEnv=development → non-production (bypass)', async () => {
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {} },
+			{ nodeEnv: 'development', serverKey: 'ysc2_real_key' },
+		)
+		expect(res).toEqual({ pass: true, reason: 'non-production' })
+	})
+
+	test('[N2] nodeEnv=test → non-production (bypass)', async () => {
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {} },
+			{ nodeEnv: 'test', serverKey: 'ysc2_real_key' },
+		)
+		expect(res).toEqual({ pass: true, reason: 'non-production' })
+	})
+
+	test('[N3] nodeEnv=development wins over demoDeployment + serverKey', async () => {
+		// Hard rule per `[[no_half_measures]]`: localhost never pays captcha
+		// friction, even if engineer accidentally configures BOTH a real
+		// server key AND demo flag in their local .env.
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'ignored' } },
+			{ nodeEnv: 'development', serverKey: 'ysc2_real_key', demoDeployment: true },
+		)
+		expect(res).toEqual({ pass: true, reason: 'non-production' })
+	})
+
+	test('[N4] nodeEnv omitted defaults to production (strict path)', async () => {
+		// Safety canon: missing nodeEnv must NOT silently bypass. Default
+		// to strict so an integrator who forgets to wire env hits the
+		// captcha rather than skipping it.
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: { captchaToken: '' } },
+			{ serverKey: 'ysc2_real_key' },
+		)
+		expect(res).toEqual({ pass: false, reason: 'missing_token' })
+	})
+
+	test('[N5] nodeEnv=production + no serverKey → disabled (existing safety net)', async () => {
+		// Distinct from N1: in production, missing serverKey still passes as
+		// 'disabled' (config-drift safety net). The hard prod guard lives
+		// at startup in index.ts (assertProductionCaptchaConfigured),
+		// not here.
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'x' } },
+			{ nodeEnv: 'production' },
+		)
+		expect(res).toEqual({ pass: true, reason: 'disabled' })
+	})
+
 	test('[A1] serverKey unset → disabled', async () => {
 		const res = await evaluateCaptchaGate(
 			{ path: '/sign-in/magic-link', body: { captchaToken: 'x' } },

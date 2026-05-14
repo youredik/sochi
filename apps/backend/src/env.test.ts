@@ -6,7 +6,7 @@
  * with synthetic inputs, NOT the runtime singleton.
  */
 import { describe, expect, it } from 'bun:test'
-import { envSchema } from './env.ts'
+import { booleanEnv, envSchema } from './env.ts'
 
 const REQUIRED_FIELDS = {
 	YDB_CONNECTION_STRING: 'grpc://localhost:2236/local',
@@ -115,6 +115,95 @@ describe('envSchema', () => {
 				'production',
 			)
 			expect(envSchema.parse({ ...REQUIRED_FIELDS, NODE_ENV: 'test' }).NODE_ENV).toBe('test')
+		})
+	})
+
+	describe('POSTBOX_ENABLED — regression: "false" must parse to false (not true)', () => {
+		// Root-cause of the silent magic-link drop on 2026-05-14: zod's
+		// `z.coerce.boolean()` reads `"false"` as truthy (JS `Boolean("false")
+		// === true`), the factory enters the Postbox branch, finds no
+		// credentials, and falls back to `StubAdapter` — emails never reach
+		// Mailpit. Guarded here so re-introducing `z.coerce.boolean()`
+		// fails the suite.
+		it('POSTBOX_ENABLED="false" → false', () => {
+			const env = envSchema.parse({ ...REQUIRED_FIELDS, POSTBOX_ENABLED: 'false' })
+			expect(env.POSTBOX_ENABLED).toBe(false)
+		})
+
+		it('POSTBOX_ENABLED="0" → false', () => {
+			const env = envSchema.parse({ ...REQUIRED_FIELDS, POSTBOX_ENABLED: '0' })
+			expect(env.POSTBOX_ENABLED).toBe(false)
+		})
+
+		it('POSTBOX_ENABLED="true" → true', () => {
+			const env = envSchema.parse({ ...REQUIRED_FIELDS, POSTBOX_ENABLED: 'true' })
+			expect(env.POSTBOX_ENABLED).toBe(true)
+		})
+
+		it('POSTBOX_ENABLED unset → false (default)', () => {
+			const env = envSchema.parse({ ...REQUIRED_FIELDS })
+			expect(env.POSTBOX_ENABLED).toBe(false)
+		})
+	})
+
+	describe('DEMO_DEPLOYMENT — same coercion canon as POSTBOX_ENABLED', () => {
+		it('DEMO_DEPLOYMENT="false" → false', () => {
+			const env = envSchema.parse({ ...REQUIRED_FIELDS, DEMO_DEPLOYMENT: 'false' })
+			expect(env.DEMO_DEPLOYMENT).toBe(false)
+		})
+
+		it('DEMO_DEPLOYMENT="true" → true', () => {
+			const env = envSchema.parse({ ...REQUIRED_FIELDS, DEMO_DEPLOYMENT: 'true' })
+			expect(env.DEMO_DEPLOYMENT).toBe(true)
+		})
+
+		it('DEMO_DEPLOYMENT unset → false', () => {
+			const env = envSchema.parse({ ...REQUIRED_FIELDS })
+			expect(env.DEMO_DEPLOYMENT).toBe(false)
+		})
+	})
+
+	describe('booleanEnv helper — accepted spellings + rejection', () => {
+		const schema = booleanEnv(false)
+
+		it.each([
+			['true', true],
+			['TRUE', true],
+			['True', true],
+			['1', true],
+			['yes', true],
+			['YES', true],
+			[true, true],
+			['false', false],
+			['FALSE', false],
+			['0', false],
+			['no', false],
+			[false, false],
+			['', false], // empty string falls back to default
+			['  true  ', true], // surrounding whitespace tolerated
+			['  false  ', false],
+		])('input %p → %p', (input, expected) => {
+			expect(schema.parse(input)).toBe(expected)
+		})
+
+		it('uses provided default when input is undefined', () => {
+			expect(booleanEnv(false).parse(undefined)).toBe(false)
+			expect(booleanEnv(true).parse(undefined)).toBe(true)
+		})
+
+		it('uses provided default when input is empty string', () => {
+			expect(booleanEnv(true).parse('')).toBe(true)
+		})
+
+		it('rejects unrecognised string with clear error', () => {
+			expect(() => schema.parse('maybe')).toThrowError(/Expected boolean env/)
+			expect(() => schema.parse('tru')).toThrowError(/Expected boolean env/)
+		})
+
+		it('rejects non-string non-boolean values', () => {
+			expect(() => schema.parse(123)).toThrow()
+			expect(() => schema.parse({})).toThrow()
+			expect(() => schema.parse([])).toThrow()
 		})
 	})
 

@@ -1,6 +1,40 @@
 import { z } from 'zod'
 
 /**
+ * Safe parser for boolean-shaped env vars.
+ *
+ * `z.coerce.boolean()` is a footgun — it delegates to JS `Boolean(value)`,
+ * which returns `true` for any non-empty string INCLUDING `"false"`. That
+ * mis-parse silently broke magic-link email delivery on 2026-05-14:
+ * `POSTBOX_ENABLED=false` in `.env` coerced to `true`, the adapter factory
+ * entered the Postbox branch, hit missing creds, fell back to `StubAdapter`,
+ * and the magic-link callback recorded its sends to a memory list while
+ * Better Auth returned `{status:true}` to the client (anti-enumeration
+ * policy). UI showed «Письмо отправлено», Mailpit stayed empty.
+ *
+ * Accepts the conventional env-var spellings; rejects anything else with a
+ * clear error so a typo never silently flips a boolean.
+ */
+export const booleanEnv = (defaultValue: boolean) =>
+	z.preprocess(
+		(v) => {
+			if (v === undefined || v === null) return defaultValue
+			if (typeof v === 'boolean') return v
+			if (typeof v === 'string') {
+				const normalized = v.toLowerCase().trim()
+				if (normalized === '') return defaultValue
+				if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true
+				if (normalized === 'false' || normalized === '0' || normalized === 'no') return false
+			}
+			return v // let z.boolean() reject — preserves type-safety
+		},
+		z.boolean({
+			error: (issue) =>
+				`Expected boolean env (true|false|1|0|yes|no|""), got ${JSON.stringify(issue.input)}`,
+		}),
+	)
+
+/**
  * Environment variable schema. Validates on startup — fails fast with a clear error.
  * Never access process.env directly in the codebase; always import `env` from here.
  *
@@ -75,7 +109,7 @@ export const envSchema = z.object({
 	//   POSTBOX_ENABLED=false → SMTP to Mailpit (local dev)
 	//   Neither configured    → log-only (silent — useful in CI / e2e where
 	//                           SMTP isn't available)
-	POSTBOX_ENABLED: z.coerce.boolean().default(false),
+	POSTBOX_ENABLED: booleanEnv(false),
 	POSTBOX_ACCESS_KEY_ID: z.string().optional(),
 	POSTBOX_SECRET_ACCESS_KEY: z.string().optional(),
 	POSTBOX_ENDPOINT: z.string().default('https://postbox.cloud.yandex.net'),
@@ -103,7 +137,7 @@ export const envSchema = z.object({
 	// =true` — must be set consistently. Mismatch (frontend off, backend on
 	// OR vice-versa) yields blanket 403 because forms cannot mint a token
 	// AND the gate refuses non-tokened requests.
-	DEMO_DEPLOYMENT: z.coerce.boolean().default(false),
+	DEMO_DEPLOYMENT: booleanEnv(false),
 
 	// DaData REST API token (`Token <…>` Authorization header).
 	// Optional: unset / empty / whitespace-only → onboarding identity-lookup

@@ -216,6 +216,35 @@ import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
 import { DemoInboxAdapter } from './demo-inbox-adapter.ts'
 
 /**
+ * Extract the bare addr-spec from an RFC 5322 mailbox string for use in the
+ * SMTP envelope (`MAIL FROM:<…>` / `RCPT TO:<…>` per RFC 5321 §3.3 / §4.1.2).
+ *
+ * The envelope reverse/forward-path takes ONLY the address — display names
+ * belong in the `From:` / `To:` MIME headers, not in the SMTP command. Mailpit
+ * and stricter MTAs reject `MAIL FROM:<"Name" <addr>>` with `501 Syntax error`.
+ *
+ *   '"HoReCa" <noreply@x.local>'  → 'noreply@x.local'
+ *   'HoReCa <noreply@x.local>'    → 'noreply@x.local'
+ *   '<noreply@x.local>'           → 'noreply@x.local'
+ *   'noreply@x.local'             → 'noreply@x.local'
+ *   '  bare@x  '                  → 'bare@x'
+ *
+ * `lastIndexOf` (not the first `<`) tolerates display names that contain
+ * angle brackets like `'"Mr. <Cool>" <x@y>'`. Empty input or `<>` returns
+ * `''` — caller treats this as the RFC 5321 null reverse-path (legal for
+ * bounces; we never emit it in product code).
+ */
+export function extractEnvelopeAddress(mailbox: string): string {
+	const trimmed = mailbox.trim()
+	const lastLt = trimmed.lastIndexOf('<')
+	const lastGt = trimmed.lastIndexOf('>')
+	if (lastLt !== -1 && lastGt > lastLt) {
+		return trimmed.slice(lastLt + 1, lastGt).trim()
+	}
+	return trimmed
+}
+
+/**
  * Process-singleton DemoInboxAdapter — the email factory and the
  * `/api/v1/public/demo/inbox` route MUST share the SAME instance so captures
  * from `EmailAdapter.send()` are visible к the polling route. Lazy-init на
@@ -274,6 +303,11 @@ export class MailpitAdapter implements EmailAdapter {
 		const messageId = `<${Date.now()}.${crypto.randomUUID()}@sochi.local>`
 		const altBoundary = `alt_${Date.now().toString(36)}`
 		const mixedBoundary = `mix_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+
+		// SMTP envelope wants bare addr-spec; display names live only in the
+		// MIME `From:` / `To:` headers below. See `extractEnvelopeAddress`.
+		const envelopeFrom = extractEnvelopeAddress(input.from)
+		const envelopeTo = extractEnvelopeAddress(input.to)
 
 		const hasAttachments = input.attachments && input.attachments.length > 0
 
@@ -370,8 +404,8 @@ export class MailpitAdapter implements EmailAdapter {
 					if (line.length > 3 && line[3] === '-') continue
 					step += 1
 					if (step === 1) socket.write('EHLO sochi\r\n')
-					else if (step === 2) socket.write(`MAIL FROM:<${input.from}>\r\n`)
-					else if (step === 3) socket.write(`RCPT TO:<${input.to}>\r\n`)
+					else if (step === 2) socket.write(`MAIL FROM:<${envelopeFrom}>\r\n`)
+					else if (step === 3) socket.write(`RCPT TO:<${envelopeTo}>\r\n`)
 					else if (step === 4) socket.write('DATA\r\n')
 					else if (step === 5) socket.write(`${message}\r\n.\r\n`)
 					else if (step === 6) {
