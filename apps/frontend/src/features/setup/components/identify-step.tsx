@@ -1,7 +1,11 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DEFAULT_WELCOME_ORG_NAME } from '@/features/auth/components/welcome-form'
+import { useActiveOrg } from '@/features/tenancy/hooks/use-active-org'
+import { authClient, sessionQueryOptions } from '@/lib/auth-client'
 import { useFindByInn } from '../hooks/use-find-by-inn.ts'
 import { useWizardStore } from '../wizard-store.ts'
 import { PartyPreviewCard } from './party-preview-card.tsx'
@@ -22,6 +26,8 @@ export function IdentifyStep() {
 	const innId = useId()
 	const [inn, setInn] = useState('')
 	const find = useFindByInn()
+	const queryClient = useQueryClient()
+	const { active: activeOrg } = useActiveOrg()
 	const setParty = useWizardStore((s) => s.setParty)
 	const party = useWizardStore((s) => s.party)
 	const manualOverride = useWizardStore((s) => s.manualOverride)
@@ -51,7 +57,30 @@ export function IdentifyStep() {
 		setStep('inventory')
 	}
 
-	function handleConfirm() {
+	/**
+	 * Confirm DaData party → step 2. Side-effect: if the current org name is
+	 * still the welcome-form default placeholder (`Гостиница Ромашка`), rename
+	 * it к `party.name` (e.g. `ООО «Сочи-Парк Отель»`). The default value
+	 * usually means «user accepted the placeholder as their value», a classic
+	 * placeholder-as-default UX trap — without this auto-fix the sidebar
+	 * forever shows «Гостиница Ромашка» while the property header inside
+	 * Шахматка shows the real legal name. Slug stays untouched (URL
+	 * stability > display cleanliness in the middle of a wizard).
+	 *
+	 * Fail-soft: a BA update error MUST NOT block the wizard. The user can
+	 * always rename via Профиль гостиницы; aborting the step on rename
+	 * failure trades a cosmetic mismatch для a hard onboarding stall.
+	 */
+	async function handleConfirm() {
+		if (party && activeOrg && activeOrg.name === DEFAULT_WELCOME_ORG_NAME) {
+			try {
+				await authClient.organization.update({ data: { name: party.name } })
+				await queryClient.invalidateQueries({ queryKey: ['auth', 'organizations'] })
+				await queryClient.invalidateQueries({ queryKey: sessionQueryOptions.queryKey })
+			} catch {
+				// Cosmetic — user can rename later. Do not block onboarding.
+			}
+		}
 		setStep('inventory')
 	}
 

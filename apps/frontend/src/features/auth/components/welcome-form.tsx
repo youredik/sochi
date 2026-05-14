@@ -7,6 +7,16 @@ import { api } from '@/lib/api'
 import { useCreateOrganization } from '../hooks/use-auth-mutations.ts'
 import { slugify } from '../lib/slugify.ts'
 
+/**
+ * Placeholder shown inside the empty orgName input. ALSO used downstream by
+ * `identify-step.tsx` to detect «user accepted the placeholder as the value»
+ * — a classic placeholder-as-default UX trap. When the wizard's step-1
+ * confirms a DaData party, this constant is the trigger to auto-replace the
+ * org name с the legal entity name из DaData (so the sidebar / cabinet
+ * label match the property header inside Шахматка).
+ */
+export const DEFAULT_WELCOME_ORG_NAME = 'Гостиница Ромашка'
+
 interface WelcomeFormProps {
 	/** orgName extracted from /welcome?n=… query — magic-link signup callback. */
 	prefillOrgName?: string | undefined
@@ -96,7 +106,7 @@ export function WelcomeForm({ prefillOrgName }: WelcomeFormProps) {
 						value={orgName}
 						onChange={(e) => setOrgName(e.target.value)}
 						aria-describedby={slugId}
-						placeholder="Гостиница Ромашка"
+						placeholder={DEFAULT_WELCOME_ORG_NAME}
 					/>
 					<p id={slugId} className="text-xs text-muted-foreground">
 						Адрес кабинета: <span className="font-mono">/o/{slugPreview || '…'}</span>
