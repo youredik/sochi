@@ -153,21 +153,27 @@ export function InventoryRatePlansPage({ propertyId }: InventoryRatePlansPagePro
 				</div>
 			)}
 
-			<RatePlanFormSheet
-				open={createOpen}
-				onOpenChange={setCreateOpen}
-				propertyId={propertyId}
-				roomTypes={roomTypes}
-			/>
-			<RatePlanFormSheet
-				open={editTarget !== null}
-				onOpenChange={(open) => {
-					if (!open) setEditTarget(null)
-				}}
-				propertyId={propertyId}
-				roomTypes={roomTypes}
-				existing={editTarget}
-			/>
+			{createOpen ? (
+				<RatePlanFormSheet
+					key="rate-plan-create"
+					open
+					onOpenChange={setCreateOpen}
+					propertyId={propertyId}
+					roomTypes={roomTypes}
+				/>
+			) : null}
+			{editTarget ? (
+				<RatePlanFormSheet
+					key={`rate-plan-edit-${editTarget.id}`}
+					open
+					onOpenChange={(open) => {
+						if (!open) setEditTarget(null)
+					}}
+					propertyId={propertyId}
+					roomTypes={roomTypes}
+					existing={editTarget}
+				/>
+			) : null}
 			{deleteTarget ? (
 				<ConfirmDialog
 					open

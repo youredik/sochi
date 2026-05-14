@@ -34,8 +34,23 @@ export const roomsQueryOptions = (propertyId: string) =>
 		staleTime: 30_000,
 	})
 
-// useUpdateRoom / useDeleteRoom — Phase II.bis.2 (individual room ops UI).
-// Removed exports per knip canon — reintroduce когда UI surfaces them.
+// useUpdateRoom (rename / disable individual rooms) deferred — UI surface
+// not yet exposed; re-add когда renaming flow ships.
+
+export function useDeleteRoom(propertyId: string) {
+	const queryClient = useQueryClient()
+	return useMutation<{ success: boolean }, Error, { id: string }>({
+		mutationFn: async ({ id }) => {
+			const res = await api.api.v1.rooms[':id'].$delete({ param: { id } })
+			if (!res.ok) throw new Error(`rooms.delete HTTP ${res.status}`)
+			const body = (await res.json()) as { data: { success: boolean } }
+			return body.data
+		},
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: roomsQueryKey(propertyId) })
+		},
+	})
+}
 
 export interface BulkRoomCreateInput {
 	readonly roomTypeId: string

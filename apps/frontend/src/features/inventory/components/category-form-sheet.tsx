@@ -36,7 +36,6 @@ interface FormValues {
 	description: string
 	maxOccupancy: string
 	baseBeds: string
-	inventoryCount: string
 }
 
 const formSchema = z.object({
@@ -44,7 +43,6 @@ const formSchema = z.object({
 	description: z.string().max(2000, 'Не более 2000 символов'),
 	maxOccupancy: z.string().regex(/^\d+$/, 'Целое число'),
 	baseBeds: z.string().regex(/^\d+$/, 'Целое число'),
-	inventoryCount: z.string().regex(/^\d+$/, 'Целое число'),
 })
 
 export interface CategoryFormSheetProps {
@@ -74,7 +72,6 @@ export function CategoryFormSheet({
 			description: existing?.description ?? '',
 			maxOccupancy: String(existing?.maxOccupancy ?? 2),
 			baseBeds: String(existing?.baseBeds ?? 1),
-			inventoryCount: String(existing?.inventoryCount ?? 1),
 		} satisfies FormValues,
 		onSubmit: async ({ value }) => {
 			setSubmitError(null)
@@ -85,7 +82,12 @@ export function CategoryFormSheet({
 					maxOccupancy: Number(value.maxOccupancy),
 					baseBeds: Number(value.baseBeds),
 					extraBeds: existing?.extraBeds ?? 0,
-					inventoryCount: Number(value.inventoryCount),
+					// inventoryCount is a planning-only field used by the onboarding
+					// wizard's bulk-seed flow. In admin UI rooms are added via
+					// «+ Номера» button and counted from actual `room` records,
+					// so this field is decoupled from operator UX. Always 0 для
+					// admin create — onboarding seeds rooms differently.
+					inventoryCount: existing?.inventoryCount ?? 0,
 				}
 				if (isEdit && existing) {
 					await update.mutateAsync({ id: existing.id, patch: payload })
@@ -161,7 +163,7 @@ export function CategoryFormSheet({
 						)}
 					</form.Field>
 
-					<div className="grid grid-cols-3 gap-3">
+					<div className="grid grid-cols-2 gap-3">
 						<form.Field
 							name="maxOccupancy"
 							validators={{
@@ -203,31 +205,6 @@ export function CategoryFormSheet({
 										inputMode="numeric"
 										min={1}
 										max={10}
-										value={field.state.value}
-										onChange={(e) => field.handleChange(e.target.value)}
-									/>
-									{field.state.meta.errors[0] ? (
-										<FieldError>{String(field.state.meta.errors[0])}</FieldError>
-									) : null}
-								</Field>
-							)}
-						</form.Field>
-						<form.Field
-							name="inventoryCount"
-							validators={{
-								onChange: ({ value }) =>
-									formSchema.shape.inventoryCount.safeParse(value).error?.issues[0]?.message,
-							}}
-						>
-							{(field) => (
-								<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
-									<FieldLabel htmlFor={field.name}>Сколько номеров</FieldLabel>
-									<Input
-										id={field.name}
-										type="number"
-										inputMode="numeric"
-										min={0}
-										max={500}
 										value={field.state.value}
 										onChange={(e) => field.handleChange(e.target.value)}
 									/>
