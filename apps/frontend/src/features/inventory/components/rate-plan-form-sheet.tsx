@@ -1,19 +1,18 @@
 /**
- * `<RatePlanFormSheet>` — create a new RatePlan (refundable / non-refundable,
- * meal plan, LOS). Mirrors CategoryFormSheet pattern.
+ * `<RatePlanFormSheet>` — RatePlan create OR edit. Mode is implicit via
+ * `existing` prop (null/undefined = create, RatePlan = edit). DRY canon:
+ * one form definition, two submit paths.
  *
  * Pre-done audit:
- *   - [R1] Hidden when open=false; renders когда open=true.
- *   - [F1] roomType select required (must reference an existing category).
- *   - [F2] Code upper-cased on blur (server requires ^[A-Z][A-Z0-9_-]*$).
- *   - [F3] cancellationHours field appears only when isRefundable=true
+ *   - [R1] mode='create' — empty defaults; submit calls useCreateRatePlan
+ *   - [R2] mode='edit' — pre-filled from `existing`; submit calls useUpdateRatePlan
+ *   - [F1] cancellationHours field appears only when isRefundable=true
  *          (server refines: refundable → cancellationHours required).
- *   - [F4] On submit → `useCreateRatePlan.mutate`.
- *   - [F5] Success → onOpenChange(false) + toast.
- *   - [A1] `<ResponsiveSheetTitle>` обязателен.
+ *   - [F2] Code field uppercase + canonical regex (server-side mirror).
+ *   - [A1] `<ResponsiveSheetTitle>` обязателен; varies by mode.
  */
 import { useForm } from '@tanstack/react-form'
-import type { MealsIncluded, RoomType } from '@horeca/shared'
+import type { MealsIncluded, RatePlan, RoomType } from '@horeca/shared'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -36,7 +35,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from '../../../components/ui/select.tsx'
-import { useCreateRatePlan } from '../hooks/use-rate-plans.ts'
+import { useCreateRatePlan, useUpdateRatePlan } from '../hooks/use-rate-plans.ts'
 
 interface FormValues {
 	name: string
@@ -71,6 +70,8 @@ export interface RatePlanFormSheetProps {
 	onOpenChange: (open: boolean) => void
 	propertyId: string
 	roomTypes: ReadonlyArray<RoomType>
+	/** When provided → edit mode. Otherwise → create. */
+	existing?: RatePlan | null
 }
 
 export function RatePlanFormSheet({
@@ -78,35 +79,54 @@ export function RatePlanFormSheet({
 	onOpenChange,
 	propertyId,
 	roomTypes,
+	existing,
 }: RatePlanFormSheetProps) {
 	const [submitError, setSubmitError] = useState<string | null>(null)
 	const create = useCreateRatePlan(propertyId)
+	const update = useUpdateRatePlan(propertyId)
+	const isEdit = existing != null
+	const isPending = create.isPending || update.isPending
 
 	const form = useForm({
 		defaultValues: {
-			name: '',
-			code: '',
-			roomTypeId: roomTypes[0]?.id ?? '',
-			isRefundable: true as boolean,
-			cancellationHours: '24',
-			mealsIncluded: 'none' as MealsIncluded,
-			minStay: '1',
+			name: existing?.name ?? '',
+			code: existing?.code ?? '',
+			roomTypeId: existing?.roomTypeId ?? roomTypes[0]?.id ?? '',
+			isRefundable: (existing?.isRefundable ?? true) as boolean,
+			cancellationHours: String(existing?.cancellationHours ?? 24),
+			mealsIncluded: (existing?.mealsIncluded ?? 'none') as MealsIncluded,
+			minStay: String(existing?.minStay ?? 1),
 		} satisfies FormValues,
 		onSubmit: async ({ value }) => {
 			setSubmitError(null)
 			try {
-				await create.mutateAsync({
-					roomTypeId: value.roomTypeId,
-					name: value.name.trim(),
-					code: value.code.trim().toUpperCase(),
-					isDefault: false,
-					isRefundable: value.isRefundable,
-					...(value.isRefundable ? { cancellationHours: Number(value.cancellationHours) } : {}),
-					mealsIncluded: value.mealsIncluded,
-					minStay: Number(value.minStay),
-					currency: 'RUB',
-				})
-				toast.success('Тариф создан')
+				if (isEdit && existing) {
+					await update.mutateAsync({
+						id: existing.id,
+						patch: {
+							name: value.name.trim(),
+							code: value.code.trim().toUpperCase(),
+							isRefundable: value.isRefundable,
+							cancellationHours: value.isRefundable ? Number(value.cancellationHours) : null,
+							mealsIncluded: value.mealsIncluded,
+							minStay: Number(value.minStay),
+						},
+					})
+					toast.success('Тариф обновлён')
+				} else {
+					await create.mutateAsync({
+						roomTypeId: value.roomTypeId,
+						name: value.name.trim(),
+						code: value.code.trim().toUpperCase(),
+						isDefault: false,
+						isRefundable: value.isRefundable,
+						...(value.isRefundable ? { cancellationHours: Number(value.cancellationHours) } : {}),
+						mealsIncluded: value.mealsIncluded,
+						minStay: Number(value.minStay),
+						currency: 'RUB',
+					})
+					toast.success('Тариф создан')
+				}
 				form.reset()
 				onOpenChange(false)
 			} catch (err) {
@@ -119,10 +139,13 @@ export function RatePlanFormSheet({
 		<ResponsiveSheet open={open} onOpenChange={onOpenChange}>
 			<ResponsiveSheetContent side="right" className="sm:max-w-md">
 				<ResponsiveSheetHeader>
-					<ResponsiveSheetTitle>Новый тариф</ResponsiveSheetTitle>
+					<ResponsiveSheetTitle>
+						{isEdit ? `Изменить «${existing?.name}»` : 'Новый тариф'}
+					</ResponsiveSheetTitle>
 					<ResponsiveSheetDescription>
-						Тариф — это шаблон цены и условий: возвратность, питание, минимум ночей. Цены за
-						конкретные даты задаются отдельно на странице «Цены и ограничения».
+						{isEdit
+							? 'Условия отмены, питание, минимум ночей. Категорию изменить нельзя — создайте новый тариф если нужна другая категория.'
+							: 'Шаблон цены и условий: возвратность, питание, минимум ночей. Цены за конкретные даты — на странице «Цены и ограничения».'}
 					</ResponsiveSheetDescription>
 				</ResponsiveSheetHeader>
 
@@ -193,7 +216,11 @@ export function RatePlanFormSheet({
 							{(field) => (
 								<Field>
 									<FieldLabel htmlFor={field.name}>Категория</FieldLabel>
-									<Select value={field.state.value} onValueChange={(v) => field.handleChange(v)}>
+									<Select
+										value={field.state.value}
+										onValueChange={(v) => field.handleChange(v)}
+										disabled={isEdit}
+									>
 										<SelectTrigger id={field.name}>
 											<SelectValue placeholder="Выберите категорию" />
 										</SelectTrigger>
@@ -308,12 +335,12 @@ export function RatePlanFormSheet({
 							type="button"
 							variant="outline"
 							onClick={() => onOpenChange(false)}
-							disabled={create.isPending}
+							disabled={isPending}
 						>
 							Отмена
 						</Button>
-						<Button type="submit" disabled={create.isPending || roomTypes.length === 0}>
-							{create.isPending ? 'Создаём…' : 'Создать тариф'}
+						<Button type="submit" disabled={isPending || roomTypes.length === 0}>
+							{isPending ? 'Сохраняем…' : isEdit ? 'Сохранить' : 'Создать тариф'}
 						</Button>
 					</ResponsiveSheetFooter>
 				</form>

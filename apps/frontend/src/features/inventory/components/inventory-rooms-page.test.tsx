@@ -143,6 +143,86 @@ describe('InventoryRoomsPage — render', () => {
 		expect(screen.queryByText('Новая категория номеров')).not.toBe(null)
 	})
 
+	it('[P5] click pencil → CategoryFormSheet opens в edit mode с prefilled name', () => {
+		// biome-ignore lint/suspicious/noExplicitAny: test seed
+		;(roomTypesData as any).current = {
+			data: [
+				{
+					id: 'rt-1',
+					tenantId: 't',
+					propertyId: 'prop-1',
+					name: 'Стандартный',
+					description: null,
+					maxOccupancy: 2,
+					baseBeds: 1,
+					extraBeds: 0,
+					areaSqm: null,
+					inventoryCount: 10,
+					isActive: true,
+					createdAt: '',
+					updatedAt: '',
+				},
+			],
+			error: null,
+			isPending: false,
+		}
+		render(<InventoryRoomsPage propertyId="prop-1" />)
+		const editBtn = screen.getByRole('button', { name: /Изменить категорию «Стандартный»/ })
+		fireEvent.click(editBtn)
+		// Sheet title varies by mode: «Изменить «Стандартный»».
+		expect(screen.queryByText('Изменить «Стандартный»')).not.toBe(null)
+	})
+
+	it('[P6] click trash → ConfirmDialog opens с RU plural in description', () => {
+		// biome-ignore lint/suspicious/noExplicitAny: test seed
+		;(roomTypesData as any).current = {
+			data: [
+				{
+					id: 'rt-1',
+					tenantId: 't',
+					propertyId: 'prop-1',
+					name: 'Стандартный',
+					description: null,
+					maxOccupancy: 2,
+					baseBeds: 1,
+					extraBeds: 0,
+					areaSqm: null,
+					inventoryCount: 10,
+					isActive: true,
+					createdAt: '',
+					updatedAt: '',
+				},
+			],
+			error: null,
+			isPending: false,
+		}
+		// biome-ignore lint/suspicious/noExplicitAny: test seed — 1 room для plural «1 номер»
+		;(roomsData as any).current = {
+			data: [
+				{
+					id: 'r-1',
+					tenantId: 't',
+					propertyId: 'prop-1',
+					roomTypeId: 'rt-1',
+					number: '101',
+					floor: 1,
+					isActive: true,
+					notes: null,
+					createdAt: '',
+					updatedAt: '',
+				},
+			],
+			error: null,
+			isPending: false,
+		}
+		render(<InventoryRoomsPage propertyId="prop-1" />)
+		const deleteBtn = screen.getByRole('button', { name: /Удалить категорию «Стандартный»/ })
+		fireEvent.click(deleteBtn)
+		expect(screen.queryByText('Удалить «Стандартный»?')).not.toBe(null)
+		// «1 номер» (one-form plural)
+		expect(screen.queryByText(/В категории 1 номер. Удаление невозможно отменить/)).not.toBe(null)
+	})
+
 	it('[P4] click «+ Номера» on a category → BulkAdd sheet opens с category name', () => {
 		// biome-ignore lint/suspicious/noExplicitAny: test seed
 		;(roomTypesData as any).current = {

@@ -1,26 +1,27 @@
 /**
  * `<InventoryRoomsPage>` — admin surface for managing room categories (RoomType)
- * + individual rooms. Phase II of inventory-admin shipping.
+ * + individual rooms. Phase II + II.bis of inventory-admin shipping.
  *
  * Sections:
  *   - Header «Категории номеров» + «+ Категория» CTA.
- *   - Cards per RoomType: name + «N номеров, до K гостей» + «+ Номера» CTA.
+ *   - Cards per RoomType: name + «N номеров, до K гостей» + actions
+ *     (Pencil = edit, Trash = delete-confirm, «+ Номера» = bulk-add rooms).
  *   - Empty state: «У вас нет категорий — создайте первую».
  *
- * Edit / delete UX deferred к Phase II.bis (per `[[no_halfway]]` keep
- * atomic). Read + create unlocks 80% of the operator value (most-common
- * post-onboarding tasks: add new category, add new rooms when a floor opens).
- *
- * Mobile: cards stack 1-column; CTA buttons full-width.
+ * Per-room management (rename, disable individual rooms 101..110) deferred
+ * к its own sub-phase per `[[no_halfway]]` — SMB operators rarely need
+ * per-room edits, bulk-add covers 80% of intent.
  */
 import { useQuery } from '@tanstack/react-query'
 import type { RoomType } from '@horeca/shared'
-import { Loader2, Plus } from 'lucide-react'
+import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '../../../components/ui/button.tsx'
-import { roomTypesQueryOptions } from '../hooks/use-room-types.ts'
+import { roomTypesQueryOptions, useDeleteRoomType } from '../hooks/use-room-types.ts'
 import { roomsQueryOptions } from '../hooks/use-rooms.ts'
 import { CategoryFormSheet } from './category-form-sheet.tsx'
+import { ConfirmDialog } from './confirm-dialog.tsx'
 import { RoomsBulkAddSheet } from './rooms-bulk-add-sheet.tsx'
 
 export interface InventoryRoomsPageProps {
@@ -30,8 +31,11 @@ export interface InventoryRoomsPageProps {
 export function InventoryRoomsPage({ propertyId }: InventoryRoomsPageProps) {
 	const roomTypesQuery = useQuery(roomTypesQueryOptions(propertyId))
 	const roomsQuery = useQuery(roomsQueryOptions(propertyId))
+	const deleteRoomType = useDeleteRoomType(propertyId)
 
-	const [categorySheetOpen, setCategorySheetOpen] = useState(false)
+	const [createOpen, setCreateOpen] = useState(false)
+	const [editTarget, setEditTarget] = useState<RoomType | null>(null)
+	const [deleteTarget, setDeleteTarget] = useState<RoomType | null>(null)
 	const [bulkAddFor, setBulkAddFor] = useState<RoomType | null>(null)
 
 	const roomCountByType = new Map<string, number>()
@@ -43,11 +47,22 @@ export function InventoryRoomsPage({ propertyId }: InventoryRoomsPageProps) {
 	const error = roomTypesQuery.error ?? roomsQuery.error
 	const roomTypes = roomTypesQuery.data ?? []
 
+	async function handleConfirmDelete() {
+		if (!deleteTarget) return
+		try {
+			await deleteRoomType.mutateAsync({ id: deleteTarget.id })
+			toast.success(`Категория «${deleteTarget.name}» удалена`)
+			setDeleteTarget(null)
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Не удалось удалить категорию')
+		}
+	}
+
 	return (
 		<div className="space-y-4">
 			<div className="flex items-center justify-between gap-4">
 				<h2 className="text-lg font-medium">Категории номеров</h2>
-				<Button onClick={() => setCategorySheetOpen(true)} size="sm">
+				<Button onClick={() => setCreateOpen(true)} size="sm">
 					<Plus className="size-4" aria-hidden="true" />
 					Категория
 				</Button>
@@ -78,7 +93,7 @@ export function InventoryRoomsPage({ propertyId }: InventoryRoomsPageProps) {
 						return (
 							<li
 								key={rt.id}
-								className="flex items-center justify-between gap-4 rounded-lg border bg-card px-4 py-3"
+								className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3"
 							>
 								<div className="min-w-0">
 									<p className="font-medium">{rt.name}</p>
@@ -87,25 +102,49 @@ export function InventoryRoomsPage({ propertyId }: InventoryRoomsPageProps) {
 										{rt.maxOccupancy} {pluralRu(rt.maxOccupancy, 'гостя', 'гостей', 'гостей')}
 									</p>
 								</div>
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => setBulkAddFor(rt)}
-									aria-label={`Добавить номера в категорию «${rt.name}»`}
-								>
-									<Plus className="size-4" aria-hidden="true" />
-									Номера
-								</Button>
+								<div className="flex flex-wrap items-center gap-2">
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => setEditTarget(rt)}
+										aria-label={`Изменить категорию «${rt.name}»`}
+									>
+										<Pencil className="size-4" aria-hidden="true" />
+										Изменить
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => setBulkAddFor(rt)}
+										aria-label={`Добавить номера в категорию «${rt.name}»`}
+									>
+										<Plus className="size-4" aria-hidden="true" />
+										Номера
+									</Button>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => setDeleteTarget(rt)}
+										aria-label={`Удалить категорию «${rt.name}»`}
+										className="text-destructive hover:bg-destructive/10"
+									>
+										<Trash2 className="size-4" aria-hidden="true" />
+									</Button>
+								</div>
 							</li>
 						)
 					})}
 				</ul>
 			)}
 
+			<CategoryFormSheet open={createOpen} onOpenChange={setCreateOpen} propertyId={propertyId} />
 			<CategoryFormSheet
-				open={categorySheetOpen}
-				onOpenChange={setCategorySheetOpen}
+				open={editTarget !== null}
+				onOpenChange={(open) => {
+					if (!open) setEditTarget(null)
+				}}
 				propertyId={propertyId}
+				existing={editTarget}
 			/>
 			<RoomsBulkAddSheet
 				open={bulkAddFor !== null}
@@ -115,6 +154,19 @@ export function InventoryRoomsPage({ propertyId }: InventoryRoomsPageProps) {
 				propertyId={propertyId}
 				roomType={bulkAddFor}
 			/>
+			{deleteTarget ? (
+				<ConfirmDialog
+					open
+					onOpenChange={(open) => {
+						if (!open) setDeleteTarget(null)
+					}}
+					title={`Удалить «${deleteTarget.name}»?`}
+					description={`В категории ${roomCountByType.get(deleteTarget.id) ?? 0} ${pluralRu(roomCountByType.get(deleteTarget.id) ?? 0, 'номер', 'номера', 'номеров')}. Удаление невозможно отменить.`}
+					confirmLabel="Удалить категорию"
+					onConfirm={handleConfirmDelete}
+					isPending={deleteRoomType.isPending}
+				/>
+			) : null}
 		</div>
 	)
 }

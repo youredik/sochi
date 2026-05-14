@@ -34,10 +34,8 @@ export const roomsQueryOptions = (propertyId: string) =>
 		staleTime: 30_000,
 	})
 
-// Single-room create / update hooks (useCreateRoom, useUpdateRoom) live в
-// Phase II.bis when the UI surfaces them. Premature export = knip «unused»
-// failure; reintroduce when consumed. Phase II currently goes ONLY through
-// `useBulkCreateRooms` (POST /rooms × N fanout for the «201..210» pattern).
+// useUpdateRoom / useDeleteRoom — Phase II.bis.2 (individual room ops UI).
+// Removed exports per knip canon — reintroduce когда UI surfaces them.
 
 export interface BulkRoomCreateInput {
 	readonly roomTypeId: string

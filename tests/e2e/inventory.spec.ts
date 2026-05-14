@@ -78,6 +78,32 @@ test.describe('inventory — rooms page (Phase II)', () => {
 	})
 })
 
+test.describe('inventory — edit + delete (Phase II.bis + III.bis)', () => {
+	test('category row exposes Pencil edit + Trash delete; both open canonical surfaces, axe-clean', async ({
+		page,
+	}) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+		await page.locator('[data-section-id="inventory"]').click()
+		await expect(page).toHaveURL(/\/inventory\/rooms$/)
+
+		// Default e2e tenant has «Стандартный» category seeded.
+		// Click pencil → edit sheet opens с prefilled title.
+		await page.getByRole('button', { name: /Изменить категорию «Стандартный»/ }).click()
+		await expect(page.getByText('Изменить «Стандартный»', { exact: true })).toBeVisible()
+		await page.keyboard.press('Escape')
+		await expect(page.getByText('Изменить «Стандартный»', { exact: true })).not.toBeVisible()
+
+		// Click trash → confirm dialog opens с category-name title.
+		await page.getByRole('button', { name: /Удалить категорию «Стандартный»/ }).click()
+		await expect(page.getByText('Удалить «Стандартный»?', { exact: true })).toBeVisible()
+		await page.getByRole('button', { name: 'Отмена' }).click()
+		await expect(page.getByText('Удалить «Стандартный»?', { exact: true })).not.toBeVisible()
+
+		await axeClean(page, 'inventory-rooms-edit-delete')
+	})
+})
+
 test.describe('inventory — prices page (Phase IV)', () => {
 	test('switches к «Цены и ограничения» tab, renders grid + opens bulk-edit sheet, axe-clean', async ({
 		page,

@@ -10,7 +10,7 @@
  * `propertiesQueryOptions` (in `features/receivables`) handles the property
  * list; this module owns roomTypes within a chosen property.
  */
-import type { RoomType, RoomTypeCreateInput } from '@horeca/shared'
+import type { RoomType, RoomTypeCreateInput, RoomTypeUpdateInput } from '@horeca/shared'
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../lib/api.ts'
 
@@ -50,6 +50,35 @@ export function useCreateRoomType(propertyId: string) {
 	})
 }
 
-// Edit / delete hooks (useUpdateRoomType, useDeleteRoomType) live в Phase
-// II.bis when the UI surfaces them. Premature export = knip «unused export»
-// failure; reintroduce when consumed.
+export function useUpdateRoomType(propertyId: string) {
+	const queryClient = useQueryClient()
+	return useMutation<RoomType, Error, { id: string; patch: RoomTypeUpdateInput }>({
+		mutationFn: async ({ id, patch }) => {
+			const res = await api.api.v1['room-types'][':id'].$patch({
+				param: { id },
+				json: patch,
+			})
+			if (!res.ok) throw new Error(`room-types.update HTTP ${res.status}`)
+			const body = (await res.json()) as { data: RoomType }
+			return body.data
+		},
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: roomTypesQueryKey(propertyId) })
+		},
+	})
+}
+
+export function useDeleteRoomType(propertyId: string) {
+	const queryClient = useQueryClient()
+	return useMutation<{ success: boolean }, Error, { id: string }>({
+		mutationFn: async ({ id }) => {
+			const res = await api.api.v1['room-types'][':id'].$delete({ param: { id } })
+			if (!res.ok) throw new Error(`room-types.delete HTTP ${res.status}`)
+			const body = (await res.json()) as { data: { success: boolean } }
+			return body.data
+		},
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: roomTypesQueryKey(propertyId) })
+		},
+	})
+}

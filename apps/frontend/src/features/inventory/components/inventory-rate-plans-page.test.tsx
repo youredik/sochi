@@ -136,6 +136,77 @@ describe('InventoryRatePlansPage — render', () => {
 		expect(screen.queryByText('По умолчанию')).not.toBe(null)
 	})
 
+	it('[P5] click pencil → RatePlanFormSheet opens в edit mode с prefilled name', () => {
+		// biome-ignore lint/suspicious/noExplicitAny: seed
+		;(roomTypesData as any).current = { data: [STANDARD_RT], error: null, isPending: false }
+		// biome-ignore lint/suspicious/noExplicitAny: seed
+		;(ratePlansData as any).current = {
+			data: [
+				{
+					id: 'rp-1',
+					tenantId: 't',
+					propertyId: 'prop-1',
+					roomTypeId: 'rt-1',
+					name: 'Базовый',
+					code: 'BASE',
+					isDefault: true,
+					isRefundable: true,
+					cancellationHours: 24,
+					mealsIncluded: 'breakfast',
+					minStay: 1,
+					maxStay: null,
+					currency: 'RUB',
+					isActive: true,
+					createdAt: '',
+					updatedAt: '',
+				},
+			],
+			error: null,
+			isPending: false,
+		}
+		render(<InventoryRatePlansPage propertyId="prop-1" />)
+		const editBtn = screen.getByRole('button', { name: /Изменить тариф «Базовый»/ })
+		fireEvent.click(editBtn)
+		expect(screen.queryByText('Изменить «Базовый»')).not.toBe(null)
+	})
+
+	it('[P6] click trash → ConfirmDialog opens с rate-plan code in description', () => {
+		// biome-ignore lint/suspicious/noExplicitAny: seed
+		;(roomTypesData as any).current = { data: [STANDARD_RT], error: null, isPending: false }
+		// biome-ignore lint/suspicious/noExplicitAny: seed
+		;(ratePlansData as any).current = {
+			data: [
+				{
+					id: 'rp-1',
+					tenantId: 't',
+					propertyId: 'prop-1',
+					roomTypeId: 'rt-1',
+					name: 'Базовый',
+					code: 'BASE',
+					isDefault: false,
+					isRefundable: true,
+					cancellationHours: 24,
+					mealsIncluded: 'none',
+					minStay: 1,
+					maxStay: null,
+					currency: 'RUB',
+					isActive: true,
+					createdAt: '',
+					updatedAt: '',
+				},
+			],
+			error: null,
+			isPending: false,
+		}
+		render(<InventoryRatePlansPage propertyId="prop-1" />)
+		const deleteBtn = screen.getByRole('button', { name: /Удалить тариф «Базовый»/ })
+		fireEvent.click(deleteBtn)
+		expect(screen.queryByText('Удалить «Базовый»?')).not.toBe(null)
+		expect(
+			screen.queryByText(/Тариф «Базовый» \(BASE\) будет удалён вместе со всеми ценами/),
+		).not.toBe(null)
+	})
+
 	it('[P4] «+ Тариф» с роумтайпами → opens RatePlanFormSheet', () => {
 		// biome-ignore lint/suspicious/noExplicitAny: seed
 		;(roomTypesData as any).current = { data: [STANDARD_RT], error: null, isPending: false }

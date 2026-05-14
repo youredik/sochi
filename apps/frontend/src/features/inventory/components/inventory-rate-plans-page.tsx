@@ -1,26 +1,24 @@
 /**
  * `<InventoryRatePlansPage>` — admin surface for managing rate plans.
- * Phase III of inventory-admin shipping.
+ * Phase III + III.bis of inventory-admin shipping (edit + delete added).
  *
  * Sections:
  *   - Header «Тарифные планы» + «+ Тариф» CTA.
- *   - Cards per RatePlan grouped by RoomType: name + code badge + flags
- *     (R/NR, meals, MinLOS).
+ *   - Cards per RatePlan grouped by RoomType: name + code badge + flags +
+ *     row actions (Pencil = edit, Trash = delete-confirm).
  *   - Empty state: «У вас нет тарифов — создайте первый» (also covers
  *     «нет категорий» с redirect hint к страница «Номера и категории»).
- *
- * Edit / delete / set-default deferred к Phase III.bis (per `[[no_halfway]]`
- * atomic-phase). Read + create unlocks most of the operator value here
- * (typical post-onboarding: «add Невозвратный -10%», «add Завтрак включён»).
  */
 import { useQuery } from '@tanstack/react-query'
-import type { MealsIncluded } from '@horeca/shared'
-import { Loader2, Plus } from 'lucide-react'
+import type { MealsIncluded, RatePlan } from '@horeca/shared'
+import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Badge } from '../../../components/ui/badge.tsx'
 import { Button } from '../../../components/ui/button.tsx'
-import { ratePlansQueryOptions } from '../hooks/use-rate-plans.ts'
+import { ratePlansQueryOptions, useDeleteRatePlan } from '../hooks/use-rate-plans.ts'
 import { roomTypesQueryOptions } from '../hooks/use-room-types.ts'
+import { ConfirmDialog } from './confirm-dialog.tsx'
 import { RatePlanFormSheet } from './rate-plan-form-sheet.tsx'
 
 const MEAL_LABELS_SHORT: Record<MealsIncluded, string> = {
@@ -38,8 +36,11 @@ export interface InventoryRatePlansPageProps {
 export function InventoryRatePlansPage({ propertyId }: InventoryRatePlansPageProps) {
 	const ratePlansQuery = useQuery(ratePlansQueryOptions(propertyId))
 	const roomTypesQuery = useQuery(roomTypesQueryOptions(propertyId))
+	const deletePlan = useDeleteRatePlan(propertyId)
 
-	const [sheetOpen, setSheetOpen] = useState(false)
+	const [createOpen, setCreateOpen] = useState(false)
+	const [editTarget, setEditTarget] = useState<RatePlan | null>(null)
+	const [deleteTarget, setDeleteTarget] = useState<RatePlan | null>(null)
 
 	const isLoading = ratePlansQuery.isPending || roomTypesQuery.isPending
 	const error = ratePlansQuery.error ?? roomTypesQuery.error
@@ -54,11 +55,22 @@ export function InventoryRatePlansPage({ propertyId }: InventoryRatePlansPagePro
 		grouped.set(plan.roomTypeId, list)
 	}
 
+	async function handleConfirmDelete() {
+		if (!deleteTarget) return
+		try {
+			await deletePlan.mutateAsync({ id: deleteTarget.id })
+			toast.success(`Тариф «${deleteTarget.name}» удалён`)
+			setDeleteTarget(null)
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Не удалось удалить тариф')
+		}
+	}
+
 	return (
 		<div className="space-y-4">
 			<div className="flex items-center justify-between gap-4">
 				<h2 className="text-lg font-medium">Тарифные планы</h2>
-				<Button onClick={() => setSheetOpen(true)} size="sm" disabled={roomTypes.length === 0}>
+				<Button onClick={() => setCreateOpen(true)} size="sm" disabled={roomTypes.length === 0}>
 					<Plus className="size-4" aria-hidden="true" />
 					Тариф
 				</Button>
@@ -113,6 +125,26 @@ export function InventoryRatePlansPage({ propertyId }: InventoryRatePlansPagePro
 											{plan.code}
 										</Badge>
 										{plan.isDefault ? <Badge>По умолчанию</Badge> : null}
+										<div className="flex items-center gap-1">
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={() => setEditTarget(plan)}
+												aria-label={`Изменить тариф «${plan.name}»`}
+											>
+												<Pencil className="size-4" aria-hidden="true" />
+												Изменить
+											</Button>
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={() => setDeleteTarget(plan)}
+												aria-label={`Удалить тариф «${plan.name}»`}
+												className="text-destructive hover:bg-destructive/10"
+											>
+												<Trash2 className="size-4" aria-hidden="true" />
+											</Button>
+										</div>
 									</li>
 								))}
 							</ul>
@@ -122,11 +154,33 @@ export function InventoryRatePlansPage({ propertyId }: InventoryRatePlansPagePro
 			)}
 
 			<RatePlanFormSheet
-				open={sheetOpen}
-				onOpenChange={setSheetOpen}
+				open={createOpen}
+				onOpenChange={setCreateOpen}
 				propertyId={propertyId}
 				roomTypes={roomTypes}
 			/>
+			<RatePlanFormSheet
+				open={editTarget !== null}
+				onOpenChange={(open) => {
+					if (!open) setEditTarget(null)
+				}}
+				propertyId={propertyId}
+				roomTypes={roomTypes}
+				existing={editTarget}
+			/>
+			{deleteTarget ? (
+				<ConfirmDialog
+					open
+					onOpenChange={(open) => {
+						if (!open) setDeleteTarget(null)
+					}}
+					title={`Удалить «${deleteTarget.name}»?`}
+					description={`Тариф «${deleteTarget.name}» (${deleteTarget.code}) будет удалён вместе со всеми ценами по нему. Это действие невозможно отменить.`}
+					confirmLabel="Удалить тариф"
+					onConfirm={handleConfirmDelete}
+					isPending={deletePlan.isPending}
+				/>
+			) : null}
 		</div>
 	)
 }

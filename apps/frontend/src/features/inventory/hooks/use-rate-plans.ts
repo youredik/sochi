@@ -12,7 +12,7 @@
  * cancellationHours field appears когда `isRefundable=true`, и code input
  * upper-cases on blur.
  */
-import type { RatePlan, RatePlanCreateInput } from '@horeca/shared'
+import type { RatePlan, RatePlanCreateInput, RatePlanUpdateInput } from '@horeca/shared'
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../lib/api.ts'
 
@@ -49,5 +49,35 @@ export function useCreateRatePlan(propertyId: string) {
 	})
 }
 
-// Edit / delete / set-default hooks live в Phase III.bis when the UI
-// surfaces them (knip «no premature exports» canon).
+export function useUpdateRatePlan(propertyId: string) {
+	const queryClient = useQueryClient()
+	return useMutation<RatePlan, Error, { id: string; patch: RatePlanUpdateInput }>({
+		mutationFn: async ({ id, patch }) => {
+			const res = await api.api.v1['rate-plans'][':id'].$patch({
+				param: { id },
+				json: patch,
+			})
+			if (!res.ok) throw new Error(`rate-plans.update HTTP ${res.status}`)
+			const body = (await res.json()) as { data: RatePlan }
+			return body.data
+		},
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: ratePlansQueryKey(propertyId) })
+		},
+	})
+}
+
+export function useDeleteRatePlan(propertyId: string) {
+	const queryClient = useQueryClient()
+	return useMutation<{ success: boolean }, Error, { id: string }>({
+		mutationFn: async ({ id }) => {
+			const res = await api.api.v1['rate-plans'][':id'].$delete({ param: { id } })
+			if (!res.ok) throw new Error(`rate-plans.delete HTTP ${res.status}`)
+			const body = (await res.json()) as { data: { success: boolean } }
+			return body.data
+		},
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: ratePlansQueryKey(propertyId) })
+		},
+	})
+}

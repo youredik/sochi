@@ -1,18 +1,19 @@
 /**
- * `<CategoryFormSheet>` — create a new RoomType. Side-Sheet с TanStack Form,
- * mirroring the canonical CRUD-drawer pattern from
- * `features/folios/refund-sheet.tsx` (memory `m6_7_frontend_canonical`).
+ * `<CategoryFormSheet>` — RoomType create OR edit. Mode is implicit via
+ * `existing` prop (null/undefined = create, RoomType = edit). DRY canon:
+ * one form definition, two submit paths.
  *
  * Pre-done audit:
- *   - [R1] Hidden when `open=false`; renders когда `open=true`.
- *   - [F1] Submit disabled until name/maxOccupancy/baseBeds/inventoryCount filled.
- *   - [F2] On submit → `useCreateRoomType(propertyId).mutate` с trimmed name.
- *   - [F3] Success → onOpenChange(false) + toast «Категория создана».
- *   - [F4] Error → inline banner с err.message (fail-soft, не закрывает sheet).
- *   - [A1] Required: `<ResponsiveSheetTitle>` (Radix throws on missing).
- *   - [A2] `aria-describedby` paired с the slug-preview-helper id.
+ *   - [R1] mode='create' — empty defaults; submit calls useCreateRoomType
+ *   - [R2] mode='edit' — pre-filled from `existing`; submit calls useUpdateRoomType
+ *          (patch с only changed fields by sending whole object)
+ *   - [F1] Submit disabled while pending.
+ *   - [F2] On success → onOpenChange(false) + toast.
+ *   - [F3] Error → inline banner.
+ *   - [A1] `<ResponsiveSheetTitle>` обязателен; varies by mode.
  */
 import { useForm } from '@tanstack/react-form'
+import type { RoomType } from '@horeca/shared'
 import { useId, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -28,7 +29,7 @@ import {
 	ResponsiveSheetTitle,
 } from '../../../components/ui/responsive-sheet.tsx'
 import { Textarea } from '../../../components/ui/textarea.tsx'
-import { useCreateRoomType } from '../hooks/use-room-types.ts'
+import { useCreateRoomType, useUpdateRoomType } from '../hooks/use-room-types.ts'
 
 interface FormValues {
 	name: string
@@ -50,33 +51,49 @@ export interface CategoryFormSheetProps {
 	open: boolean
 	onOpenChange: (open: boolean) => void
 	propertyId: string
+	/** When provided → edit mode. Otherwise → create. */
+	existing?: RoomType | null
 }
 
-export function CategoryFormSheet({ open, onOpenChange, propertyId }: CategoryFormSheetProps) {
+export function CategoryFormSheet({
+	open,
+	onOpenChange,
+	propertyId,
+	existing,
+}: CategoryFormSheetProps) {
 	const errorId = useId()
 	const [submitError, setSubmitError] = useState<string | null>(null)
 	const create = useCreateRoomType(propertyId)
+	const update = useUpdateRoomType(propertyId)
+	const isEdit = existing != null
+	const isPending = create.isPending || update.isPending
 
 	const form = useForm({
 		defaultValues: {
-			name: '',
-			description: '',
-			maxOccupancy: '2',
-			baseBeds: '1',
-			inventoryCount: '1',
+			name: existing?.name ?? '',
+			description: existing?.description ?? '',
+			maxOccupancy: String(existing?.maxOccupancy ?? 2),
+			baseBeds: String(existing?.baseBeds ?? 1),
+			inventoryCount: String(existing?.inventoryCount ?? 1),
 		} satisfies FormValues,
 		onSubmit: async ({ value }) => {
 			setSubmitError(null)
 			try {
-				await create.mutateAsync({
+				const payload = {
 					name: value.name.trim(),
 					description: value.description.trim() === '' ? undefined : value.description.trim(),
 					maxOccupancy: Number(value.maxOccupancy),
 					baseBeds: Number(value.baseBeds),
-					extraBeds: 0,
+					extraBeds: existing?.extraBeds ?? 0,
 					inventoryCount: Number(value.inventoryCount),
-				})
-				toast.success('Категория создана')
+				}
+				if (isEdit && existing) {
+					await update.mutateAsync({ id: existing.id, patch: payload })
+					toast.success('Категория обновлена')
+				} else {
+					await create.mutateAsync(payload)
+					toast.success('Категория создана')
+				}
 				form.reset()
 				onOpenChange(false)
 			} catch (err) {
@@ -89,10 +106,13 @@ export function CategoryFormSheet({ open, onOpenChange, propertyId }: CategoryFo
 		<ResponsiveSheet open={open} onOpenChange={onOpenChange}>
 			<ResponsiveSheetContent side="right" className="sm:max-w-md">
 				<ResponsiveSheetHeader>
-					<ResponsiveSheetTitle>Новая категория номеров</ResponsiveSheetTitle>
+					<ResponsiveSheetTitle>
+						{isEdit ? `Изменить «${existing?.name}»` : 'Новая категория номеров'}
+					</ResponsiveSheetTitle>
 					<ResponsiveSheetDescription>
-						Например: «Стандартный», «Полулюкс», «Сюит». Можно создать несколько и поделить номера
-						между ними.
+						{isEdit
+							? 'Поменяйте название, вместимость или количество мест.'
+							: 'Например: «Стандартный», «Полулюкс», «Сюит».'}
 					</ResponsiveSheetDescription>
 				</ResponsiveSheetHeader>
 
@@ -231,12 +251,12 @@ export function CategoryFormSheet({ open, onOpenChange, propertyId }: CategoryFo
 							type="button"
 							variant="outline"
 							onClick={() => onOpenChange(false)}
-							disabled={create.isPending}
+							disabled={isPending}
 						>
 							Отмена
 						</Button>
-						<Button type="submit" disabled={create.isPending}>
-							{create.isPending ? 'Создаём…' : 'Создать категорию'}
+						<Button type="submit" disabled={isPending}>
+							{isPending ? 'Сохраняем…' : isEdit ? 'Сохранить' : 'Создать категорию'}
 						</Button>
 					</ResponsiveSheetFooter>
 				</form>
