@@ -2,9 +2,10 @@
 
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
-**Status**: G1 SHIPPED 2026-05-15 (commits `5b38c26` backend root-cause +
-`d18d747` G1 frontend). Next: G2 (TravelLine 8-color palette extension) —
-LOW complexity, no architectural dependency. AWAITING USER SIGNAL.
+**Status**: G1 ✓ pushed + G2 ✓ local (commit `6598116`) 2026-05-15. Next:
+G3 (Dialog → side-Sheet architectural shift) — UX expectation change,
+needs explicit approval OR G4 (RU compliance overlays — additive, less
+architectural). AWAITING USER SIGNAL.
 
 Per `[[pre-plan-codebase-recon]]` §0 ДО §1; per `[[adversarial-reading-before-done]]`
 all touched files read через 9-item checklist; per `[[research-protocol]]`
@@ -364,7 +365,31 @@ dates), adversarial (guest 409 → toast surfaces).
 
 **Complexity**: LOW. 1 commit, ~150 LoC.
 
-### Phase G2 — Status palette extension к TravelLine 8-color canon
+### ~~Phase G2 — Status palette extension к TravelLine 8-color canon~~ — DONE 2026-05-15
+
+**Shipped** в commit `6598116`:
+• `paletteFor(ctx)` derived helper с 5-step precedence canon (terminal
+→ overdue → unassigned → confirmed → in_house)
+• `DERIVED_BOOKING_CELL_STYLES` export {overdue, unassigned}
+• `--status-unassigned` CSS token (light/dark/contrast-more variants
+verified ≥4.5:1 paired с \*-foreground)
+• GridBooking shape extended с `assignedRoomId?: string | null` (server
+already serves; was narrowed-out)
+• chessboard.tsx threads `paletteFor({booking, todayIso})` instead of
+`styleFor(status)`
+
+**Coverage**: booking-palette.ts **100/100** funcs/lines. 14 new strict
+cases [P1-P5, A4, I1-I2] + no-hardcoded-palette × 2.
+
+**Empirical**: e2e 37/38 (1 pre-existing booking-EDIT axe flake, not G2);
+unit 1712/0; ratchet clean.
+
+**Deferred sub-phases** (recorded в backlog):
+• G2.bis — channel-color outline (yandexTravel red-orange differentiator)
+• G2.deferred — OOO maintenance bands (needs backend propertyBlock domain;
+rolls into G9)
+
+### Phase G2 implementation history (kept для reference)
 
 **Empirical bound source**: §3.2 TravelLine canon; current `booking-palette.ts` 5 base
 states; `booking.channelCode` enum already в schema.
