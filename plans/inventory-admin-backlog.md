@@ -98,15 +98,18 @@ updatedAt. No restriction fields. Schema extension required для closeout
 Migration + `RateBulkUpsertInput` extension + UI affordance (Bnovo has
 this в same bulk-edit modal). Backend canon needed first.
 
-### rooms-bulk-add-sheet — partial bounds (caught 2026-05-15 during B5 audit)
+### ~~rooms-bulk-add-sheet — floor bounds~~ — DONE 2026-05-15 (B5.bis)
 
-**Status**: `apps/frontend/src/features/inventory/components/rooms-bulk-add-sheet.tsx`
-fields `startNumber` / `endNumber` имеют `.refine(>=1, 'Минимум 1')` но
-без upper bound; `floor` имеет regex `/^-?\d+$/` без range. Server-side
-`floorSchema = z.coerce.number().int().min(-5).max(50)` — клиент пропустит
-`floor=999`, fail на server. Different shape vs B5 (range pair, not single
-int) — отдельный item. Could reuse `intRangeFieldSchema` для `floor`; range
-pair needs a co-refinement (endNumber >= startNumber, range <= 500).
+**Status**: SHIPPED commit `ca678a6`. Helper extended с `allowEmpty: true`
+option; floor field re-wired (validator was completely unwired — schema
+dead code, no FieldError; caught during self-review). +7 helper unit
+[O1-O7], +6 component test [R1+B1-B5] (rooms-bulk-add-sheet.test.tsx new
+file), +1 e2e spec с axe.
+
+`startNumber` / `endNumber` cross-field refine (endNumber ≥ startNumber,
+range ≤ 500, individual numbers must satisfy `roomNumberSchema` ≤20
+chars) — STILL OPEN. Different shape от single-int B5/B5.bis pattern,
+separate sub-phase.
 
 ## Priority 5 — gestural / power-user UX
 
@@ -122,18 +125,18 @@ selection highlighting required.
 **Status**: research 2026-05-14 noted Linear/Airtable canon. Modal-driven
 covers 100% intent для Sochi SMB scale; defer unless workflow demands.
 
-## Empirical signals (post-B5, 2026-05-15)
+## Empirical signals (post-B5.bis, 2026-05-15)
 
-- Frontend suite: **1644/0** tests (was 1618 pre-B5)
-- Chromium e2e: **146/146** (full 2026-05-14) + 7/7 inventory.spec.ts
-  (incl. 2 new B5 specs) 2026-05-15
-- axe WCAG 2.2 AA: **clean**
-- Coverage inventory: 66.27 lines pre-B5 (> 65 floor); B5 +26 tests
-  should monotonically improve when next coverage run lands
-- Backend in mock-DaData mode для e2e; live mode для real-user signup
+- Frontend suite: **1657/0** tests (was 1618 pre-B5; +26 B5; +13 B5.bis)
+- Chromium e2e: **146/146** (full 2026-05-14) + 8/8 inventory.spec.ts
+  (5 pre-existing + 2 B5 + 1 B5.bis) 2026-05-15
+- axe WCAG 2.2 AA: **clean** across 5 inventory scans
+- Coverage inventory: 66.27 lines pre-B5 (> 65 floor); +39 tests от
+  B5 + B5.bis should monotonically improve when next coverage run lands
+- Backend в mock-DaData mode для e2e; live mode для real-user signup
   (swap canon `[[backend-mode-e2e-swap-canon]]`)
-- 1 commit ahead origin/main (`deda212` B5); awaiting `[[batched_push]]`
-  signal
+- 3 commits ahead origin/main (`deda212` B5 + `e65e155` docs + `ca678a6`
+  B5.bis); awaiting `[[batched_push]]` signal
 
 ## Resume protocol
 
