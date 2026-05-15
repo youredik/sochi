@@ -58,8 +58,12 @@ test.describe('booking-edit dialog', () => {
 		page,
 	}) => {
 		const { band } = await createConfirmedBooking(page, 11)
-		await expect(band).toContainText('Подтверждена')
-		await expect(band).toHaveClass(/bg-status-confirmed/)
+		// G2 (2026-05-15): paletteFor renders «Не распределена» turquoise для
+		// confirmed + assignedRoomId=null (booking-create flow doesn't assign
+		// a room — operator assigns separately OR room auto-assigned at
+		// check-in per existing canon). Pre-check-in band IS unassigned.
+		await expect(band).toContainText('Не распределена')
+		await expect(band).toHaveClass(/bg-status-unassigned/)
 
 		await band.click()
 		const dialog = page.getByRole('dialog')
@@ -155,7 +159,8 @@ test.describe('booking-edit dialog', () => {
 		// Days must be within [1..14] (grid window). Avoid collisions with
 		// other tests (11, 12, 13, 14 used above, and bookings.spec.ts 5, 6).
 		const { band } = await createConfirmedBooking(page, 1)
-		await expect(band).toHaveClass(/bg-status-confirmed/)
+		// G2: confirmed + null assignedRoomId → unassigned turquoise (см. test 57).
+		await expect(band).toHaveClass(/bg-status-unassigned/)
 
 		// Check in
 		await band.click()
