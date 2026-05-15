@@ -125,18 +125,46 @@ selection highlighting required.
 **Status**: research 2026-05-14 noted Linear/Airtable canon. Modal-driven
 covers 100% intent для Sochi SMB scale; defer unless workflow demands.
 
-## Empirical signals (post-B5.bis, 2026-05-15)
+## Real bug hunt 2026-05-15 — DONE (commit `00dd3f3` B5.tri)
 
-- Frontend suite: **1657/0** tests (was 1618 pre-B5; +26 B5; +13 B5.bis)
-- Chromium e2e: **146/146** (full 2026-05-14) + 8/8 inventory.spec.ts
-  (5 pre-existing + 2 B5 + 1 B5.bis) 2026-05-15
+Adversarial reading по всем inventory + setup numeric forms нашло 6 bugs
+ДО shipping (per new canon `[[adversarial-reading-before-done]]` — должно
+быть стандартным шагом, caught после 3-х user pink'ов в session). Все
+fixed в одном коммите:
+
+**HIGH severity — data-loss vectors**:
+• zero-price в bulk-edit set mode → 90×N cells set к 0₽
+• zero-price в single-rate-edit → cell saved as 0₽ rate
+• onboarding wizard avgPriceRub=0 → 90 days of free cells seeded
+
+**MEDIUM severity — UX traps**:
+• bulk-edit `from > to` silently returns empty + misleading DOW toast
+• bulk-edit no client 365-day cap → generic «HTTP 400»
+• setup silent clamp (typing 250 → silent 200, no UX signal)
+
+Memory canons recorded: `[[zero-price-data-loss-trap]]`,
+`[[silent-clamp-anti-pattern]]`, `[[reverse-date-and-server-cap-traps]]`,
+`[[adversarial-reading-before-done]]`, `[[bun-test-coverage-builtin]]`.
+
+## Empirical signals (post-B5.tri, 2026-05-15)
+
+- Frontend suite: **1671/0** tests (was 1618 pre-B5; +53 total session:
+  +26 B5, +13 B5.bis, +14 B5.tri including property-based)
+- Property-based tests (fast-check): 6 properties × bounded shrinks =
+  **964 expect calls** для intRangeFieldSchema
+- Chromium e2e: **8/8** inventory.spec.ts (5 pre-existing + 2 B5 + 1 B5.bis)
+  passing pre-B5.tri AND post-B5.tri verification
 - axe WCAG 2.2 AA: **clean** across 5 inventory scans
-- Coverage inventory: 66.27 lines pre-B5 (> 65 floor); +39 tests от
-  B5 + B5.bis should monotonically improve when next coverage run lands
+- Coverage (inventory files post-B5.tri):
+  - `int-range-field-schema.ts`: **100/100** funcs/lines
+  - `category-form-sheet.tsx`: 87.50/100
+  - `rate-plan-form-sheet.tsx`: 82.14/100
+  - `rooms-bulk-add-sheet.tsx`: 94.44/99.48 (was 41/77 pre-B5.bis)
 - Backend в mock-DaData mode для e2e; live mode для real-user signup
   (swap canon `[[backend-mode-e2e-swap-canon]]`)
-- 3 commits ahead origin/main (`deda212` B5 + `e65e155` docs + `ca678a6`
-  B5.bis); awaiting `[[batched_push]]` signal
+- **5 commits ahead origin/main**: `deda212` B5 + `e65e155` docs +
+  `ca678a6` B5.bis + `33ef82d` docs + `00dd3f3` B5.tri; awaiting
+  `[[batched_push]]` signal
 
 ## Resume protocol
 
