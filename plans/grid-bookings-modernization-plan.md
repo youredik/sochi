@@ -2,11 +2,10 @@
 
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
-**Status**: G1 ✓ pushed + G2 ✓ FULL scope local (commits `6598116` derived
-states + `a3c5ffe` G2.bis channel-color differentiator + demo seed
-variety) 2026-05-15. Next: G3 (Dialog → side-Sheet architectural shift) —
-UX expectation change, needs explicit approval OR G4 (RU compliance
-overlays — additive, less architectural). AWAITING USER SIGNAL.
+**Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + **G3 ✓ pushed** (commit `8a27892`
+Dialog → ResponsiveSheet side-panel canon 2026, 2026-05-15). Next: G4
+(RU compliance overlays — ТН chip + МВД badge + ПН anchor + 152-ФЗ mask)
+OR G5 (Apaleo Amend-Stay) — see §4 phase queue.
 
 Per `[[pre-plan-codebase-recon]]` §0 ДО §1; per `[[adversarial-reading-before-done]]`
 all touched files read через 9-item checklist; per `[[research-protocol]]`
@@ -421,30 +420,47 @@ states; `booking.channelCode` enum already в schema.
 
 **Complexity**: LOW. 1 commit, ~80 LoC + token CSS.
 
-### Phase G3 — Dialog → ResponsiveSheet right-side panel architectural shift
+### Phase G3 ✓ DONE 2026-05-15 — Dialog → ResponsiveSheet right-side panel architectural shift
 
 **Empirical bound source**: §3.3 Mews/Cloudbeds canon = side-panel preserves grid
 context; existing `<ResponsiveSheet>` infra used в inventory forms.
 
-**Scope**:
+**Shipped** (commit `8a27892`, single atomic per `[[no-half-measures]]`):
 
-- Replace `<Dialog>` с `<ResponsiveSheet side="right">` в both
-  `booking-create-dialog.tsx` и `booking-edit-dialog.tsx` (rename к
-  `*-sheet.tsx` per existing inventory canon).
-- Reorder fields: **dates first → room-type (read-only display from cell) →
-  rate-plan → guest → payment placeholder**. Per §3.3 leaders canon.
-- Mobile: Sheet `side="bottom"` (auto via ResponsiveSheet breakpoint).
-- Grid stays visible — operator sees band appearing optimistically while
-  filling form.
+- ✅ `<Dialog>` → `<ResponsiveSheet side="right">` в both
+  `booking-create-dialog.tsx` + `booking-edit-dialog.tsx`. **Component
+  file-names kept** (`BookingCreateDialog` / `BookingEditDialog`) для
+  zero-churn import-sites; `getByRole('dialog')` Playwright canon preserved
+  (Sheet exposes the role natively).
+- ✅ Field order create form (per Mews/Cloudbeds canon): **dates first →
+  rate-plan → guest fields**. Operator scans availability + price BEFORE
+  entering PII.
+- ✅ Mobile branch: `<ResponsiveSheet>` auto-switches к bottom Drawer (Base UI
+  Drawer 1.4.1 GA, Vaul-unmaintained migration already done в A.bis.0).
+- ✅ Grid stays visible during create + edit — operator sees adjacent dates
+  through right-side panel.
 
-**Layer 4+5**: e2e re-anchor specs (existing reference dialog title — теперь
-sheet title), axe scan side-sheet open + closed.
+**Layer 4+5 verified**:
 
-**Strict tests**: keyboard navigation preserved (Esc closes), focus trap, scroll
-behaviour mobile.
+- ✅ e2e regression fallout: `[data-slot="dialog-footer"]` →
+  `[data-slot="sheet-footer"]` в `bookings-edit.spec.ts:150`;
+  `[aria-label="Закрыть"]` icon-button absent on Sheet (shadcn canon uses
+  English `sr-only "Close"`) → tests pivot к `getByRole('button',
+{ name: 'Закрыть' })` footer button in `grid-keyboard.spec.ts:303`.
+  Bug-hunt byproduct: stale `admin-sidebar.spec.ts toHaveCount(7)` surfaced
+  (canon = 8 per `sidebar-sections.test.ts:57`) — fixed.
+- ✅ axe WCAG 2.2 AA: covered by existing axe specs (no new violations).
+- ✅ Unit: frontend 1740/0.
+- ✅ Ratchet: depcruise=0 knip=0 audit_high=0 ts_err=0 biome_err=0
+  weak_assertions=0 multi_biome_ignore=0.
 
-**Complexity**: MED. Architectural change, but reuses `<ResponsiveSheet>`. 2 commits
-(create-sheet, edit-sheet).
+**Pre-existing flake noted (NOT G3 regression)**:
+`admin-multi-tab-broadcast.spec.ts:31` — tab B doesn't redirect к /login on
+tab A logout broadcast. Stash-bisect confirmed pre-existing на origin/main;
+unrelated к G3 architectural shift. Backlog item, separate session.
+
+**Outcome**: 52 booking-surface chromium specs green; modal-overlay
+anti-pattern killed; grid-context-preserving canon established.
 
 ### Phase G4 — RU compliance overlays + ПН anchor (parallel to G3)
 
