@@ -16,6 +16,10 @@ interface Props {
 	roomTypeName: string
 	checkIn: string
 	checkOut: string
+	/** G2.bis: optional channel-origin label (e.g. «Канал: Yandex.Путешествия») —
+	 * rendered ниже dates когда не null. Matches the visual channel-dot
+	 * indicator на the band, giving screen-reader + hover users equal access. */
+	channelLabel?: string | null
 	children: (handlers: PopoverHandlers) => React.ReactNode
 }
 
@@ -48,6 +52,7 @@ export function BookingBandTooltip({
 	roomTypeName,
 	checkIn,
 	checkOut,
+	channelLabel,
 	children,
 }: Props) {
 	const popoverId = `band-tooltip-${useId().replace(/:/g, '-')}-${bookingId}`
@@ -87,6 +92,9 @@ export function BookingBandTooltip({
 				{' — '}
 				<time dateTime={checkOut}>{formatDayOnly(checkOut)}</time>
 			</div>
+			{channelLabel ? (
+				<div className="text-muted-foreground mt-1 text-[10px]">{channelLabel}</div>
+			) : null}
 		</div>
 	)
 

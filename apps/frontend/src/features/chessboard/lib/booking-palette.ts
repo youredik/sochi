@@ -1,4 +1,4 @@
-import type { BookingStatus } from '@horeca/shared'
+import type { BookingChannelCode, BookingStatus } from '@horeca/shared'
 
 /**
  * Booking-status → cell display classes (M9.5 Phase B Bnovo-parity + G2
@@ -124,6 +124,72 @@ export function styleFor(status: BookingStatus): CellStyle {
  *
  * Pure function — caller passes `todayIso` для testable date-comparison.
  */
+/**
+ * G2.bis (2026-05-15) — channel-color indicator differentiator per TravelLine
+ * 8-color canon. RU staff already trained: yandexTravel red-orange dot
+ * (Сочи market leader, distinct from generic OTA) vs other-channels yellow
+ * dot (Booking.com / Ostrovok / Expedia / Airbnb / Bnovo / TravelLine CM).
+ *
+ * Direct + walkIn channels: no indicator (operator-originated bookings
+ * are the «default» context).
+ *
+ * Returns `null` для no-indicator channels (decorative absence is
+ * meaningful — no clutter on the majority of bookings).
+ */
+export interface ChannelIndicator {
+	readonly dotClass: string
+	readonly label: string
+}
+
+export function channelIndicator(channelCode: BookingChannelCode): ChannelIndicator | null {
+	switch (channelCode) {
+		case 'direct':
+		case 'walkIn':
+			return null
+		case 'yandexTravel':
+			return {
+				dotClass: 'bg-channel-yandex',
+				label: 'Канал: Yandex.Путешествия',
+			}
+		// Generic OTA bucket — TravelLine + Bnovo channel managers + Booking.com
+		// + Expedia + Ostrovok + Airbnb. All yellow per TravelLine canon. Future
+		// differentiator differentiation possible if SMB operators demand.
+		case 'bnovo':
+		case 'travelLine':
+		case 'bookingCom':
+		case 'expedia':
+		case 'ostrovok':
+		case 'airbnb':
+			return {
+				dotClass: 'bg-channel-ota',
+				label: `Канал: ${labelForChannelCode(channelCode)}`,
+			}
+	}
+}
+
+function labelForChannelCode(channelCode: BookingChannelCode): string {
+	switch (channelCode) {
+		case 'direct':
+			return 'Прямое бронирование'
+		case 'walkIn':
+			return 'Front desk'
+		case 'yandexTravel':
+			return 'Yandex.Путешествия'
+		case 'ostrovok':
+			return 'Ostrovok'
+		case 'travelLine':
+			return 'TravelLine'
+		case 'bnovo':
+			return 'Bnovo'
+		case 'bookingCom':
+			return 'Booking.com'
+		case 'expedia':
+			return 'Expedia'
+		case 'airbnb':
+			return 'Airbnb'
+	}
+}
+
 export function paletteFor(ctx: {
 	booking: {
 		status: BookingStatus

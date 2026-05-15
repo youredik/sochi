@@ -135,6 +135,12 @@ body {
 	 * Bnovo + Cloudbeds «Unassigned Reservations» panel orange-dot). */
 	--color-status-unassigned: var(--status-unassigned);
 	--color-status-unassigned-foreground: var(--status-unassigned-foreground);
+	/* G2.bis 2026-05-15 — channel-color indicator dot per TravelLine canon:
+	 * yandex (Yandex.Путешествия) red-orange differentiator vs generic OTA
+	 * yellow. Decorative — aria-label на band carries semantic. Min 3:1
+	 * contrast to band background per WCAG 2.2 non-text contrast. */
+	--color-channel-yandex: var(--channel-yandex);
+	--color-channel-ota: var(--channel-ota);
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
 	--radius-sm: calc(var(--radius) * 0.6);
@@ -201,6 +207,11 @@ body {
 	 * L=0.45 paired с white-fg for ≥4.5:1 AA per same canon как status-confirmed. */
 	--status-unassigned: oklch(0.45 0.1 195);
 	--status-unassigned-foreground: oklch(0.985 0 0);
+	/* G2.bis channel tokens — bright accents для visibility on any status bg.
+	 * Yandex distinguishes red-orange (Сочи market leader); generic OTA
+	 * yellow per TravelLine 8-color canon. */
+	--channel-yandex: oklch(0.65 0.18 35);
+	--channel-ota: oklch(0.7 0.18 85);
 }
 
 .dark {
@@ -259,6 +270,9 @@ body {
 	/* G2 dark theme: turquoise L=0.7 paired с dark-fg for AA contrast. */
 	--status-unassigned: oklch(0.7 0.11 195);
 	--status-unassigned-foreground: oklch(0.205 0 0);
+	/* G2.bis dark theme channel tokens — same canon, slightly lighter L. */
+	--channel-yandex: oklch(0.7 0.18 35);
+	--channel-ota: oklch(0.78 0.18 85);
 }
 
 /* prefers-contrast: more (M9.1) — AAA-overlay над light + dark.

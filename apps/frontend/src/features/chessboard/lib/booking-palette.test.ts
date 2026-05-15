@@ -1,7 +1,8 @@
-import type { BookingStatus } from '@horeca/shared'
+import type { BookingChannelCode, BookingStatus } from '@horeca/shared'
 import { describe, expect, it } from 'bun:test'
 import {
 	BOOKING_CELL_STYLES,
+	channelIndicator,
 	DERIVED_BOOKING_CELL_STYLES,
 	paletteFor,
 	styleFor,
@@ -235,5 +236,90 @@ describe('paletteFor — G2 derived states', () => {
 		it('unassigned NOT использует hardcoded palette', () => {
 			expect(DERIVED_BOOKING_CELL_STYLES.unassigned.bg).not.toMatch(/bg-(neutral|yellow|red)-\d/)
 		})
+	})
+})
+
+/**
+ * G2.bis (2026-05-15) — `channelIndicator` differentiator dot per TravelLine
+ * canon. Strict: exhaustive enum coverage + exact-value labels + null-as-
+ * meaningful для direct/walkIn.
+ */
+describe('channelIndicator — G2.bis channel-color differentiator', () => {
+	const ALL_CHANNELS: readonly BookingChannelCode[] = [
+		'direct',
+		'walkIn',
+		'yandexTravel',
+		'ostrovok',
+		'travelLine',
+		'bnovo',
+		'bookingCom',
+		'expedia',
+		'airbnb',
+	] as const
+
+	describe('exhaustive enum coverage (every BookingChannelCode handled)', () => {
+		it.each([...ALL_CHANNELS])(
+			'channelIndicator(%s) returns null или ChannelIndicator',
+			(code: BookingChannelCode) => {
+				const ind = channelIndicator(code)
+				if (ind !== null) {
+					expect(ind.dotClass).toMatch(/^bg-channel-/)
+					expect(ind.label).toMatch(/^Канал: /)
+				}
+			},
+		)
+	})
+
+	describe('direct + walkIn — no indicator (operator-originated, no clutter)', () => {
+		it('direct → null', () => {
+			expect(channelIndicator('direct')).toBe(null)
+		})
+		it('walkIn → null', () => {
+			expect(channelIndicator('walkIn')).toBe(null)
+		})
+	})
+
+	describe('yandexTravel — red-orange differentiator (Сочи market leader)', () => {
+		it('returns bg-channel-yandex dot + canonical label', () => {
+			const ind = channelIndicator('yandexTravel')
+			expect(ind).not.toBe(null)
+			expect(ind?.dotClass).toBe('bg-channel-yandex')
+			expect(ind?.label).toBe('Канал: Yandex.Путешествия')
+		})
+	})
+
+	describe('generic OTA bucket — yellow dot per TravelLine canon', () => {
+		const OTA_CHANNELS: readonly BookingChannelCode[] = [
+			'ostrovok',
+			'travelLine',
+			'bnovo',
+			'bookingCom',
+			'expedia',
+			'airbnb',
+		]
+		it.each([...OTA_CHANNELS])('channelIndicator(%s) → bg-channel-ota', (code) => {
+			const ind = channelIndicator(code)
+			expect(ind?.dotClass).toBe('bg-channel-ota')
+		})
+		it('per-channel label distinguishes OTA source', () => {
+			expect(channelIndicator('ostrovok')?.label).toBe('Канал: Ostrovok')
+			expect(channelIndicator('travelLine')?.label).toBe('Канал: TravelLine')
+			expect(channelIndicator('bnovo')?.label).toBe('Канал: Bnovo')
+			expect(channelIndicator('bookingCom')?.label).toBe('Канал: Booking.com')
+			expect(channelIndicator('expedia')?.label).toBe('Канал: Expedia')
+			expect(channelIndicator('airbnb')?.label).toBe('Канал: Airbnb')
+		})
+	})
+
+	describe('no hardcoded shadcn palette в channel tokens', () => {
+		it.each([...ALL_CHANNELS])(
+			'channelIndicator(%s).dotClass NOT использует bg-yellow-NNN/bg-red-NNN',
+			(code) => {
+				const ind = channelIndicator(code)
+				if (ind !== null) {
+					expect(ind.dotClass).not.toMatch(/bg-(yellow|red|orange)-\d/)
+				}
+			},
+		)
 	})
 })

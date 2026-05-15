@@ -1,4 +1,4 @@
-import type { BookingStatus, RoomType } from '@horeca/shared'
+import type { BookingChannelCode, BookingStatus, RoomType } from '@horeca/shared'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../../lib/api.ts'
 
@@ -21,6 +21,11 @@ interface GridBooking {
 	// requires it. Stays nullable per domain (`assignedRoomId: string | null`
 	// в `apps/backend/.../booking.repo.ts`).
 	assignedRoomId?: string | null
+	// G2.bis (2026-05-15): channel-color differentiator dot per TravelLine
+	// canon. Server already serves; narrowing extended. Indicates origin
+	// channel of the booking (yandexTravel red-orange vs generic OTA yellow
+	// vs direct/walkIn no-indicator).
+	channelCode?: BookingChannelCode
 }
 
 /**

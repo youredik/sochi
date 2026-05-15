@@ -448,7 +448,10 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		return d
 	}
 
-	// 30 entries: [statusOffset], dayOffset relative to today, nightsCount, roomTypeIdx (0=Deluxe, 1=Standard), ratePlanIdx (0=Flex, 1=NR).
+	// 30+ entries: [statusOffset], dayOffset relative to today, nightsCount,
+	// roomTypeIdx (0=Deluxe, 1=Standard), ratePlanIdx (0=Flex, 1=NR).
+	// G2.bis (2026-05-15): optional channelCode для TravelLine 8-color
+	// differentiator dot demonstration. Defaults к 'direct' если omitted.
 	const BOOKING_PLAN: ReadonlyArray<{
 		status: string
 		dayOffset: number
@@ -456,6 +459,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		roomTypeIdx: 0 | 1
 		ratePlanIdx: 0 | 1
 		guestCount: number
+		channelCode?: string
 	}> = [
 		// 8 checked_out (past)
 		{
@@ -528,9 +532,47 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		{ status: 'in_house', dayOffset: 0, nights: 2, roomTypeIdx: 0, ratePlanIdx: 1, guestCount: 2 },
 		{ status: 'in_house', dayOffset: -3, nights: 7, roomTypeIdx: 1, ratePlanIdx: 1, guestCount: 4 },
 		{ status: 'in_house', dayOffset: -1, nights: 3, roomTypeIdx: 0, ratePlanIdx: 0, guestCount: 2 },
-		// 12 confirmed (future)
-		{ status: 'confirmed', dayOffset: 5, nights: 3, roomTypeIdx: 0, ratePlanIdx: 0, guestCount: 2 },
-		{ status: 'confirmed', dayOffset: 7, nights: 4, roomTypeIdx: 1, ratePlanIdx: 1, guestCount: 2 },
+		// G2 2026-05-15: 2 overdue (confirmed status + checkIn в прошлом — operator
+		// urgency #1 «Просрочена» red band per TravelLine 8-color canon). Demo
+		// должна показывать this state так potential customers видят G2 capability.
+		{
+			status: 'confirmed',
+			dayOffset: -2,
+			nights: 3,
+			roomTypeIdx: 0,
+			ratePlanIdx: 0,
+			guestCount: 2,
+			channelCode: 'yandexTravel',
+		},
+		{
+			status: 'confirmed',
+			dayOffset: -1,
+			nights: 2,
+			roomTypeIdx: 1,
+			ratePlanIdx: 0,
+			guestCount: 1,
+		},
+		// 12 confirmed (future) — mixed channel codes для G2.bis visual canon
+		// (yandexTravel red-orange dot vs OTA yellow dot vs direct/walkIn no-dot).
+		// Каждые 4 bookings rotate через major channel sources Сочи рынка.
+		{
+			status: 'confirmed',
+			dayOffset: 5,
+			nights: 3,
+			roomTypeIdx: 0,
+			ratePlanIdx: 0,
+			guestCount: 2,
+			channelCode: 'yandexTravel',
+		},
+		{
+			status: 'confirmed',
+			dayOffset: 7,
+			nights: 4,
+			roomTypeIdx: 1,
+			ratePlanIdx: 1,
+			guestCount: 2,
+			channelCode: 'bookingCom',
+		},
 		{
 			status: 'confirmed',
 			dayOffset: 10,
@@ -538,6 +580,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			roomTypeIdx: 0,
 			ratePlanIdx: 1,
 			guestCount: 1,
+			channelCode: 'ostrovok',
 		},
 		{
 			status: 'confirmed',
@@ -546,6 +589,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			roomTypeIdx: 1,
 			ratePlanIdx: 0,
 			guestCount: 3,
+			channelCode: 'travelLine',
 		},
 		{
 			status: 'confirmed',
@@ -554,6 +598,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			roomTypeIdx: 0,
 			ratePlanIdx: 0,
 			guestCount: 2,
+			channelCode: 'expedia',
 		},
 		{
 			status: 'confirmed',
@@ -562,6 +607,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			roomTypeIdx: 1,
 			ratePlanIdx: 0,
 			guestCount: 2,
+			channelCode: 'bnovo',
 		},
 		{
 			status: 'confirmed',
@@ -737,7 +783,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 				${guestId}, ${toJson(guestSnapshot)},
 				${checkInDate}, ${checkOutDate}, ${b.nights},
 				${b.status}, ${nowTs},
-				${'direct'}, ${NULL_TEXT},
+				${b.channelCode ?? 'direct'}, ${NULL_TEXT},
 				${b.guestCount}, ${totalMicros}, ${paidMicros}, ${'RUB'}, ${toJson(timeSlices)},
 				${'not_required'}, ${'not_checked'},
 				${tourismTaxBaseMicros}, ${tourismTaxMicros},

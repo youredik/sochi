@@ -8,7 +8,7 @@ import { BookingCreateDialog } from '../../bookings/components/booking-create-di
 import { BookingEditDialog } from '../../bookings/components/booking-edit-dialog'
 import { useFitWindowDays } from '../hooks/use-fit-window-days'
 import { useGridData } from '../hooks/use-grid-data'
-import { paletteFor } from '../lib/booking-palette'
+import { channelIndicator, paletteFor } from '../lib/booking-palette'
 import { useChessboardPrefsStore } from '../lib/chessboard-prefs-store'
 import { addDays, iterateDates, todayIso } from '../lib/date-range'
 import {
@@ -107,6 +107,7 @@ export function Chessboard() {
 						checkIn: string
 						checkOut: string
 						assignedRoomId: string | null
+						channelCode: (typeof rowBookings)[number]['channelCode']
 						span: number
 						truncatedLeft: boolean
 						truncatedRight: boolean
@@ -125,6 +126,8 @@ export function Chessboard() {
 						// G2: thread assignedRoomId через layout state так paletteFor()
 						// может render «unassigned» turquoise overlay.
 						assignedRoomId: b.assignedRoomId ?? null,
+						// G2.bis: thread channelCode для channelIndicator() differentiator.
+						channelCode: b.channelCode,
 						span,
 						truncatedLeft: pos.truncatedLeft,
 						truncatedRight: pos.truncatedRight,
@@ -352,6 +355,9 @@ export function Chessboard() {
 											},
 											todayIso: today,
 										})
+										// G2.bis: channel-origin differentiator dot. null когда
+										// direct/walkIn (operator-originated, no clutter).
+										const channel = band.channelCode ? channelIndicator(band.channelCode) : null
 										const tabStop = isTabStop(rowIdx, ariaColIdx)
 										return (
 											<BookingBandTooltip
@@ -361,16 +367,19 @@ export function Chessboard() {
 												roomTypeName={rt.name}
 												checkIn={band.checkIn}
 												checkOut={band.checkOut}
+												channelLabel={channel?.label ?? null}
 											>
 												{({ popoverId, onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
 													<button
 														type="button"
-														className={`focus-visible:outline-ring border-border flex h-10 items-center overflow-hidden border-b px-2 text-[11px] focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${style.bg} ${style.text}`}
+														className={`focus-visible:outline-ring border-border relative flex h-10 items-center overflow-hidden border-b px-2 text-[11px] focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${style.bg} ${style.text}`}
 														style={{ gridColumn: `span ${band.span}` }}
 														role="gridcell"
 														aria-colindex={ariaColIdx}
 														aria-colspan={band.span}
-														aria-label={`${style.label}, ${rt.name}, ${band.checkIn} — ${band.checkOut}. Enter — открыть действия.`}
+														aria-label={`${style.label}, ${rt.name}, ${band.checkIn} — ${band.checkOut}${
+															channel ? `, ${channel.label}` : ''
+														}. Enter — открыть действия.`}
 														aria-details={popoverId}
 														data-booking-id={band.id}
 														data-row-idx={rowIdx}
@@ -390,6 +399,16 @@ export function Chessboard() {
 															{style.label}
 															{band.truncatedRight ? '…' : ''}
 														</span>
+														{/* G2.bis channel dot — decorative (semantic carried в
+														    aria-label above). Top-right corner, размер 6px,
+														    contrast verified ≥3:1 non-text per WCAG 2.2. */}
+														{channel ? (
+															<span
+																aria-hidden="true"
+																className={`pointer-events-none absolute top-1 right-1 size-1.5 rounded-full ${channel.dotClass}`}
+																data-channel-dot={band.channelCode}
+															/>
+														) : null}
 													</button>
 												)}
 											</BookingBandTooltip>
