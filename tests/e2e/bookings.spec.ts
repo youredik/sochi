@@ -172,3 +172,68 @@ test.describe('booking-create dialog', () => {
 		await expect(dialog.getByRole('button', { name: /Создать бронирование/ })).toBeEnabled()
 	})
 })
+
+test.describe('booking-create G1 — real-bug-hunt fixes', () => {
+	test('G-B2: guestsCount=0 surfaces inline «Не меньше 1»; submit gated', async ({ page }) => {
+		await page.goto('/')
+		await page.locator('[data-section-id="grid"]').first().click()
+		const targetDate = futureIso(12)
+		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
+		const dialog = page.getByRole('dialog')
+		await expect(dialog).toBeVisible()
+
+		// Out-of-range below — used к pass HTML5-only, fail server с 400.
+		await dialog.getByRole('spinbutton', { name: 'Гостей' }).fill('0')
+		await dialog.getByRole('spinbutton', { name: 'Гостей' }).blur()
+		await expect(dialog.getByText('Не меньше 1')).toBeVisible()
+
+		// Out-of-range above — same trap.
+		await dialog.getByRole('spinbutton', { name: 'Гостей' }).fill('21')
+		await dialog.getByRole('spinbutton', { name: 'Гостей' }).blur()
+		await expect(dialog.getByText('Не больше 20')).toBeVisible()
+
+		// Recover к valid — error disappears.
+		await dialog.getByRole('spinbutton', { name: 'Гостей' }).fill('2')
+		await dialog.getByRole('spinbutton', { name: 'Гостей' }).blur()
+		await expect(dialog.getByText('Не больше 20')).not.toBeVisible()
+		await expect(dialog.getByText('Не меньше 1')).not.toBeVisible()
+	})
+
+	test('G-B3: rate plan picker visible с default; can change selection', async ({ page }) => {
+		await page.goto('/')
+		await page.locator('[data-section-id="grid"]').first().click()
+		const targetDate = futureIso(13)
+		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
+		const dialog = page.getByRole('dialog')
+		await expect(dialog).toBeVisible()
+
+		// Тариф label + Select visible.
+		const ratePlanTrigger = dialog.getByRole('combobox', { name: 'Тариф' })
+		await expect(ratePlanTrigger).toBeVisible()
+		// Default seeded — should NOT be «Выберите тариф» (placeholder visible
+		// only while query loads); тариф «Базовый» seeded by onboarding wizard.
+		await expect(ratePlanTrigger).not.toContainText('Выберите тариф')
+		await expect(ratePlanTrigger).not.toContainText('Загружаем')
+	})
+
+	test('G-B4: price preview shows nights + total ₽ (live rate-grid query)', async ({ page }) => {
+		await page.goto('/')
+		await page.locator('[data-section-id="grid"]').first().click()
+		const targetDate = futureIso(14)
+		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
+		const dialog = page.getByRole('dialog')
+		await expect(dialog).toBeVisible()
+
+		// Default 1 night; rate-grid seeded 90 days at onboarding's avgPriceRub.
+		const preview = dialog.locator('[data-slot="price-preview"]')
+		await expect(preview).toBeVisible()
+		await expect(preview).toContainText('1 ночь')
+		await expect(preview).toContainText('тариф')
+
+		// Itogo line surfaces после rates load — wait for it.
+		const total = dialog.locator('[data-slot="price-preview-total"]')
+		await expect(total).toBeVisible({ timeout: 5_000 })
+		await expect(total).toContainText('Итого:')
+		await expect(total).toContainText('₽')
+	})
+})

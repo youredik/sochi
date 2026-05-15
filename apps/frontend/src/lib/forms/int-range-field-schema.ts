@@ -1,7 +1,9 @@
 /**
  * `intRangeFieldSchema` — Zod string-schema mirror to a server-side integer
- * range bound. Used by inventory admin forms so a successful client parse
- * implies a successful server parse — no silent 400 on submit.
+ * range bound. Shared across feature folders (inventory, setup, bookings)
+ * — moved from `features/inventory/lib/` к `lib/forms/` 2026-05-15 once
+ * 3rd consumer arrived (per `[[no-half-measures]]`: feature-boundary dies
+ * when generic primitive used cross-feature).
  *
  * Surfaces FieldError messages in the order a user encounters mistakes:
  *
@@ -25,6 +27,12 @@
  * is the load-bearing client gate; it must mirror the matching server
  * Zod bound (e.g. `roomType.ts` `occupancySchema = z.coerce.number().int()
  * .min(1).max(20)`).
+ *
+ * `intRangeNumberValidator` — TanStack-Form-compatible validator function
+ * for fields that store `number | undefined` (when `<Input type="number">`
+ * is wrapped in a component that coerces via `valueAsNumber` — see
+ * `features/forms/text-field.tsx`). Same 4-message canon, different
+ * input shape.
  */
 import { z } from 'zod'
 
@@ -54,4 +62,20 @@ export function intRangeFieldSchema(opts: { min: number; max: number; allowEmpty
 			passIfEmpty((v) => Number(v) <= opts.max),
 			`Не больше ${opts.max}`,
 		)
+}
+
+/**
+ * `intRangeNumberValidator` — same 4-message canon as `intRangeFieldSchema`,
+ * но input is `number | undefined` (TanStack Form field that stores
+ * coerced `valueAsNumber`). Returns error message string or `undefined`
+ * (validator-canonical "pass").
+ */
+export function intRangeNumberValidator(opts: { min: number; max: number }) {
+	return (value: number | undefined): string | undefined => {
+		if (typeof value !== 'number' || !Number.isFinite(value)) return 'Введите число'
+		if (!Number.isInteger(value)) return 'Целое число'
+		if (value < opts.min) return `Не меньше ${opts.min}`
+		if (value > opts.max) return `Не больше ${opts.max}`
+		return undefined
+	}
 }

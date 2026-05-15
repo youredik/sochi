@@ -30,7 +30,7 @@ import {
 } from '../../../components/ui/responsive-sheet.tsx'
 import { Textarea } from '../../../components/ui/textarea.tsx'
 import { useCreateRoomType, useUpdateRoomType } from '../hooks/use-room-types.ts'
-import { intRangeFieldSchema } from '../lib/int-range-field-schema.ts'
+import { intRangeFieldSchema } from '../../../lib/forms/int-range-field-schema.ts'
 
 interface FormValues {
 	name: string

@@ -28,7 +28,7 @@ import {
 	ResponsiveSheetTitle,
 } from '../../../components/ui/responsive-sheet.tsx'
 import { useBulkCreateRooms } from '../hooks/use-rooms.ts'
-import { intRangeFieldSchema } from '../lib/int-range-field-schema.ts'
+import { intRangeFieldSchema } from '../../../lib/forms/int-range-field-schema.ts'
 
 interface FormValues {
 	startNumber: string

@@ -24,7 +24,7 @@
  *     [I1] custom min/max numbers reflected verbatim in messages
  */
 import { describe, expect, it } from 'bun:test'
-import { intRangeFieldSchema } from './int-range-field-schema.ts'
+import { intRangeFieldSchema, intRangeNumberValidator } from './int-range-field-schema.ts'
 
 describe('intRangeFieldSchema — valid', () => {
 	const schema = intRangeFieldSchema({ min: 1, max: 20 })
@@ -176,5 +176,89 @@ describe('intRangeFieldSchema — allowEmpty variant', () => {
 		const r = required.safeParse('')
 		expect(r.success).toBe(false)
 		expect(r.error?.issues[0]?.message).toBe('Введите число')
+	})
+})
+
+/**
+ * `intRangeNumberValidator` — TanStack-Form validator function variant
+ * (number | undefined input). Same 4-message canon as `intRangeFieldSchema`,
+ * different input shape. Used by booking-create-dialog `guestsCount` field
+ * (`<TextField type="number">` coerces via valueAsNumber).
+ *
+ *   undefined / NaN  → «Введите число»
+ *   non-integer      → «Целое число»
+ *   below min        → «Не меньше {min}»
+ *   above max        → «Не больше {max}»
+ *   valid → undefined (validator-canonical pass)
+ */
+describe('intRangeNumberValidator', () => {
+	const validate = intRangeNumberValidator({ min: 1, max: 20 })
+
+	describe('valid', () => {
+		it('[N-V1] min boundary returns undefined', () => {
+			expect(validate(1)).toBe(undefined)
+		})
+		it('[N-V2] max boundary returns undefined', () => {
+			expect(validate(20)).toBe(undefined)
+		})
+		it('[N-V3] mid range returns undefined', () => {
+			expect(validate(10)).toBe(undefined)
+		})
+	})
+
+	describe('adversarial — invalid input shape', () => {
+		it('[N-E1] undefined → «Введите число» (TextField empty state)', () => {
+			expect(validate(undefined)).toBe('Введите число')
+		})
+		it('[N-E2] NaN → «Введите число»', () => {
+			expect(validate(Number.NaN)).toBe('Введите число')
+		})
+		it('[N-E3] +Infinity → «Введите число»', () => {
+			expect(validate(Number.POSITIVE_INFINITY)).toBe('Введите число')
+		})
+		it('[N-E4] -Infinity → «Введите число»', () => {
+			expect(validate(Number.NEGATIVE_INFINITY)).toBe('Введите число')
+		})
+		it('[N-E5] decimal (1.5) → «Целое число»', () => {
+			expect(validate(1.5)).toBe('Целое число')
+		})
+	})
+
+	describe('adversarial — out of range', () => {
+		it('[N-B1] 0 with min=1 → «Не меньше 1»', () => {
+			expect(validate(0)).toBe('Не меньше 1')
+		})
+		it('[N-B2] -5 with min=1 → «Не меньше 1»', () => {
+			expect(validate(-5)).toBe('Не меньше 1')
+		})
+		it('[N-A1] 21 with max=20 → «Не больше 20»', () => {
+			expect(validate(21)).toBe('Не больше 20')
+		})
+		it('[N-A2] 999999 with max=20 → «Не больше 20»', () => {
+			expect(validate(999999)).toBe('Не больше 20')
+		})
+	})
+
+	describe('immutable bounds (template literal contract)', () => {
+		it('[N-I1] arbitrary min/max reflected verbatim', () => {
+			const v = intRangeNumberValidator({ min: 7, max: 42 })
+			expect(v(6)).toBe('Не меньше 7')
+			expect(v(43)).toBe('Не больше 42')
+			expect(v(7)).toBe(undefined)
+			expect(v(42)).toBe(undefined)
+		})
+	})
+
+	describe('parallel canon с string variant (intRangeFieldSchema)', () => {
+		it('[N-P1] same messages для same trap inputs', () => {
+			// String variant: empty → «Введите число»; number variant: undefined → same.
+			expect(validate(undefined)).toBe(
+				intRangeFieldSchema({ min: 1, max: 20 }).safeParse('').error?.issues[0]?.message,
+			)
+			// String '21' fails «Не больше 20»; number 21 same.
+			expect(validate(21)).toBe(
+				intRangeFieldSchema({ min: 1, max: 20 }).safeParse('21').error?.issues[0]?.message,
+			)
+		})
 	})
 })

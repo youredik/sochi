@@ -36,7 +36,7 @@ import {
 	SelectValue,
 } from '../../../components/ui/select.tsx'
 import { useCreateRatePlan, useUpdateRatePlan } from '../hooks/use-rate-plans.ts'
-import { intRangeFieldSchema } from '../lib/int-range-field-schema.ts'
+import { intRangeFieldSchema } from '../../../lib/forms/int-range-field-schema.ts'
 
 interface FormValues {
 	name: string

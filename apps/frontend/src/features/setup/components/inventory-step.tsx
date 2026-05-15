@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { intRangeFieldSchema } from '../../inventory/lib/int-range-field-schema.ts'
+import { intRangeFieldSchema } from '../../../lib/forms/int-range-field-schema.ts'
 import { useBulkInventory } from '../hooks/use-bulk-inventory.ts'
 import { useWizardStore } from '../wizard-store.ts'
 

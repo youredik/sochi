@@ -1,5 +1,6 @@
-import { useForm } from '@tanstack/react-form'
-import { useMemo } from 'react'
+import { useForm, useStore } from '@tanstack/react-form'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useId, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import {
 	Dialog,
@@ -9,7 +10,18 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from '@/components/ui/select'
+import { ratesRangeQueryOptions } from '../../inventory/hooks/use-rates'
+import { addDays } from '../../chessboard/lib/date-range'
 import { TextField } from '../../forms/text-field'
+import { intRangeNumberValidator } from '../../../lib/forms/int-range-field-schema'
 import { useCreateBooking, useCreateGuest, useRatePlans } from '../hooks/use-booking-mutations'
 import {
 	type BookingCreateDialogInput,
@@ -19,6 +31,10 @@ import {
 	pickDefaultRatePlan,
 	pluralNights,
 } from '../lib/booking-create'
+
+// Server-side bound mirror: `bookingCreateInput.guestsCount` is
+// `z.coerce.number().int().min(1).max(20)` per `packages/shared/src/booking.ts`.
+const validateGuestsCount = intRangeNumberValidator({ min: 1, max: 20 })
 
 /**
  * Click-to-create booking dialog (M5e.1).
@@ -59,14 +75,19 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 	// still being testable. Reset happens when the dialog remounts (Dialog
 	// defaults unmount on close via Radix Portal).
 	const idempotencyKey = useMemo(() => generateIdempotencyKey(), [])
+	const ratePlanFieldId = useId()
 
 	const ratePlansQ = useRatePlans(props.propertyId, props.roomTypeId)
 	const createGuest = useCreateGuest()
 	const createBooking = useCreateBooking(props.propertyId, props.windowFrom, props.windowTo)
 
-	// First active rate plan for this roomType. Null while query loads or if
-	// the tenant somehow has zero plans for this roomType — submit button is
-	// disabled in that case (guard below).
+	// G-B3 fix (real-bug-hunt 2026-05-15): previously rate plan auto-picked
+	// FIRST active silently — operator с 3 tariffs (BAR/Невозвратный/Завтрак)
+	// could не choose. Now picker is explicit; default = first active.
+	const activeRatePlans = useMemo(
+		() => (ratePlansQ.data ?? []).filter((p) => p.isActive),
+		[ratePlansQ.data],
+	)
 	const defaultRatePlan = useMemo(
 		() => pickDefaultRatePlan(ratePlansQ.data ?? []),
 		[ratePlansQ.data],
@@ -83,9 +104,10 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 			guestsCount: 1,
 			checkIn: props.checkIn,
 			checkOut: defaultCheckOut(props.checkIn),
+			ratePlanId: '',
 		},
 		onSubmit: async ({ value }) => {
-			if (!defaultRatePlan) return
+			if (!value.ratePlanId) return
 			// 1. Create guest
 			const guest = await createGuest.mutateAsync({
 				firstName: value.firstName,
@@ -98,7 +120,7 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 			// 2. Create booking (optimistic band appears immediately)
 			const input: BookingCreateDialogInput = {
 				roomTypeId: props.roomTypeId,
-				ratePlanId: defaultRatePlan.id,
+				ratePlanId: value.ratePlanId,
 				checkIn: value.checkIn,
 				checkOut: value.checkOut,
 				guestsCount: value.guestsCount,
@@ -117,6 +139,17 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 			props.onOpenChange(false)
 		},
 	})
+
+	// Auto-seed ratePlanId с default-active plan when query lands. User can
+	// still override via Select — only fires once (when form value still empty).
+	// Per `[[tanstack-form-derived-state-canon]]` — read form state via store
+	// в effect deps, NOT `form.state.values` direct.
+	const currentRatePlanId = useStore(form.store, (s) => s.values.ratePlanId)
+	useEffect(() => {
+		if (!currentRatePlanId && defaultRatePlan) {
+			form.setFieldValue('ratePlanId', defaultRatePlan.id)
+		}
+	}, [currentRatePlanId, defaultRatePlan, form])
 
 	const isPending = createGuest.isPending || createBooking.isPending
 
@@ -180,7 +213,13 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 						<form.Field name="checkOut">
 							{(field) => <TextField field={field} label="Выезд" type="date" required />}
 						</form.Field>
-						<form.Field name="guestsCount">
+						{/* G-B2 fix (real-bug-hunt 2026-05-15): previously HTML5-only
+						   min/max → server 400 on 0/21/etc. intRangeNumberValidator
+						   mirrors `guestsCountSchema.min(1).max(20)` server bound. */}
+						<form.Field
+							name="guestsCount"
+							validators={{ onChange: ({ value }) => validateGuestsCount(value) }}
+						>
 							{(field) => (
 								<TextField
 									field={field}
@@ -195,17 +234,50 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 						</form.Field>
 					</div>
 
-					<form.Subscribe selector={(s) => [s.values.checkIn, s.values.checkOut] as const}>
-						{([ci, co]) => {
+					{/* G-B3 fix (real-bug-hunt 2026-05-15): rate plan picker — was
+					   silent auto-pick of first active. Default seeded from
+					   pickDefaultRatePlan via useEffect; operator can override. */}
+					<form.Field name="ratePlanId">
+						{(field) => (
+							<div className="space-y-1.5">
+								<Label htmlFor={ratePlanFieldId}>Тариф</Label>
+								<Select
+									value={field.state.value}
+									onValueChange={(v) => field.handleChange(v)}
+									disabled={activeRatePlans.length === 0}
+								>
+									<SelectTrigger id={ratePlanFieldId} aria-label="Тариф">
+										<SelectValue
+											placeholder={ratePlansQ.isPending ? 'Загружаем тарифы…' : 'Выберите тариф'}
+										/>
+									</SelectTrigger>
+									<SelectContent>
+										{activeRatePlans.map((p) => (
+											<SelectItem key={p.id} value={p.id}>
+												{p.name}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+						)}
+					</form.Field>
+
+					<form.Subscribe
+						selector={(s) => [s.values.checkIn, s.values.checkOut, s.values.ratePlanId] as const}
+					>
+						{([ci, co, planId]) => {
 							const nights = safeNightsCount(ci, co)
 							return (
 								<>
-									<p className="text-muted-foreground text-sm">
-										{nights > 0
-											? `${nights} ${pluralNights(nights)}`
-											: 'Выезд должен быть позже заезда'}
-										{defaultRatePlan ? ` · тариф ${defaultRatePlan.name}` : ' · тариф загружается…'}
-									</p>
+									<BookingPricePreview
+										propertyId={props.propertyId}
+										ratePlanId={planId}
+										checkIn={ci}
+										checkOut={co}
+										nights={nights}
+										ratePlanName={activeRatePlans.find((p) => p.id === planId)?.name ?? null}
+									/>
 
 									<DialogFooter>
 										<Button
@@ -216,7 +288,7 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 										>
 											Отмена
 										</Button>
-										<Button type="submit" disabled={isPending || !defaultRatePlan || nights < 1}>
+										<Button type="submit" disabled={isPending || !planId || nights < 1}>
 											{isPending ? 'Создаём…' : 'Создать бронирование'}
 										</Button>
 									</DialogFooter>
@@ -236,4 +308,106 @@ function safeNightsCount(ci: string, co: string): number {
 	} catch {
 		return 0
 	}
+}
+
+/**
+ * G-B4 fix (real-bug-hunt 2026-05-15): live price preview via rate-grid query.
+ *
+ * Source-of-truth: `rate` table (per-date amount per ratePlan, seeded by
+ * onboarding wizard 90-day window). Sum amounts для [checkIn..checkOut-1]
+ * (exclusive checkout — last night is checkOut-1). Server `Rate.amount` is
+ * a decimal string («5000.50»); `Number()` coerces safely up to ≤6 fractional
+ * digits per `packages/shared/src/rate.ts` `amountSchema`.
+ *
+ * Edge cases:
+ *   • ratePlanId empty / dates invalid → render nights-only line
+ *   • Query loading → render «считаем…»
+ *   • Some dates missing rate rows → partial total, hint operator
+ *   • Query error → render nights-only с warn (don't block submit)
+ */
+function BookingPricePreview(props: {
+	propertyId: string | null
+	ratePlanId: string
+	checkIn: string
+	checkOut: string
+	nights: number
+	ratePlanName: string | null
+}) {
+	const { ratePlanId, checkIn, checkOut, nights, ratePlanName } = props
+	const lastNight = useMemo(() => {
+		if (!checkIn || !checkOut || nights < 1) return null
+		try {
+			return addDays(checkOut, -1)
+		} catch {
+			return null
+		}
+	}, [checkOut, checkIn, nights])
+	const enabled = Boolean(ratePlanId && checkIn && lastNight)
+	const ratesQ = useQuery({
+		...ratesRangeQueryOptions(ratePlanId, checkIn, lastNight ?? checkIn),
+		enabled,
+	})
+
+	if (nights < 1) {
+		return (
+			<p className="text-muted-foreground text-sm" data-slot="price-preview">
+				Выезд должен быть позже заезда
+			</p>
+		)
+	}
+
+	const nightsLabel = `${nights} ${pluralNights(nights)}`
+	const planLabel = ratePlanName ? ` · тариф ${ratePlanName}` : ' · тариф не выбран'
+
+	if (!enabled) {
+		return (
+			<p className="text-muted-foreground text-sm" data-slot="price-preview">
+				{nightsLabel}
+				{planLabel}
+			</p>
+		)
+	}
+
+	if (ratesQ.isPending) {
+		return (
+			<p className="text-muted-foreground text-sm" data-slot="price-preview">
+				{nightsLabel}
+				{planLabel} · считаем стоимость…
+			</p>
+		)
+	}
+
+	const rates = ratesQ.data ?? []
+	const total = rates.reduce((sum, r) => sum + Number(r.amount), 0)
+	const ratesFound = rates.length
+	const missing = nights - ratesFound
+
+	if (ratesQ.isError || ratesFound === 0) {
+		return (
+			<p className="text-muted-foreground text-sm" data-slot="price-preview">
+				{nightsLabel}
+				{planLabel} · стоимость рассчитается при создании
+			</p>
+		)
+	}
+
+	const formattedTotal = new Intl.NumberFormat('ru-RU', {
+		style: 'currency',
+		currency: 'RUB',
+		maximumFractionDigits: 0,
+	}).format(total)
+	const partialHint = missing > 0 ? ` (для ${missing} дн. цена не задана — будет 0₽)` : ''
+
+	return (
+		<div className="space-y-1 text-sm" data-slot="price-preview">
+			<p className="text-muted-foreground">
+				{nightsLabel}
+				{planLabel}
+			</p>
+			<p className="font-medium" data-slot="price-preview-total">
+				Итого: {formattedTotal}
+				{partialHint ? <span className="text-amber-700 text-xs"> {partialHint}</span> : null}
+			</p>
+		</div>
+	)
 }

@@ -64,7 +64,17 @@ export function useCreateGuest() {
 			return payload.data
 		},
 		onError: (err: ApiError) => {
+			// G-B1 fix (real-bug-hunt 2026-05-15): previously only `logger.warn`
+			// → operator saw nothing on failure. Sheet stayed open, spinner stopped,
+			// user re-clicked Submit. Symmetric с `useCreateBooking` onError canon.
 			logger.warn('guest.create failed', { code: err.code, message: err.message })
+			const msg =
+				err.code === 'VALIDATION_ERROR'
+					? 'Проверьте корректность данных гостя'
+					: err.message
+						? `Не удалось создать гостя: ${err.message}`
+						: 'Не удалось создать гостя'
+			toast.error(msg)
 		},
 	})
 }
