@@ -2,10 +2,10 @@
 
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
-**Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + **G3 ✓ pushed** (commit `8a27892`
-Dialog → ResponsiveSheet side-panel canon 2026, 2026-05-15). Next: G4
-(RU compliance overlays — ТН chip + МВД badge + ПН anchor + 152-ФЗ mask)
-OR G5 (Apaleo Amend-Stay) — see §4 phase queue.
+**Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + G3 ✓ + **G4 ✓ pushed** (commit
+`ca1303c` RU compliance overlays — 152-ФЗ mask + ТН chip + МВД badge,
+2026-05-15). Next: G5 (Apaleo Amend-Stay — backend extension required)
+OR G6 (display range selector 4d/1w/2w/3w canon) — see §4 phase queue.
 
 Per `[[pre-plan-codebase-recon]]` §0 ДО §1; per `[[adversarial-reading-before-done]]`
 all touched files read через 9-item checklist; per `[[research-protocol]]`
@@ -462,27 +462,57 @@ unrelated к G3 architectural shift. Backlog item, separate session.
 **Outcome**: 52 booking-surface chromium specs green; modal-overlay
 anti-pattern killed; grid-context-preserving canon established.
 
-### Phase G4 — RU compliance overlays + ПН anchor (parallel to G3)
+### Phase G4 ✓ DONE 2026-05-15 — RU compliance overlays (152-ФЗ + ТН + МВД)
 
 **Empirical bound source**: §0.1 backend already computes `tourismTaxMicros` +
 `registrationStatus`; §3.5 RU canon.
 
-**Scope**:
+**Shipped** (commit `ca1303c`, single atomic per `[[no-half-measures]]`):
 
-- **Туристический налог chip** на band: small «ТН 120₽» (read from
-  `booking.tourismTaxMicros`). Tooltip с breakdown. Skip если status=cancelled.
-- **МВД status badge**: «МУ не подан / Подан / Просрочен» from
-  `booking.registrationStatus`. Click → open МВД section (separate phase).
-  Only render для `guestSnapshot.citizenship !== 'RU'`.
-- **ПН-anchor audit**: `formatDateHeader` already uses ru weekdays array
-  starting с вс (JS index 0). Verify week-anchor IS пн для column 0 of
-  weekly view modes. `date-fns weekStartsOn: 1` global override (если
-  date-fns adopted в G7).
-- **152-ФЗ default mask**: band label shows `Фамилия И.` (Last + first
-  initial). Full name только в side-panel detail. Toggle для full-name
-  per band (screen-share mode setting).
+- ✅ **152-ФЗ default mask** (PRIMARY canon shift): band visible label
+  changed status → `maskGuestNameRu(snapshot)` («Фамилия И.»). Mews /
+  Cloudbeds / Apaleo industry canon — guest IS the band identifier; status
+  conveyed via colour + aria-label (semantic preserved). Tooltip on
+  intentional hover REVEALS full name (operator action).
+- ✅ **Туристический налог chip**: `formatTourismTaxRub(micros)` helper
+  pure-fn, half-up rounding, ГОСТ 8.417 NBSP separator. Shown в tooltip
+  («Туристический налог: 120 ₽»). Skip on cancelled. Returns null on zero
+  (Cloudbeds no-zero-clutter canon).
+- ✅ **МВД status badge**: `registrationBadgeFor(status, citizenship)` —
+  top-left 4px dot, only foreign guests (RU/RUS → null), 5-state enum
+  exhaustive. Color-coded: status-issue red for pending/failed (urgent),
+  status-confirmed green for submitted, status-occupied blue for
+  registered. Reuses axe-verified status-\* tokens.
+- ✅ aria-label extended: status + channel + МВД + tax. Full screen-reader
+  parity с visual chips.
+- ✅ data-mvd-status + data-mvd-urgent attrs для e2e probing.
 
-**Complexity**: MED. 1-2 commits (overlays + 152-ФЗ).
+**Backend changes**: **ZERO**. `listByProperty` already serializes
+guestSnapshot + registrationStatus + tourismTaxMicros на every Booking row;
+GridBooking narrow type extended to thread through.
+
+**ПН-anchor**: deferred. `formatDateHeader` weekday array already correct
+(['вс','пн','вт','ср','чт','пт','сб'] indexed by getUTCDay 0=Sunday).
+Grid windowFrom не enforces week-alignment by design (operator-driven
+navigation), so no UX gap. Re-evaluate if G6 display-range selector
+includes «week» preset.
+
+**Layer 4+5 verified**:
+
+- ✅ Frontend unit: 1764/0 (+24 new G4 strict cases: maskGuestNameRu × 8 inc.
+  empty-firstName fallback + immutability + Latin lastName; formatTourismTaxRub
+  × 7 inc. half-up rounding + ГОСТ NBSP guard; registrationBadgeFor × 8 inc.
+  RU citizenship null + enum-exhaustive + urgent-flag aligns с red dot)
+- ✅ Bookings-surface chromium e2e: 44/44 (5 stale `band.toContainText(status)`
+  migrated к `band.toHaveAttribute('aria-label', /status/)`; new assertion
+  catches full-name leak regression: `band.toContainText('Edit11 Т.')`)
+- ✅ Full chromium e2e: 175/176 (1 pre-existing multi-tab-broadcast flake
+  unrelated к G4)
+- ✅ axe WCAG 2.2 AA: clean (status-\* tokens reused — already verified)
+- ✅ Ratchet: depcruise=0 knip=0 audit_high=0 ts_err=0 biome_err=0
+  weak_assertions=0 multi_biome_ignore=0
+
+**Pure helpers added к `booking-palette.ts`**: 152 LoC.
 
 ### Phase G5 — Booking edit affordance (Apaleo single-stay canon)
 
