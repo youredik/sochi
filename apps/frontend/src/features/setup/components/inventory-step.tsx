@@ -1,9 +1,10 @@
 import type { City } from '@horeca/shared'
 import { useParams } from '@tanstack/react-router'
-import { type FormEvent, useId, useState } from 'react'
+import { type FormEvent, useEffect, useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { intRangeFieldSchema } from '../../inventory/lib/int-range-field-schema.ts'
 import { useBulkInventory } from '../hooks/use-bulk-inventory.ts'
 import { useWizardStore } from '../wizard-store.ts'
 
@@ -64,6 +65,33 @@ export function InventoryStep() {
 		city: 'Sochi',
 	}))
 
+	// Caught real-bug-hunt 2026-05-15: previous `Math.max(1, Math.min(200,
+	// Number(...) || 0))` silently clamped — operator typing 250 saw 200 без
+	// signal. AND `min={0}` permitted avgPriceRub=0, seeding 90 days × 0₽
+	// rate (sellable free). Inline-bounds canon via intRangeFieldSchema:
+	// raw string state + Zod refine → inline error → store updated только
+	// при valid input.
+	const ROOMS_MIN = 1
+	const ROOMS_MAX = 200
+	const PRICE_MIN = 1
+	const PRICE_MAX = 1_000_000
+	const roomsSchema = intRangeFieldSchema({ min: ROOMS_MIN, max: ROOMS_MAX })
+	const priceSchema = intRangeFieldSchema({ min: PRICE_MIN, max: PRICE_MAX })
+	const [roomsRaw, setRoomsRaw] = useState(String(rooms))
+	const [priceRaw, setPriceRaw] = useState(String(avgPriceRub))
+	const roomsParse = roomsSchema.safeParse(roomsRaw)
+	const priceParse = priceSchema.safeParse(priceRaw)
+	const roomsError = roomsParse.success ? null : (roomsParse.error.issues[0]?.message ?? null)
+	const priceError = priceParse.success ? null : (priceParse.error.issues[0]?.message ?? null)
+	// Sync store ONLY when input is valid — keeps last-valid value for the
+	// «Номера 101–…» preview, but blocks submit via canSubmit.
+	useEffect(() => {
+		if (roomsParse.success) setRooms(Number(roomsRaw))
+	}, [roomsParse.success, roomsRaw, setRooms])
+	useEffect(() => {
+		if (priceParse.success) setAvgPriceRub(Number(priceRaw))
+	}, [priceParse.success, priceRaw, setAvgPriceRub])
+
 	const usingManual = manualOverride || party === null
 
 	function handleSubmit(e: FormEvent) {
@@ -96,10 +124,8 @@ export function InventoryStep() {
 
 	const canSubmit =
 		!bulk.isPending &&
-		rooms >= 1 &&
-		rooms <= 200 &&
-		avgPriceRub >= 0 &&
-		avgPriceRub <= 1_000_000 &&
+		roomsError === null &&
+		priceError === null &&
 		(!usingManual || (manualForm.name.trim().length > 0 && manualForm.address.trim().length > 0))
 
 	return (
@@ -165,16 +191,24 @@ export function InventoryStep() {
 						id={roomsId}
 						type="number"
 						inputMode="numeric"
-						min={1}
-						max={200}
+						min={ROOMS_MIN}
+						max={ROOMS_MAX}
 						step={1}
 						required
-						value={rooms}
-						onChange={(e) => setRooms(Math.max(1, Math.min(200, Number(e.target.value) || 0)))}
+						aria-invalid={roomsError !== null}
+						aria-describedby={roomsError !== null ? `${roomsId}-err` : undefined}
+						value={roomsRaw}
+						onChange={(e) => setRoomsRaw(e.target.value)}
 					/>
-					<p className="text-xs text-muted-foreground">
-						Номера 101–{(100 + rooms).toString()} на 1 этаже. Перенумеровать можно позже.
-					</p>
+					{roomsError !== null ? (
+						<p id={`${roomsId}-err`} className="text-xs text-destructive" role="alert">
+							{roomsError}
+						</p>
+					) : (
+						<p className="text-xs text-muted-foreground">
+							Номера 101–{(100 + rooms).toString()} на 1 этаже. Перенумеровать можно позже.
+						</p>
+					)}
 				</div>
 				<div className="space-y-1.5">
 					<Label htmlFor={priceId}>Цена за ночь, ₽</Label>
@@ -182,18 +216,24 @@ export function InventoryStep() {
 						id={priceId}
 						type="number"
 						inputMode="numeric"
-						min={0}
-						max={1_000_000}
+						min={PRICE_MIN}
+						max={PRICE_MAX}
 						step={100}
 						required
-						value={avgPriceRub}
-						onChange={(e) =>
-							setAvgPriceRub(Math.max(0, Math.min(1_000_000, Number(e.target.value) || 0)))
-						}
+						aria-invalid={priceError !== null}
+						aria-describedby={priceError !== null ? `${priceId}-err` : undefined}
+						value={priceRaw}
+						onChange={(e) => setPriceRaw(e.target.value)}
 					/>
-					<p className="text-xs text-muted-foreground">
-						Это значение по умолчанию для всех дат. Уточните в шахматке.
-					</p>
+					{priceError !== null ? (
+						<p id={`${priceId}-err`} className="text-xs text-destructive" role="alert">
+							{priceError}
+						</p>
+					) : (
+						<p className="text-xs text-muted-foreground">
+							Это значение по умолчанию для всех дат. Уточните в шахматке.
+						</p>
+					)}
 				</div>
 			</div>
 

@@ -31,13 +31,15 @@ import {
 import { useBulkUpsertRates, useDeleteRate } from '../hooks/use-rates.ts'
 
 const formSchema = z.object({
-	// Strict positive amount — server `singleRateSchema.amount` also forbids
-	// negative. Caught regex tightening 2026-05-14 (frontend was `/^-?\d+/`
-	// в bulk-edit, allowed negative submit → server 400; UX-bad).
+	// Strict positive amount. Caught real-bug-hunt 2026-05-15: regex allowed
+	// '0' → cell saved as 0₽ rate → sellable for free (data-loss trap).
+	// Server's `singleRateSchema.amount` ALSO forbids non-positive but
+	// generic 400 response is UX-bad. .refine surfaces inline FieldError.
 	price: z
 		.string()
 		.min(1, 'Введите цену')
-		.regex(/^\d+(\.\d{1,2})?$/, 'Число, до 2 знаков после точки'),
+		.regex(/^\d+(\.\d{1,2})?$/, 'Число, до 2 знаков после точки')
+		.refine((v) => Number(v) > 0, 'Цена должна быть больше нуля'),
 })
 
 export interface SingleRateEditTarget {

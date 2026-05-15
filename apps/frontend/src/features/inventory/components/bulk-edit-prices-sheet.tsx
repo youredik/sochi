@@ -108,11 +108,20 @@ export function BulkEditPricesSheet({
 			// TanStack Form's handleSubmit skips user-onSubmit when field validation
 			// fails, так что empty/NaN paths shown как inline FieldError, not toast.
 			const factor = Number(value.price)
-			// Strict-positive для set mode (Mews / Bnovo canon: цена ≥ 0).
-			// Для relative ops (percent / amount) — отрицательные допустимы
-			// (скидка), но финальная сумма clamped к 0 ниже + warned.
-			if (value.mode === 'set' && factor < 0) {
-				toast.error('Цена не может быть отрицательной')
+			// Strict-positive для set mode (Mews / Bnovo canon: published rate > 0).
+			// Caught real-bug-hunt 2026-05-15: factor=0 passes `factor < 0` check
+			// → all selected cells set к 0₽ → free-room data-loss. Tighten к
+			// strict positive. Для relative ops (percent / amount) — отрицательные
+			// допустимы (скидка), 0 valid (no-op).
+			if (value.mode === 'set' && factor <= 0) {
+				toast.error('Цена должна быть больше нуля')
+				return
+			}
+			// from > to silently returns empty dates (generateDatesInRange loop
+			// guard `start <= end`) — operator sees misleading «не попадает ни одна
+			// дата» toast и ищет проблему в DOW. Explicit check + targeted message.
+			if (value.from > value.to) {
+				toast.error('Дата «С» должна быть раньше или равна «По»')
 				return
 			}
 			const allowedJsDow = new Set(
@@ -121,6 +130,16 @@ export function BulkEditPricesSheet({
 			const dates = generateDatesInRange(value.from, value.to, allowedJsDow)
 			if (dates.length === 0) {
 				toast.error('Под выбранные дни в диапазоне дат не попадает ни одна дата')
+				return
+			}
+			// Server `rateBulkUpsertInput.max` caps rates per ratePlan at 365.
+			// One-plan-at-a-time fanout — каждый POST sends `dates.length` rates.
+			// Above-cap → server 400 «HTTP 400» generic message. Client gate с
+			// targeted recovery hint.
+			if (dates.length > 365) {
+				toast.error(
+					`Слишком большой диапазон: ${dates.length} дней. Уменьшите промежуток или отметьте меньше дней недели — лимит 365 дат.`,
+				)
 				return
 			}
 			if (value.ratePlanIds.length === 0) {

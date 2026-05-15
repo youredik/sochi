@@ -238,7 +238,7 @@ describe('BulkEditPricesSheet — 3-mode computation (Bnovo canon)', () => {
 		expect(bulkMutateAsync).toHaveBeenCalledTimes(0)
 	})
 
-	it('[V2] mode=set с negative price → toast.error «Цена не может быть отрицательной»; no mutation', async () => {
+	it('[V2] mode=set с negative price → toast.error strict-positive; no mutation', async () => {
 		render(
 			<BulkEditPricesSheet
 				open
@@ -255,7 +255,78 @@ describe('BulkEditPricesSheet — 3-mode computation (Bnovo canon)', () => {
 		fireEvent.click(screen.getByRole('button', { name: /Применить цену/ }))
 		await waitFor(() => expect(toastError).toHaveBeenCalled())
 		const errMsg = toastError.mock.calls[0]
-		expect(JSON.stringify(errMsg)).toContain('отрицательной')
+		// New canon 2026-05-15: strict-positive (negative AND zero both rejected).
+		expect(JSON.stringify(errMsg)).toContain('больше нуля')
+		expect(bulkMutateAsync).toHaveBeenCalledTimes(0)
+	})
+
+	it('[V3] mode=set с price=0 → toast.error strict-positive; no mutation (data-loss trap caught 2026-05-15)', async () => {
+		render(
+			<BulkEditPricesSheet
+				open
+				onOpenChange={() => {}}
+				ratePlans={[PLAN]}
+				roomTypes={ROOM_TYPES}
+				existingRates={new Map()}
+			/>,
+		)
+		setDateInput('С даты', '2026-06-15')
+		setDateInput('По дату', '2026-06-15')
+		const priceInput = screen.getByLabelText('Цена за ночь, ₽') as HTMLInputElement
+		await userEvent.setup().type(priceInput, '0')
+		fireEvent.click(screen.getByRole('button', { name: /Применить цену/ }))
+		await waitFor(() => expect(toastError).toHaveBeenCalled())
+		// CRITICAL: factor=0 must NOT slip through. Previous `factor < 0`
+		// check let zero pass → 90×N cells set к 0₽ (sellable free).
+		expect(JSON.stringify(toastError.mock.calls[0])).toContain('больше нуля')
+		expect(bulkMutateAsync).toHaveBeenCalledTimes(0)
+	})
+
+	it('[V4] from > to surfaces targeted error (не misleading «не попадает»); no mutation', async () => {
+		render(
+			<BulkEditPricesSheet
+				open
+				onOpenChange={() => {}}
+				ratePlans={[PLAN]}
+				roomTypes={ROOM_TYPES}
+				existingRates={new Map()}
+			/>,
+		)
+		setDateInput('С даты', '2026-06-30')
+		setDateInput('По дату', '2026-06-01')
+		const priceInput = screen.getByLabelText('Цена за ночь, ₽') as HTMLInputElement
+		await userEvent.setup().type(priceInput, '4500')
+		fireEvent.click(screen.getByRole('button', { name: /Применить цену/ }))
+		await waitFor(() => expect(toastError).toHaveBeenCalled())
+		// Was misleading «Под выбранные дни не попадает ни одна дата» — caught
+		// real-bug-hunt 2026-05-15. Targeted message references the «С» / «По»
+		// canon labels.
+		const msg = JSON.stringify(toastError.mock.calls[0])
+		expect(msg).toContain('«С»')
+		expect(msg).toContain('«По»')
+		expect(bulkMutateAsync).toHaveBeenCalledTimes(0)
+	})
+
+	it('[V5] dates.length > 365 surfaces targeted cap error before server round-trip', async () => {
+		render(
+			<BulkEditPricesSheet
+				open
+				onOpenChange={() => {}}
+				ratePlans={[PLAN]}
+				roomTypes={ROOM_TYPES}
+				existingRates={new Map()}
+			/>,
+		)
+		// 2026-01-01 → 2027-06-30 = 546 days, all DOW selected by default.
+		setDateInput('С даты', '2026-01-01')
+		setDateInput('По дату', '2027-06-30')
+		const priceInput = screen.getByLabelText('Цена за ночь, ₽') as HTMLInputElement
+		await userEvent.setup().type(priceInput, '4500')
+		fireEvent.click(screen.getByRole('button', { name: /Применить цену/ }))
+		await waitFor(() => expect(toastError).toHaveBeenCalled())
+		const msg = JSON.stringify(toastError.mock.calls[0])
+		// Targeted message names the limit и hints на recovery.
+		expect(msg).toContain('365')
 		expect(bulkMutateAsync).toHaveBeenCalledTimes(0)
 	})
 })

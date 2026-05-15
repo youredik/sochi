@@ -35,8 +35,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 
-const upsertMutateAsync = mock(async () => [])
-const deleteMutateAsync = mock(async () => ({ success: true }))
+type UpsertArg = {
+	ratePlanId: string
+	input: { rates: Array<{ date: string; amount: string; currency: 'RUB' }> }
+}
+const upsertMutateAsync = mock<(arg: UpsertArg) => Promise<unknown[]>>(async () => [])
+const deleteMutateAsync = mock<
+	(arg: { ratePlanId: string; date: string }) => Promise<{
+		success: boolean
+	}>
+>(async () => ({ success: true }))
 const upsertState = { isPending: false }
 const deleteState = { isPending: false }
 
@@ -202,5 +210,38 @@ describe('SingleRateEditSheet — adversarial failure', () => {
 		expect(screen.getByRole('alert').textContent).toBe('Сервер недоступен')
 		// Sheet stays open — onOpenChange NOT called с false.
 		expect(onOpenChange.mock.calls.some((c) => c[0] === false)).toBe(false)
+	})
+})
+
+describe('SingleRateEditSheet — strict-positive price (real-bug-hunt 2026-05-15)', () => {
+	it('[Z1] price=«0» surfaces «Цена должна быть больше нуля»; no mutation', async () => {
+		render(<SingleRateEditSheet open onOpenChange={() => {}} target={TARGET_EMPTY_AMOUNT} />)
+		const priceInput = screen.getByLabelText('Цена за ночь, ₽') as HTMLInputElement
+		fireEvent.change(priceInput, { target: { value: '0' } })
+		await waitFor(() => {
+			expect(screen.queryByText('Цена должна быть больше нуля')).not.toBe(null)
+		})
+		fireEvent.click(screen.getByRole('button', { name: /Сохранить/ }))
+		await new Promise((r) => setTimeout(r, 50))
+		// CRITICAL: zero must NOT slip through → previously created 0₽ rate
+		// (sellable for free, data-loss trap).
+		expect(upsertMutateAsync).not.toHaveBeenCalled()
+	})
+
+	it('[Z2] valid positive price (e.g. «4500») сохраняется через upsert', async () => {
+		render(<SingleRateEditSheet open onOpenChange={() => {}} target={TARGET_EMPTY_AMOUNT} />)
+		const priceInput = screen.getByLabelText('Цена за ночь, ₽') as HTMLInputElement
+		fireEvent.change(priceInput, { target: { value: '4500' } })
+		// Make sure no error visible.
+		await new Promise((r) => setTimeout(r, 20))
+		expect(screen.queryByText('Цена должна быть больше нуля')).toBe(null)
+		fireEvent.click(screen.getByRole('button', { name: /Сохранить/ }))
+		await waitFor(() => {
+			expect(upsertMutateAsync).toHaveBeenCalled()
+		})
+		const payload = upsertMutateAsync.mock.calls[0]?.[0] as unknown as {
+			input: { rates: Array<{ amount: string }> }
+		}
+		expect(payload.input.rates[0]?.amount).toBe('4500')
 	})
 })
