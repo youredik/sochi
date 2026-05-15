@@ -210,8 +210,9 @@ test.describe('booking-create G1 — real-bug-hunt fixes', () => {
 		// Тариф label + Select visible.
 		const ratePlanTrigger = dialog.getByRole('combobox', { name: 'Тариф' })
 		await expect(ratePlanTrigger).toBeVisible()
-		// Default seeded — should NOT be «Выберите тариф» (placeholder visible
-		// only while query loads); тариф «Базовый» seeded by onboarding wizard.
+		// Default seeded — wizard seeds «Базовый» plan. POSITIVE assertion +
+		// negative-fallback assertions для belt-and-suspenders.
+		await expect(ratePlanTrigger).toContainText('Базовый')
 		await expect(ratePlanTrigger).not.toContainText('Выберите тариф')
 		await expect(ratePlanTrigger).not.toContainText('Загружаем')
 	})

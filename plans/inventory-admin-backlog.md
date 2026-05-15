@@ -9,9 +9,11 @@ implemented» NOT «do X next».
 ### ~~B5 — Frontend inline-bounds для numeric fields~~ — DONE 2026-05-15
 
 **Status**: SHIPPED commit `deda212`. Canonical helper
-`apps/frontend/src/features/inventory/lib/int-range-field-schema.ts`
-mirrors server integer-range bound; surfaces per-stage RU FieldError
-(«Введите число» / «Целое число» / «Не меньше N» / «Не больше N»).
+`apps/frontend/src/lib/forms/int-range-field-schema.ts` (moved from
+`features/inventory/lib/` к shared lib 2026-05-15 once 3rd consumer
+arrived — see G1 commit `d18d747`) mirrors server integer-range bound;
+surfaces per-stage RU FieldError («Введите число» / «Целое число» /
+«Не меньше N» / «Не больше N»).
 Applied к ОБЕИМ formам с identical anti-pattern (per `[[no-half-measures]]`):
 
 - `category-form-sheet.tsx` — maxOccupancy 1..20, baseBeds 1..10
