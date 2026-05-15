@@ -130,6 +130,11 @@ body {
 	--color-status-past-foreground: var(--status-past-foreground);
 	--color-status-issue: var(--status-issue);
 	--color-status-issue-foreground: var(--status-issue-foreground);
+	/* G2 2026-05-15 — TravelLine 8-color canon extension: unassigned bookings
+	 * (assignedRoomId === null) flagged turquoise per RU canon (TravelLine +
+	 * Bnovo + Cloudbeds «Unassigned Reservations» panel orange-dot). */
+	--color-status-unassigned: var(--status-unassigned);
+	--color-status-unassigned-foreground: var(--status-unassigned-foreground);
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
 	--radius-sm: calc(var(--radius) * 0.6);
@@ -192,6 +197,10 @@ body {
 	--status-past-foreground: oklch(0.985 0 0);
 	--status-issue: oklch(0.55 0.245 27.325);
 	--status-issue-foreground: oklch(0.985 0 0);
+	/* G2 — unassigned token: turquoise/teal (TravelLine canon).
+	 * L=0.45 paired с white-fg for ≥4.5:1 AA per same canon как status-confirmed. */
+	--status-unassigned: oklch(0.45 0.1 195);
+	--status-unassigned-foreground: oklch(0.985 0 0);
 }
 
 .dark {
@@ -247,6 +256,9 @@ body {
 	--status-past-foreground: oklch(0.985 0 0);
 	--status-issue: oklch(0.704 0.191 22.216);
 	--status-issue-foreground: oklch(0.205 0 0);
+	/* G2 dark theme: turquoise L=0.7 paired с dark-fg for AA contrast. */
+	--status-unassigned: oklch(0.7 0.11 195);
+	--status-unassigned-foreground: oklch(0.205 0 0);
 }
 
 /* prefers-contrast: more (M9.1) — AAA-overlay над light + dark.
@@ -271,6 +283,8 @@ body {
 		--status-occupied: oklch(0.45 0.2 240);
 		--status-past: oklch(0.5 0 0);
 		--status-issue: oklch(0.45 0.245 27.325);
+		/* G2 unassigned AAA light: deeper L for 7:1+ on white-fg. */
+		--status-unassigned: oklch(0.4 0.1 195);
 	}
 	.dark {
 		/* muted-foreground: 0.708 → 0.85 (lighter для AAA на dark bg) */
@@ -285,6 +299,8 @@ body {
 		--status-occupied: oklch(0.78 0.18 240);
 		--status-past: oklch(0.7 0 0);
 		--status-issue: oklch(0.78 0.18 22.216);
+		/* G2 unassigned AAA dark: lighter L for 7:1+ on dark-fg. */
+		--status-unassigned: oklch(0.78 0.11 195);
 	}
 }
 

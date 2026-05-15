@@ -14,6 +14,13 @@ interface GridBooking {
 	status: BookingStatus
 	checkIn: string
 	checkOut: string
+	// G2 (2026-05-15): added для UI-derived `unassigned` palette state per
+	// TravelLine 8-color canon (turquoise band when assignedRoomId is null
+	// AND status='confirmed'). Server already serves this field on Booking
+	// rows — narrowed-out previously для bandwidth, but the palette derive
+	// requires it. Stays nullable per domain (`assignedRoomId: string | null`
+	// в `apps/backend/.../booking.repo.ts`).
+	assignedRoomId?: string | null
 }
 
 /**

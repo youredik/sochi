@@ -8,7 +8,7 @@ import { BookingCreateDialog } from '../../bookings/components/booking-create-di
 import { BookingEditDialog } from '../../bookings/components/booking-edit-dialog'
 import { useFitWindowDays } from '../hooks/use-fit-window-days'
 import { useGridData } from '../hooks/use-grid-data'
-import { styleFor } from '../lib/booking-palette'
+import { paletteFor } from '../lib/booking-palette'
 import { useChessboardPrefsStore } from '../lib/chessboard-prefs-store'
 import { addDays, iterateDates, todayIso } from '../lib/date-range'
 import {
@@ -106,6 +106,7 @@ export function Chessboard() {
 						status: (typeof rowBookings)[number]['status']
 						checkIn: string
 						checkOut: string
+						assignedRoomId: string | null
 						span: number
 						truncatedLeft: boolean
 						truncatedRight: boolean
@@ -121,6 +122,9 @@ export function Chessboard() {
 						status: b.status,
 						checkIn: b.checkIn,
 						checkOut: b.checkOut,
+						// G2: thread assignedRoomId через layout state так paletteFor()
+						// может render «unassigned» turquoise overlay.
+						assignedRoomId: b.assignedRoomId ?? null,
 						span,
 						truncatedLeft: pos.truncatedLeft,
 						truncatedRight: pos.truncatedRight,
@@ -337,7 +341,17 @@ export function Chessboard() {
 									const ariaColIdx = colIdx + 2
 									const band = bandByStart.get(colIdx)
 									if (band) {
-										const style = styleFor(band.status)
+										// G2: paletteFor combines status + checkIn-vs-today
+										// (overdue) + assignedRoomId-null (unassigned) per
+										// TravelLine 8-color canon.
+										const style = paletteFor({
+											booking: {
+												status: band.status,
+												checkIn: band.checkIn,
+												assignedRoomId: band.assignedRoomId,
+											},
+											todayIso: today,
+										})
 										const tabStop = isTabStop(rowIdx, ariaColIdx)
 										return (
 											<BookingBandTooltip
