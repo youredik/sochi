@@ -14,6 +14,7 @@ import type {
 	TourismTaxReport,
 	TourismTaxReportParams,
 } from '@horeca/shared'
+import { isRussianCitizenship } from '@horeca/shared'
 import { decimalToMicros } from '../../db/ydb-helpers.ts'
 import {
 	NoInventoryError,
@@ -128,9 +129,15 @@ export function computeTourismTax(
 }
 
 /** Derive registration flow per primary guest's citizenship.
- *  'RU' citizenship → `'notRequired'`; foreign → `'pending'` (awaiting МВД). */
+ *  RU citizenship → `'notRequired'`; foreign → `'pending'` (awaiting МВД).
+ *
+ *  **G4.bis fix (2026-05-15)**: `citizenshipSchema` accepts ISO-3166 alpha-2
+ *  ('RU') AND alpha-3 ('RUS'). Прежде проверял только 'RU' → operator typing
+ *  'RUS' silently triggered МВД pipeline для actual RU citizen. Использует
+ *  shared `isRussianCitizenship()` helper для both encodings.
+ */
 export function deriveRegistrationStatus(citizenship: string): 'notRequired' | 'pending' {
-	return citizenship.toUpperCase() === 'RU' ? 'notRequired' : 'pending'
+	return isRussianCitizenship(citizenship) ? 'notRequired' : 'pending'
 }
 
 /**

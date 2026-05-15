@@ -40,9 +40,9 @@
  *
  * M4e — Registration status derivation:
  *   [DR1] RU citizenship → 'notRequired'
- *   [DR2] RUS (ISO alpha-3) → 'pending' (documented limitation — alpha-3 not mapped)
- *   [DR3] Case-insensitive for 'RU'
- *   [DR4] 9 foreign countries → all 'pending'
+ *   [DR2] RUS (ISO alpha-3) → 'notRequired' (G4.bis fix 2026-05-15 — was 'pending' bug)
+ *   [DR3] Case-insensitive for 'RU'/'RUS' (both alpha encodings)
+ *   [DR4] 12 foreign countries → all 'pending' (alpha-2 + alpha-3 mix)
  */
 
 import * as fc from 'fast-check'
@@ -388,18 +388,36 @@ describe('deriveRegistrationStatus', () => {
 	test('[DR1] RU citizenship → notRequired', () => {
 		expect(deriveRegistrationStatus('RU')).toBe('notRequired')
 	})
-	test('[DR2] RUS (ISO alpha-3) — currently treated as foreign (spec calls alpha-2 default)', () => {
-		// This is a known limitation: we normalize to uppercase but don't
-		// map alpha-3 → alpha-2. Admin UI validates alpha-2 for RU on input.
-		// Test documents the current behavior so any future fix is intentional.
-		expect(deriveRegistrationStatus('RUS')).toBe('pending')
+	test('[DR2] G4.bis fix — RUS (ISO alpha-3) → notRequired (was pending bug)', () => {
+		// Prior known limitation: alpha-2 хардкод missed alpha-3. Schema
+		// `citizenshipSchema` accepts BOTH ('RU' alpha-2 OR 'RUS' alpha-3),
+		// so operator typing 'RUS' silently triggered МВД pipeline для actual
+		// RU citizen. G4.bis (2026-05-15): extracted shared
+		// `isRussianCitizenship` helper which canonically recognises оба
+		// encodings — surfaced via self-review.
+		expect(deriveRegistrationStatus('RUS')).toBe('notRequired')
 	})
-	test('[DR3] case-insensitive for RU', () => {
+	test('[DR3] case-insensitive for RU (both alpha encodings)', () => {
 		expect(deriveRegistrationStatus('ru')).toBe('notRequired')
 		expect(deriveRegistrationStatus('Ru')).toBe('notRequired')
+		expect(deriveRegistrationStatus('rus')).toBe('notRequired')
+		expect(deriveRegistrationStatus('Rus')).toBe('notRequired')
 	})
 	test('[DR4] every non-RU citizenship → pending', () => {
-		for (const code of ['US', 'DE', 'CN', 'KZ', 'BY', 'FR', 'JP', 'IT', 'ES']) {
+		for (const code of [
+			'US',
+			'DE',
+			'CN',
+			'KZ',
+			'BY',
+			'FR',
+			'JP',
+			'IT',
+			'ES',
+			'USA',
+			'DEU',
+			'CHN',
+		]) {
 			expect(deriveRegistrationStatus(code)).toBe('pending')
 		}
 	})

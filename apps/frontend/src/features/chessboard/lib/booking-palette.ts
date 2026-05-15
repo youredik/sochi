@@ -4,6 +4,11 @@ import type {
 	BookingRegistrationStatus,
 	BookingStatus,
 } from '@horeca/shared'
+// G4.bis (2026-05-15) — `isRussianCitizenship` extracted to shared (canonical
+// home: domain concept, not chessboard-specific). Re-exported here for
+// existing test import-sites + co-located callers.
+import { isRussianCitizenship } from '@horeca/shared'
+export { isRussianCitizenship }
 
 /**
  * Booking-status → cell display classes (M9.5 Phase B Bnovo-parity + G2
@@ -250,7 +255,7 @@ export function registrationBadgeFor(
 	status: BookingRegistrationStatus,
 	citizenship: string,
 ): RegistrationBadge | null {
-	if (citizenship.toUpperCase() === 'RU' || citizenship.toUpperCase() === 'RUS') return null
+	if (isRussianCitizenship(citizenship)) return null
 	switch (status) {
 		case 'notRequired':
 			return null

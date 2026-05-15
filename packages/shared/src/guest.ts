@@ -35,6 +35,25 @@ const citizenshipSchema = z
 			.regex(/^[A-Z]{3}$/, 'ISO-3166 alpha-3, uppercase'),
 	)
 
+/**
+ * G4.bis (2026-05-15) — RU citizenship canonical detector.
+ *
+ * `citizenshipSchema` accepts BOTH ISO-3166 alpha-2 ('RU') AND alpha-3
+ * ('RUS'). До G4.bis backend `deriveRegistrationStatus` checked только
+ * alpha-2 → operator typing 'RUS' (valid per schema) silently triggered
+ * МВД pipeline для actual RU citizen. Frontend `registrationBadgeFor`
+ * had same hardcoded 2-string check.
+ *
+ * Sealed Set + case-insensitive comparator — both alpha encodings count
+ * как «Russian citizen» canonically. Reused backend + frontend для
+ * single source of truth.
+ */
+export const RUSSIAN_CITIZENSHIP_CODES: ReadonlySet<string> = new Set(['RU', 'RUS'])
+
+export function isRussianCitizenship(citizenship: string): boolean {
+	return RUSSIAN_CITIZENSHIP_CODES.has(citizenship.toUpperCase())
+}
+
 export const guestCreateInput = z.object({
 	lastName: nameSchema,
 	firstName: nameSchema,
