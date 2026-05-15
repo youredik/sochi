@@ -8,6 +8,9 @@
  *        inventoryCount === rooms)
  *   [I3] all N room rows land with sequential numbers '101..(100+N)'
  *   [I4] ratePlan row lands with isDefault=true, code='BASE', currency='RUB'
+ *   [I8] rate × 90 + availability × 90 seeded for today..+89 — every priced
+ *        night has a matching availability row с allotment=rooms (closes
+ *        «no availability row» 409 trap caught 2026-05-15 via e2e baseline)
  *   [I5] every row carries the same tenantId; cross-tenant leakage check
  *   [I6] roomIds returned match the actual room rows in DB
  *   [I7] typeid prefixes correct (property/roomType/room/ratePlan)
@@ -40,6 +43,8 @@ describe('onboarding.service — bulk createInventory', () => {
 		// Best-effort cleanup. Tenant isolation makes leaked rows harmless,
 		// but housekeeping keeps the test DB readable for ad-hoc inspection.
 		for (const propertyId of cleanupPropertyIds) {
+			await sql`DELETE FROM availability WHERE tenantId = ${TENANT} AND propertyId = ${propertyId}`
+			await sql`DELETE FROM rate WHERE tenantId = ${TENANT} AND propertyId = ${propertyId}`
 			await sql`DELETE FROM room WHERE tenantId = ${TENANT} AND propertyId = ${propertyId}`
 			await sql`DELETE FROM ratePlan WHERE tenantId = ${TENANT} AND propertyId = ${propertyId}`
 			await sql`DELETE FROM roomType WHERE tenantId = ${TENANT} AND propertyId = ${propertyId}`
@@ -133,6 +138,70 @@ describe('onboarding.service — bulk createInventory', () => {
 		expect(rp.code).toBe('BASE')
 		expect(rp.isDefault).toBe(true)
 		expect(rp.currency).toBe('RUB')
+	})
+
+	test('[I8] rate × 90 + availability × 90 seeded for today..+89, 1:1 by date, allotment=rooms', async () => {
+		const result = await service.createInventory(TENANT, {
+			property: {
+				name: 'Гостиница «Bookable-from-wizard»',
+				address: '354340, г. Сочи, ул. Канонная, д. 8',
+				city: 'Sochi',
+			},
+			rooms: 5,
+			avgPriceRub: 4200,
+		})
+		cleanupPropertyIds.push(result.propertyId)
+
+		// rate × 90: every day in [today, today+89] has a row at avgPriceRub micros.
+		const [rateRows = []] = await sql<Array<{ rateCount: number | bigint }>>`
+			SELECT COUNT(*) AS rateCount FROM rate
+			WHERE tenantId = ${TENANT}
+				AND propertyId = ${result.propertyId}
+				AND roomTypeId = ${result.roomTypeId}
+		`
+		expect(Number(rateRows[0]?.rateCount ?? 0)).toBe(90)
+
+		// availability × 90: every priced night has a matching allotment row.
+		const [availRows = []] = await sql<
+			Array<{ availCount: number | bigint; allotmentSum: number | bigint }>
+		>`
+			SELECT COUNT(*) AS availCount, SUM(allotment) AS allotmentSum FROM availability
+			WHERE tenantId = ${TENANT}
+				AND propertyId = ${result.propertyId}
+				AND roomTypeId = ${result.roomTypeId}
+		`
+		expect(Number(availRows[0]?.availCount ?? 0)).toBe(90)
+		// allotment=rooms=5 на every of 90 nights → SUM=450.
+		expect(Number(availRows[0]?.allotmentSum ?? 0)).toBe(450)
+
+		// 1:1 date alignment: NO orphan rate (rate без availability) AND NO
+		// orphan availability (availability без rate). Asymmetric seeding =
+		// the trap caught 2026-05-15.
+		const [orphanRateRows = []] = await sql<Array<{ orphans: number | bigint }>>`
+			SELECT COUNT(*) AS orphans FROM rate AS r
+			LEFT JOIN availability AS a
+				ON a.tenantId = r.tenantId
+				AND a.propertyId = r.propertyId
+				AND a.roomTypeId = r.roomTypeId
+				AND a.date = r.date
+			WHERE r.tenantId = ${TENANT}
+				AND r.propertyId = ${result.propertyId}
+				AND a.date IS NULL
+		`
+		expect(Number(orphanRateRows[0]?.orphans ?? 0)).toBe(0)
+
+		// Sold=0, stopSell=false, no closures — fresh bookable state.
+		const [defaultsRows = []] = await sql<
+			Array<{ soldSum: number | bigint; stopSellAnyTrue: boolean | number }>
+		>`
+			SELECT SUM(sold) AS soldSum, MAX(CAST(stopSell AS Int32)) AS stopSellAnyTrue
+			FROM availability
+			WHERE tenantId = ${TENANT}
+				AND propertyId = ${result.propertyId}
+				AND roomTypeId = ${result.roomTypeId}
+		`
+		expect(Number(defaultsRows[0]?.soldSum ?? 0)).toBe(0)
+		expect(Number(defaultsRows[0]?.stopSellAnyTrue ?? 0)).toBe(0)
 	})
 
 	test('[I3.boundary] rooms=1 creates a single room «101»', async () => {

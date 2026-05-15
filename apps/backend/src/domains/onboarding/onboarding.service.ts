@@ -13,16 +13,23 @@ type SqlInstance = typeof SQL
  * tenant with a partially-wired property — the wizard rerun would then
  * collide on room numbers and confuse the user.
  *
- * What we create (5 entity classes, 1 transaction):
- *   1. `property` × 1            — name / address / city / timezone / tourism-tax
- *   2. `roomType` × 1            — «Стандартный», capacity 2, default beds
- *   3. `room`     × N            — numbers `101`..`100+N` on floor 1
- *   4. `ratePlan` × 1            — «Базовый», refundable, RUB, default plan
- *   5. `rate`     × `RATE_SEED_DAYS` — per-night price rows, today..+N-1, at
- *      `avgPriceRub`. Seeded so Шахматка is immediately bookable (the user's
- *      «always-on demo» canon — empty rate rows = unsellable inventory and
- *      friction for the FIRST booking attempt). Operator can rewrite later
- *      via the existing `POST /rate-plans/:id/rates` bulk-upsert endpoint.
+ * What we create (6 entity classes, 1 transaction):
+ *   1. `property`    × 1                  — name / address / city / timezone / tourism-tax
+ *   2. `roomType`    × 1                  — «Стандартный», capacity 2, default beds
+ *   3. `room`        × N                  — numbers `101`..`100+N` on floor 1
+ *   4. `ratePlan`    × 1                  — «Базовый», refundable, RUB, default plan
+ *   5. `rate`        × `RATE_SEED_DAYS`   — per-night price rows, today..+N-1, at
+ *      `avgPriceRub`. Empty rate = unsellable inventory.
+ *   6. `availability` × `RATE_SEED_DAYS`  — per-night allotment rows, today..+N-1,
+ *      `allotment = input.rooms`, `sold=0`, no stop-sell / min-stay /
+ *      closed-to-arrival/departure constraints. Caught real-bug-hunt
+ *      2026-05-15: previously omitted → `booking.create` 409 NO_INVENTORY
+ *      «no availability row for {date}» from the FIRST booking attempt
+ *      post-wizard. Tests passed pre-Phase-16 closure (`8436dd7`) because
+ *      shared/demo tenant had seed-demo-tenant.ts coverage; per-worker
+ *      isolated tenants exposed the gap. Seeded NOW so Шахматка is
+ *      bookable end-to-end immediately. Operator can edit via existing
+ *      `POST /properties/:id/availability` admin endpoint.
  */
 export interface CreateInventoryPropertyInput {
 	readonly name: string
@@ -185,7 +192,7 @@ export function createOnboardingService(sql: SqlInstance): OnboardingService {
 					)
 				`
 
-				// 5. rate × RATE_SEED_DAYS — flat `avgPriceRub` for today..+89.
+				// 5. rate × RATE_SEED_DAYS — flat `avgPriceRub` for today..+(N-1).
 				// Per-row UPSERT inside the same tx (same pattern as `room` × N
 				// above) — N≤90 stays well inside YDB's tx-statement budget and
 				// keeps the onboarding round-trip ≤ 2 s on local infra. The
@@ -203,13 +210,45 @@ export function createOnboardingService(sql: SqlInstance): OnboardingService {
 						)
 					`
 				}
+
+				// 6. availability × RATE_SEED_DAYS — allotment=input.rooms, sold=0,
+				// no stop-sell / min-stay / closed-to-arrival|departure. Mirrors
+				// the existing `rate` loop date range so EVERY rate-priced night
+				// has a matching availability row. Booking creation in
+				// `booking.repo.ts:385-400` reads availability per night and
+				// throws `NO_INVENTORY` on missing row — seeding here closes
+				// the pre-existing «no availability row» 409 trap caught when
+				// per-worker e2e tenant migration exposed onboarding gap.
+				const initialSold = 0
+				const noMinStay = NULL_INT32
+				const noMaxStay = NULL_INT32
+				const noStopSell = false
+				const noCta = false
+				const noCtd = false
+				for (let dayOffset = 0; dayOffset < RATE_SEED_DAYS; dayOffset += 1) {
+					const dateBind = dateFromIso(isoDateOffset(dayOffset))
+					await tx`
+						UPSERT INTO availability (
+							\`tenantId\`, \`propertyId\`, \`roomTypeId\`, \`date\`,
+							\`allotment\`, \`sold\`, \`minStay\`, \`maxStay\`,
+							\`closedToArrival\`, \`closedToDeparture\`, \`stopSell\`,
+							\`createdAt\`, \`updatedAt\`
+						) VALUES (
+							${tenantId}, ${propertyId}, ${roomTypeId}, ${dateBind},
+							${input.rooms}, ${initialSold}, ${noMinStay}, ${noMaxStay},
+							${noCta}, ${noCtd}, ${noStopSell},
+							${nowTs}, ${nowTs}
+						)
+					`
+				}
 			})
 
-			// `avgPriceRub` is now persisted as `RATE_SEED_DAYS` rate rows (see
-			// step 5 above) so Шахматка is immediately sellable from the moment
-			// the wizard finishes. We echo `avgPriceRub` back in the response
-			// for the frontend's «suggested default» affordance в the
-			// fill-calendar UI when the operator wants to extend the horizon.
+			// `avgPriceRub` persists as `RATE_SEED_DAYS` rate rows (step 5);
+			// `input.rooms` persists as the matching availability allotment
+			// rows (step 6). Шахматка immediately bookable from wizard finish.
+			// We echo `avgPriceRub` back in the response for the frontend's
+			// «suggested default» affordance в the fill-calendar UI when the
+			// operator wants to extend the horizon beyond RATE_SEED_DAYS.
 			return { propertyId, roomTypeId, ratePlanId, roomIds }
 		},
 	}

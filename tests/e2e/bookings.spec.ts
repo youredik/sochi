@@ -4,16 +4,21 @@ import { expect } from '@playwright/test'
  * Booking-create dialog (M5e.1) adversarial e2e.
  *
  * Runs with `owner.json` storageState so the tenant already has:
- *   - property, roomType (inventoryCount=1 — the wizard default, NOT the
- *     2 physical rooms created in step 3), seeded BAR rate plan,
- *     30-day rate + availability rows.
+ *   - property, roomType (inventoryCount=10 per wizard default rooms=10),
+ *     seeded «Базовый» rate plan, 90-day rate + availability rows
+ *     (`apps/backend/.../onboarding.service.ts` step 6, ratchet-fixed
+ *     2026-05-15 after per-worker e2e tenant exposed the missing-availability
+ *     trap).
  *   - the grid window [today..today+14] has exactly 15 empty cells per row.
  *
  * Hunts:
  *   1. Happy path: click cell → fill guest → submit → band + success toast
- *   2. Overbooking: second booking on already-booked date → 409
- *      NO_INVENTORY → toast + dialog stays open + band count unchanged
- *      (optimistic band rolled back)
+ *   2. Overbooking: PRE-fixture forces `allotment=1` на target date via the
+ *      admin `POST /room-types/:id/availability` endpoint (canon: test
+ *      fixtures use the SAME endpoint operators use — `[[mock-seam-at-
+ *      adapter-not-http]]`); then 2nd booking → 409 NO_INVENTORY → toast
+ *      + dialog stays open + band count unchanged (optimistic band rolled
+ *      back)
  *   3. Form guard: checkOut <= checkIn → submit button disabled (nights < 1)
  */
 
@@ -69,10 +74,43 @@ test.describe('booking-create dialog', () => {
 	}) => {
 		await page.goto('/')
 		await page.locator('[data-section-id="grid"]').first().click()
+		await expect(page).toHaveURL(/\/grid$/)
 
 		// First booking: single night on today+6
 		const firstDate = futureIso(6)
-		await page.locator(`button[data-cell-date="${firstDate}"]`).click()
+
+		// **Force allotment=1 на firstDate** ДО first booking — wizard default
+		// is rooms=10 per `[[wizard-store-default]]`, so without this fixture
+		// step 11 concurrent bookings would be needed to exhaust inventory
+		// (too slow for e2e). Setting allotment=1 makes overbooking trigger
+		// on the 2nd attempt. Per `[[mock-seam-at-adapter-not-http]]` canon —
+		// test fixture uses the SAME admin endpoint operators use, не a test
+		// shortcut.
+		const cellButton = page.locator(`button[data-cell-date="${firstDate}"]`).first()
+		await expect(cellButton).toBeVisible()
+		const roomTypeId = await cellButton.getAttribute('data-cell-room-type-id')
+		expect(roomTypeId).not.toBeNull()
+		const setAllotment = await page.request.post(
+			`http://localhost:8787/api/v1/room-types/${roomTypeId}/availability`,
+			{
+				data: {
+					rates: [
+						{
+							date: firstDate,
+							allotment: 1,
+							minStay: null,
+							maxStay: null,
+							closedToArrival: false,
+							closedToDeparture: false,
+							stopSell: false,
+						},
+					],
+				},
+			},
+		)
+		expect(setAllotment.ok()).toBe(true)
+
+		await cellButton.click()
 		await page.getByLabel('Фамилия').fill('Петров')
 		await page.getByLabel('Имя').fill('Пётр')
 		await page.getByLabel('Номер документа').fill('4510999001')
