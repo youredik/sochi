@@ -312,6 +312,32 @@ shared demo tenant. Per-worker isolation exposed gap.
 • `[[backend-recon-end-to-end]]` — plan §0 must trace pipeline, не just sigs
 • `[[no-preexisting-excuse]]` reinforced via root-cause fix vs «skip»
 
+### Backlog (caught during G1 self-review, не shipped)
+
+**Idempotency-stuck-on-retry trap** (`booking-create-dialog.tsx`):
+Idempotency key generated per-dialog-mount via `useMemo([])`. If first
+POST /bookings fails (e.g., 409 NO_INVENTORY), key persists. User
+edits date + retries → server idempotency replay returns SAME 409.
+Stuck unless they close + reopen dialog. Stripe canon: idempotency
+key replays same operation, не «retry with new state». Need
+regenerate-on-failure OR new key when user edits dates. **Pre-existing,
+не G1 regression**. Note as G3 candidate (rolling into edit affordance).
+
+**roomType.inventoryCount ↔ availability.allotment drift** (post-B5 +
+G1 backend fix): operator can edit `roomType.inventoryCount` via admin
+UI (B5 done) but availability.allotment is seeded at onboarding и
+stays. Edit `inventoryCount: 10 → 5` doesn't reduce allotment к 5.
+Bookings can still take all 10. Data integrity bug. Need either:
+(a) PATCH /room-types/:id cascade-updates future availability rows,
+(b) availability читает allotment from roomType.inventoryCount in
+realtime. Future phase decision. **Pre-existing, не G1 regression**.
+
+**Component test coverage gap для booking-create-dialog**:
+86.67/82.16 post-self-review (added 7 strict tests). Uncovered: error
+paths (createBooking rejection toast), price preview loading state,
+Subscribe edge-cases. NOT critical для floor (above 65), но useful
+delta для G2+ work.
+
 ### Phase G1 implementation history (для reference)
 
 **Empirical bound source**: server `guestsCountSchema.min(1).max(20)` (booking.ts:122);

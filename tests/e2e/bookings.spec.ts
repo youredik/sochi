@@ -80,12 +80,12 @@ test.describe('booking-create dialog', () => {
 		const firstDate = futureIso(6)
 
 		// **Force allotment=1 на firstDate** ДО first booking — wizard default
-		// is rooms=10 per `[[wizard-store-default]]`, so without this fixture
-		// step 11 concurrent bookings would be needed to exhaust inventory
-		// (too slow for e2e). Setting allotment=1 makes overbooking trigger
-		// on the 2nd attempt. Per `[[mock-seam-at-adapter-not-http]]` canon —
-		// test fixture uses the SAME admin endpoint operators use, не a test
-		// shortcut.
+		// is `rooms: 10` (см. `apps/frontend/src/features/setup/wizard-store.ts`
+		// INITIAL.rooms), so without this fixture 11 concurrent bookings would
+		// be needed to exhaust inventory (too slow for e2e). Setting allotment=1
+		// makes overbooking trigger on the 2nd attempt. Per `[[mock-seam-at-
+		// adapter-not-http]]` canon — test fixture uses the SAME admin endpoint
+		// operators use (POST /room-types/:id/availability), не a test shortcut.
 		const cellButton = page.locator(`button[data-cell-date="${firstDate}"]`).first()
 		await expect(cellButton).toBeVisible()
 		const roomTypeId = await cellButton.getAttribute('data-cell-room-type-id')
