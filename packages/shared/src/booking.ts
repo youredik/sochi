@@ -161,6 +161,54 @@ export type BookingMarkNoShowInput = z.infer<typeof bookingMarkNoShowInput>
 // `earlyCheckoutReason` / folio adjustments, introduce `bookingCheckOutInput`
 // and wire the validator. For now the route only reads the path param.
 
+/**
+ * G5 Apaleo Amend-Stay 2026-05-15 — pre-arrival booking modifications.
+ *
+ * Per Apaleo PMS canon (research май 2026): amend-stay = «modify a confirmed,
+ * not-yet-arrived booking». Three independent operations, each its own atomic
+ * PATCH endpoint per service-method canon (mirrors check-in/check-out/cancel
+ * separation rather than catch-all PATCH /bookings/:id с partial body —
+ * simpler tx semantics, per-endpoint permission gates, cleaner Apaleo parity).
+ *
+ * Status guard: ALL three endpoints reject `in_house` / `checked_out` /
+ * `cancelled` / `no_show` — only `confirmed` bookings are amend-able. Once
+ * guest checks in, dates are committed; once terminal, history is immutable.
+ *
+ * `change-guests-count` is the exception that ALSO accepts `in_house`
+ * (operator может add companions при day-of-arrival walk-up — Apaleo canon).
+ */
+
+/** PATCH /bookings/:id/move-dates — relocate stay window. Triggers
+ *  inventory release on old-only nights + reserve on new-only nights +
+ *  timeSlices recompute + tourismTax + cancellationFee redaction.
+ *  Same refine как bookingCreateInput для consistency.
+ */
+export const bookingMoveDatesInput = z
+	.object({
+		checkIn: dateSchema,
+		checkOut: dateSchema,
+	})
+	.refine((v) => v.checkIn < v.checkOut, 'checkIn must be strictly before checkOut')
+export type BookingMoveDatesInput = z.infer<typeof bookingMoveDatesInput>
+
+/** PATCH /bookings/:id/change-rate-plan — switch к different active plan.
+ *  Server-validates new plan belongs к same property + same roomType.
+ *  Same dates → no inventory mutation; timeSlices + fees recomputed.
+ */
+export const bookingChangeRatePlanInput = z.object({
+	ratePlanId: idSchema('ratePlan'),
+})
+export type BookingChangeRatePlanInput = z.infer<typeof bookingChangeRatePlanInput>
+
+/** PATCH /bookings/:id/change-guests-count — adjust head-count.
+ *  No inventory / price recompute (allotment counts ROOMS, not guests).
+ *  Bounds mirror server `bookingCreateInput.guestsCount` schema (1..20).
+ */
+export const bookingChangeGuestsCountInput = z.object({
+	guestsCount: z.coerce.number().int().min(1).max(20),
+})
+export type BookingChangeGuestsCountInput = z.infer<typeof bookingChangeGuestsCountInput>
+
 export const bookingIdParam = z.object({ id: idSchema('booking') })
 export const bookingPropertyParam = z.object({ propertyId: idSchema('property') })
 

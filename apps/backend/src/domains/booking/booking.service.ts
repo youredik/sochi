@@ -1,9 +1,12 @@
 import type {
 	BookingCancelInput,
+	BookingChangeGuestsCountInput,
+	BookingChangeRatePlanInput,
 	BookingCheckInInput,
 	BookingCreateInput,
 	BookingFeeSnapshot,
 	BookingMarkNoShowInput,
+	BookingMoveDatesInput,
 	BookingStatus,
 	BookingTimeSlice,
 	RatePlan,
@@ -17,6 +20,7 @@ import type {
 import { isRussianCitizenship } from '@horeca/shared'
 import { decimalToMicros } from '../../db/ydb-helpers.ts'
 import {
+	InvalidBookingAmendStateError,
 	NoInventoryError,
 	PropertyNotFoundError,
 	RatePlanNotFoundError,
@@ -257,6 +261,150 @@ export function createBookingService(
 			input: BookingMarkNoShowInput,
 			actorUserId: string,
 		) => repo.markNoShow(tenantId, id, input.reason ?? null, actorUserId),
+
+		// -----------------------------------------------------------------
+		// G5 Apaleo Amend-Stay 2026-05-15 — pre-arrival booking modifications.
+		// Each method does cross-domain validation + recompute then delegates
+		// к repo для atomic write. Same shape as `create` flow для consistency.
+		// -----------------------------------------------------------------
+
+		/**
+		 * Move stay window. Recompute timeSlices / fees / tax from new rate
+		 * rows; repo handles inventory rebalance + atomic UPSERT.
+		 */
+		moveDates: async (
+			tenantId: string,
+			id: string,
+			input: BookingMoveDatesInput,
+			actorUserId: string,
+		) => {
+			const current = await repo.getById(tenantId, id)
+			if (!current) return null
+			// Pre-check status so service surfaces canonical error BEFORE
+			// hitting repo (repo also re-checks под tx, defense-in-depth).
+			if (current.status !== 'confirmed') {
+				throw new InvalidBookingAmendStateError(current.status, 'move-dates')
+			}
+			const prop = await propertyService.getById(tenantId, current.propertyId)
+			if (!prop) throw new PropertyNotFoundError(current.propertyId)
+			const rp = await ratePlanService.getById(tenantId, current.ratePlanId)
+			if (!rp) throw new RatePlanNotFoundError(current.ratePlanId)
+
+			const nights = nightsBetween(input.checkIn, input.checkOut)
+			if (nights.length === 0) {
+				throw new NoInventoryError('checkIn must be strictly before checkOut')
+			}
+			const rates = await rateRepo.listRange(
+				tenantId,
+				current.propertyId,
+				current.roomTypeId,
+				current.ratePlanId,
+				{ from: nights[0] ?? '', to: nights[nights.length - 1] ?? '' },
+			)
+			const rateByDate = new Map(rates.map((r) => [r.date, r]))
+			const timeSlices: BookingTimeSlice[] = []
+			for (const night of nights) {
+				const r = rateByDate.get(night)
+				if (!r) throw new NoInventoryError(`no rate row for ${night}`)
+				timeSlices.push({
+					date: night,
+					grossMicros: decimalToMicros(r.amount),
+					ratePlanId: r.ratePlanId,
+					ratePlanVersion: rp.updatedAt,
+					currency: r.currency,
+				})
+			}
+			const totalMicros = timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
+			return repo.moveDates(tenantId, id, {
+				newCheckIn: input.checkIn,
+				newCheckOut: input.checkOut,
+				timeSlices,
+				cancellationFee: computeCancellationFeeSnapshot(totalMicros, rp, input.checkIn),
+				noShowFee: computeNoShowFeeSnapshot(totalMicros, rp),
+				tourismTaxBaseMicros: totalMicros,
+				tourismTaxMicros: computeTourismTax(totalMicros, prop.tourismTaxRateBps, nights.length),
+				actorUserId,
+			})
+		},
+
+		/**
+		 * Switch rate plan (same dates). Validates new plan belongs к same
+		 * property + roomType; recomputes price snapshots; no inventory move.
+		 */
+		changeRatePlan: async (
+			tenantId: string,
+			id: string,
+			input: BookingChangeRatePlanInput,
+			actorUserId: string,
+		) => {
+			const current = await repo.getById(tenantId, id)
+			if (!current) return null
+			if (current.status !== 'confirmed') {
+				throw new InvalidBookingAmendStateError(current.status, 'change-rate-plan')
+			}
+			if (input.ratePlanId === current.ratePlanId) {
+				// No-op shortcut: return current row unchanged. Idempotent.
+				return current
+			}
+			const prop = await propertyService.getById(tenantId, current.propertyId)
+			if (!prop) throw new PropertyNotFoundError(current.propertyId)
+			const newRp = await ratePlanService.getById(tenantId, input.ratePlanId)
+			if (
+				!newRp ||
+				newRp.propertyId !== current.propertyId ||
+				newRp.roomTypeId !== current.roomTypeId
+			) {
+				throw new RatePlanNotFoundError(input.ratePlanId)
+			}
+
+			const nights = nightsBetween(current.checkIn, current.checkOut)
+			const rates = await rateRepo.listRange(
+				tenantId,
+				current.propertyId,
+				current.roomTypeId,
+				input.ratePlanId,
+				{ from: nights[0] ?? '', to: nights[nights.length - 1] ?? '' },
+			)
+			const rateByDate = new Map(rates.map((r) => [r.date, r]))
+			const timeSlices: BookingTimeSlice[] = []
+			for (const night of nights) {
+				const r = rateByDate.get(night)
+				if (!r) throw new NoInventoryError(`no rate row for ${night}`)
+				timeSlices.push({
+					date: night,
+					grossMicros: decimalToMicros(r.amount),
+					ratePlanId: r.ratePlanId,
+					ratePlanVersion: newRp.updatedAt,
+					currency: r.currency,
+				})
+			}
+			const totalMicros = timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
+			return repo.changeRatePlan(tenantId, id, {
+				newRatePlanId: input.ratePlanId,
+				timeSlices,
+				cancellationFee: computeCancellationFeeSnapshot(totalMicros, newRp, current.checkIn),
+				noShowFee: computeNoShowFeeSnapshot(totalMicros, newRp),
+				tourismTaxBaseMicros: totalMicros,
+				tourismTaxMicros: computeTourismTax(totalMicros, prop.tourismTaxRateBps, nights.length),
+				actorUserId,
+			})
+		},
+
+		/**
+		 * Adjust head-count. Schema enforces 1..20 bounds. No price-recompute
+		 * (allotment counts rooms not guests). Allowed на `in_house` ALSO per
+		 * Apaleo walk-up companions canon.
+		 */
+		changeGuestsCount: async (
+			tenantId: string,
+			id: string,
+			input: BookingChangeGuestsCountInput,
+			actorUserId: string,
+		) =>
+			repo.changeGuestsCount(tenantId, id, {
+				newGuestsCount: input.guestsCount,
+				actorUserId,
+			}),
 
 		/**
 		 * Aggregate tourism-tax liability for quarterly fiscal reporting.

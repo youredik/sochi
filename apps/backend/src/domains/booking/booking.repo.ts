@@ -24,6 +24,7 @@ import {
 } from '../../db/ydb-helpers.ts'
 import {
 	BookingExternalIdTakenError,
+	InvalidBookingAmendStateError,
 	InvalidBookingTransitionError,
 	NoInventoryError,
 } from '../../errors/domain.ts'
@@ -242,6 +243,98 @@ async function upsertBookingRow(tx: TX, current: Booking, next: TransitionOverri
 			${current.rklCheckResult},
 			${timestampOpt(current.rklCheckedAt ? new Date(current.rklCheckedAt) : null)},
 			${BigInt(current.tourismTaxBaseMicros)}, ${BigInt(current.tourismTaxMicros)},
+			${current.notes ?? NULL_TEXT}, ${tsFromIso(current.createdAt)}, ${nowTs},
+			${current.createdBy}, ${next.updatedBy}
+		)
+	`
+}
+
+/**
+ * G5 Apaleo Amend-Stay 2026-05-15 — fields amend-able post-create.
+ *
+ * Mutually exclusive с TransitionOverride (status stays `current.status` для
+ * all amends — they don't transition). Repo helper merges next.X ?? current.X
+ * для each field (same UPSERT-as-merge canon as upsertBookingRow but for the
+ * post-create-time-mutable subset).
+ */
+type AmendOverride = {
+	updatedAt: Date
+	updatedBy: string
+	checkIn?: string
+	checkOut?: string
+	ratePlanId?: string
+	guestsCount?: number
+	nightsCount?: number
+	timeSlices?: BookingTimeSlice[]
+	totalMicros?: bigint
+	cancellationFee?: BookingFeeSnapshot | null
+	noShowFee?: BookingFeeSnapshot | null
+	tourismTaxBaseMicros?: bigint
+	tourismTaxMicros?: bigint
+}
+
+/**
+ * UPSERT booking row с amend-field overrides. Status / audit timestamps /
+ * transition state preserved verbatim from `current`. Distinct from
+ * `upsertBookingRow` (transitions) — same SQL shape but mutable field set
+ * differs canonically (amends touch dates/rates/guests; transitions touch
+ * status/checkedAt/cancelledAt).
+ */
+async function upsertAmendedBookingRow(
+	tx: TX,
+	current: Booking,
+	next: AmendOverride,
+): Promise<void> {
+	const nowTs = toTs(next.updatedAt)
+	const checkIn = next.checkIn ?? current.checkIn
+	const checkOut = next.checkOut ?? current.checkOut
+	const ratePlanId = next.ratePlanId ?? current.ratePlanId
+	const guestsCount = next.guestsCount ?? current.guestsCount
+	const nightsCount = next.nightsCount ?? current.nightsCount
+	const timeSlices = next.timeSlices ?? current.timeSlices
+	const totalMicros = next.totalMicros ?? BigInt(current.totalMicros)
+	const cancellationFee = 'cancellationFee' in next ? next.cancellationFee : current.cancellationFee
+	const noShowFee = 'noShowFee' in next ? next.noShowFee : current.noShowFee
+	const tourismTaxBaseMicros = next.tourismTaxBaseMicros ?? BigInt(current.tourismTaxBaseMicros)
+	const tourismTaxMicros = next.tourismTaxMicros ?? BigInt(current.tourismTaxMicros)
+
+	await tx`
+		UPSERT INTO booking (
+			\`tenantId\`, \`propertyId\`, \`checkIn\`, \`id\`,
+			\`checkOut\`, \`roomTypeId\`, \`ratePlanId\`, \`assignedRoomId\`,
+			\`guestsCount\`, \`nightsCount\`,
+			\`primaryGuestId\`, \`guestSnapshot\`,
+			\`status\`, \`confirmedAt\`,
+			\`checkedInAt\`, \`checkedOutAt\`, \`cancelledAt\`, \`noShowAt\`, \`cancelReason\`,
+			\`channelCode\`, \`externalId\`, \`externalReferences\`,
+			\`totalMicros\`, \`paidMicros\`, \`currency\`, \`timeSlices\`,
+			\`cancellationFee\`, \`noShowFee\`,
+			\`registrationStatus\`, \`registrationMvdId\`, \`registrationSubmittedAt\`,
+			\`rklCheckResult\`, \`rklCheckedAt\`,
+			\`tourismTaxBaseMicros\`, \`tourismTaxMicros\`,
+			\`notes\`, \`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
+		) VALUES (
+			${current.tenantId}, ${current.propertyId}, ${dateFromIso(checkIn)}, ${current.id},
+			${dateFromIso(checkOut)}, ${current.roomTypeId}, ${ratePlanId},
+			${current.assignedRoomId ?? NULL_TEXT},
+			${guestsCount}, ${nightsCount},
+			${current.primaryGuestId}, ${toJson(current.guestSnapshot)},
+			${current.status}, ${tsFromIso(current.confirmedAt)},
+			${timestampOpt(current.checkedInAt ? new Date(current.checkedInAt) : null)},
+			${timestampOpt(current.checkedOutAt ? new Date(current.checkedOutAt) : null)},
+			${timestampOpt(current.cancelledAt ? new Date(current.cancelledAt) : null)},
+			${timestampOpt(current.noShowAt ? new Date(current.noShowAt) : null)},
+			${current.cancelReason ?? NULL_TEXT},
+			${current.channelCode}, ${current.externalId ?? NULL_TEXT},
+			${toJson(current.externalReferences)},
+			${totalMicros}, ${BigInt(current.paidMicros)},
+			${current.currency}, ${toJson(timeSlices)},
+			${toJson(cancellationFee)}, ${toJson(noShowFee)},
+			${current.registrationStatus}, ${current.registrationMvdId ?? NULL_TEXT},
+			${timestampOpt(current.registrationSubmittedAt ? new Date(current.registrationSubmittedAt) : null)},
+			${current.rklCheckResult},
+			${timestampOpt(current.rklCheckedAt ? new Date(current.rklCheckedAt) : null)},
+			${tourismTaxBaseMicros}, ${tourismTaxMicros},
 			${current.notes ?? NULL_TEXT}, ${tsFromIso(current.createdAt)}, ${nowTs},
 			${current.createdBy}, ${next.updatedBy}
 		)
@@ -646,6 +739,261 @@ export function createBookingRepo(sql: SqlInstance) {
 				})
 			} catch (err) {
 				if (err instanceof Error && err.cause instanceof InvalidBookingTransitionError)
+					throw err.cause
+				throw err
+			}
+		},
+
+		// -------------------------------------------------------------------
+		// G5 Apaleo Amend-Stay 2026-05-15 — pre-arrival booking modifications.
+		// All three operations atomic in single sql.begin tx с idempotent:true.
+		// -------------------------------------------------------------------
+
+		/**
+		 * Move stay window (PATCH /bookings/:id/move-dates).
+		 *
+		 * Inventory rebalance: release `sold-1` for nights ∈ (old \ new),
+		 * reserve `sold+1` for nights ∈ (new \ old) с stopSell + allotment
+		 * checks (same as create flow). Nights in both sets untouched.
+		 *
+		 * Status guard: confirmed-only. `in_house` rejected — once guest
+		 * checks in, dates are committed (audit + folio integrity).
+		 *
+		 * Caller (service) computes new timeSlices / totalMicros / fees /
+		 * tourismTax from new rate rows. Repo only writes the atomic mutation.
+		 */
+		async moveDates(
+			tenantId: string,
+			id: string,
+			ctx: {
+				newCheckIn: string
+				newCheckOut: string
+				timeSlices: BookingTimeSlice[]
+				cancellationFee: BookingFeeSnapshot | null
+				noShowFee: BookingFeeSnapshot | null
+				tourismTaxBaseMicros: bigint
+				tourismTaxMicros: bigint
+				actorUserId: string
+			},
+		): Promise<Booking | null> {
+			try {
+				return await sql.begin({ idempotent: true }, async (tx) => {
+					const current = await loadByIdForTx(tx, tenantId, id)
+					if (!current) return null
+					if (current.status !== 'confirmed') {
+						throw new InvalidBookingAmendStateError(current.status, 'move-dates')
+					}
+
+					const now = new Date()
+					const nowTs = toTs(now)
+					const oldNights = nightsBetween(current.checkIn, current.checkOut)
+					const newNights = nightsBetween(ctx.newCheckIn, ctx.newCheckOut)
+					if (newNights.length === 0) {
+						throw new NoInventoryError('checkIn must be strictly before checkOut')
+					}
+					if (ctx.timeSlices.length !== newNights.length) {
+						throw new NoInventoryError(
+							`timeSlices length ${ctx.timeSlices.length} != newNights count ${newNights.length}`,
+						)
+					}
+					const oldSet = new Set(oldNights)
+					const newSet = new Set(newNights)
+
+					// Release inventory для nights ∈ (old \ new). Guard sold > 0 so
+					// double-release не corrupts (defensive; tx idempotency catches re-run).
+					for (const night of oldNights) {
+						if (newSet.has(night)) continue
+						await tx`
+							UPDATE availability SET sold = sold - 1, updatedAt = ${nowTs}
+							WHERE tenantId = ${tenantId}
+								AND propertyId = ${current.propertyId}
+								AND roomTypeId = ${current.roomTypeId}
+								AND date = ${dateFromIso(night)}
+								AND sold > 0
+						`
+					}
+
+					// Reserve inventory для nights ∈ (new \ old) с allotment + stopSell
+					// guards (matches create-flow canon).
+					for (const night of newNights) {
+						if (oldSet.has(night)) continue
+						const [availRows = []] = await tx<
+							{ allotment: number | bigint; sold: number | bigint; stopSell: boolean }[]
+						>`
+							SELECT allotment, sold, stopSell FROM availability
+							WHERE tenantId = ${tenantId}
+								AND propertyId = ${current.propertyId}
+								AND roomTypeId = ${current.roomTypeId}
+								AND date = ${dateFromIso(night)}
+							LIMIT 1
+						`
+						const avail = availRows[0]
+						if (!avail) {
+							throw new NoInventoryError(`no availability row for ${night}`)
+						}
+						if (avail.stopSell) {
+							throw new NoInventoryError(`stopSell set for ${night}`)
+						}
+						const sold = Number(avail.sold)
+						const allotment = Number(avail.allotment)
+						if (sold >= allotment) {
+							throw new NoInventoryError(`sold ${sold} >= allotment ${allotment} for ${night}`)
+						}
+						await tx`
+							UPDATE availability SET sold = sold + 1, updatedAt = ${nowTs}
+							WHERE tenantId = ${tenantId}
+								AND propertyId = ${current.propertyId}
+								AND roomTypeId = ${current.roomTypeId}
+								AND date = ${dateFromIso(night)}
+						`
+					}
+
+					const totalMicros = ctx.timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
+					await upsertAmendedBookingRow(tx, current, {
+						updatedAt: now,
+						updatedBy: ctx.actorUserId,
+						checkIn: ctx.newCheckIn,
+						checkOut: ctx.newCheckOut,
+						nightsCount: newNights.length,
+						timeSlices: ctx.timeSlices,
+						totalMicros,
+						cancellationFee: ctx.cancellationFee,
+						noShowFee: ctx.noShowFee,
+						tourismTaxBaseMicros: ctx.tourismTaxBaseMicros,
+						tourismTaxMicros: ctx.tourismTaxMicros,
+					})
+
+					return {
+						...current,
+						checkIn: ctx.newCheckIn,
+						checkOut: ctx.newCheckOut,
+						nightsCount: newNights.length,
+						timeSlices: ctx.timeSlices,
+						totalMicros: totalMicros.toString(),
+						cancellationFee: ctx.cancellationFee,
+						noShowFee: ctx.noShowFee,
+						tourismTaxBaseMicros: ctx.tourismTaxBaseMicros.toString(),
+						tourismTaxMicros: ctx.tourismTaxMicros.toString(),
+						updatedAt: now.toISOString(),
+						updatedBy: ctx.actorUserId,
+					}
+				})
+			} catch (err) {
+				if (err instanceof Error && err.cause instanceof InvalidBookingAmendStateError)
+					throw err.cause
+				if (err instanceof Error && err.cause instanceof NoInventoryError) throw err.cause
+				throw err
+			}
+		},
+
+		/**
+		 * Switch rate plan (PATCH /bookings/:id/change-rate-plan).
+		 *
+		 * Same dates → no inventory mutation. New plan's rate rows recompute
+		 * timeSlices / totalMicros / fees / tourismTax server-side; repo writes
+		 * the row update.
+		 *
+		 * Status guard: confirmed-only. Service validates new plan's
+		 * (propertyId, roomTypeId) match current.
+		 */
+		async changeRatePlan(
+			tenantId: string,
+			id: string,
+			ctx: {
+				newRatePlanId: string
+				timeSlices: BookingTimeSlice[]
+				cancellationFee: BookingFeeSnapshot | null
+				noShowFee: BookingFeeSnapshot | null
+				tourismTaxBaseMicros: bigint
+				tourismTaxMicros: bigint
+				actorUserId: string
+			},
+		): Promise<Booking | null> {
+			try {
+				return await sql.begin({ idempotent: true }, async (tx) => {
+					const current = await loadByIdForTx(tx, tenantId, id)
+					if (!current) return null
+					if (current.status !== 'confirmed') {
+						throw new InvalidBookingAmendStateError(current.status, 'change-rate-plan')
+					}
+					if (ctx.timeSlices.length !== current.nightsCount) {
+						throw new NoInventoryError(
+							`timeSlices length ${ctx.timeSlices.length} != current.nightsCount ${current.nightsCount}`,
+						)
+					}
+
+					const now = new Date()
+					const totalMicros = ctx.timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
+					await upsertAmendedBookingRow(tx, current, {
+						updatedAt: now,
+						updatedBy: ctx.actorUserId,
+						ratePlanId: ctx.newRatePlanId,
+						timeSlices: ctx.timeSlices,
+						totalMicros,
+						cancellationFee: ctx.cancellationFee,
+						noShowFee: ctx.noShowFee,
+						tourismTaxBaseMicros: ctx.tourismTaxBaseMicros,
+						tourismTaxMicros: ctx.tourismTaxMicros,
+					})
+
+					return {
+						...current,
+						ratePlanId: ctx.newRatePlanId,
+						timeSlices: ctx.timeSlices,
+						totalMicros: totalMicros.toString(),
+						cancellationFee: ctx.cancellationFee,
+						noShowFee: ctx.noShowFee,
+						tourismTaxBaseMicros: ctx.tourismTaxBaseMicros.toString(),
+						tourismTaxMicros: ctx.tourismTaxMicros.toString(),
+						updatedAt: now.toISOString(),
+						updatedBy: ctx.actorUserId,
+					}
+				})
+			} catch (err) {
+				if (err instanceof Error && err.cause instanceof InvalidBookingAmendStateError)
+					throw err.cause
+				if (err instanceof Error && err.cause instanceof NoInventoryError) throw err.cause
+				throw err
+			}
+		},
+
+		/**
+		 * Adjust head-count (PATCH /bookings/:id/change-guests-count).
+		 *
+		 * No inventory / price recompute — `availability.allotment` counts
+		 * ROOMS, not guests. Walk-up companions добавление common per Apaleo
+		 * canon, hence ALSO allowed на `in_house` status (unlike date/rate
+		 * edits which are confirmed-only).
+		 */
+		async changeGuestsCount(
+			tenantId: string,
+			id: string,
+			ctx: { newGuestsCount: number; actorUserId: string },
+		): Promise<Booking | null> {
+			try {
+				return await sql.begin({ idempotent: true }, async (tx) => {
+					const current = await loadByIdForTx(tx, tenantId, id)
+					if (!current) return null
+					if (current.status !== 'confirmed' && current.status !== 'in_house') {
+						throw new InvalidBookingAmendStateError(current.status, 'change-guests-count')
+					}
+
+					const now = new Date()
+					await upsertAmendedBookingRow(tx, current, {
+						updatedAt: now,
+						updatedBy: ctx.actorUserId,
+						guestsCount: ctx.newGuestsCount,
+					})
+
+					return {
+						...current,
+						guestsCount: ctx.newGuestsCount,
+						updatedAt: now.toISOString(),
+						updatedBy: ctx.actorUserId,
+					}
+				})
+			} catch (err) {
+				if (err instanceof Error && err.cause instanceof InvalidBookingAmendStateError)
 					throw err.cause
 				throw err
 			}

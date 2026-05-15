@@ -38,6 +38,10 @@ type BookingShape = {
 	checkIn: string
 	checkOut: string
 	propertyId?: string
+	// G5 amend-stay (2026-05-15): ratePlanId / guestsCount нужны UI для
+	// inline edit affordances. Already returned by `GET /bookings/:id`.
+	ratePlanId?: string
+	guestsCount?: number
 	cancelReason?: string | null
 	cancelledAt?: string | null
 	checkedInAt?: string | null
@@ -177,5 +181,109 @@ export function useMarkNoShowBooking(deps: TransitionDeps) {
 				json: trimmed ? { reason: trimmed } : {},
 			})
 		},
+	)
+}
+
+// ---------------------------------------------------------------------------
+// G5 Apaleo Amend-Stay (2026-05-15) — pre-arrival booking modifications.
+//
+// Unlike transitions which optimistically update `status` only, amends touch
+// multiple fields (dates, rate, count). The mutation invalidates grid + single-
+// booking cache на settled — reconciliation pulls full server truth (включая
+// updated timeSlices / fees / tax). Optimistic UI deferred: amend is rarer
+// than transitions (operator action, not bulk-flow), brief loading state OK.
+//
+// Error mapping: 409 INVALID_BOOKING_AMEND_STATE + 409 NO_INVENTORY + 404
+// surface canonical RU messages. Same Toast notification pattern as transitions.
+// ---------------------------------------------------------------------------
+
+interface AmendDeps {
+	propertyId: string | null
+	windowFrom: string
+	windowTo: string
+	bookingId: string
+}
+
+function amendErrorMessage(err: ApiError, defaultMsg: string): string {
+	if (err.code === 'INVALID_BOOKING_AMEND_STATE') {
+		return 'Изменение недоступно в текущем статусе брони'
+	}
+	if (err.code === 'NO_INVENTORY') {
+		return 'Нет свободных номеров на новые даты'
+	}
+	if (err.code === 'NOT_FOUND') {
+		return 'Бронь или тариф не найдены'
+	}
+	return err.message || defaultMsg
+}
+
+function useAmendMutation<Vars>(
+	deps: AmendDeps,
+	successMessage: string,
+	defaultErrorMessage: string,
+	requestFn: (vars: Vars) => Promise<Response>,
+) {
+	const queryClient = useQueryClient()
+	const bookingKey = ['booking', deps.bookingId] as const
+
+	return useMutation({
+		mutationFn: async (vars: Vars) => {
+			const res = await requestFn(vars)
+			if (!res.ok) throw await errorFromResponse(res)
+			const body = (await res.json()) as { data: BookingShape }
+			return body.data
+		},
+		onError: (err: ApiError) => {
+			logger.warn('booking.amend failed', { code: err.code, message: err.message })
+			toast.error(amendErrorMessage(err, defaultErrorMessage))
+		},
+		onSettled: async () => {
+			// Full re-sync: amends touch many fields (timeSlices / fees / tax)
+			// что не fit optimistic single-field update — server truth wins.
+			await queryClient.invalidateQueries({ queryKey: ['bookings', deps.propertyId] })
+			await queryClient.invalidateQueries({ queryKey: bookingKey })
+		},
+		onSuccess: () => {
+			toast.success(successMessage)
+		},
+	})
+}
+
+export function useMoveDatesBooking(deps: AmendDeps) {
+	return useAmendMutation<{ checkIn: string; checkOut: string }>(
+		deps,
+		'Даты обновлены',
+		'Не удалось перенести бронь',
+		(vars) =>
+			api.api.v1.bookings[':id']['move-dates'].$patch({
+				param: { id: deps.bookingId },
+				json: { checkIn: vars.checkIn, checkOut: vars.checkOut },
+			}),
+	)
+}
+
+export function useChangeRatePlanBooking(deps: AmendDeps) {
+	return useAmendMutation<{ ratePlanId: string }>(
+		deps,
+		'Тариф обновлён',
+		'Не удалось сменить тариф',
+		(vars) =>
+			api.api.v1.bookings[':id']['change-rate-plan'].$patch({
+				param: { id: deps.bookingId },
+				json: { ratePlanId: vars.ratePlanId },
+			}),
+	)
+}
+
+export function useChangeGuestsCountBooking(deps: AmendDeps) {
+	return useAmendMutation<{ guestsCount: number }>(
+		deps,
+		'Количество гостей обновлено',
+		'Не удалось изменить число гостей',
+		(vars) =>
+			api.api.v1.bookings[':id']['change-guests-count'].$patch({
+				param: { id: deps.bookingId },
+				json: { guestsCount: vars.guestsCount },
+			}),
 	)
 }

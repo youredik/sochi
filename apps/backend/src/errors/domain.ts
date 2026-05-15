@@ -109,6 +109,36 @@ export class InvalidBookingTransitionError extends ConflictError {
 	}
 }
 
+/**
+ * G5 (2026-05-15) — Attempt к amend-stay (move-dates / change-rate-plan /
+ * change-guests-count) a booking whose status forbids the operation.
+ *
+ * Status policy per Apaleo Amend-Stay canon:
+ *   - move-dates: confirmed ONLY (in_house → dates committed; terminal → immutable)
+ *   - change-rate-plan: confirmed ONLY
+ *   - change-guests-count: confirmed OR in_house (operator may add companions
+ *     при walk-up day-of-arrival per Apaleo guest-management spec).
+ *
+ * Surfaces 409 CONFLICT в HTTP layer per `[[error-response-canon]]`.
+ */
+export class InvalidBookingAmendStateError extends ConflictError {
+	override readonly code = 'INVALID_BOOKING_AMEND_STATE'
+	readonly bookingStatus: string
+	readonly operation: 'move-dates' | 'change-rate-plan' | 'change-guests-count'
+	constructor(
+		bookingStatus: string,
+		operation: 'move-dates' | 'change-rate-plan' | 'change-guests-count',
+	) {
+		super(
+			`Booking with status '${bookingStatus}' cannot be amended via '${operation}'. ` +
+				`Apaleo canon: confirmed-only for date/rate edits; confirmed-or-in_house for guests-count.`,
+		)
+		this.name = 'InvalidBookingAmendStateError'
+		this.bookingStatus = bookingStatus
+		this.operation = operation
+	}
+}
+
 /** UNIQUE `(tenantId, propertyId, externalId)` violation (OTA retry with different body). */
 export class BookingExternalIdTakenError extends ConflictError {
 	override readonly code = 'BOOKING_EXTERNAL_ID_TAKEN'
