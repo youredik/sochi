@@ -299,8 +299,10 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		const editDialog = page.getByRole('dialog')
 		await expect(editDialog).toBeVisible()
 		await expect(editDialog.getByRole('heading', { name: /Бронь:.+Подтверждена/ })).toBeVisible()
-		// Close dialog to not pollute downstream tests.
-		await editDialog.locator('[aria-label="Закрыть"]').click()
+		// G3 (2026-05-15): Dialog → ResponsiveSheet shift. Sheet's icon-close uses
+		// English `sr-only "Close"` (shadcn canon); RU close affordance lives в
+		// footer как `<Button>Закрыть</Button>`. Hit that.
+		await editDialog.getByRole('button', { name: 'Закрыть' }).click()
 		await expect(editDialog).not.toBeVisible()
 	})
 

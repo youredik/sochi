@@ -146,8 +146,11 @@ test.describe('booking-edit dialog', () => {
 		await expect(terminalDialog.getByRole('button', { name: 'Не заехал' })).toHaveCount(0)
 
 		await expect(terminalDialog.getByText('Adversarial terminal test')).toBeVisible()
+		// G3 (2026-05-15): Dialog → ResponsiveSheet shift. На desktop (≥768px)
+		// рендерится `<SheetFooter data-slot="sheet-footer">` (mobile branch
+		// был бы `drawer-footer`). Chromium e2e default viewport > 768px.
 		await expect(
-			terminalDialog.locator('[data-slot="dialog-footer"]').getByRole('button', {
+			terminalDialog.locator('[data-slot="sheet-footer"]').getByRole('button', {
 				name: 'Закрыть',
 			}),
 		).toBeVisible()

@@ -2,13 +2,13 @@ import { useForm } from '@tanstack/react-form'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from '@/components/ui/dialog'
+	ResponsiveSheet,
+	ResponsiveSheetContent,
+	ResponsiveSheetDescription,
+	ResponsiveSheetFooter,
+	ResponsiveSheetHeader,
+	ResponsiveSheetTitle,
+} from '@/components/ui/responsive-sheet'
 import { TextareaField } from '../../forms/textarea-field'
 import {
 	useBooking,
@@ -26,7 +26,12 @@ import {
 } from '../lib/booking-transitions'
 
 /**
- * Click-on-band edit dialog (M5e.2).
+ * Click-on-band edit dialog → side-Sheet (M5e.2 + G3 2026-05-15).
+ *
+ * **G3 architectural shift**: `<Dialog>` modal → `<ResponsiveSheet
+ * side="right">` per Mews / Cloudbeds / Apaleo 2026 canon — side-panel
+ * preserves grid context. Mobile auto-switches к bottom Drawer.
+ * Component name retained `BookingEditDialog` для backward-compat.
  *
  * Two branches, decided by `isTerminal(booking.status)`:
  *
@@ -60,26 +65,28 @@ export function BookingEditDialog(props: BookingEditDialogProps) {
 	const bookingQ = useBooking(props.open ? props.bookingId : null)
 
 	return (
-		<Dialog open={props.open} onOpenChange={props.onOpenChange}>
-			<DialogContent className="max-h-[90vh] overflow-y-auto">
+		<ResponsiveSheet open={props.open} onOpenChange={props.onOpenChange}>
+			<ResponsiveSheetContent side="right" className="sm:max-w-md overflow-y-auto">
 				{bookingQ.isPending ? (
-					<DialogHeader>
-						<DialogTitle>Загрузка брони…</DialogTitle>
-						<DialogDescription>Получаем актуальные данные с сервера.</DialogDescription>
-					</DialogHeader>
+					<ResponsiveSheetHeader>
+						<ResponsiveSheetTitle>Загрузка брони…</ResponsiveSheetTitle>
+						<ResponsiveSheetDescription>
+							Получаем актуальные данные с сервера.
+						</ResponsiveSheetDescription>
+					</ResponsiveSheetHeader>
 				) : bookingQ.isError || !bookingQ.data ? (
 					<>
-						<DialogHeader>
-							<DialogTitle>Не удалось загрузить бронь</DialogTitle>
-							<DialogDescription>
+						<ResponsiveSheetHeader>
+							<ResponsiveSheetTitle>Не удалось загрузить бронь</ResponsiveSheetTitle>
+							<ResponsiveSheetDescription>
 								Проверьте соединение и закройте диалог — попробуйте ещё раз позже.
-							</DialogDescription>
-						</DialogHeader>
-						<DialogFooter>
+							</ResponsiveSheetDescription>
+						</ResponsiveSheetHeader>
+						<ResponsiveSheetFooter>
 							<Button type="button" onClick={() => props.onOpenChange(false)}>
 								Закрыть
 							</Button>
-						</DialogFooter>
+						</ResponsiveSheetFooter>
 					</>
 				) : isTerminal(bookingQ.data.status) ? (
 					<TerminalView booking={bookingQ.data} onClose={() => props.onOpenChange(false)} />
@@ -92,8 +99,8 @@ export function BookingEditDialog(props: BookingEditDialogProps) {
 						onClose={() => props.onOpenChange(false)}
 					/>
 				)}
-			</DialogContent>
-		</Dialog>
+			</ResponsiveSheetContent>
+		</ResponsiveSheet>
 	)
 }
 
@@ -124,12 +131,14 @@ function TerminalView(props: {
 
 	return (
 		<>
-			<DialogHeader>
-				<DialogTitle>Бронь завершена: {labelForStatus(booking.status)}</DialogTitle>
-				<DialogDescription>
+			<ResponsiveSheetHeader>
+				<ResponsiveSheetTitle>
+					Бронь завершена: {labelForStatus(booking.status)}
+				</ResponsiveSheetTitle>
+				<ResponsiveSheetDescription>
 					{booking.checkIn} — {booking.checkOut}
-				</DialogDescription>
-			</DialogHeader>
+				</ResponsiveSheetDescription>
+			</ResponsiveSheetHeader>
 
 			<dl className="space-y-2 text-sm" data-slot="terminal-details">
 				{transitionAt ? (
@@ -146,11 +155,11 @@ function TerminalView(props: {
 				) : null}
 			</dl>
 
-			<DialogFooter>
+			<ResponsiveSheetFooter>
 				<Button type="button" onClick={props.onClose}>
 					Закрыть
 				</Button>
-			</DialogFooter>
+			</ResponsiveSheetFooter>
 		</>
 	)
 }
@@ -215,12 +224,12 @@ function ActionView(props: {
 
 	return (
 		<>
-			<DialogHeader>
-				<DialogTitle>Бронь: {labelForStatus(booking.status)}</DialogTitle>
-				<DialogDescription>
+			<ResponsiveSheetHeader>
+				<ResponsiveSheetTitle>Бронь: {labelForStatus(booking.status)}</ResponsiveSheetTitle>
+				<ResponsiveSheetDescription>
 					{booking.checkIn} — {booking.checkOut}
-				</DialogDescription>
-			</DialogHeader>
+				</ResponsiveSheetDescription>
+			</ResponsiveSheetHeader>
 
 			{reasonExpanded === 'cancel' ? (
 				<form
@@ -251,7 +260,7 @@ function ActionView(props: {
 					</cancelForm.Field>
 					<cancelForm.Subscribe selector={(s) => s.values.reason}>
 						{(reason) => (
-							<DialogFooter>
+							<ResponsiveSheetFooter>
 								<Button
 									type="button"
 									variant="outline"
@@ -267,7 +276,7 @@ function ActionView(props: {
 								>
 									{isPending ? 'Отменяем…' : 'Подтвердить отмену'}
 								</Button>
-							</DialogFooter>
+							</ResponsiveSheetFooter>
 						)}
 					</cancelForm.Subscribe>
 				</form>
@@ -291,7 +300,7 @@ function ActionView(props: {
 							/>
 						)}
 					</noShowForm.Field>
-					<DialogFooter>
+					<ResponsiveSheetFooter>
 						<Button
 							type="button"
 							variant="outline"
@@ -303,7 +312,7 @@ function ActionView(props: {
 						<Button type="submit" disabled={isPending}>
 							{isPending ? 'Сохраняем…' : 'Отметить: не заехал'}
 						</Button>
-					</DialogFooter>
+					</ResponsiveSheetFooter>
 				</form>
 			) : (
 				<>
@@ -330,11 +339,11 @@ function ActionView(props: {
 							</Button>
 						))}
 					</div>
-					<DialogFooter>
+					<ResponsiveSheetFooter>
 						<Button type="button" variant="outline" onClick={props.onClose} disabled={isPending}>
 							Закрыть
 						</Button>
-					</DialogFooter>
+					</ResponsiveSheetFooter>
 				</>
 			)}
 		</>

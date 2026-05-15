@@ -26,12 +26,12 @@ import { expect } from '@playwright/test'
  */
 
 test.describe('AdminSidebar — real-browser mount + RBAC visibility', () => {
-	test('owner — sidebar mounts on /o/$slug/ with exactly 7 section rows', async ({ page }) => {
+	test('owner — sidebar mounts on /o/$slug/ with exactly 8 section rows', async ({ page }) => {
 		await page.goto('/')
 		// Wait for sidebar to mount (post-auth redirect to /o/{slug}/).
 		await expect(page.locator('[data-slot="sidebar"]').first()).toBeVisible()
 		const sectionLinks = page.locator('[data-section-id]')
-		await expect(sectionLinks).toHaveCount(7)
+		await expect(sectionLinks).toHaveCount(8)
 	})
 
 	test('every section row carries Cyrillic aria-label (D15 canon)', async ({ page }) => {
@@ -42,13 +42,13 @@ test.describe('AdminSidebar — real-browser mount + RBAC visibility', () => {
 		// the query resolves, so we must wait until all 7 rows are in the DOM
 		// before `evaluateAll` (which doesn't auto-wait). Race surfaced after
 		// React 19.2.6 + TanStack Query 5.100.10 timing tightening 2026-05-12.
-		await expect(page.locator('[data-section-id]')).toHaveCount(7)
+		await expect(page.locator('[data-section-id]')).toHaveCount(8)
 		// Read all aria-labels off the rendered <a> rows.
 		const labels = await page
 			.locator('[data-section-id]')
 			.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')))
 		// All 7 must be non-empty AND contain Cyrillic.
-		expect(labels.length).toBe(7)
+		expect(labels.length).toBe(8)
 		for (const label of labels) {
 			expect(label).toBeTruthy()
 			expect(label).toMatch(/[А-яЁё]/)

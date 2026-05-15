@@ -2,15 +2,15 @@ import { useForm, useStore } from '@tanstack/react-form'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useId, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import {
+	ResponsiveSheet,
+	ResponsiveSheetContent,
+	ResponsiveSheetDescription,
+	ResponsiveSheetFooter,
+	ResponsiveSheetHeader,
+	ResponsiveSheetTitle,
+} from '@/components/ui/responsive-sheet'
 import {
 	Select,
 	SelectContent,
@@ -37,22 +37,34 @@ import {
 const validateGuestsCount = intRangeNumberValidator({ min: 1, max: 20 })
 
 /**
- * Click-to-create booking dialog (M5e.1).
+ * Click-to-create booking dialog → side-Sheet (M5e.1 + G3 2026-05-15).
+ *
+ * **G3 architectural shift (2026-05-15)**: was `<Dialog>` modal, now
+ * `<ResponsiveSheet side="right">` per Mews / Cloudbeds / Apaleo 2026
+ * canon — side-panel preserves grid context (operator sees band layout
+ * while filling form). Mobile auto-switches к bottom Drawer per
+ * `[[hostaway-mobile-canon]]` thumb-reach. Component name retained
+ * `BookingCreateDialog` для backward-compat с tests/imports.
+ *
+ * **Field order**: per Mews canon (2026) — dates first → room-type (read-
+ * only via title context) → rate-plan → guest → payment (placeholder
+ * для G5 Apaleo Amend-Stay). Reasoning: rate plans depend on dates, so
+ * dates must be set before plan selection makes sense.
  *
  * Entry: user clicks an empty cell in the reservation grid; Chessboard
- * opens this with pre-filled roomTypeId + checkIn. Dialog picks the
- * default rate plan for that roomType automatically (first one, which
- * per the wizard is the seeded BAR plan) — server 422s on missing
- * plan, so this is always populated for a properly-onboarded tenant.
+ * opens this with pre-filled roomTypeId + checkIn. Sheet picks the
+ * default rate plan for that roomType automatically (per the wizard is
+ * the seeded BAR plan) — server 422s on missing plan, so this is
+ * always populated for a properly-onboarded tenant.
  *
  * Flow: guest create (POST /guests) → booking create (POST /bookings
  * with `Idempotency-Key`). Sequencing is deliberate — a failed guest-
  * create short-circuits before we commit the idempotency key. The key
- * is generated once per dialog mount so a user re-submitting after a
+ * is generated once per sheet mount so a user re-submitting after a
  * network hiccup replays the same operation (Stripe-style).
  *
  * Out of scope (later phases):
- *   - Editing existing guests (click on band → M5e.2)
+ *   - Editing existing guests (click on band → M5e.2 / G5)
  *   - Foreign-guest fields (visa, migration card) — registrationStatus
  *     auto-flags `pending`, HK workflow collects details later
  *   - Multiple companions — only primary guest for now
@@ -154,61 +166,27 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 	const isPending = createGuest.isPending || createBooking.isPending
 
 	return (
-		<Dialog open={props.open} onOpenChange={props.onOpenChange}>
-			<DialogContent className="max-h-[90vh] overflow-y-auto">
-				<DialogHeader>
-					<DialogTitle>Новое бронирование</DialogTitle>
-					<DialogDescription>
+		<ResponsiveSheet open={props.open} onOpenChange={props.onOpenChange}>
+			<ResponsiveSheetContent side="right" className="sm:max-w-lg overflow-y-auto">
+				<ResponsiveSheetHeader>
+					<ResponsiveSheetTitle>Новое бронирование</ResponsiveSheetTitle>
+					<ResponsiveSheetDescription>
 						{props.roomTypeName} · заезд {props.checkIn}
-					</DialogDescription>
-				</DialogHeader>
+					</ResponsiveSheetDescription>
+				</ResponsiveSheetHeader>
 
 				<form
 					onSubmit={(e) => {
 						e.preventDefault()
 						void form.handleSubmit()
 					}}
-					className="space-y-4"
+					className="space-y-4 px-4 pb-4"
 					noValidate
 				>
-					<div className="grid grid-cols-2 gap-3">
-						<form.Field name="lastName">
-							{(field) => <TextField field={field} label="Фамилия" autoFocus required />}
-						</form.Field>
-						<form.Field name="firstName">
-							{(field) => <TextField field={field} label="Имя" required />}
-						</form.Field>
-					</div>
-
-					<form.Field name="middleName">
-						{(field) => <TextField field={field} label="Отчество (опционально)" />}
-					</form.Field>
-
-					<div className="grid grid-cols-2 gap-3">
-						<form.Field name="documentType">
-							{(field) => <TextField field={field} label="Документ" required />}
-						</form.Field>
-						<form.Field name="documentNumber">
-							{(field) => <TextField field={field} label="Номер документа" required />}
-						</form.Field>
-					</div>
-
-					<form.Field name="citizenship">
-						{(field) => (
-							<TextField
-								field={field}
-								label="Гражданство (ISO)"
-								description="RU, BY, KZ, USA… Не-RU триггерит МВД-регистрацию."
-								pattern="^[A-Z]{2,3}$"
-								maxLength={3}
-								required
-							/>
-						)}
-					</form.Field>
-
+					{/* G3 Mews/Cloudbeds canon: dates first → rate-plan → guest. */}
 					<div className="grid grid-cols-3 gap-3">
 						<form.Field name="checkIn">
-							{(field) => <TextField field={field} label="Заезд" type="date" required />}
+							{(field) => <TextField field={field} label="Заезд" type="date" required autoFocus />}
 						</form.Field>
 						<form.Field name="checkOut">
 							{(field) => <TextField field={field} label="Выезд" type="date" required />}
@@ -263,6 +241,43 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 						)}
 					</form.Field>
 
+					{/* G3 guest section — moved BELOW dates/rate per Mews canon
+					   (dates+rate establish booking shape ДО guest data entry). */}
+					<div className="grid grid-cols-2 gap-3">
+						<form.Field name="lastName">
+							{(field) => <TextField field={field} label="Фамилия" required />}
+						</form.Field>
+						<form.Field name="firstName">
+							{(field) => <TextField field={field} label="Имя" required />}
+						</form.Field>
+					</div>
+
+					<form.Field name="middleName">
+						{(field) => <TextField field={field} label="Отчество (опционально)" />}
+					</form.Field>
+
+					<div className="grid grid-cols-2 gap-3">
+						<form.Field name="documentType">
+							{(field) => <TextField field={field} label="Документ" required />}
+						</form.Field>
+						<form.Field name="documentNumber">
+							{(field) => <TextField field={field} label="Номер документа" required />}
+						</form.Field>
+					</div>
+
+					<form.Field name="citizenship">
+						{(field) => (
+							<TextField
+								field={field}
+								label="Гражданство (ISO)"
+								description="RU, BY, KZ, USA… Не-RU триггерит МВД-регистрацию."
+								pattern="^[A-Z]{2,3}$"
+								maxLength={3}
+								required
+							/>
+						)}
+					</form.Field>
+
 					<form.Subscribe
 						selector={(s) => [s.values.checkIn, s.values.checkOut, s.values.ratePlanId] as const}
 					>
@@ -279,7 +294,7 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 										ratePlanName={activeRatePlans.find((p) => p.id === planId)?.name ?? null}
 									/>
 
-									<DialogFooter>
+									<ResponsiveSheetFooter className="mt-2 px-0">
 										<Button
 											type="button"
 											variant="outline"
@@ -291,14 +306,14 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 										<Button type="submit" disabled={isPending || !planId || nights < 1}>
 											{isPending ? 'Создаём…' : 'Создать бронирование'}
 										</Button>
-									</DialogFooter>
+									</ResponsiveSheetFooter>
 								</>
 							)
 						}}
 					</form.Subscribe>
 				</form>
-			</DialogContent>
-		</Dialog>
+			</ResponsiveSheetContent>
+		</ResponsiveSheet>
 	)
 }
 
