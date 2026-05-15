@@ -62,8 +62,13 @@ test.describe('booking-edit dialog', () => {
 		// confirmed + assignedRoomId=null (booking-create flow doesn't assign
 		// a room — operator assigns separately OR room auto-assigned at
 		// check-in per existing canon). Pre-check-in band IS unassigned.
-		await expect(band).toContainText('Не распределена')
+		// G4 (2026-05-15): band visible text = guest mask `Edit11 Т.` (152-ФЗ
+		// default-mask canon); status moved к aria-label + colour. Class +
+		// aria-label assertions enforce semantic correctness.
 		await expect(band).toHaveClass(/bg-status-unassigned/)
+		await expect(band).toHaveAttribute('aria-label', /Не распределена/)
+		// Guest mask visible — `Edit{N}` lastName + `Т.` first-name initial.
+		await expect(band).toContainText('Edit11 Т.')
 
 		await band.click()
 		const dialog = page.getByRole('dialog')
@@ -74,8 +79,8 @@ test.describe('booking-edit dialog', () => {
 		await expect(page.getByText('Гость заселён')).toBeVisible()
 		await expect(dialog).not.toBeVisible()
 
-		await expect(band).toContainText('В проживании')
 		await expect(band).toHaveClass(/bg-status-occupied/)
+		await expect(band).toHaveAttribute('aria-label', /В проживании/)
 	})
 
 	test('cancel: empty reason → submit disabled + hint shown', async ({ page }) => {
@@ -114,7 +119,8 @@ test.describe('booking-edit dialog', () => {
 		await expect(page.getByText('Бронь отменена')).toBeVisible()
 		await expect(dialog).not.toBeVisible()
 
-		await expect(band).toContainText('Отменена')
+		// G4: status moved к aria-label; visible text = guest mask.
+		await expect(band).toHaveAttribute('aria-label', /Отменена/)
 		await expect(band).toHaveClass(/bg-status-past/)
 		await expect(band).toHaveClass(/line-through/)
 	})
@@ -184,7 +190,8 @@ test.describe('booking-edit dialog', () => {
 		await dialog.getByRole('button', { name: 'Выезд' }).click()
 		await expect(page.getByText('Гость выселен')).toBeVisible()
 		await expect(band).toHaveClass(/bg-status-past/)
-		await expect(band).toContainText('Выехал')
+		// G4: status в aria-label, visible text = guest mask.
+		await expect(band).toHaveAttribute('aria-label', /Выехал/)
 	})
 
 	test('no-show happy: reason filled → yellow palette, terminal re-open shows reason', async ({
@@ -203,7 +210,8 @@ test.describe('booking-edit dialog', () => {
 
 		await expect(page.getByText('Отмечено: гость не заехал')).toBeVisible()
 		await expect(band).toHaveClass(/bg-status-issue/)
-		await expect(band).toContainText('Не заехал')
+		// G4: status в aria-label.
+		await expect(band).toHaveAttribute('aria-label', /Не заехал/)
 
 		// Terminal re-open: reason persisted, no action buttons
 		await band.click()

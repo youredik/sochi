@@ -1,4 +1,10 @@
-import type { BookingChannelCode, BookingStatus, RoomType } from '@horeca/shared'
+import type {
+	BookingChannelCode,
+	BookingGuestSnapshot,
+	BookingRegistrationStatus,
+	BookingStatus,
+	RoomType,
+} from '@horeca/shared'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../../lib/api.ts'
 
@@ -26,6 +32,18 @@ interface GridBooking {
 	// channel of the booking (yandexTravel red-orange vs generic OTA yellow
 	// vs direct/walkIn no-indicator).
 	channelCode?: BookingChannelCode
+	// G4 (2026-05-15): RU compliance overlays. All three fields ALREADY
+	// serialized by the backend `listByProperty` (returns full Booking shape) —
+	// previously narrowed-out for bandwidth. Reuse:
+	//   - guestSnapshot: render `Фамилия И.` mask on band per 152-ФЗ canon
+	//     (Mews / Cloudbeds / Apaleo industry default).
+	//   - registrationStatus + guestSnapshot.citizenship: МВД badge for foreign
+	//     guests, identifies operator action (Боль 1.1 canon).
+	//   - tourismTaxMicros: «ТН» chip / tooltip line — Сочи 2% per
+	//     `[[ru-legal-canonical]]`. BigInt#toJSON serializes к строка.
+	guestSnapshot?: BookingGuestSnapshot
+	registrationStatus?: BookingRegistrationStatus
+	tourismTaxMicros?: string | number
 }
 
 /**

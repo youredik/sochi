@@ -1,4 +1,9 @@
-import type { BookingChannelCode, BookingStatus } from '@horeca/shared'
+import type {
+	BookingChannelCode,
+	BookingGuestSnapshot,
+	BookingRegistrationStatus,
+	BookingStatus,
+} from '@horeca/shared'
 
 /**
  * Booking-status → cell display classes (M9.5 Phase B Bnovo-parity + G2
@@ -164,6 +169,99 @@ export function channelIndicator(channelCode: BookingChannelCode): ChannelIndica
 				dotClass: 'bg-channel-ota',
 				label: `Канал: ${labelForChannelCode(channelCode)}`,
 			}
+	}
+}
+
+/**
+ * G4 (2026-05-15) — 152-ФЗ default mask helper. Шахматка band shows guest
+ * identification mask «Фамилия И.» (last name + first-name initial + dot)
+ * BY DEFAULT, full name only inside side-Sheet edit panel. Per `[[ru-legal-
+ * canonical]]` 152-ФЗ Статья 7 + canonical industry (Mews / Cloudbeds /
+ * Apaleo) — screen-share / open-area front-desk monitor accidentally
+ * leaks PII without this canon.
+ *
+ * **Pure** (no Intl / locale dep): RU lastName + firstName always Cyrillic
+ * per `bookingGuestSnapshotSchema` (no validation on alphabet, but data
+ * arrives Cyrillic from operator entry + ОФД канон).
+ *
+ * Returns the full mask string. Caller decides whether to render `mask`
+ * (default visible) или `${lastName} ${firstName}` (operator action — full
+ * name reveal). Edge case: if firstName is empty (allowed by domain since
+ * .min(1) — but defensive — defensive code keeps mask robust for migration
+ * legacy rows): return lastName alone.
+ */
+export function maskGuestNameRu(
+	snapshot: Pick<BookingGuestSnapshot, 'firstName' | 'lastName'>,
+): string {
+	const last = snapshot.lastName.trim()
+	const first = snapshot.firstName.trim()
+	if (first.length === 0) return last
+	return `${last} ${first.charAt(0).toUpperCase()}.`
+}
+
+/**
+ * G4 (2026-05-15) — Туристический налог chip formatter. Server stores tax
+ * в `tourismTaxMicros` (micros = ₽ × 10^6 per `[[m6-folio-money-canon]]`).
+ * Convert к whole rubles for compact band chip. Skip rendering chip if
+ * micros === 0n (e.g. cancelled bookings where tax was reversed).
+ *
+ * **Pure**, accepts bigint OR string (BigInt#toJSON patch на backend
+ * serializes как строка); pre-coerces к bigint for safe div.
+ *
+ * Returns null for zero amounts (callers omit chip when null per Cloudbeds
+ * «no zero-clutter» canon).
+ */
+export function formatTourismTaxRub(micros: bigint | string | number): string | null {
+	const asBig =
+		typeof micros === 'bigint'
+			? micros
+			: typeof micros === 'number'
+				? BigInt(micros)
+				: BigInt(micros)
+	if (asBig === 0n) return null
+	// Round to nearest whole rub (half-up): (micros + 5*10^5) / 10^6
+	const rounded = (asBig + 500_000n) / 1_000_000n
+	return `${rounded.toString()} ₽`
+}
+
+/**
+ * G4 (2026-05-15) — МВД registration lifecycle badge. Renders ONLY для
+ * non-RU guests (citizenship !== 'RU') per Боль 1.1 canon — RU citizens
+ * не требуют МВД registration в this domain.
+ *
+ * Color semantics (each token already axe-verified ≥3:1 non-text per WCAG
+ * 2.2 SC 1.4.11):
+ *   - notRequired: null (caller omits — RU guest fallback handled by callsite)
+ *   - pending:     status-issue (red) — operator must submit ДО deadline
+ *   - submitted:   status-confirmed (green) — awaiting МВД ack
+ *   - registered:  status-occupied (blue) — terminal success
+ *   - failed:      status-issue (red) — re-submit required, blocks check-in
+ *
+ * **Pure**. Returns `null` when no badge required (RU citizen ИЛИ
+ * `notRequired` enum). Caller does final render decision.
+ */
+export interface RegistrationBadge {
+	readonly dotClass: string
+	readonly label: string
+	readonly urgent: boolean
+}
+
+export function registrationBadgeFor(
+	status: BookingRegistrationStatus,
+	citizenship: string,
+): RegistrationBadge | null {
+	if (citizenship.toUpperCase() === 'RU' || citizenship.toUpperCase() === 'RUS') return null
+	switch (status) {
+		case 'notRequired':
+			return null
+		case 'pending':
+			return { dotClass: 'bg-status-issue', label: 'МУ не подан', urgent: true }
+		case 'submitted':
+			return { dotClass: 'bg-status-confirmed', label: 'МУ отправлен', urgent: false }
+		case 'registered':
+			return { dotClass: 'bg-status-occupied', label: 'МУ принят МВД', urgent: false }
+		case 'failed':
+			return { dotClass: 'bg-status-issue', label: 'МУ отклонён — повторите', urgent: true }
 	}
 }
 

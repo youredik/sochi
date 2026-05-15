@@ -20,6 +20,18 @@ interface Props {
 	 * rendered ниже dates когда не null. Matches the visual channel-dot
 	 * indicator на the band, giving screen-reader + hover users equal access. */
 	channelLabel?: string | null
+	/** G4: full guest name (no mask) — tooltip is operator-only hover, OK to
+	 * un-mask here. Per 152-ФЗ default-mask canon: band visible-text uses
+	 * `maskGuestNameRu()`, but tooltip on intentional hover/focus exposes full
+	 * identity for operator action. */
+	guestFullName?: string | null
+	/** G4: МВД lifecycle label (e.g. «МУ не подан»). Null for RU citizens или
+	 * `notRequired` state (caller omits via `registrationBadgeFor()` returning
+	 * null). Surface as actionable urgency cue. */
+	mvdLabel?: string | null
+	/** G4: tourism tax amount (Сочи 2%, e.g. «120 ₽»). Null когда сумма ноль
+	 * или booking cancelled (caller pre-filters). */
+	taxRub?: string | null
 	children: (handlers: PopoverHandlers) => React.ReactNode
 }
 
@@ -53,6 +65,9 @@ export function BookingBandTooltip({
 	checkIn,
 	checkOut,
 	channelLabel,
+	guestFullName,
+	mvdLabel,
+	taxRub,
 	children,
 }: Props) {
 	const popoverId = `band-tooltip-${useId().replace(/:/g, '-')}-${bookingId}`
@@ -85,7 +100,14 @@ export function BookingBandTooltip({
 			role="tooltip"
 			className="bg-popover text-popover-foreground border-border rounded-md border p-3 text-xs shadow-popover"
 		>
-			<div className="font-medium">{statusLabel}</div>
+			{guestFullName ? (
+				<div className="font-medium" data-slot="tooltip-guest">
+					{guestFullName}
+				</div>
+			) : null}
+			<div className={guestFullName ? 'text-muted-foreground mt-1 text-[10px]' : 'font-medium'}>
+				{statusLabel}
+			</div>
 			<div className="text-muted-foreground mt-1">{roomTypeName}</div>
 			<div className="text-muted-foreground mt-1">
 				<time dateTime={checkIn}>{formatDayOnly(checkIn)}</time>
@@ -94,6 +116,16 @@ export function BookingBandTooltip({
 			</div>
 			{channelLabel ? (
 				<div className="text-muted-foreground mt-1 text-[10px]">{channelLabel}</div>
+			) : null}
+			{mvdLabel ? (
+				<div className="text-foreground mt-1 text-[10px]" data-slot="tooltip-mvd">
+					{mvdLabel}
+				</div>
+			) : null}
+			{taxRub ? (
+				<div className="text-muted-foreground mt-1 text-[10px]" data-slot="tooltip-tax">
+					Туристический налог: {taxRub}
+				</div>
 			) : null}
 		</div>
 	)

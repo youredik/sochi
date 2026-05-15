@@ -8,7 +8,13 @@ import { BookingCreateDialog } from '../../bookings/components/booking-create-di
 import { BookingEditDialog } from '../../bookings/components/booking-edit-dialog'
 import { useFitWindowDays } from '../hooks/use-fit-window-days'
 import { useGridData } from '../hooks/use-grid-data'
-import { channelIndicator, paletteFor } from '../lib/booking-palette'
+import {
+	channelIndicator,
+	formatTourismTaxRub,
+	maskGuestNameRu,
+	paletteFor,
+	registrationBadgeFor,
+} from '../lib/booking-palette'
 import { useChessboardPrefsStore } from '../lib/chessboard-prefs-store'
 import { addDays, iterateDates, todayIso } from '../lib/date-range'
 import {
@@ -108,6 +114,9 @@ export function Chessboard() {
 						checkOut: string
 						assignedRoomId: string | null
 						channelCode: (typeof rowBookings)[number]['channelCode']
+						guestSnapshot: (typeof rowBookings)[number]['guestSnapshot']
+						registrationStatus: (typeof rowBookings)[number]['registrationStatus']
+						tourismTaxMicros: (typeof rowBookings)[number]['tourismTaxMicros']
 						span: number
 						truncatedLeft: boolean
 						truncatedRight: boolean
@@ -128,6 +137,11 @@ export function Chessboard() {
 						assignedRoomId: b.assignedRoomId ?? null,
 						// G2.bis: thread channelCode для channelIndicator() differentiator.
 						channelCode: b.channelCode,
+						// G4: thread RU compliance fields — guest mask label,
+						// registration МВД badge, tourism tax chip / tooltip line.
+						guestSnapshot: b.guestSnapshot,
+						registrationStatus: b.registrationStatus,
+						tourismTaxMicros: b.tourismTaxMicros,
 						span,
 						truncatedLeft: pos.truncatedLeft,
 						truncatedRight: pos.truncatedRight,
@@ -358,6 +372,27 @@ export function Chessboard() {
 										// G2.bis: channel-origin differentiator dot. null когда
 										// direct/walkIn (operator-originated, no clutter).
 										const channel = band.channelCode ? channelIndicator(band.channelCode) : null
+										// G4: RU compliance overlays. Guest mask = ALWAYS rendered
+										// when snapshot present (152-ФЗ default). registrationBadge
+										// + tourismTax = optional chips (null = omit). Status label
+										// stays in aria-label (screen-reader semantic) + colour
+										// (sighted urgency) — visible text now identifies the
+										// booking, per Mews / Cloudbeds / Apaleo canon.
+										const guestMask = band.guestSnapshot
+											? maskGuestNameRu(band.guestSnapshot)
+											: null
+										const visibleLabel = guestMask ?? style.label
+										const mvdBadge =
+											band.registrationStatus && band.guestSnapshot
+												? registrationBadgeFor(
+														band.registrationStatus,
+														band.guestSnapshot.citizenship,
+													)
+												: null
+										const taxRub =
+											band.tourismTaxMicros !== undefined && band.status !== 'cancelled'
+												? formatTourismTaxRub(band.tourismTaxMicros)
+												: null
 										const tabStop = isTabStop(rowIdx, ariaColIdx)
 										return (
 											<BookingBandTooltip
@@ -368,6 +403,17 @@ export function Chessboard() {
 												checkIn={band.checkIn}
 												checkOut={band.checkOut}
 												channelLabel={channel?.label ?? null}
+												guestFullName={
+													band.guestSnapshot
+														? `${band.guestSnapshot.lastName} ${band.guestSnapshot.firstName}${
+																band.guestSnapshot.middleName
+																	? ` ${band.guestSnapshot.middleName}`
+																	: ''
+															}`
+														: null
+												}
+												mvdLabel={mvdBadge?.label ?? null}
+												taxRub={taxRub}
 											>
 												{({ popoverId, onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
 													<button
@@ -379,6 +425,8 @@ export function Chessboard() {
 														aria-colspan={band.span}
 														aria-label={`${style.label}, ${rt.name}, ${band.checkIn} — ${band.checkOut}${
 															channel ? `, ${channel.label}` : ''
+														}${mvdBadge ? `, ${mvdBadge.label}` : ''}${
+															taxRub ? `, туристический налог ${taxRub}` : ''
 														}. Enter — открыть действия.`}
 														aria-details={popoverId}
 														data-booking-id={band.id}
@@ -394,9 +442,9 @@ export function Chessboard() {
 															setFocus({ rowIdx, colIdx: ariaColIdx })
 														}}
 													>
-														<span className="truncate">
+														<span className="truncate" data-band-label>
 															{band.truncatedLeft ? '…' : ''}
-															{style.label}
+															{visibleLabel}
 															{band.truncatedRight ? '…' : ''}
 														</span>
 														{/* G2.bis channel dot — decorative (semantic carried в
@@ -407,6 +455,18 @@ export function Chessboard() {
 																aria-hidden="true"
 																className={`pointer-events-none absolute top-1 right-1 size-1.5 rounded-full ${channel.dotClass}`}
 																data-channel-dot={band.channelCode}
+															/>
+														) : null}
+														{/* G4 МВД badge — decorative dot top-left corner. Color-
+														    coded по lifecycle state. Non-text contrast ≥3:1 per
+														    WCAG 2.2 SC 1.4.11 (reuses status-* tokens — already
+														    axe-verified). Semantic в aria-label выше + tooltip. */}
+														{mvdBadge ? (
+															<span
+																aria-hidden="true"
+																className={`pointer-events-none absolute top-1 left-1 size-1.5 rounded-full ${mvdBadge.dotClass}`}
+																data-mvd-status={band.registrationStatus}
+																data-mvd-urgent={mvdBadge.urgent ? 'true' : 'false'}
 															/>
 														) : null}
 													</button>

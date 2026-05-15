@@ -1,10 +1,13 @@
-import type { BookingChannelCode, BookingStatus } from '@horeca/shared'
+import type { BookingChannelCode, BookingRegistrationStatus, BookingStatus } from '@horeca/shared'
 import { describe, expect, it } from 'bun:test'
 import {
 	BOOKING_CELL_STYLES,
 	channelIndicator,
 	DERIVED_BOOKING_CELL_STYLES,
+	formatTourismTaxRub,
+	maskGuestNameRu,
 	paletteFor,
+	registrationBadgeFor,
 	styleFor,
 } from './booking-palette.ts'
 
@@ -321,5 +324,155 @@ describe('channelIndicator — G2.bis channel-color differentiator', () => {
 				}
 			},
 		)
+	})
+
+	// -----------------------------------------------------------------
+	// G4 (2026-05-15) — RU compliance overlays. 152-ФЗ default-mask
+	// canon, tourism-tax formatter, МВД lifecycle badge.
+	// -----------------------------------------------------------------
+
+	describe('G4 — maskGuestNameRu (152-ФЗ default-mask canon)', () => {
+		it('exact mask format: «Фамилия И.»', () => {
+			expect(maskGuestNameRu({ firstName: 'Иван', lastName: 'Иванов' })).toBe('Иванов И.')
+		})
+		it('first-name initial uppercased even when input lower-case', () => {
+			expect(maskGuestNameRu({ firstName: 'мария', lastName: 'Петрова' })).toBe('Петрова М.')
+		})
+		it('multi-char first name reduced к single initial (адversarial: full name leak)', () => {
+			// Catches the regression where first-name прокидывался полностью.
+			expect(maskGuestNameRu({ firstName: 'Александр', lastName: 'Сидоров' })).toBe('Сидоров А.')
+			expect(maskGuestNameRu({ firstName: 'Александр', lastName: 'Сидоров' })).not.toContain(
+				'лександр',
+			)
+		})
+		it('lastName trimmed (whitespace from operator paste)', () => {
+			expect(maskGuestNameRu({ firstName: 'Иван', lastName: '  Иванов  ' })).toBe('Иванов И.')
+		})
+		it('empty firstName falls back to lastName-only (defensive — domain min(1) но migration legacy)', () => {
+			expect(maskGuestNameRu({ firstName: '', lastName: 'Иванов' })).toBe('Иванов')
+		})
+		it('whitespace-only firstName treated як пустое', () => {
+			expect(maskGuestNameRu({ firstName: '   ', lastName: 'Иванов' })).toBe('Иванов')
+		})
+		it('Latin lastName preserves casing (citizenship=US/GB foreign-guest case)', () => {
+			expect(maskGuestNameRu({ firstName: 'John', lastName: 'Smith' })).toBe('Smith J.')
+		})
+		it('immutability — input snapshot не mutated', () => {
+			const input = { firstName: 'Иван', lastName: 'Иванов' }
+			const before = JSON.stringify(input)
+			maskGuestNameRu(input)
+			expect(JSON.stringify(input)).toBe(before)
+		})
+	})
+
+	describe('G4 — formatTourismTaxRub (Сочи 2% chip)', () => {
+		it('zero micros → null (no-zero-clutter canon)', () => {
+			expect(formatTourismTaxRub(0n)).toBeNull()
+			expect(formatTourismTaxRub('0')).toBeNull()
+			expect(formatTourismTaxRub(0)).toBeNull()
+		})
+		// RU typography canon (ГОСТ 8.417): NBSP (U+00A0) между числом и
+		// валютным знаком. Helper enforces; tests use literal   to catch
+		// regressions to regular ASCII space.
+		const NBSP = ' '
+		it('exact-value: 120 ₽ from 120_000_000 micros', () => {
+			expect(formatTourismTaxRub(120_000_000n)).toBe(`120${NBSP}₽`)
+		})
+		it('half-up rounding к ближайший whole rub', () => {
+			expect(formatTourismTaxRub(120_400_000n)).toBe(`120${NBSP}₽`)
+			expect(formatTourismTaxRub(120_500_000n)).toBe(`121${NBSP}₽`)
+			expect(formatTourismTaxRub(120_600_000n)).toBe(`121${NBSP}₽`)
+		})
+		it('handles string serialization (BigInt#toJSON wire format)', () => {
+			expect(formatTourismTaxRub('1234560000')).toBe(`1235${NBSP}₽`)
+		})
+		it('handles JS number input (operator-side computed values)', () => {
+			expect(formatTourismTaxRub(50_000_000)).toBe(`50${NBSP}₽`)
+		})
+		it('large amount (multi-night high-tier suite) rendered correctly', () => {
+			expect(formatTourismTaxRub(12_345_000_000n)).toBe(`12345${NBSP}₽`)
+		})
+		it('uses NBSP not regular space (ГОСТ 8.417 RU typography canon)', () => {
+			const out = formatTourismTaxRub(120_000_000n)
+			expect(out).not.toBeNull()
+			expect(out).toContain(NBSP)
+			expect(out).not.toMatch(/\d /) // no digit-then-ASCII-space
+		})
+	})
+
+	describe('G4 — registrationBadgeFor (МВД lifecycle for foreign guests)', () => {
+		const FOREIGN_STATUSES: readonly BookingRegistrationStatus[] = [
+			'notRequired',
+			'pending',
+			'submitted',
+			'registered',
+			'failed',
+		] as const
+
+		it('RU citizenship → ALWAYS null (no badge for citizens)', () => {
+			for (const status of FOREIGN_STATUSES) {
+				expect(registrationBadgeFor(status, 'RU')).toBeNull()
+				expect(registrationBadgeFor(status, 'RUS')).toBeNull()
+				expect(registrationBadgeFor(status, 'ru')).toBeNull() // case-insensitive
+			}
+		})
+		it('foreign + notRequired → null (no actionable state)', () => {
+			expect(registrationBadgeFor('notRequired', 'US')).toBeNull()
+			expect(registrationBadgeFor('notRequired', 'CN')).toBeNull()
+		})
+		it('pending → red urgent badge «МУ не подан»', () => {
+			const badge = registrationBadgeFor('pending', 'US')
+			expect(badge?.dotClass).toBe('bg-status-issue')
+			expect(badge?.label).toBe('МУ не подан')
+			expect(badge?.urgent).toBe(true)
+		})
+		it('submitted → green non-urgent «МУ отправлен»', () => {
+			const badge = registrationBadgeFor('submitted', 'CN')
+			expect(badge?.dotClass).toBe('bg-status-confirmed')
+			expect(badge?.label).toBe('МУ отправлен')
+			expect(badge?.urgent).toBe(false)
+		})
+		it('registered → blue non-urgent «МУ принят МВД»', () => {
+			const badge = registrationBadgeFor('registered', 'DE')
+			expect(badge?.dotClass).toBe('bg-status-occupied')
+			expect(badge?.label).toBe('МУ принят МВД')
+			expect(badge?.urgent).toBe(false)
+		})
+		it('failed → red urgent «МУ отклонён — повторите»', () => {
+			const badge = registrationBadgeFor('failed', 'TR')
+			expect(badge?.dotClass).toBe('bg-status-issue')
+			expect(badge?.label).toBe('МУ отклонён — повторите')
+			expect(badge?.urgent).toBe(true)
+		})
+		it('exhaustiveness — every BookingRegistrationStatus handled (no implicit fallback)', () => {
+			// Enum-cover: explicit assertion for each value. Compiler tree-shake
+			// guards against future enum extension being silently dropped.
+			for (const status of FOREIGN_STATUSES) {
+				const badge = registrationBadgeFor(status, 'US')
+				if (status === 'notRequired') {
+					expect(badge).toBeNull()
+				} else {
+					expect(badge).not.toBeNull()
+					expect(badge?.label.length).toBeGreaterThan(0)
+					expect(badge?.dotClass).toMatch(/^bg-status-/)
+				}
+			}
+		})
+		it('urgent flag aligns с red dot (status-issue) consistently', () => {
+			for (const status of FOREIGN_STATUSES) {
+				const badge = registrationBadgeFor(status, 'US')
+				if (badge?.urgent === true) {
+					expect(badge.dotClass).toBe('bg-status-issue')
+				}
+			}
+		})
+		it('no hardcoded shadcn palette — only status-* tokens', () => {
+			for (const status of FOREIGN_STATUSES) {
+				const badge = registrationBadgeFor(status, 'US')
+				if (badge !== null) {
+					expect(badge.dotClass).not.toMatch(/bg-(yellow|red|orange|blue|green)-\d/)
+				}
+			}
+		})
 	})
 })
