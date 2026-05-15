@@ -2,10 +2,11 @@
 
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
-**Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + G3 ✓ + **G4 ✓ pushed** (commit
-`ca1303c` RU compliance overlays — 152-ФЗ mask + ТН chip + МВД badge,
-2026-05-15). Next: G5 (Apaleo Amend-Stay — backend extension required)
-OR G6 (display range selector 4d/1w/2w/3w canon) — see §4 phase queue.
+**Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + G3 ✓ + G4 ✓ + **G6 ✓ pushed** (commit
+`868983a` Cloudbeds Spring 2026 display-range canon — 4d/1w/2w/3w/fit
+extension, 2026-05-15). Next: G5 (Apaleo Amend-Stay — backend extension
+required, 2-3 commits) — only outstanding plan item with ground-truth
+scope; G7/G8/G9 require additional backend.
 
 Per `[[pre-plan-codebase-recon]]` §0 ДО §1; per `[[adversarial-reading-before-done]]`
 all touched files read через 9-item checklist; per `[[research-protocol]]`
@@ -535,20 +536,37 @@ NO general PATCH; §3.3 Apaleo canon = single-stay drill-down.
 **Complexity**: MED-HIGH. Backend audit + extension required. 2-3 commits
 (1 backend + 1-2 frontend).
 
-### Phase G6 — Display range selector (Cloudbeds Spring 2026 canon)
+### Phase G6 ✓ DONE 2026-05-15 — Display range selector (Cloudbeds Spring 2026 canon)
 
 **Empirical bound source**: §3.1 Cloudbeds 4d/1w/2w/3w + fit-to-screen;
 current `ChessboardWindowSelector` has 15/30/fit.
 
-**Scope**:
+**Shipped** (commit `868983a`, single atomic per `[[no-half-measures]]`):
 
-- Extend ChessboardWindowSelector с **4d / 1w (7d) / 2w (14d) / 3w (21d) /
-  30d / fit**.
-- Add mini-calendar date-picker на header (Cloudbeds canon) — current has
-  `ChessboardDatePicker` — verify это mini-calendar OR enhance.
-- Keyboard `[ ` / `]` для week-step navigation per APG GridList canon.
+- ✅ ChessboardWindowSelector extended: 8 options total (3d/4d/1w/2w/15d/
+  3w/30d/fit). WindowDays type additive: `3 | 4 | 7 | 14 | 15 | 21 | 30 |
+'fit'`. Previously-persisted Zustand `15` remains valid — no migration.
+- ✅ RU labels follow ГОСТ morphology: «1 неделя» (singular nominative)
+  / «2 недели» (plural genitive) / «3 недели» (plural genitive). Cloudbeds
+  w1/w2/w3 aliases mapped к 7/14/21 day values.
 
-**Complexity**: LOW. 1 commit.
+**Deferred / non-scope**:
+
+- Mini-calendar date-picker on header: existing `ChessboardDatePicker`
+  already mini-calendar. No scope.
+- Keyboard `[`/`]` week-step: existing «← Назад / → Вперёд» buttons
+  step by `windowDays`, so when window=7 они step by 1 week
+  natively — already Cloudbeds canon. No additional binding needed.
+
+**Layer 4+5 verified**:
+
+- ✅ Frontend unit: 1772/0 (+10 new G6 strict cases inc. backward-compat
+  legacy-15-still-works + 8-option dropdown exact order + week-alias
+  store round-trip)
+- ✅ Bookings+grid chromium e2e: 44/44 (canonical test order)
+- ✅ Ratchet: green
+
+**Complexity actual**: LOW. 1 atomic commit ~107 LoC.
 
 ### Phase G7 — Drag-move + drag-resize gestures (Pragmatic DnD)
 
