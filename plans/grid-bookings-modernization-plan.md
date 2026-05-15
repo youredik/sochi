@@ -48,6 +48,60 @@ via e2e (`grid.spec.ts`, `grid-a11y.spec.ts`, `grid-keyboard.spec.ts`,
 - UTC-anchored date math (recent fix `7ce8a0d` killed MSK-shift artifact)
 - RU morphology pluralNights helper
 
+### §0.1 — Backend + shared schemas (empirical, post-pink correction)
+
+Caught self-pink: первый pass §0 был только frontend. Per `[[no-half-measures]]` —
+recon должен включать server-truth ДО planning. Корректирую.
+
+**`packages/shared/src/booking.ts` (305 lines)** — confirmed:
+
+- **`guestsCountSchema = z.coerce.number().int().min(1).max(20)`** → G-B2 server bound
+  empirically verified, не «probably».
+- **`bookingCreateInput.refine` checkIn < checkOut** — strict before; client mirrors.
+- **`bookingChannelCodeValues`**: 9 channels (direct/walkIn/yandexTravel/ostrovok/
+  travelLine/bnovo/bookingCom/expedia/airbnb). Already enum — research §1 TravelLine
+  color canon should reuse this.
+- **`bookingStatusValues`**: 5 states. **Missing «overdue» state** — research §1
+  TravelLine canon has overdue (Red) as UI-derived computed status from
+  `checkIn < today AND status=='confirmed'`. **NOT a domain state, UI-only**.
+- **`Booking` row carries** `timeSlices` (per-night frozen price snapshot),
+  `tourismTaxBaseMicros` / `tourismTaxMicros` (Сочи 2% computed server-side),
+  `registrationStatus` (МВД lifecycle 5-state), `rklCheckResult` (3-state),
+  `cancellationFee` / `noShowFee` snapshots. **All grid overlays have ground-truth
+  fields ready**.
+
+**`packages/shared/src/guest.ts` (96 lines)** — confirmed:
+
+- **`citizenshipSchema`**: alpha-2 OR alpha-3 ISO-3166, **uppercase regex**.
+  Frontend `pattern="^[A-Z]{2,3}$"` ALIGNED but decorative under `noValidate`.
+- **`documentType: z.string().min(1).max(50)`** — **EXPLICITLY documented as
+  free-form**: «we don't constrain to a fixed set because МВД reporting accepts
+  40+ document types; the admin UI picker validates against a reference list,
+  not this schema». **Corrects G-B5 — server canon is intentionally free-form,
+  UI picker is right answer, not Zod enum**.
+- **`guestCreateInput` has 15+ fields** (birthDate, documentSeries, documentIssuedBy,
+  documentIssuedDate, registrationAddress, phone, email, visa*, migrationCard*,
+  arrivalDate, stayUntil). Current `booking-create-dialog` uses only 5 (firstName,
+  lastName, middleName, citizenship, documentType, documentNumber). Major
+  affordance gap — operator должен через separate guest-edit UI fill rest.
+
+**`apps/backend/src/domains/booking/booking.routes.ts` (signature)**:
+
+- `GET    /api/v1/properties/:propertyId/bookings` (list)
+- `POST   /api/v1/properties/:propertyId/bookings` (create)
+- `GET    /api/v1/bookings/:id` (single)
+- `PATCH  /api/v1/bookings/:id/cancel`
+- `PATCH  /api/v1/bookings/:id/check-in`
+- `PATCH  /api/v1/bookings/:id/check-out`
+- `PATCH  /api/v1/bookings/:id/no-show`
+- **NO general `PATCH /bookings/:id`** → date/rate/guest edits need backend
+  extension. Confirms G-B7 requires server work, not just UI.
+- **NO availability check endpoint** → G-B6 live overlap detection: либо
+  client-derive from existing booking list query, OR backend addition.
+
+**`apps/frontend/src/routes/__root.tsx`** — minimal Outlet wrapper, route context
+carries `queryClient`. No grid/booking-specific concerns.
+
 ## §1 — Mission framing
 
 Per `[[north-star-canonical]]` + `[[initial-framing]]` 7×3:
@@ -90,8 +144,8 @@ Operator picks 3 nights × Невозвратный rate plan = X₽ total. **Cu
 
 ### MEDIUM severity (UX traps)
 
-**G-B5 — `citizenship` pattern + `documentType` free-text без enum**
-[`booking-create-dialog.tsx:163-174`](apps/frontend/src/features/bookings/components/booking-create-dialog.tsx:163) — citizenship has `pattern="^[A-Z]{2,3}$"` HTML5 only (form has `noValidate` — pattern decorative). documentType is plain text. Server probably has strict enum для documentType (passportRF / foreignPassport / birthCertificate / military / driverLicense / militaryId) per МВД миграционный учёт schema. Need verification + enum Select component.
+**G-B5 — `citizenship` pattern decorative; `documentType` needs UI picker (NOT enum)**
+[`booking-create-dialog.tsx:163-174`](apps/frontend/src/features/bookings/components/booking-create-dialog.tsx:163) — citizenship has `pattern="^[A-Z]{2,3}$"` HTML5 only; form has `noValidate` → pattern decorative. Need Zod-refine mirror of server `citizenshipSchema` (alpha-2 OR alpha-3 uppercase). **Correction post-empirical recon §0.1**: `documentType` is INTENTIONALLY free-form в server schema (МВД accepts 40+ types per `guest.ts` comment). Не Zod enum, а **UI picker против reference list** = canonical. Need reference list per МВД 2026 + Select-with-search.
 
 **G-B6 — No live overlap detection (reactive vs proactive)**
 Operator clicks empty cell. Cell IS empty в grid, но real server availability может differ (booking edited by another tab, optimistic state stale). Submit → server 409 NO_INVENTORY → toast.error «На эти даты нет свободных номеров». Reactive. Cloudbeds 2026: live overlap warning during date pick.
@@ -112,95 +166,320 @@ Operator clicks empty cell. Cell IS empty в grid, но real server availability
 - Group/multi-room booking deferred per architecture decision (G-B12)
 - Idempotency-key only stable within single dialog mount, not across reopens (G-B13 — by design but comment misleading)
 
-## §3 — Research synthesis (PLACEHOLDER — agent в фоне)
+## §3 — Research synthesis (май 2026, agent landed)
 
-Research agent launched 2026-05-15 для май 2026 hotelier grid + booking
-canons (Mews / Cloudbeds / Apaleo / Hostaway / Bnovo / TravelLine /
-Stayntouch). Output должен покрыть:
+Research-agent landed (`a5b599a5f959ea888`). Coverage caveat: Cloudbeds Spring
+Release **event 2026-05-19 (4 days post-today)**, но published material
+доступен 2026-05-15 (webinar page, hoteltechnologynews.com Feb 2026 Climber-RMS
+piece). Mews/Apaleo help-center gated behind 401/403; fallback к mid-2025 docs
+с explicit `[≤2025]` markers. Cloudbeds + Bnovo + TravelLine — strongest 2026
+canon available.
 
-1. Modern grid pattern (drag-create / drag-resize / multi-select / mobile)
-2. Booking dialog/sheet pattern (Apaleo single-stay, rate plan picker, price preview, overlap live-check)
-3. Technical patterns для нашего стека (virtualization Y/N, drag gesture lib)
-4. RU-specific (152-ФЗ guest data в grid, туристический налог, МВД flagging)
-5. Anti-patterns confirmed bad
-6. Phased plan proposal с complexity ratings
+### §3.1 — Grid (Шахматка) canon per leader
 
-Когда landing — sync здесь, update §4 phases.
+| Leader                                    | Date pattern                                                                                            | Row org                                           | Band gesture                                                                                       | Mobile                                                                                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Mews** [≤2025]                          | Single horizontal Timeline, today-anchor button. Side-panel detail (NOT modal) — preserves grid context | By Space (room) с category grouping (collapsible) | Drag-move ✓; **drag-resize ✗** (documented user complaint — opportunity)                           | Operator app list-first, not grid                                                                                                        |
+| **Cloudbeds** [2026-05]                   | **4d/1w/2w/3w/fit-to-screen** display range; mini-calendar picker; sticky «back to today» first-class   | By room (Accommodation) grouped by type           | Drag-and-drop reservation between rooms; **Unassigned Reservations panel** top-left + auto-assign  | List/grid hybrid, arrival/departure checklist                                                                                            |
+| **Apaleo** [≤2025]                        | List-first + Reservation Diary. Booking ≠ Reservation (1 booking = N stays)                             | By room в diary                                   | Drag в diary                                                                                       | Single-stay drill-down on dedicated route — **«Amend Stay» canon** covers extend/reschedule/switch-roomtype/adjust-pax all on ONE screen |
+| **Hostaway** [2026]                       | Multi-Calendar (vacation-rental)                                                                        | Properties → **expandable sub-rows**              | Mobile = dropdown for room move; **drag explicitly disabled на touch** (Hostaway product decision) | Mobile-first canon                                                                                                                       |
+| **Bnovo** [release 2024-09, current 2026] | **Adaptive — 15/30/fit** auto-fits months к screen                                                      | By room, grouped by category                      | Overbooking red highlight; arrival/departure highlight + nights count on band                      | Native iOS/Android parity. **Offline mode** 36 days local cache (2 back + 34 forward) — relevant к Сочи infra                            |
+| **TravelLine** [color canon 2026]         | Standard tabular                                                                                        | Rooms grouped by category                         | Click intersection → create                                                                        | Limited subset; tap creates; blue indicator for unassigned-count                                                                         |
 
-## §4 — Phased plan (proposal — pending research synthesis)
+### §3.2 — TravelLine 8-color canon (RU staff already trained на это)
 
-### Phase G1 — HIGH severity bug fixes (no research needed, ship immediately)
+| Status                   | Color          | Meaning                                                    |
+| ------------------------ | -------------- | ---------------------------------------------------------- |
+| Direct + manual          | **Green**      | Booking engine + walk-in                                   |
+| OTA via CM               | **Yellow**     | yandexTravel/ostrovok/etc                                  |
+| Checked-in (in-house)    | **Purple**     | Currently staying                                          |
+| Checked-out              | **Orange**     | Stay complete                                              |
+| **Overdue** (UI-derived) | **Red**        | `checkIn < today AND status='confirmed'` — action required |
+| **Unassigned**           | **Turquoise**  | Нет assignedRoomId                                         |
+| **OOO / Maintenance**    | **Grey**       | Block-cell affordance                                      |
+| Filter-deactivated       | **Light grey** | Tag filtered out                                           |
+
+Current `booking-palette.ts` covers 5 base states (confirmed/in_house/checked_out/
+cancelled/no_show). Missing: overdue (UI-computed), unassigned (UI-computed),
+OOO (need backend extension OR separate domain). TravelLine yellow для
+non-walkIn/non-direct channels — surface from `booking.channelCode`.
+
+### §3.3 — Booking dialog canon
+
+**Apaleo single-stay drill-down (still 2026)** — Amend Stay covers extend /
+reschedule / switch room-type / adjust adults+children / set custom arrival-
+departure-time — all in **ONE screen** on a dedicated URL. **Apaleo canon =
+the 2026 reference для booking edit affordance**.
+
+**Mews + Cloudbeds canon** — booking detail = **right-side panel**, NEVER
+modal. Preserves grid context. Our `Dialog` modal pattern conflicts; need
+shift к `ResponsiveSheet side="right"`.
+
+**Field order canon**: dates → room-type → rate-plan → guest → payment.
+Reasoning: rate plans depend on dates. Current dialog has guest FIRST → date
+LAST. **Should reverse** per leaders 2026.
+
+### §3.4 — Technical stack picks (research-recommended)
+
+| Concern        | Pick                                                                                                                                  | Why                                                                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Virtualization | TanStack Virtual 3.13+ (4.x beta)                                                                                                     | Same author ecosystem as TanStack Router/Query/Form. APG-compliant (we own DOM). 30×30=900 cells current — **virtualization deferred until chain customers с 100+ rooms** |
+| Drag library   | **`@atlaskit/pragmatic-drag-and-drop` 1.7.x**                                                                                         | dnd-kit maintainer status precarious (issue #1194 open); Pragmatic = Trello/Jira production-proven, native browser drag APIs, framework-agnostic, mobile-friendly         |
+| Date           | **`date-fns 4` + `date-fns-tz`** + `Temporal` polyfill behind feature-detect                                                          | March 2026 PkgPulse guide: date-fns won TanStack ecosystem. Temporal Stage 4 March 2026, native в Chrome 144+/Firefox 139+. Shim out when shipped                         |
+| Form           | TanStack Form v1 (already canon)                                                                                                      | Per `[[feedback_tanstack_form_derived_state_canon]]` — `useStore(form.store)` для reactive reads                                                                          |
+| Real-time      | **SSE (Server-Sent Events)** — backend CDC → SSE → React Query invalidate                                                             | 2026 canon для one-way push. WebSocket overkill. Hotel grid is strictly one-way (clerk A's mutation → others see). NO multiplayer cursors needed                          |
+| a11y           | React Aria primitives (`useCalendar`/`useRangeCalendar`/`useGridList`) **только как building blocks**. NOT full React Aria Components | Too opinionated, breaks aria-colspan + grid-column span canon                                                                                                             |
+
+### §3.5 — RU/Сочи compliance overlays
+
+- **ПН (Monday) anchor canon**: Cloudbeds ships «Choose Your Calendar Start Day»
+  setting Spring 2026; `date-fns weekStartsOn: 1` per Lingui ru override.
+  Current grid: `formatDateHeader` uses Russian short weekday (пн/вт/...) — OK
+  for header rendering, но week-anchor canon needs explicit audit.
+- **152-ФЗ PII в band**: Show first-name + last-initial по default; full name
+  только в detail drawer. Bnovo/TravelLine surface full name (RU canon),
+  acceptable for staff-only, но screen-share-mode toggle нужен. Audit-log
+  band-hover that reveals PII.
+- **Туристический налог chip**: 2% Сочи + min ₽100/night per НК РФ ch.33.1
+  (replaces repealed курортный сбор). Quarterly reporting 27.04/27.07/26.10/25.01.
+  **Backend already computes `tourismTaxMicros` per booking** — surface на band
+  via small ₽ chip («ТН 120₽»). Льгота flag для Сочи-residents.
+- **МВД миграционный учёт badge**: Госпошлина 500₽ since 2025-09-01. Status badge
+  «МУ не подан / Подан / Просрочен» from `booking.registrationStatus`.
+  **Backend already tracks 5-state lifecycle** — direct UI surface.
+- **Channel-color via `booking.channelCode`**: yandexTravel = yellow (TravelLine
+  canon) OR red-orange dot для differentiation. Already enum в schema.
+
+### §3.6 — Anti-patterns confirmed (research-backed)
+
+1. **Modal dialog для booking-create на desktop** — Mews/Apaleo canon =
+   side-panel preserves context. Current `<Dialog>` violates this.
+2. **AG-Grid / react-data-grid для Шахматки** — fights APG canon, inflates
+   bundle. Already correctly avoided.
+3. **`react-beautiful-dnd`** — deprecated, React 19 compat uncertain.
+4. **`@hello-pangea/dnd`** — list-only, no grid support.
+5. **Mobile drag-and-drop для reservations** — Hostaway product team explicitly
+   chose dropdown. Touch precision insufficient for date bands.
+6. **Mews-style «extend stay forces multi-click separate page»** — documented
+   user complaint. Ship drag-resize from day 1.
+7. **Sunday-anchored week (JS default)** — must override globally `weekStartsOn: 1`.
+8. **Storing local-time в YDB** — UTC server, MSK presentation. Current
+   `date-range.ts` already canon (UTC-anchored noon parsing).
+9. **Tourism tax hardcoded 2%** — varies by region (Москва 1%, Сочи 2%, others
+   differ). Read from tenant config, **not** literal в code.
+10. **Inline guest creation без dedup** — Bnovo lets duplicate guests; 152-ФЗ
+    minimization → fuzzy-match by phone/email before creating new.
+11. **No «back to today» anchor** — Cloudbeds Spring-2026 first-class affordance.
+    **We already have it** [`chessboard.tsx:231-238`](apps/frontend/src/features/chessboard/components/chessboard.tsx:231) — kept as canon ✓.
+
+## §4 — Phased plan (research-synthesized, revision 2)
+
+Merged §2 bug findings + §3 research recommendations. Pre-empts «patch then
+rebuild» trap by sequencing foundation → architectural → feature.
+
+### Phase G1 — HIGH bug fixes (no research dependency)
+
+**Empirical bound source**: server `guestsCountSchema.min(1).max(20)` (booking.ts:122);
+server idempotency replay canon (booking.routes.ts).
+
+**Scope** (4 HIGH bugs from §2):
+
+- **G-B1 fix**: `useCreateGuest` onError → add `toast.error(extractRuMessage(err))`.
+  Same pattern as `useCreateBooking` (asymmetric error UX → symmetric).
+- **G-B2 fix**: `guestsCount` → `intRangeFieldSchema({min: 1, max: 20})` через
+  TanStack Form validator + inline FieldError. Mirrors `[[zero-price-data-loss-trap]]`
+  canon — server bound mirrored client-side.
+- **G-B3 fix**: rate plan picker → `<Select>` of `ratePlansQ.data.filter(isActive)`,
+  default = `pickDefaultRatePlan`. `form.Field name="ratePlanId"`.
+- **G-B4 fix**: live price preview. Source = ratePlan's base price (initial), then
+  refined в G5 к rate-grid lookup. Шоу «nights × rate = total» в footer
+  через `form.Subscribe`.
+
+**Layer 4+5**: e2e `tests/e2e/bookings.spec.ts` extend: guestsCount=0/21 + ratePlan
+picker + price preview rendering + guest-create-failure toast visible.
+
+**Strict tests**: exact-value messages, immutable-field (rate switch не сбрасывает
+dates), adversarial (guest 409 → toast surfaces).
+
+**Complexity**: LOW. 1 commit, ~150 LoC.
+
+### Phase G2 — Status palette extension к TravelLine 8-color canon
+
+**Empirical bound source**: §3.2 TravelLine canon; current `booking-palette.ts` 5 base
+states; `booking.channelCode` enum already в schema.
 
 **Scope**:
 
-- Fix `useCreateGuest` silent failure → add `toast.error(extractRuMessage(err))` в onError
-- Fix `guestsCount` HTML5-only → `intRangeFieldSchema({min: 1, max: 20})` через TanStack Form validator + inline FieldError
-- Add rate plan picker → `<Select>` of `ratePlansQ.data.filter(isActive)`, defaults to `pickDefaultRatePlan`. Subscribe via `form.Field`
-- Add live price preview → `<form.Subscribe>` reads checkIn+checkOut+ratePlanId, computes `nights × ratePlanPrice` через price-grid lookup OR rate plan's base amount. Show в footer
+- Extend `BOOKING_CELL_STYLES` с 3 UI-derived states: **overdue** (Red,
+  `checkIn < today && status='confirmed'`), **unassigned** (Turquoise,
+  `assignedRoomId === null && status='confirmed'`), **OOO** (Grey,
+  separate domain — defer until backend has block-cell, **note as G2.deferred**).
+- Add `paletteFor(booking, today)` helper — combines status + channelCode +
+  derived states. Per TravelLine: non-direct/non-walkIn channels → Yellow
+  outline или dot. yandexTravel separate red-orange dot per `[[differentiator]]`.
+- Token-based палитра extension в `index.css` `--status-*`. Verify axe
+  ≥4.5:1 across 12 light/dark/contrast-more combos (current canon).
 
-**Layer 4+5**: e2e в `tests/e2e/bookings.spec.ts` (existing) — extend с adversarial: guestsCount=0, =21, ratePlan picker visibility, price preview rendering, guest-create-failure toast.
+**Complexity**: LOW. 1 commit, ~80 LoC + token CSS.
 
-**Strict tests**: exact-value messages, immutable-field (rate plan switch preserves dates), adversarial (guest 409 → toast visible).
+### Phase G3 — Dialog → ResponsiveSheet right-side panel architectural shift
 
-**Complexity**: LOW. Estimated 1 commit, ~150 LoC.
-
-### Phase G2 — MEDIUM bug fixes — input enum validation + date guards
-
-**Scope**:
-
-- citizenship: Select component с RU/BY/KZ/UA/UZ/TJ/AZ/AM/GE/KG/MD/TM/Other (top-10 + Other) per Сочи tourist demographics
-- documentType: Select enum mirror к server (need backend schema check) — passportRF / foreignPassport / birthCertificate / military / etc
-- checkIn past-date guard — `.refine((v) => v >= todayIso())` с soft-warning (operator может back-date walk-in)
-- guest.firstName/lastName trim+nonEmpty + Cyrillic-or-Latin char restriction
-- documentNumber per-documentType validation (passportRF: 4+6 digits regex; foreign: alphanumeric)
-
-**Complexity**: MED. Requires shared/src/guest.ts schema audit. 1-2 commits.
-
-### Phase G3 — Booking edit affordance (date/rate-plan/guest)
+**Empirical bound source**: §3.3 Mews/Cloudbeds canon = side-panel preserves grid
+context; existing `<ResponsiveSheet>` infra used в inventory forms.
 
 **Scope**:
 
-- Extend ActionView с date editor (checkIn/checkOut с overlap check)
-- Add rate plan switcher
-- Add guest editor (link к existing guest или create new)
-- TerminalView dates formatted RU
-- `formatTransitionDate` no-fallback к raw ISO — show "недействительная дата" instead
-- Backend: confirm `PATCH /bookings/:id` supports these field edits OR propose schema extension
+- Replace `<Dialog>` с `<ResponsiveSheet side="right">` в both
+  `booking-create-dialog.tsx` и `booking-edit-dialog.tsx` (rename к
+  `*-sheet.tsx` per existing inventory canon).
+- Reorder fields: **dates first → room-type (read-only display from cell) →
+  rate-plan → guest → payment placeholder**. Per §3.3 leaders canon.
+- Mobile: Sheet `side="bottom"` (auto via ResponsiveSheet breakpoint).
+- Grid stays visible — operator sees band appearing optimistically while
+  filling form.
 
-**Complexity**: MED-HIGH. Backend audit required. 2-3 commits.
+**Layer 4+5**: e2e re-anchor specs (existing reference dialog title — теперь
+sheet title), axe scan side-sheet open + closed.
 
-### Phase G4 — Drag-create + drag-resize gesture (RESEARCH-DRIVEN)
+**Strict tests**: keyboard navigation preserved (Esc closes), focus trap, scroll
+behaviour mobile.
 
-**Scope** (pending research):
+**Complexity**: MED. Architectural change, but reuses `<ResponsiveSheet>`. 2 commits
+(create-sheet, edit-sheet).
 
-- Drag-select multi-day cells → opens dialog с pre-filled range
-- Drag band edges → live resize checkIn/checkOut
-- Drag band middle → move booking к different roomType / dates
-- Library choice (per research): @use-gesture/react vs dnd-kit vs vanilla pointer events
+### Phase G4 — RU compliance overlays + ПН anchor (parallel to G3)
 
-**Complexity**: MED-HIGH. Research informs choice. 2-3 commits.
-
-### Phase G5 — Live overlap detection + block-cell affordance (RESEARCH-DRIVEN)
-
-**Scope**:
-
-- Live availability query за dialog date range
-- Visual conflict highlight в grid когда dragging
-- "Заблокировать номер" affordance (OOO maintenance band)
-- Backend: confirm `GET /availability/check` endpoint exists OR propose
-
-**Complexity**: HIGH. Backend coupling. 2-4 commits.
-
-### Phase G6 — Mobile + filtering (RESEARCH-DRIVEN)
+**Empirical bound source**: §0.1 backend already computes `tourismTaxMicros` +
+`registrationStatus`; §3.5 RU canon.
 
 **Scope**:
 
-- Mobile grid: stack rows OR horizontal scroll с roomType pinned
-- Touch gestures: pinch-zoom date range, swipe-to-navigate weeks
-- Filter affordances: by status, by guest name search
-- Dialog → bottom-sheet на mobile per shadcn Drawer canon
+- **Туристический налог chip** на band: small «ТН 120₽» (read from
+  `booking.tourismTaxMicros`). Tooltip с breakdown. Skip если status=cancelled.
+- **МВД status badge**: «МУ не подан / Подан / Просрочен» from
+  `booking.registrationStatus`. Click → open МВД section (separate phase).
+  Only render для `guestSnapshot.citizenship !== 'RU'`.
+- **ПН-anchor audit**: `formatDateHeader` already uses ru weekdays array
+  starting с вс (JS index 0). Verify week-anchor IS пн для column 0 of
+  weekly view modes. `date-fns weekStartsOn: 1` global override (если
+  date-fns adopted в G7).
+- **152-ФЗ default mask**: band label shows `Фамилия И.` (Last + first
+  initial). Full name только в side-panel detail. Toggle для full-name
+  per band (screen-share mode setting).
 
-**Complexity**: MED. Mobile UX research informs. 2 commits.
+**Complexity**: MED. 1-2 commits (overlays + 152-ФЗ).
+
+### Phase G5 — Booking edit affordance (Apaleo single-stay canon)
+
+**Empirical bound source**: §0.1 backend exposes ONLY transition PATCH endpoints,
+NO general PATCH; §3.3 Apaleo canon = single-stay drill-down.
+
+**Scope**:
+
+- **Backend extension required** ДО shipping G5 UI:
+  - `PATCH /api/v1/bookings/:id` accepting checkIn/checkOut/ratePlanId/notes/
+    guestsCount. Overlap re-check + timeSlices recompute.
+  - OR separate endpoints per field: `/move-dates`, `/change-rate-plan`,
+    `/change-guests-count`. Per service.ts service-method canon.
+- **UI**: extend ActionView с inline editor sections (Apaleo Amend-Stay
+  layout). Each field has «Изменить» chip → inline editor → save.
+- **TerminalView**: dates formatted RU per `formatTransitionDate` canon
+  (apply to all dates).
+- **`formatTransitionDate` fallback** → «недействительная дата» (G-B9 fix).
+
+**Complexity**: MED-HIGH. Backend audit + extension required. 2-3 commits
+(1 backend + 1-2 frontend).
+
+### Phase G6 — Display range selector (Cloudbeds Spring 2026 canon)
+
+**Empirical bound source**: §3.1 Cloudbeds 4d/1w/2w/3w + fit-to-screen;
+current `ChessboardWindowSelector` has 15/30/fit.
+
+**Scope**:
+
+- Extend ChessboardWindowSelector с **4d / 1w (7d) / 2w (14d) / 3w (21d) /
+  30d / fit**.
+- Add mini-calendar date-picker на header (Cloudbeds canon) — current has
+  `ChessboardDatePicker` — verify это mini-calendar OR enhance.
+- Keyboard `[ ` / `]` для week-step navigation per APG GridList canon.
+
+**Complexity**: LOW. 1 commit.
+
+### Phase G7 — Drag-move + drag-resize gestures (Pragmatic DnD)
+
+**Empirical bound source**: §3.4 Pragmatic DnD canon; §3.6 anti-pattern Mews
+multi-click complaint.
+
+**Scope**:
+
+- Adopt `@atlaskit/pragmatic-drag-and-drop` 1.7.x.
+- **Drag-move band**: room ↔ room same dates. Existing `useTransitionMutation`
+  pattern для optimistic + rollback. NEW backend endpoint required
+  (`PATCH /bookings/:id/move` accepting target roomTypeId — overlap check).
+- **Drag-resize band edges**: extend/shorten dates. NEW endpoint
+  (`PATCH /bookings/:id/dates` OR reuse G5 general PATCH).
+- **Drag-create**: drag across empty cells → opens create-sheet с pre-filled
+  range.
+- **Keyboard equivalents**: Enter grabs, arrows move, Shift+arrows resize,
+  Esc cancels. Per React Aria GridList.
+- **Mobile**: drag explicitly disabled per Hostaway product canon (§3.6 #5).
+  Touch users → dropdown/sheet alternative.
+
+**Complexity**: HIGH. Backend coupling. 3-4 commits.
+
+### Phase G8 — Unassigned Reservations panel + auto-assign
+
+**Empirical bound source**: §3.1 Cloudbeds Spring 2026 panel; §0.1 booking has
+`assignedRoomId` nullable.
+
+**Scope**:
+
+- Top-left panel «Нераспределённые» с orange-dot count of bookings
+  с `assignedRoomId === null && status='confirmed'`.
+- Click panel → list view → click booking → assign room flow (separate
+  room selector dialog OR drag from panel к row).
+- «Авто-назначение» button → backend service to mass-assign per allocation
+  rules.
+
+**Complexity**: MED-HIGH. Backend allocation service. 2-3 commits.
+
+### Phase G9 — Live overlap detection + block-cell (OOO maintenance)
+
+**Empirical bound source**: §3.1 Bnovo overbooking red highlight; no current
+availability endpoint per §0.1.
+
+**Scope**:
+
+- **Live overlap check**: while filling create-sheet, re-query bookings list
+  for selected dates + roomType. Show conflict banner inline.
+- **OOO band**: separate `propertyBlock` domain или extend booking с
+  `type='maintenance'`. Render Grey band. Backend addition.
+
+**Complexity**: HIGH. New domain. 3-4 commits.
+
+### Phase G10 — SSE real-time + mobile-list view
+
+**Empirical bound source**: §3.4 SSE 2026 canon; §3.1 Bnovo live updates + offline.
+
+**Scope**:
+
+- **SSE endpoint**: `GET /api/v1/properties/:propertyId/events?stream=bookings`.
+  YDB CDC topic → SSE → frontend `EventSource` → `queryClient.invalidateQueries`.
+- **Toast on remote change** per Bnovo canon.
+- **Mobile list-first view** (Hostaway canon) — separate `<ChessboardMobile>`
+  component, breakpoint switch.
+
+**Complexity**: HIGH. CDC pipeline + new transport. 4-5 commits.
+
+### Phase G11 — Offline mode (Bnovo canon, deferred decision)
+
+**Empirical bound source**: §3.1 Bnovo 36 days local cache (2 back + 34 forward).
+Сочи infra reality.
+
+**Scope**: PWA service worker + IndexedDB cache for last-seen grid + queue
+mutations offline. Per `[[m5-tech-decisions]]` vite-plugin-pwa already canon.
+
+**Complexity**: HIGH. Decide post-G10. Defer unless infra outage data motivates.
 
 ## §5 — Empirical signals to track (per `[[memory-is-canon-not-backlog]]`)
 
@@ -217,18 +496,21 @@ Each phase ships с:
 ## §6 — Open questions to user (BEFORE shipping G1)
 
 1. **G1 scope confirmation**: 4 HIGH bugs одним commit OK? Or split per bug (4 commits)?
-2. **Rate plan picker UX**: Select dropdown с per-plan label «Базовый · 4500₽» OR radio list с full breakdown? Cloudbeds canon = dropdown с inline summary.
-3. **Price preview source-of-truth**: пользоваться `rate.amount` for ratePlanId+date (per inventory pricing grid) OR ratePlan's default `amount`? Real prices vary per date.
-4. **Phased ordering**: G1 → G2 → G3 → ... линейно? OR G1+G2 parallel? Single thread per `[[no-half-measures]]` more sensible.
+2. **Rate plan picker UX**: Select dropdown с per-plan label «Базовый · 4500₽» (Cloudbeds canon) OR radio list с full breakdown?
+3. **Price preview source-of-truth (G1 stage)**: ratePlan's `currency` + per-night base = simple total OR rate-grid lookup per (planId, date) per inventory pricing grid? Real prices vary per date. G1 simple → G5 enhanced проще.
+4. **Phased ordering**: G1 → G2 → G3 ... линейно? Single thread per `[[no-half-measures]]`. Phases G2 (palette) + G4 (RU overlays) могут parallel — оба data-layer-only.
+5. **Phase G3 architectural shift** (Dialog → side-Sheet) — это **большое** UX change. Confirm OK с архитектурной точки или защитить current Dialog pattern? Mews/Cloudbeds canon strongly recommends side-panel, но breaks existing UX expectations.
+6. **Phase G5 backend extension scope** — general `PATCH /bookings/:id` (Apaleo Amend-Stay style) OR separate endpoints (`/move-dates`, `/change-rate-plan`)? Backend service.ts canon prefers separate methods per domain operation.
+7. **Phase G7 drag-create на mobile** — Hostaway product team explicitly disabled. Confirm follow canon (touch = sheet selector, не drag)?
 
 ## §7 — Resume protocol
 
-When research-agent lands:
+Per `[[handover-post-push-refresh]]` — after each phase ship, update this
+plan canon с DONE marker + memory canons + handover sync. After phase
+approval, commit phase scope as task list (TodoWrite) + ship per
+`[[adversarial-reading-before-done]]` 9-item checklist.
 
-1. Sync research findings к §3
-2. Update §4 phase scope с research-informed decisions
-3. Add §8 — anti-patterns explicit list per research
-4. Bring к user для phase-by-phase approval
+When phases done, mark plan §10 «closure» summary. 3. Add §8 — anti-patterns explicit list per research 4. Bring к user для phase-by-phase approval
 
 Awaiting user signal: «G1 погнали» OR «жди research → revise plan» OR
 «split G1 в 4 commits» OR other priority pivot.
