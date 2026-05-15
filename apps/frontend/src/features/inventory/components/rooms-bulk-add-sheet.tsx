@@ -28,6 +28,7 @@ import {
 	ResponsiveSheetTitle,
 } from '../../../components/ui/responsive-sheet.tsx'
 import { useBulkCreateRooms } from '../hooks/use-rooms.ts'
+import { intRangeFieldSchema } from '../lib/int-range-field-schema.ts'
 
 interface FormValues {
 	startNumber: string
@@ -35,6 +36,12 @@ interface FormValues {
 	floor: string
 }
 
+// `floor` bound mirrors `packages/shared/src/room.ts` `floorSchema =
+// z.coerce.number().int().min(-5).max(50)`. allowEmpty: true because the
+// field is documented as «Если пусто — этаж не присваивается».
+// startNumber/endNumber upper bound semantic = практический room-number cap
+// (resulting string must satisfy `roomNumberSchema` ≤20 chars + bulk-range
+// ≤500); separate backlog item — needs cross-field refine.
 const formSchema = z.object({
 	startNumber: z
 		.string()
@@ -44,10 +51,7 @@ const formSchema = z.object({
 		.string()
 		.regex(/^\d+$/, 'Целое число')
 		.refine((v) => Number(v) >= 1, 'Минимум 1'),
-	floor: z
-		.string()
-		.regex(/^-?\d+$/, 'Целое число')
-		.optional(),
+	floor: intRangeFieldSchema({ min: -5, max: 50, allowEmpty: true }),
 })
 
 export interface RoomsBulkAddSheetProps {
@@ -188,9 +192,15 @@ export function RoomsBulkAddSheet({
 						</form.Field>
 					</div>
 
-					<form.Field name="floor">
+					<form.Field
+						name="floor"
+						validators={{
+							onChange: ({ value }) =>
+								formSchema.shape.floor.safeParse(value).error?.issues[0]?.message,
+						}}
+					>
 						{(field) => (
-							<Field>
+							<Field data-invalid={field.state.meta.errors.length > 0 ? '' : undefined}>
 								<FieldLabel htmlFor={field.name}>Этаж (необязательно)</FieldLabel>
 								<Input
 									id={field.name}
@@ -204,6 +214,9 @@ export function RoomsBulkAddSheet({
 								<FieldDescription>
 									Если пусто — этаж не присваивается, заполнишь позже.
 								</FieldDescription>
+								{field.state.meta.errors[0] ? (
+									<FieldError>{String(field.state.meta.errors[0])}</FieldError>
+								) : null}
 							</Field>
 						)}
 					</form.Field>

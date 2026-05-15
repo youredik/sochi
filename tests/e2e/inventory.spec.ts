@@ -229,4 +229,35 @@ test.describe('inventory — inline-bounds validation (B5)', () => {
 		await expect(page.getByText('Новый тариф')).not.toBeVisible()
 		await axeClean(page, 'inventory-rate-plans-bounds')
 	})
+
+	test('rooms bulk-add: floor field out-of-range surfaces inline FieldError; empty is silent', async ({
+		page,
+	}) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+
+		await page.locator('[data-section-id="inventory"]').click()
+		await expect(page).toHaveURL(/\/inventory\/rooms$/)
+
+		// Default e2e tenant has «Стандартный» category. Per-category bulk-add CTA
+		// aria-label = «Добавить номера в категорию «X»».
+		await page.getByRole('button', { name: /Добавить номера в категорию «Стандартный»/ }).click()
+		await expect(page.getByText('Добавить номера в категорию «Стандартный»')).toBeVisible()
+
+		// floor field: server bound -5..50; HTML5 attrs are cosmetic.
+		const floor = page.getByRole('spinbutton', { name: /Этаж/ })
+		await floor.fill('51')
+		await expect(page.getByText('Не больше 50')).toBeVisible()
+		await floor.fill('-6')
+		await expect(page.getByText('Не меньше -5')).toBeVisible()
+		// allowEmpty: cleared field surfaces NO error (optional field semantic).
+		await floor.fill('')
+		await expect(page.getByText('Не больше 50')).not.toBeVisible()
+		await expect(page.getByText('Не меньше -5')).not.toBeVisible()
+		await expect(page.getByText('Целое число')).not.toBeVisible()
+
+		await page.keyboard.press('Escape')
+		await expect(page.getByText('Добавить номера в категорию «Стандартный»')).not.toBeVisible()
+		await axeClean(page, 'inventory-rooms-bulk-floor-bounds')
+	})
 })

@@ -137,3 +137,44 @@ describe('intRangeFieldSchema — immutable bounds (template literal contract)',
 		expect(schema.safeParse('42').success).toBe(true)
 	})
 })
+
+describe('intRangeFieldSchema — allowEmpty variant', () => {
+	const schema = intRangeFieldSchema({ min: -5, max: 50, allowEmpty: true })
+
+	it('[O1] empty string passes silently (no «Введите число»)', () => {
+		expect(schema.safeParse('').success).toBe(true)
+	})
+
+	it('[O2] valid integer in range still passes', () => {
+		expect(schema.safeParse('5').success).toBe(true)
+	})
+
+	it('[O3] valid negative integer (mirrors floorSchema -5..50)', () => {
+		expect(schema.safeParse('-5').success).toBe(true)
+	})
+
+	it('[O4] non-empty malformed still rejected → «Целое число»', () => {
+		const r = schema.safeParse('abc')
+		expect(r.success).toBe(false)
+		expect(r.error?.issues[0]?.message).toBe('Целое число')
+	})
+
+	it('[O5] non-empty below-min rejected → «Не меньше -5»', () => {
+		const r = schema.safeParse('-6')
+		expect(r.success).toBe(false)
+		expect(r.error?.issues[0]?.message).toBe('Не меньше -5')
+	})
+
+	it('[O6] non-empty above-max rejected → «Не больше 50»', () => {
+		const r = schema.safeParse('51')
+		expect(r.success).toBe(false)
+		expect(r.error?.issues[0]?.message).toBe('Не больше 50')
+	})
+
+	it('[O7] required variant (allowEmpty defaults false) still rejects empty', () => {
+		const required = intRangeFieldSchema({ min: 1, max: 10 })
+		const r = required.safeParse('')
+		expect(r.success).toBe(false)
+		expect(r.error?.issues[0]?.message).toBe('Введите число')
+	})
+})
