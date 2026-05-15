@@ -22,35 +22,17 @@ import { beforeEach, describe, expect, it } from 'bun:test'
 
 const STORAGE_KEY = 'horeca-chessboard-prefs'
 
-const storageData = { value: new Map<string, string>() }
-;(() => {
-	const stub = {
-		getItem: (k: string) => storageData.value.get(k) ?? null,
-		setItem: (k: string, v: string) => {
-			storageData.value.set(k, String(v))
-		},
-		removeItem: (k: string) => {
-			storageData.value.delete(k)
-		},
-		clear: () => {
-			storageData.value.clear()
-		},
-		key: (i: number) => Array.from(storageData.value.keys())[i] ?? null,
-		get length() {
-			return storageData.value.size
-		},
-	} satisfies Storage
-	Object.defineProperty(globalThis, 'localStorage', {
-		value: stub,
-		writable: true,
-		configurable: true,
-	})
-})()
-
+// G6.bis (2026-05-15) — flake fix: previously installed file-local
+// localStorage stub via `Object.defineProperty`, which collided с the
+// twin stub в `chessboard-window-selector.test.tsx` (later-loaded file
+// overwrote the earlier-loaded stub). Result: P1 read from one stub's
+// Map while writes hit a different Map. Now using happy-dom's native
+// `window.localStorage` (registered by `bun-preload.ts` GlobalRegistrator)
+// + explicit `clear()` в beforeEach. Single source of truth.
 const { useChessboardPrefsStore } = await import('./chessboard-prefs-store')
 
 beforeEach(() => {
-	storageData.value.clear()
+	window.localStorage.clear()
 	useChessboardPrefsStore.setState({ windowDays: 15, viewMode: 'day' })
 })
 

@@ -25,36 +25,16 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-const storageData = { value: new Map<string, string>() }
-;(() => {
-	const stub = {
-		getItem: (k: string) => storageData.value.get(k) ?? null,
-		setItem: (k: string, v: string) => {
-			storageData.value.set(k, String(v))
-		},
-		removeItem: (k: string) => {
-			storageData.value.delete(k)
-		},
-		clear: () => {
-			storageData.value.clear()
-		},
-		key: (i: number) => Array.from(storageData.value.keys())[i] ?? null,
-		get length() {
-			return storageData.value.size
-		},
-	} satisfies Storage
-	Object.defineProperty(globalThis, 'localStorage', {
-		value: stub,
-		writable: true,
-		configurable: true,
-	})
-})()
-
+// G6.bis (2026-05-15) — flake fix: см. parallel canon в `chessboard-prefs-
+// store.test.ts`. Was installing file-local localStorage stub which collided
+// с the twin stub в the prefs-store test (whichever loaded last overwrote
+// globalThis.localStorage, breaking storage state isolation between specs
+// в sequential runs). Now using happy-dom's native window.localStorage.
 const { ChessboardWindowSelector } = await import('./chessboard-window-selector')
 const { useChessboardPrefsStore } = await import('../lib/chessboard-prefs-store')
 
 beforeEach(() => {
-	storageData.value.clear()
+	window.localStorage.clear()
 	useChessboardPrefsStore.setState({ windowDays: 15, viewMode: 'day' })
 })
 
