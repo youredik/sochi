@@ -6,7 +6,7 @@ import { type ApiError, errorFromResponse, extractApiError } from '../../../lib/
 import { logger } from '../../../lib/logger.ts'
 import {
 	applyOptimisticBand,
-	type BookingCreateDialogInput,
+	type BookingCreateSheetInput,
 	buildBookingCreateBody,
 	buildGuestCreateBody,
 	buildOptimisticBand,
@@ -100,7 +100,7 @@ export function useCreateBooking(propertyId: string | null, windowFrom: string, 
 	const bookingsKey = ['bookings', propertyId, windowFrom, windowTo] as const
 
 	return useMutation({
-		mutationFn: async (args: { input: BookingCreateDialogInput; idempotencyKey: string }) => {
+		mutationFn: async (args: { input: BookingCreateSheetInput; idempotencyKey: string }) => {
 			if (!propertyId) {
 				throw extractApiError({ message: 'Нет propertyId — перезайдите на страницу гостиницы' })
 			}

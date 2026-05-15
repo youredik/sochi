@@ -45,7 +45,7 @@ interface Props {
  *   - Trigger через mouseenter/focus, hide через mouseleave/blur
  *
  * **UX canon** (eradicates prior «click-conflict» reasoning that deferred):
- *   - Click band → opens BookingEditDialog (existing canonical action)
+ *   - Click band → opens BookingEditSheet (existing canonical action)
  *   - Hover/focus band → shows tooltip с guest details (NEW Phase B)
  *   - Two interaction modes don't overlap; native popover preserves
  *     screen-reader announcement

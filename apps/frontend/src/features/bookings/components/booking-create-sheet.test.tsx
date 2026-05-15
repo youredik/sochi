@@ -1,5 +1,5 @@
 /**
- * `<BookingCreateDialog>` — strict component tests focused on G1 fixes
+ * `<BookingCreateSheet>` — strict component tests focused on G1 fixes
  * (real-bug-hunt 2026-05-15 G1). E2e covers integration через сервер mock;
  * component tests here verify per-field UX contracts independently of the
  * network round-trip.
@@ -97,7 +97,7 @@ mock.module('sonner', () => ({
 	toast: { error: toastErrorMock, success: () => {}, warning: () => {}, info: () => {} },
 }))
 
-const { BookingCreateDialog } = await import('./booking-create-dialog.tsx')
+const { BookingCreateSheet } = await import('./booking-create-sheet.tsx')
 
 const baseProps = {
 	open: true,
@@ -128,17 +128,17 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-describe('BookingCreateDialog — render', () => {
+describe('BookingCreateSheet — render', () => {
 	it('[R1] mount renders title + description с roomTypeName + checkIn', () => {
-		render(<BookingCreateDialog {...baseProps} />)
+		render(<BookingCreateSheet {...baseProps} />)
 		expect(screen.queryByText('Новое бронирование')).not.toBe(null)
 		expect(screen.queryByText('Стандартный · заезд 2026-05-20')).not.toBe(null)
 	})
 })
 
-describe('BookingCreateDialog — G-B3 rate plan picker', () => {
+describe('BookingCreateSheet — G-B3 rate plan picker', () => {
 	it('[P1] picker visible; default rate plan auto-seeded после query lands', async () => {
-		render(<BookingCreateDialog {...baseProps} />)
+		render(<BookingCreateSheet {...baseProps} />)
 		// Label «Тариф» rendered.
 		expect(screen.queryByText('Тариф')).not.toBe(null)
 		// Combobox trigger present с accessible name «Тариф».
@@ -155,9 +155,9 @@ describe('BookingCreateDialog — G-B3 rate plan picker', () => {
 	})
 })
 
-describe('BookingCreateDialog — G-B2 guestsCount inline validation', () => {
+describe('BookingCreateSheet — G-B2 guestsCount inline validation', () => {
 	it('[V1] guestsCount=0 on blur surfaces «Не меньше 1»', async () => {
-		render(<BookingCreateDialog {...baseProps} />)
+		render(<BookingCreateSheet {...baseProps} />)
 		const input = screen.getByLabelText('Гостей') as HTMLInputElement
 		// Set value 0 via fireEvent.change (TextField type=number coerces к 0)
 		fireEvent.change(input, { target: { value: '0' } })
@@ -168,7 +168,7 @@ describe('BookingCreateDialog — G-B2 guestsCount inline validation', () => {
 	})
 
 	it('[V2] guestsCount=21 on blur surfaces «Не больше 20»', async () => {
-		render(<BookingCreateDialog {...baseProps} />)
+		render(<BookingCreateSheet {...baseProps} />)
 		const input = screen.getByLabelText('Гостей') as HTMLInputElement
 		fireEvent.change(input, { target: { value: '21' } })
 		fireEvent.blur(input)
@@ -178,7 +178,7 @@ describe('BookingCreateDialog — G-B2 guestsCount inline validation', () => {
 	})
 
 	it('[V3] valid integer (5) — no validation error rendered', async () => {
-		render(<BookingCreateDialog {...baseProps} />)
+		render(<BookingCreateSheet {...baseProps} />)
 		const input = screen.getByLabelText('Гостей') as HTMLInputElement
 		fireEvent.change(input, { target: { value: '5' } })
 		fireEvent.blur(input)
@@ -189,9 +189,9 @@ describe('BookingCreateDialog — G-B2 guestsCount inline validation', () => {
 	})
 })
 
-describe('BookingCreateDialog — G-B4 price preview', () => {
+describe('BookingCreateSheet — G-B4 price preview', () => {
 	it('[P-PV1] rates loaded → preview shows nights + plan + Итого ₽', async () => {
-		render(<BookingCreateDialog {...baseProps} />)
+		render(<BookingCreateSheet {...baseProps} />)
 		// PricePreview component reads form state; default 1 night
 		// (checkIn=2026-05-20, checkOut=defaultCheckOut → +1day).
 		const preview = screen.getByText(/Итого:/)
@@ -202,7 +202,7 @@ describe('BookingCreateDialog — G-B4 price preview', () => {
 
 	it('[P-PV2] rates empty → graceful fallback «стоимость рассчитается при создании»', async () => {
 		ratesState.data = []
-		render(<BookingCreateDialog {...baseProps} />)
+		render(<BookingCreateSheet {...baseProps} />)
 		await waitFor(() => {
 			expect(screen.queryByText(/стоимость рассчитается при создании/)).not.toBe(null)
 		})

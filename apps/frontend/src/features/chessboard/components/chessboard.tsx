@@ -4,8 +4,8 @@ import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { BookingCreateDialog } from '../../bookings/components/booking-create-dialog'
-import { BookingEditDialog } from '../../bookings/components/booking-edit-dialog'
+import { BookingCreateSheet } from '../../bookings/components/booking-create-sheet'
+import { BookingEditSheet } from '../../bookings/components/booking-edit-sheet'
 import { useFitWindowDays } from '../hooks/use-fit-window-days'
 import { useGridData } from '../hooks/use-grid-data'
 import {
@@ -505,7 +505,7 @@ export function Chessboard() {
 			)}
 
 			{clickedCell ? (
-				<BookingCreateDialog
+				<BookingCreateSheet
 					open={true}
 					onOpenChange={(open) => {
 						if (!open) setClickedCell(null)
@@ -520,7 +520,7 @@ export function Chessboard() {
 			) : null}
 
 			{editingBookingId ? (
-				<BookingEditDialog
+				<BookingEditSheet
 					open={true}
 					onOpenChange={(open) => {
 						if (!open) setEditingBookingId(null)

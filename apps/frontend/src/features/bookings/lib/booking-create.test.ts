@@ -2,7 +2,7 @@ import type { RatePlan } from '@horeca/shared'
 import { describe, expect, it } from 'bun:test'
 import {
 	applyOptimisticBand,
-	type BookingCreateDialogInput,
+	type BookingCreateSheetInput,
 	buildBookingCreateBody,
 	buildGuestCreateBody,
 	buildGuestSnapshot,
@@ -14,7 +14,7 @@ import {
 	pluralNights,
 } from './booking-create.ts'
 
-const baseGuest: BookingCreateDialogInput['primaryGuest'] = {
+const baseGuest: BookingCreateSheetInput['primaryGuest'] = {
 	firstName: 'Иван',
 	lastName: 'Иванов',
 	middleName: 'Иванович',
@@ -23,7 +23,7 @@ const baseGuest: BookingCreateDialogInput['primaryGuest'] = {
 	documentNumber: '4510123456',
 }
 
-const baseInput: BookingCreateDialogInput = {
+const baseInput: BookingCreateSheetInput = {
 	roomTypeId: 'rmt_abc',
 	ratePlanId: 'rp_bar',
 	checkIn: '2026-05-01',

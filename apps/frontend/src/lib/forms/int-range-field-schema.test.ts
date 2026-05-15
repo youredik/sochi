@@ -182,7 +182,7 @@ describe('intRangeFieldSchema — allowEmpty variant', () => {
 /**
  * `intRangeNumberValidator` — TanStack-Form validator function variant
  * (number | undefined input). Same 4-message canon as `intRangeFieldSchema`,
- * different input shape. Used by booking-create-dialog `guestsCount` field
+ * different input shape. Used by booking-create-sheet `guestsCount` field
  * (`<TextField type="number">` coerces via valueAsNumber).
  *
  *   undefined / NaN  → «Введите число»

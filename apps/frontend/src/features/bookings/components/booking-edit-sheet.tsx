@@ -26,12 +26,15 @@ import {
 } from '../lib/booking-transitions'
 
 /**
- * Click-on-band edit dialog → side-Sheet (M5e.2 + G3 2026-05-15).
+ * Click-on-band edit side-Sheet (M5e.2 + G3 + G3.bis 2026-05-15).
  *
  * **G3 architectural shift**: `<Dialog>` modal → `<ResponsiveSheet
  * side="right">` per Mews / Cloudbeds / Apaleo 2026 canon — side-panel
  * preserves grid context. Mobile auto-switches к bottom Drawer.
- * Component name retained `BookingEditDialog` для backward-compat.
+ *
+ * **G3.bis (2026-05-15)**: file + component renamed `*-dialog` → `*-sheet`
+ * к match inventory canon. Playwright `getByRole('dialog')` still works
+ * (Sheet exposes the dialog role). Plan §G3 explicit rename completed.
  *
  * Two branches, decided by `isTerminal(booking.status)`:
  *
@@ -52,7 +55,7 @@ import {
  *     booking cache; rollback on 409; invalidate on settled.
  */
 
-interface BookingEditDialogProps {
+interface BookingEditSheetProps {
 	open: boolean
 	onOpenChange: (open: boolean) => void
 	bookingId: string
@@ -61,7 +64,7 @@ interface BookingEditDialogProps {
 	windowTo: string
 }
 
-export function BookingEditDialog(props: BookingEditDialogProps) {
+export function BookingEditSheet(props: BookingEditSheetProps) {
 	const bookingQ = useBooking(props.open ? props.bookingId : null)
 
 	return (

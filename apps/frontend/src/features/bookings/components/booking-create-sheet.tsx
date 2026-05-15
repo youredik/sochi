@@ -24,7 +24,7 @@ import { TextField } from '../../forms/text-field'
 import { intRangeNumberValidator } from '../../../lib/forms/int-range-field-schema'
 import { useCreateBooking, useCreateGuest, useRatePlans } from '../hooks/use-booking-mutations'
 import {
-	type BookingCreateDialogInput,
+	type BookingCreateSheetInput,
 	defaultCheckOut,
 	generateIdempotencyKey,
 	nightsCount,
@@ -37,14 +37,18 @@ import {
 const validateGuestsCount = intRangeNumberValidator({ min: 1, max: 20 })
 
 /**
- * Click-to-create booking dialog → side-Sheet (M5e.1 + G3 2026-05-15).
+ * Click-to-create booking side-Sheet (M5e.1 + G3 + G3.bis 2026-05-15).
  *
  * **G3 architectural shift (2026-05-15)**: was `<Dialog>` modal, now
  * `<ResponsiveSheet side="right">` per Mews / Cloudbeds / Apaleo 2026
  * canon — side-panel preserves grid context (operator sees band layout
  * while filling form). Mobile auto-switches к bottom Drawer per
- * `[[hostaway-mobile-canon]]` thumb-reach. Component name retained
- * `BookingCreateDialog` для backward-compat с tests/imports.
+ * `[[hostaway-mobile-canon]]` thumb-reach.
+ *
+ * **G3.bis (2026-05-15)**: file + component renamed `*-dialog` → `*-sheet`
+ * к match inventory canon (`category-form-sheet`, `rooms-bulk-add-sheet`).
+ * Plan §G3 explicit rename completed (was halfmeasure-deferred). Playwright
+ * `getByRole('dialog')` still works — Sheet exposes the dialog role.
  *
  * **Field order**: per Mews canon (2026) — dates first → room-type (read-
  * only via title context) → rate-plan → guest → payment (placeholder
@@ -70,7 +74,7 @@ const validateGuestsCount = intRangeNumberValidator({ min: 1, max: 20 })
  *   - Multiple companions — only primary guest for now
  */
 
-interface BookingCreateDialogProps {
+interface BookingCreateSheetProps {
 	open: boolean
 	onOpenChange: (open: boolean) => void
 	propertyId: string | null
@@ -81,7 +85,7 @@ interface BookingCreateDialogProps {
 	windowTo: string
 }
 
-export function BookingCreateDialog(props: BookingCreateDialogProps) {
+export function BookingCreateSheet(props: BookingCreateSheetProps) {
 	// Stable idempotency key per dialog mount — useMemo, NOT useRef, because
 	// useMemo's [] dep guarantees identity lives for the whole mount while
 	// still being testable. Reset happens when the dialog remounts (Dialog
@@ -130,7 +134,7 @@ export function BookingCreateDialog(props: BookingCreateDialogProps) {
 				documentNumber: value.documentNumber,
 			})
 			// 2. Create booking (optimistic band appears immediately)
-			const input: BookingCreateDialogInput = {
+			const input: BookingCreateSheetInput = {
 				roomTypeId: props.roomTypeId,
 				ratePlanId: value.ratePlanId,
 				checkIn: value.checkIn,

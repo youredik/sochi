@@ -26,7 +26,7 @@ import { addDays, diffDays } from '../../chessboard/lib/date-range.ts'
  *     on import (not wired yet).
  */
 
-export type BookingCreateDialogInput = {
+export type BookingCreateSheetInput = {
 	roomTypeId: string
 	ratePlanId: string
 	checkIn: string // YYYY-MM-DD
@@ -53,7 +53,7 @@ export type BookingCreateDialogInput = {
  * contract.
  */
 export function buildGuestSnapshot(
-	guest: BookingCreateDialogInput['primaryGuest'],
+	guest: BookingCreateSheetInput['primaryGuest'],
 ): BookingGuestSnapshot {
 	const snapshot: BookingGuestSnapshot = {
 		firstName: guest.firstName,
@@ -74,7 +74,7 @@ export function buildGuestSnapshot(
  * populated; optional keys (`externalId`, `externalReferences`) are
  * deliberately omitted rather than nulled for clarity.
  */
-export function buildBookingCreateBody(input: BookingCreateDialogInput) {
+export function buildBookingCreateBody(input: BookingCreateSheetInput) {
 	if (input.checkIn >= input.checkOut) {
 		throw new Error(
 			`buildBookingCreateBody: checkIn must be strictly before checkOut (got ${input.checkIn} → ${input.checkOut})`,
