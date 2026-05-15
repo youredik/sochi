@@ -2,11 +2,23 @@
 
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
-**Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + G3 ✓ + G4 ✓ + **G6 ✓ pushed** (commit
-`868983a` Cloudbeds Spring 2026 display-range canon — 4d/1w/2w/3w/fit
-extension, 2026-05-15). Next: G5 (Apaleo Amend-Stay — backend extension
-required, 2-3 commits) — only outstanding plan item with ground-truth
-scope; G7/G8/G9 require additional backend.
+**Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + G3 ✓ + G3.bis ✓ + G4 ✓ + G4.bis ✓ +
+G6 ✓ + **G6.bis ✓ pushed** (последний коммит `c77fb59` 2026-05-15).
+Self-review pass shipped 3 .bis follow-ups closing все halfmeasures
+caught по `[[no-half-measures]]` audit:
+
+- G3.bis (`f7470fb`): rename booking-{create,edit}-dialog → \*-sheet
+  (plan §G3 explicit canon, deferred originally)
+- G4.bis (`41be621`): закрыл e2e gap (7 new specs) + property-based
+  (15 fc.property cases) + tooltip unit (8 new cases) + REAL BUG FIX
+  «RUS alpha-3 → notRequired» (was 'pending' — silent МВД-pipeline
+  trigger для RU citizen) + extracted shared `isRussianCitizenship`
+- G6.bis (`c77fb59`): e2e gap closed (6 new cases) + sequential test-
+  isolation flake fix (localStorage stub collision pre-existing)
+
+Next: G5 (Apaleo Amend-Stay — backend extension required, 2-3 commits) —
+only outstanding plan item с ground-truth scope; G7/G8/G9 require
+additional backend.
 
 Per `[[pre-plan-codebase-recon]]` §0 ДО §1; per `[[adversarial-reading-before-done]]`
 all touched files read через 9-item checklist; per `[[research-protocol]]`
@@ -421,7 +433,7 @@ states; `booking.channelCode` enum already в schema.
 
 **Complexity**: LOW. 1 commit, ~80 LoC + token CSS.
 
-### Phase G3 ✓ DONE 2026-05-15 — Dialog → ResponsiveSheet right-side panel architectural shift
+### Phase G3 ✓ + G3.bis ✓ DONE 2026-05-15 — Dialog → ResponsiveSheet right-side panel architectural shift
 
 **Empirical bound source**: §3.3 Mews/Cloudbeds canon = side-panel preserves grid
 context; existing `<ResponsiveSheet>` infra used в inventory forms.
@@ -463,7 +475,7 @@ unrelated к G3 architectural shift. Backlog item, separate session.
 **Outcome**: 52 booking-surface chromium specs green; modal-overlay
 anti-pattern killed; grid-context-preserving canon established.
 
-### Phase G4 ✓ DONE 2026-05-15 — RU compliance overlays (152-ФЗ + ТН + МВД)
+### Phase G4 ✓ + G4.bis ✓ DONE 2026-05-15 — RU compliance overlays (152-ФЗ + ТН + МВД)
 
 **Empirical bound source**: §0.1 backend already computes `tourismTaxMicros` +
 `registrationStatus`; §3.5 RU canon.
@@ -536,7 +548,7 @@ NO general PATCH; §3.3 Apaleo canon = single-stay drill-down.
 **Complexity**: MED-HIGH. Backend audit + extension required. 2-3 commits
 (1 backend + 1-2 frontend).
 
-### Phase G6 ✓ DONE 2026-05-15 — Display range selector (Cloudbeds Spring 2026 canon)
+### Phase G6 ✓ + G6.bis ✓ DONE 2026-05-15 — Display range selector (Cloudbeds Spring 2026 canon)
 
 **Empirical bound source**: §3.1 Cloudbeds 4d/1w/2w/3w + fit-to-screen;
 current `ChessboardWindowSelector` has 15/30/fit.
