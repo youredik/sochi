@@ -6,17 +6,20 @@ implemented» NOT «do X next».
 
 ## Priority 1 — visible UX gaps
 
-### B5 — Frontend inline-bounds для category form numeric fields
+### ~~B5 — Frontend inline-bounds для numeric fields~~ — DONE 2026-05-15
 
-**Status**: HTML5 `min/max` attrs present, но Zod refine не enforces.
-`maxOccupancy=0` или `21` passes client validation, fails server с 400.
-Inline FieldError для bounds violation отсутствует.
+**Status**: SHIPPED commit `deda212`. Canonical helper
+`apps/frontend/src/features/inventory/lib/int-range-field-schema.ts`
+mirrors server integer-range bound; surfaces per-stage RU FieldError
+(«Введите число» / «Целое число» / «Не меньше N» / «Не больше N»).
+Applied к ОБЕИМ formам с identical anti-pattern (per `[[no-half-measures]]`):
 
-**Touched files**:
+- `category-form-sheet.tsx` — maxOccupancy 1..20, baseBeds 1..10
+- `rate-plan-form-sheet.tsx` — cancellationHours 0..720, minStay 1..30
 
-- `apps/frontend/src/features/inventory/components/category-form-sheet.tsx:54-58`
-- shared schemas: `packages/shared/src/roomType.ts` (server-side
-  `occupancySchema = z.coerce.number().int().min(1).max(20)`)
+Tests: 16 helper unit + 10 form strict (5 cat + 5 rate-plan) + 2 e2e
+specs `tests/e2e/inventory.spec.ts` с axe scan. 5 layers green; ratchet
+clean. Frontend unit 1644/0 (+26).
 
 ### B10 — Sidebar не highlights «Шахматка» когда на bookings drill-down
 
@@ -95,6 +98,16 @@ updatedAt. No restriction fields. Schema extension required для closeout
 Migration + `RateBulkUpsertInput` extension + UI affordance (Bnovo has
 this в same bulk-edit modal). Backend canon needed first.
 
+### rooms-bulk-add-sheet — partial bounds (caught 2026-05-15 during B5 audit)
+
+**Status**: `apps/frontend/src/features/inventory/components/rooms-bulk-add-sheet.tsx`
+fields `startNumber` / `endNumber` имеют `.refine(>=1, 'Минимум 1')` но
+без upper bound; `floor` имеет regex `/^-?\d+$/` без range. Server-side
+`floorSchema = z.coerce.number().int().min(-5).max(50)` — клиент пропустит
+`floor=999`, fail на server. Different shape vs B5 (range pair, not single
+int) — отдельный item. Could reuse `intRangeFieldSchema` для `floor`; range
+pair needs a co-refinement (endNumber >= startNumber, range <= 500).
+
 ## Priority 5 — gestural / power-user UX
 
 ### Drag-select range на rate grid
@@ -109,15 +122,18 @@ selection highlighting required.
 **Status**: research 2026-05-14 noted Linear/Airtable canon. Modal-driven
 covers 100% intent для Sochi SMB scale; defer unless workflow demands.
 
-## Empirical signals
+## Empirical signals (post-B5, 2026-05-15)
 
-- Frontend suite: **1618/0** tests
-- Chromium e2e: **146/146** (6.1 minutes)
+- Frontend suite: **1644/0** tests (was 1618 pre-B5)
+- Chromium e2e: **146/146** (full 2026-05-14) + 7/7 inventory.spec.ts
+  (incl. 2 new B5 specs) 2026-05-15
 - axe WCAG 2.2 AA: **clean**
-- Coverage inventory: **66.27 lines** (> 65 floor)
+- Coverage inventory: 66.27 lines pre-B5 (> 65 floor); B5 +26 tests
+  should monotonically improve when next coverage run lands
 - Backend in mock-DaData mode для e2e; live mode для real-user signup
   (swap canon `[[backend-mode-e2e-swap-canon]]`)
-- 22 commits ahead origin/main за inventory session
+- 1 commit ahead origin/main (`deda212` B5); awaiting `[[batched_push]]`
+  signal
 
 ## Resume protocol
 
