@@ -3,9 +3,14 @@
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
 **Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + G3 ✓ + G3.bis ✓ + G4 ✓ + G4.bis ✓ +
-G6 ✓ + **G6.bis ✓ pushed** (последний коммит `c77fb59` 2026-05-15).
-Self-review pass shipped 3 .bis follow-ups closing все halfmeasures
-caught по `[[no-half-measures]]` audit:
+**G5 ✓ pushed** (commit `a4c09ae` Apaleo Amend-Stay — move-dates +
+change-rate-plan + change-guests-count, 2026-05-15) + G6 ✓ + G6.bis ✓.
+
+ВСЕ ground-truth plan items закрыты. Outstanding только G7/G8/G9 (DnD +
+unassigned panel + live overlap) — все требуют additional backend +
+больше дизайн-итераций; их в backlog для отдельной фокусной сессии.
+
+History (2026-05-15 session):
 
 - G3.bis (`f7470fb`): rename booking-{create,edit}-dialog → \*-sheet
   (plan §G3 explicit canon, deferred originally)
@@ -15,10 +20,9 @@ caught по `[[no-half-measures]]` audit:
   trigger для RU citizen) + extracted shared `isRussianCitizenship`
 - G6.bis (`c77fb59`): e2e gap closed (6 new cases) + sequential test-
   isolation flake fix (localStorage stub collision pre-existing)
-
-Next: G5 (Apaleo Amend-Stay — backend extension required, 2-3 commits) —
-only outstanding plan item с ground-truth scope; G7/G8/G9 require
-additional backend.
+- G5 (`a4c09ae`): Apaleo Amend-Stay — 3 PATCH endpoints (move-dates /
+  change-rate-plan / change-guests-count) + atomic inventory rebalance
+  - 14 real-YDB integration tests + 8 e2e + adversarial 9-item passed
 
 Per `[[pre-plan-codebase-recon]]` §0 ДО §1; per `[[adversarial-reading-before-done]]`
 all touched files read через 9-item checklist; per `[[research-protocol]]`
@@ -527,26 +531,67 @@ includes «week» preset.
 
 **Pure helpers added к `booking-palette.ts`**: 152 LoC.
 
-### Phase G5 — Booking edit affordance (Apaleo single-stay canon)
+### Phase G5 ✓ DONE 2026-05-15 — Booking edit affordance (Apaleo single-stay canon)
 
 **Empirical bound source**: §0.1 backend exposes ONLY transition PATCH endpoints,
 NO general PATCH; §3.3 Apaleo canon = single-stay drill-down.
 
-**Scope**:
+**Shipped** (commit `a4c09ae`, atomic single-commit per `[[no-half-measures]]`):
 
-- **Backend extension required** ДО shipping G5 UI:
-  - `PATCH /api/v1/bookings/:id` accepting checkIn/checkOut/ratePlanId/notes/
-    guestsCount. Overlap re-check + timeSlices recompute.
-  - OR separate endpoints per field: `/move-dates`, `/change-rate-plan`,
-    `/change-guests-count`. Per service.ts service-method canon.
-- **UI**: extend ActionView с inline editor sections (Apaleo Amend-Stay
-  layout). Each field has «Изменить» chip → inline editor → save.
-- **TerminalView**: dates formatted RU per `formatTransitionDate` canon
-  (apply to all dates).
-- **`formatTransitionDate` fallback** → «недействительная дата» (G-B9 fix).
+- ✅ **Backend** — 3 separate PATCH endpoints per service-method canon
+  (mirror cancel/check-in/check-out separation):
+  - `PATCH /bookings/:id/move-dates` — atomic inventory rebalance:
+    release sold-1 для (old\new) nights, reserve sold+1 для (new\old) с
+    stopSell + allotment guards. Recomputes timeSlices, totalMicros,
+    cancellationFee.dueDate, noShowFee, tourismTax.
+  - `PATCH /bookings/:id/change-rate-plan` — validates new plan belongs
+    к same (propertyId, roomTypeId); idempotent no-op same plan returns
+    current; recomputes price snapshots. No inventory mutation.
+  - `PATCH /bookings/:id/change-guests-count` — schema-bounded (1..20)
+    UPSERT of guestsCount only. No inventory / price recompute. Allowed
+    on `in_house` ALSO per Apaleo walk-up companion canon.
+- ✅ **Status policy** (new error `InvalidBookingAmendStateError` → 409):
+  - move-dates / change-rate-plan: confirmed-only
+  - change-guests-count: confirmed OR in_house
+  - terminal (cancelled/checked_out/no_show) → 409 для all 3
+- ✅ **Shared schemas** (`packages/shared/src/booking.ts`): 3 input types
+  с canonical strict validation (date refine, ID format, 1..20 bounds).
+- ✅ **Repo helper** `upsertAmendedBookingRow` — UPSERT-merge с amend-field
+  overrides parallel к existing transition `upsertBookingRow`. Distinct
+  type AmendOverride keeps mutability separated semantically.
+- ✅ **Frontend** — 3 mutation hooks (`useMoveDatesBooking`,
+  `useChangeRatePlanBooking`, `useChangeGuestsCountBooking`) с invalidate-
+  on-settled (NO optimistic — amend touches many fields). Canonical RU
+  error messages для 409 INVALID_BOOKING_AMEND_STATE / 409 NO_INVENTORY / 404. ActionView extended с 3 inline editor forms + new «Изменить бронь»
+  section appearing когда status is confirmed (3 buttons) OR in_house
+  (only change-guests-count, per Apaleo canon).
 
-**Complexity**: MED-HIGH. Backend audit + extension required. 2-3 commits
-(1 backend + 1-2 frontend).
+**Deferred** (separate scope, low priority):
+
+- `formatTransitionDate` fallback «недействительная дата» (G-B9) —
+  trivial follow-up, не blocking.
+- TerminalView dates formatted RU via formatTransitionDate canon — UX
+  polish, не affordance gap.
+
+**Layer 4+5 verified**:
+
+- ✅ Backend integration: **14/14** real-YDB tests covering inventory
+  rebalance via direct SQL verification + cancellationFee.dueDate shift +
+  cross-tenant 404 + status guards + idempotent no-op + cross-property
+  RatePlanNotFoundError + in_house allowed for guests-count + null on
+  non-existent id.
+- ✅ Frontend unit: 1795/0 (no regression).
+- ✅ Booking-surface chromium e2e: **63/63** (canonical order: bookings →
+  bookings-edit → g4-bookings-compliance → g5-bookings-amend-stay → grid
+  → grid-a11y → grid-keyboard). New G5 spec covers happy path × 3 +
+  validation × 2 + terminal-hidden + cross-tenant 404 × 3 routes.
+- ✅ Adversarial 9-item checklist passed (zero-permit / silent-clamp /
+  reversed-input / hidden-state / server-cap / NaN-slip / race / reset
+  semantics / closure-stale — see commit body).
+- ✅ Ratchet: depcruise=0 knip=0 audit_high=0 ts_err=0 biome_err=0
+  weak_assertions=0 multi_biome_ignore=0.
+
+**Complexity actual**: MED-HIGH. Single atomic commit ~1900 LoC.
 
 ### Phase G6 ✓ + G6.bis ✓ DONE 2026-05-15 — Display range selector (Cloudbeds Spring 2026 canon)
 
