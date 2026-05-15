@@ -2,10 +2,11 @@
 
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
-**Status**: G1 ✓ pushed + G2 ✓ local (commit `6598116`) 2026-05-15. Next:
-G3 (Dialog → side-Sheet architectural shift) — UX expectation change,
-needs explicit approval OR G4 (RU compliance overlays — additive, less
-architectural). AWAITING USER SIGNAL.
+**Status**: G1 ✓ pushed + G2 ✓ FULL scope local (commits `6598116` derived
+states + `a3c5ffe` G2.bis channel-color differentiator + demo seed
+variety) 2026-05-15. Next: G3 (Dialog → side-Sheet architectural shift) —
+UX expectation change, needs explicit approval OR G4 (RU compliance
+overlays — additive, less architectural). AWAITING USER SIGNAL.
 
 Per `[[pre-plan-codebase-recon]]` §0 ДО §1; per `[[adversarial-reading-before-done]]`
 all touched files read через 9-item checklist; per `[[research-protocol]]`
@@ -384,10 +385,22 @@ cases [P1-P5, A4, I1-I2] + no-hardcoded-palette × 2.
 **Empirical**: e2e 37/38 (1 pre-existing booking-EDIT axe flake, not G2);
 unit 1712/0; ratchet clean.
 
-**Deferred sub-phases** (recorded в backlog):
-• G2.bis — channel-color outline (yandexTravel red-orange differentiator)
-• G2.deferred — OOO maintenance bands (needs backend propertyBlock domain;
-rolls into G9)
+**G2.bis SHIPPED 2026-05-15** в commit `a3c5ffe` (closed user pinok
+«ты снова все забыл»):
+• `channelIndicator(channelCode)` 9-enum exhaustive (direct/walkIn → null;
+yandexTravel red-orange; 6 OTA → yellow per TravelLine canon)
+• CSS tokens `--channel-yandex` / `--channel-ota` (light/dark, ≥3:1
+non-text contrast)
+• GridBooking + `channelCode?: BookingChannelCode`
+• chessboard 6px dot top-right + aria-label expansion
+• BookingBandTooltip channelLabel row
+• Demo seed variety: +2 overdue + 6 mixed channelCodes (always-on demo
+canon: new customers see G2 + G2.bis visually)
+• Tests +28 strict
+• Memory canon recorded: `[[halfmeasure-in-initial-scope]]`
+
+**Deferred к G9 (out-of-G2 scope)**: OOO maintenance bands (grey
+TravelLine canon) — requires backend `propertyBlock` domain extension.
 
 ### Phase G2 implementation history (kept для reference)
 
