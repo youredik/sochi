@@ -2,7 +2,9 @@
 
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
-**Status**: AWAITING USER APPROVAL.
+**Status**: G1 SHIPPED 2026-05-15 (commits `5b38c26` backend root-cause +
+`d18d747` G1 frontend). Next: G2 (TravelLine 8-color palette extension) —
+LOW complexity, no architectural dependency. AWAITING USER SIGNAL.
 
 Per `[[pre-plan-codebase-recon]]` §0 ДО §1; per `[[adversarial-reading-before-done]]`
 all touched files read через 9-item checklist; per `[[research-protocol]]`
@@ -277,7 +279,40 @@ LAST. **Should reverse** per leaders 2026.
 Merged §2 bug findings + §3 research recommendations. Pre-empts «patch then
 rebuild» trap by sequencing foundation → architectural → feature.
 
-### Phase G1 — HIGH bug fixes (no research dependency)
+### ~~Phase G1 — HIGH bug fixes~~ — DONE 2026-05-15
+
+**Shipped** в commit `d18d747` (G1) + backend root-cause `5b38c26`:
+• G-B1: `useCreateGuest` toast.error on failure (symmetric с useCreateBooking)
+• G-B2: guestsCount validator via `intRangeNumberValidator({min:1, max:20})`
+• G-B3: rate plan picker `<Select>` of active plans, default seeded via useEffect
+• G-B4: live price preview component с rate-grid query, RU currency format
+• Helper moved `features/inventory/lib/` → `lib/forms/` (3rd consumer arrived)
+• Helper extended с `intRangeNumberValidator` для number-typed fields
+
+**Pre-existing root cause caught** (separate atomic commit `5b38c26`):
+• Onboarding service seeded property+roomType+rooms+ratePlan+rate × 90
+но NOT availability rows. Booking creation hit `NO_INVENTORY` для каждого
+night. Pre-Phase-16 closure (`8436dd7` per-worker tenant) масked by
+shared demo tenant. Per-worker isolation exposed gap.
+• Fix: step 6 в onboarding tx — availability × 90 with `allotment=rooms`
+• Test [I8] strict 1:1 date alignment + no orphan rate без availability
+• Overbooking e2e test repaired: pre-fixture sets `allotment=1` via admin
+`POST /room-types/:id/availability` (canon: test uses ops endpoint)
+
+**Empirical (verified pre-commit)**:
+• frontend unit: 1685/0 (was 1671 → +14 number-validator)
+• property-based: 6 × 964 expect calls
+• e2e chromium: 14/14 (bookings 7/7 incl. 3 new G1 + inventory 8/8)
+• axe WCAG 2.2 AA: clean
+• coverage int-range-field-schema.ts: 100/100
+• ratchet OK: all metrics 0
+
+**Memory canons recorded** (`[[memory-is-canon-not-backlog]]`):
+• `[[baseline-e2e-before-coding]]` — meta-lesson from G1 ship
+• `[[backend-recon-end-to-end]]` — plan §0 must trace pipeline, не just sigs
+• `[[no-preexisting-excuse]]` reinforced via root-cause fix vs «skip»
+
+### Phase G1 implementation history (для reference)
 
 **Empirical bound source**: server `guestsCountSchema.min(1).max(20)` (booking.ts:122);
 server idempotency replay canon (booking.routes.ts).
