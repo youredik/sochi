@@ -36,6 +36,7 @@ import {
 	SelectValue,
 } from '../../../components/ui/select.tsx'
 import { useCreateRatePlan, useUpdateRatePlan } from '../hooks/use-rate-plans.ts'
+import { intRangeFieldSchema } from '../lib/int-range-field-schema.ts'
 
 interface FormValues {
 	name: string
@@ -49,12 +50,16 @@ interface FormValues {
 
 const codeRegex = /^[A-Z][A-Z0-9_-]*$/
 
+// Numeric bounds mirror `packages/shared/src/ratePlan.ts` `cancellationHoursSchema`
+// (0..720h = 30d) and `minStaySchema` (1..30). cancellationHours is only mounted
+// when `isRefundable=true` (form.Subscribe), so its validator never fires on the
+// hidden default — no need для `.optional().or(literal(''))` wrap.
 const formSchema = z.object({
 	name: z.string().min(1, 'Введите название').max(200, 'Не более 200 символов'),
 	code: z.string().regex(codeRegex, 'Только заглавные буквы, цифры, «-» и «_»; начинается с буквы'),
 	roomTypeId: z.string().min(1, 'Выберите категорию'),
-	cancellationHours: z.string().regex(/^\d+$/, 'Целое число').optional().or(z.literal('')),
-	minStay: z.string().regex(/^\d+$/, 'Целое число'),
+	cancellationHours: intRangeFieldSchema({ min: 0, max: 720 }),
+	minStay: intRangeFieldSchema({ min: 1, max: 30 }),
 })
 
 const MEAL_LABELS: Record<MealsIncluded, string> = {

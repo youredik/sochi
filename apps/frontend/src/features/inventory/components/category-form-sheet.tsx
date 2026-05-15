@@ -30,6 +30,7 @@ import {
 } from '../../../components/ui/responsive-sheet.tsx'
 import { Textarea } from '../../../components/ui/textarea.tsx'
 import { useCreateRoomType, useUpdateRoomType } from '../hooks/use-room-types.ts'
+import { intRangeFieldSchema } from '../lib/int-range-field-schema.ts'
 
 interface FormValues {
 	name: string
@@ -38,11 +39,12 @@ interface FormValues {
 	baseBeds: string
 }
 
+// Bounds mirror `packages/shared/src/roomType.ts` `occupancySchema` / `baseBedsSchema`.
 const formSchema = z.object({
 	name: z.string().min(1, 'Введите название').max(100, 'Не более 100 символов'),
 	description: z.string().max(2000, 'Не более 2000 символов'),
-	maxOccupancy: z.string().regex(/^\d+$/, 'Целое число'),
-	baseBeds: z.string().regex(/^\d+$/, 'Целое число'),
+	maxOccupancy: intRangeFieldSchema({ min: 1, max: 20 }),
+	baseBeds: intRangeFieldSchema({ min: 1, max: 10 }),
 })
 
 export interface CategoryFormSheetProps {

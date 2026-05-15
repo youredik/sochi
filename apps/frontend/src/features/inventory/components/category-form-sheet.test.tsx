@@ -26,6 +26,16 @@
  *     [A2] invalid maxOccupancy = '0' → validator error rendered;
  *          BUT button still clickable (form-level validation, не attr disable —
  *          submit path errors instead)
+ *
+ *   Inline-bounds (B5 — `[[no-half-measures]]`, Zod refine mirrors server):
+ *     [B1] maxOccupancy='0' → «Не меньше 1» FieldError visible
+ *     [B2] maxOccupancy='21' → «Не больше 20» FieldError visible (out-of-range
+ *          previously passed client and crashed at server with 400)
+ *     [B3] baseBeds='-5' → «Не меньше 1» (regex permits leading minus to
+ *          surface precise message)
+ *     [B4] baseBeds='11' → «Не больше 10»
+ *     [B5] out-of-range value submit → createMutateAsync NOT called (validator
+ *          gates submission; no silent server round-trip)
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -208,5 +218,62 @@ describe('CategoryFormSheet — adversarial', () => {
 		expect(screen.getByRole('alert').textContent).toBe('HTTP 409 conflict')
 		// Sheet stays open — onOpenChange NOT called с false
 		expect(onOpenChange.mock.calls.some((c) => c[0] === false)).toBe(false)
+	})
+})
+
+describe('CategoryFormSheet — inline-bounds (B5)', () => {
+	it('[B1] maxOccupancy=0 surfaces «Не меньше 1»', async () => {
+		render(<CategoryFormSheet open onOpenChange={() => {}} propertyId="prop-1" />)
+		const occ = screen.getByLabelText('Гостей') as HTMLInputElement
+		fireEvent.change(occ, { target: { value: '0' } })
+		await waitFor(() => {
+			expect(screen.queryByText('Не меньше 1')).not.toBe(null)
+		})
+	})
+
+	it('[B2] maxOccupancy=21 surfaces «Не больше 20» (server bound max)', async () => {
+		render(<CategoryFormSheet open onOpenChange={() => {}} propertyId="prop-1" />)
+		const occ = screen.getByLabelText('Гостей') as HTMLInputElement
+		fireEvent.change(occ, { target: { value: '21' } })
+		await waitFor(() => {
+			expect(screen.queryByText('Не больше 20')).not.toBe(null)
+		})
+	})
+
+	it('[B3] baseBeds=-5 surfaces «Не меньше 1» (negative integer parsed → range message)', async () => {
+		render(<CategoryFormSheet open onOpenChange={() => {}} propertyId="prop-1" />)
+		const beds = screen.getByLabelText('Кроватей') as HTMLInputElement
+		fireEvent.change(beds, { target: { value: '-5' } })
+		await waitFor(() => {
+			expect(screen.queryByText('Не меньше 1')).not.toBe(null)
+		})
+	})
+
+	it('[B4] baseBeds=11 surfaces «Не больше 10»', async () => {
+		render(<CategoryFormSheet open onOpenChange={() => {}} propertyId="prop-1" />)
+		const beds = screen.getByLabelText('Кроватей') as HTMLInputElement
+		fireEvent.change(beds, { target: { value: '11' } })
+		await waitFor(() => {
+			expect(screen.queryByText('Не больше 10')).not.toBe(null)
+		})
+	})
+
+	it('[B5] out-of-range submit attempt blocks mutation (no silent server round-trip)', async () => {
+		render(<CategoryFormSheet open onOpenChange={() => {}} propertyId="prop-1" />)
+		const nameInput = screen.getByLabelText('Название категории')
+		await userEvent.setup().type(nameInput, 'Бракованный')
+		const occ = screen.getByLabelText('Гостей') as HTMLInputElement
+		fireEvent.change(occ, { target: { value: '999' } })
+
+		await waitFor(() => {
+			expect(screen.queryByText('Не больше 20')).not.toBe(null)
+		})
+
+		fireEvent.click(screen.getByRole('button', { name: /Создать категорию/ }))
+
+		// Wait long enough for any submit path to fire if it were going to.
+		await new Promise((r) => setTimeout(r, 50))
+		expect(createMutateAsync).not.toHaveBeenCalled()
+		expect(screen.queryByText('Не больше 20')).not.toBe(null)
 	})
 })

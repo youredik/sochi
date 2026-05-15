@@ -165,3 +165,68 @@ test.describe('inventory — rate-plans page (Phase III)', () => {
 		await axeClean(page, 'inventory-rate-plans')
 	})
 })
+
+test.describe('inventory — inline-bounds validation (B5)', () => {
+	test('category form: maxOccupancy out-of-range surfaces inline FieldError (no server 400)', async ({
+		page,
+	}) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+
+		await page.locator('[data-section-id="inventory"]').click()
+		await expect(page).toHaveURL(/\/inventory\/rooms$/)
+
+		// Open the create-category sheet.
+		await page
+			.getByRole('button', { name: /Категория/ })
+			.first()
+			.click()
+		await expect(page.getByText('Новая категория номеров')).toBeVisible()
+
+		// `getByLabel('Гостей')` collides with the sidebar aria-label «Картотека
+		// гостей и миграционный учёт МВД» (substring match across the page).
+		// `getByRole('spinbutton')` is the canonical accessible selector для
+		// `<input type="number">` per Playwright + WAI-ARIA roles.
+		const occ = page.getByRole('spinbutton', { name: 'Гостей' })
+		// Above-max — server `occupancySchema.max(20)` would 400; client surfaces inline.
+		await occ.fill('21')
+		await expect(page.getByText('Не больше 20')).toBeVisible()
+		// Below-min — server `occupancySchema.min(1)` would 400.
+		await occ.fill('0')
+		await expect(page.getByText('Не меньше 1')).toBeVisible()
+		// Recover к valid — error disappears.
+		await occ.fill('2')
+		await expect(page.getByText('Не меньше 1')).not.toBeVisible()
+		await expect(page.getByText('Не больше 20')).not.toBeVisible()
+
+		// Close sheet so axe scan inspects the page surface, not the portal.
+		await page.keyboard.press('Escape')
+		await expect(page.getByText('Новая категория номеров')).not.toBeVisible()
+		await axeClean(page, 'inventory-rooms-bounds')
+	})
+
+	test('rate-plan form: minStay out-of-range surfaces inline FieldError', async ({ page }) => {
+		await page.goto('/')
+		await expect(page).toHaveURL(/\/o\/[^/]+\/?/)
+
+		await page.locator('[data-section-id="inventory"]').click()
+		await page.getByRole('tab', { name: 'Тарифы' }).click()
+		await expect(page).toHaveURL(/\/inventory\/rate-plans$/)
+
+		await page
+			.getByRole('button', { name: /Тариф/ })
+			.first()
+			.click()
+		await expect(page.getByText('Новый тариф')).toBeVisible()
+
+		const minStay = page.getByRole('spinbutton', { name: 'Мин. ночей' })
+		await minStay.fill('31')
+		await expect(page.getByText('Не больше 30')).toBeVisible()
+		await minStay.fill('0')
+		await expect(page.getByText('Не меньше 1')).toBeVisible()
+
+		await page.keyboard.press('Escape')
+		await expect(page.getByText('Новый тариф')).not.toBeVisible()
+		await axeClean(page, 'inventory-rate-plans-bounds')
+	})
+})

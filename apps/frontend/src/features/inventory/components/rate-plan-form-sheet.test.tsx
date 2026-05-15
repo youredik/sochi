@@ -22,6 +22,14 @@
  *
  *   Adversarial:
  *     [A1] create.mutateAsync reject → error banner; sheet stays open
+ *
+ *   Inline-bounds (B5 — Zod refine mirrors server `ratePlan.ts` bounds):
+ *     [B1] minStay='0' → «Не меньше 1» FieldError
+ *     [B2] minStay='31' → «Не больше 30» (server cap)
+ *     [B3] cancellationHours='-1' → «Не меньше 0» (server cancellationHours
+ *          permits 0 — same-day non-refundable window)
+ *     [B4] cancellationHours='721' → «Не больше 720» (server 30d cap)
+ *     [B5] out-of-range submit attempt blocks mutation
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -210,5 +218,72 @@ describe('RatePlanFormSheet — adversarial', () => {
 		await waitFor(() => expect(screen.queryByRole('alert')).not.toBe(null))
 		expect(screen.getByRole('alert').textContent).toBe('code already exists')
 		expect(onOpenChange.mock.calls.some((c) => c[0] === false)).toBe(false)
+	})
+})
+
+describe('RatePlanFormSheet — inline-bounds (B5)', () => {
+	it('[B1] minStay=0 surfaces «Не меньше 1»', async () => {
+		render(
+			<RatePlanFormSheet open onOpenChange={() => {}} propertyId="prop-1" roomTypes={ROOM_TYPES} />,
+		)
+		const minStay = screen.getByLabelText('Мин. ночей') as HTMLInputElement
+		fireEvent.change(minStay, { target: { value: '0' } })
+		await waitFor(() => {
+			expect(screen.queryByText('Не меньше 1')).not.toBe(null)
+		})
+	})
+
+	it('[B2] minStay=31 surfaces «Не больше 30»', async () => {
+		render(
+			<RatePlanFormSheet open onOpenChange={() => {}} propertyId="prop-1" roomTypes={ROOM_TYPES} />,
+		)
+		const minStay = screen.getByLabelText('Мин. ночей') as HTMLInputElement
+		fireEvent.change(minStay, { target: { value: '31' } })
+		await waitFor(() => {
+			expect(screen.queryByText('Не больше 30')).not.toBe(null)
+		})
+	})
+
+	it('[B3] cancellationHours=-1 surfaces «Не меньше 0» (server min=0)', async () => {
+		render(
+			<RatePlanFormSheet open onOpenChange={() => {}} propertyId="prop-1" roomTypes={ROOM_TYPES} />,
+		)
+		// isRefundable defaults true → cancellationHours field mounted.
+		const ch = screen.getByLabelText(/бесплатная отмена/) as HTMLInputElement
+		fireEvent.change(ch, { target: { value: '-1' } })
+		await waitFor(() => {
+			expect(screen.queryByText('Не меньше 0')).not.toBe(null)
+		})
+	})
+
+	it('[B4] cancellationHours=721 surfaces «Не больше 720» (server 30d cap)', async () => {
+		render(
+			<RatePlanFormSheet open onOpenChange={() => {}} propertyId="prop-1" roomTypes={ROOM_TYPES} />,
+		)
+		const ch = screen.getByLabelText(/бесплатная отмена/) as HTMLInputElement
+		fireEvent.change(ch, { target: { value: '721' } })
+		await waitFor(() => {
+			expect(screen.queryByText('Не больше 720')).not.toBe(null)
+		})
+	})
+
+	it('[B5] out-of-range submit attempt blocks createMutateAsync', async () => {
+		render(
+			<RatePlanFormSheet open onOpenChange={() => {}} propertyId="prop-1" roomTypes={ROOM_TYPES} />,
+		)
+		await userEvent.setup().type(screen.getByLabelText('Название'), 'Test')
+		await userEvent.setup().type(screen.getByLabelText('Код тарифа'), 'TEST')
+		const minStay = screen.getByLabelText('Мин. ночей') as HTMLInputElement
+		fireEvent.change(minStay, { target: { value: '99' } })
+
+		await waitFor(() => {
+			expect(screen.queryByText('Не больше 30')).not.toBe(null)
+		})
+
+		fireEvent.click(screen.getByRole('button', { name: /Создать тариф/ }))
+
+		await new Promise((r) => setTimeout(r, 50))
+		expect(createMutateAsync).not.toHaveBeenCalled()
+		expect(screen.queryByText('Не больше 30')).not.toBe(null)
 	})
 })
