@@ -1,7 +1,16 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-export type WindowDays = 3 | 7 | 15 | 30 | 'fit'
+/**
+ * G6 (2026-05-15) — Cloudbeds Spring 2026 display-range canon. Added 4 / 14
+ * / 21 для 1w / 2w / 3w industry parity. Kept 3 / 15 для Bnovo backward-
+ * compat (operators trained on 15-day fortnight; capsule hotels Сочи use 3-day).
+ *
+ * **No migration needed**: previously-persisted `15` remains valid; new values
+ * additive. Future Phase G6.bis could drop 15 in favour of canonical 14 once
+ * usage telemetry confirms drift.
+ */
+export type WindowDays = 3 | 4 | 7 | 14 | 15 | 21 | 30 | 'fit'
 export type ViewMode = 'day' | 'month'
 
 interface ChessboardPrefsState {
