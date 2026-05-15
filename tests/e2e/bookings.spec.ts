@@ -177,8 +177,12 @@ test.describe('booking-create G1 — real-bug-hunt fixes', () => {
 	test('G-B2: guestsCount=0 surfaces inline «Не меньше 1»; submit gated', async ({ page }) => {
 		await page.goto('/')
 		await page.locator('[data-section-id="grid"]').first().click()
-		const targetDate = futureIso(12)
-		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
+		// Pick FIRST empty cell from page DOM — robust against prior specs в
+		// full chromium suite consuming hardcoded dates (caught full-suite e2e:
+		// futureIso(12) was booked by other specs, click timeout). Empty cells
+		// carry `data-cell-date`; bands have `data-booking-id` (no data-cell-date).
+		const emptyCell = page.locator('button[data-cell-date]').first()
+		await emptyCell.click()
 		const dialog = page.getByRole('dialog')
 		await expect(dialog).toBeVisible()
 
@@ -202,8 +206,8 @@ test.describe('booking-create G1 — real-bug-hunt fixes', () => {
 	test('G-B3: rate plan picker visible с default; can change selection', async ({ page }) => {
 		await page.goto('/')
 		await page.locator('[data-section-id="grid"]').first().click()
-		const targetDate = futureIso(13)
-		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
+		const emptyCell = page.locator('button[data-cell-date]').first()
+		await emptyCell.click()
 		const dialog = page.getByRole('dialog')
 		await expect(dialog).toBeVisible()
 
@@ -220,8 +224,8 @@ test.describe('booking-create G1 — real-bug-hunt fixes', () => {
 	test('G-B4: price preview shows nights + total ₽ (live rate-grid query)', async ({ page }) => {
 		await page.goto('/')
 		await page.locator('[data-section-id="grid"]').first().click()
-		const targetDate = futureIso(14)
-		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
+		const emptyCell = page.locator('button[data-cell-date]').first()
+		await emptyCell.click()
 		const dialog = page.getByRole('dialog')
 		await expect(dialog).toBeVisible()
 

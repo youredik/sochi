@@ -119,11 +119,13 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 		const dialog = page.getByRole('dialog')
 		await expect(dialog).toBeVisible()
 		await expect(dialog.getByRole('heading', { name: /Новое бронирование/ })).toBeVisible()
-		// Wait for ratePlan query to settle — until then, submit button is
-		// disabled (opacity-50), which axe flags as contrast violation from
-		// the blended computed color. Empirically: "тариф Базовый тариф"
-		// text in the description appears ONLY after ratePlan loaded.
-		await expect(dialog.getByText(/тариф Базовый тариф/)).toBeVisible()
+		// Wait for ratePlan query AND rate-grid query to settle — until then,
+		// submit button is disabled (opacity-50), which axe flags as contrast
+		// violation from blended computed color. Post-G1 (commit `d18d747`):
+		// price-preview-total slot renders «Итого: X ₽» только когда rates
+		// query landed → ratePlanId seeded → button enabled. Canonical signal
+		// без brittle text regex.
+		await expect(dialog.locator('[data-slot="price-preview-total"]')).toBeVisible()
 		await expect(dialog.getByRole('button', { name: /Создать бронирование/ })).toBeEnabled()
 		// Wait for Sheet/Dialog enter-animation (fade-in-0 + slide-from-*-10)
 		// to fully settle — без этого axe captures composite frame с button at
