@@ -26,6 +26,7 @@ jest.setTimeout(60_000)
 
 import { dateFromIso } from '../../db/ydb-helpers.ts'
 import {
+	PropertyBlockBlockOverlapError,
 	PropertyBlockBookingConflictError,
 	PropertyBlockPastImmutableError,
 } from '../../errors/domain.ts'
@@ -655,5 +656,104 @@ describe('property-block.service G9 (integration)', () => {
 		await expect(block.update(TENANT_A, blk.id, { endDate: '2033-01-06' })).rejects.toThrow(
 			PropertyBlockBookingConflictError,
 		)
+	})
+
+	// ============================================================
+	// [PB14] update extends block across ANOTHER active block → throws
+	// (adversarial 9-item caught — previously only booking overlap checked)
+	// ============================================================
+	test('[PB14] update extends across another block (same room) → PropertyBlockBlockOverlapError', async () => {
+		const dates = ['2033-02-01', '2033-02-02', '2033-02-03', '2033-02-04', '2033-02-05']
+		const { prop, rooms } = await seedScenario({ tenantId: TENANT_A, dates })
+		const room0 = rooms[0]
+		if (!room0) throw new Error('seed failed')
+
+		// Block A: 2/1-2/2
+		const rA = await block.createBlocks(
+			TENANT_A,
+			prop.id,
+			{
+				roomIds: [room0.id],
+				startDate: '2033-02-01',
+				endDate: '2033-02-02',
+				reason: 'repair',
+			},
+			{ actorUserId: USER_A },
+		)
+		const blkA = rA.created[0]
+		if (!blkA) throw new Error('blkA create failed')
+		await trackBlockCleanup(blkA)
+
+		// Block B: 2/4-2/5
+		const rB = await block.createBlocks(
+			TENANT_A,
+			prop.id,
+			{
+				roomIds: [room0.id],
+				startDate: '2033-02-04',
+				endDate: '2033-02-05',
+				reason: 'deep_clean',
+			},
+			{ actorUserId: USER_A },
+		)
+		const blkB = rB.created[0]
+		if (!blkB) throw new Error('blkB create failed')
+		await trackBlockCleanup(blkB)
+
+		// Extend A's endDate к 2/5 — now overlaps Block B
+		await expect(block.update(TENANT_A, blkA.id, { endDate: '2033-02-05' })).rejects.toThrow(
+			PropertyBlockBlockOverlapError,
+		)
+		// Self-overlap (extending к own dates) MUST be allowed (excludeBlockId=self)
+		const same = await block.update(TENANT_A, blkA.id, { endDate: '2033-02-02' })
+		expect(same.endDate).toBe('2033-02-02')
+	})
+
+	// ============================================================
+	// [PB15] listBlockedRoomIdsInWindow — distinct + tenant-scoped
+	// ============================================================
+	test('[PB15] listBlockedRoomIdsInWindow returns distinct active blocked rooms in window', async () => {
+		const dates = ['2033-03-01', '2033-03-02', '2033-03-03']
+		const { prop, rooms } = await seedScenario({ tenantId: TENANT_A, dates, roomsCount: 3 })
+		const [r0, r1, r2] = rooms
+		if (!r0 || !r1 || !r2) throw new Error('seed failed')
+
+		// Block r0 + r1 (two distinct rooms in window)
+		const res = await block.createBlocks(
+			TENANT_A,
+			prop.id,
+			{
+				roomIds: [r0.id, r1.id],
+				startDate: '2033-03-01',
+				endDate: '2033-03-03',
+				reason: 'repair',
+			},
+			{ actorUserId: USER_A },
+		)
+		for (const b of res.created) await trackBlockCleanup(b)
+		expect(res.created).toHaveLength(2)
+
+		// Direct repo call — listBlockedRoomIdsInWindow (path covered by
+		// availability endpoint, now also explicit).
+		const sql = getTestSql()
+		const repo = (await import('./property-block.repo.ts')).createPropertyBlockRepo(sql)
+		const blockedIds = await repo.listBlockedRoomIdsInWindow(
+			TENANT_A,
+			prop.id,
+			'2033-03-01',
+			'2033-03-03',
+		)
+		expect(new Set(blockedIds)).toEqual(new Set([r0.id, r1.id]))
+		// r2 is NOT blocked
+		expect(blockedIds).not.toContain(r2.id)
+
+		// Cross-tenant: TENANT_B sees nothing
+		const fromB = await repo.listBlockedRoomIdsInWindow(
+			TENANT_B,
+			prop.id,
+			'2033-03-01',
+			'2033-03-03',
+		)
+		expect(fromB).toEqual([])
 	})
 })

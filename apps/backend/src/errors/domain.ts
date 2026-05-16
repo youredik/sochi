@@ -509,6 +509,26 @@ export class PropertyBlockBookingConflictError extends ConflictError {
 }
 
 /**
+ * Block-over-block: extending or shifting a property-block так чтобы оно
+ * перекрылось с другой active блокировкой того же room. Distinct from
+ * booking-conflict (different operator UX — suggest merging/splitting blocks,
+ * NOT moving guest). Caught по adversarial-reading 9-item: previously
+ * service.update only validated booking overlap, missing block-block edge.
+ */
+export class PropertyBlockBlockOverlapError extends ConflictError {
+	override readonly code = 'PROPERTY_BLOCK_BLOCK_OVERLAP'
+	readonly overlappingBlockIds: string[]
+	constructor(overlappingBlockIds: string[]) {
+		super(
+			`Cannot extend block — overlaps with existing block(s): ${overlappingBlockIds.join(', ')}. ` +
+				`Merge or split via separate edits.`,
+		)
+		this.name = 'PropertyBlockBlockOverlapError'
+		this.overlappingBlockIds = overlappingBlockIds
+	}
+}
+
+/**
  * Edit a block whose dates are past: TravelLine immutable-past canon —
  * past blocks document historical state, shrinking endDate earlier than
  * today would falsify housekeeping records. Future-extension OK; past-

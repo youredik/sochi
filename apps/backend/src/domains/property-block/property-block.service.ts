@@ -8,6 +8,7 @@ import type { PropertyService } from '../property/property.service.ts'
 import type { RoomService } from '../room/room.service.ts'
 import type { PropertyBlockRepo } from './property-block.repo.ts'
 import {
+	PropertyBlockBlockOverlapError,
 	PropertyBlockBookingConflictError,
 	PropertyBlockNotFoundError,
 	PropertyBlockPastImmutableError,
@@ -191,16 +192,30 @@ export function createPropertyBlockService(deps: {
 				throw new PropertyBlockPastImmutableError()
 			}
 
-			// Re-validate booking overlap if dates changed
+			// Re-validate overlap if dates changed: booking-overlap + block-block
+			// overlap (extending block A across block B same-room canon, with
+			// excludeBlockId=self to avoid self-conflict). Adversarial-reading
+			// 9-item caught: previously only booking overlap checked — silent
+			// extension over another block was possible.
 			if (patch.startDate !== undefined || patch.endDate !== undefined) {
-				const overlapping = await deps.bookingRepo.findOverlappingBookingsByRoom(
+				const overlappingBookings = await deps.bookingRepo.findOverlappingBookingsByRoom(
 					tenantId,
 					current.roomId,
 					newStartDate,
 					newEndDate,
 				)
-				if (overlapping.length > 0) {
+				if (overlappingBookings.length > 0) {
 					throw new PropertyBlockBookingConflictError([current.roomId])
+				}
+				const overlappingBlocks = await deps.blockRepo.findOverlappingByRoom(
+					tenantId,
+					current.roomId,
+					newStartDate,
+					newEndDate,
+					current.id, // exclude self
+				)
+				if (overlappingBlocks.length > 0) {
+					throw new PropertyBlockBlockOverlapError(overlappingBlocks.map((b) => b.id))
 				}
 			}
 
