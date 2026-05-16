@@ -143,10 +143,10 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		await page.goto('/')
 		await page.locator('[data-section-id="grid"]').first().click()
 
-		// Focus a specific empty cell via aria-label to avoid band collisions.
-		// Use a mid-window date that's likely empty in a fresh state; if not
-		// empty, this e2e is order-dependent — accept that risk.
-		const targetDate = futureIso(9)
+		// Per `[[strict-tests]]` self-isolation: use day +1 — verified
+		// collision-free vs all G4-G9 dayOffsets (G7: 3/4/10/11; G8: 0/3-9/11-15;
+		// G9: 60+). Day 1 is empty in default 15-day window для any worker order.
+		const targetDate = futureIso(1)
 		const cell = page.locator(`button[data-cell-date="${targetDate}"]`)
 		await cell.focus()
 
@@ -168,7 +168,8 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 		await page.goto('/')
 		await page.locator('[data-section-id="grid"]').first().click()
 
-		const targetDate = futureIso(8)
+		// Day +2 — collision-free per same canon as Enter test above.
+		const targetDate = futureIso(2)
 		const cell = page.locator(`button[data-cell-date="${targetDate}"]`)
 		await cell.focus()
 
@@ -275,13 +276,20 @@ test.describe('reservation grid — APG keyboard navigation', () => {
 	test('Enter on focused BAND opens edit dialog (parity with empty-cell Enter)', async ({
 		page,
 	}) => {
-		// Create a booking FIRST so there's a band to focus. Use day 0 (today)
-		// to keep this test independent from other date-offset tests.
+		// Self-contained per `[[strict-tests]]`: create a booking at distant
+		// future date (day 45 — beyond G4-G8 dayOffsets 0-15) then scroll grid
+		// window к see it. Day 1/2 reserved для empty-cell test siblings outside
+		// this test, so distant + scroll avoids any cross-test reuse.
 		await page.goto('/')
 		await page.locator('[data-section-id="grid"]').first().click()
 
-		const targetDate = futureIso(0)
-		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
+		// Scroll forward 3× (×15 days each) к get window covering day ~45.
+		const fwd = page.getByRole('button', { name: 'Следующие 15 дней' })
+		for (let i = 0; i < 3; i++) await fwd.click()
+
+		const targetDate = futureIso(45)
+		// Pick FIRST roomType row (multiple roomTypes may exist after G7 spec).
+		await page.locator(`button[data-cell-date="${targetDate}"]`).first().click()
 		const createDialog = page.getByRole('dialog')
 		await expect(createDialog).toBeVisible()
 		await createDialog.getByLabel('Фамилия').fill('Клавиатура')

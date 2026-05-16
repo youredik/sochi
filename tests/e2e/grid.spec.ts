@@ -1,5 +1,7 @@
 import { test } from './_fixtures.ts'
 import { expect } from '@playwright/test'
+
+const API_BASE = 'http://localhost:8787/api/v1'
 /**
  * Grid (M5d) adversarial e2e. Runs with `owner.json` storageState from
  * auth.setup.ts, so the tenant already has property + roomType + 2 rooms.
@@ -20,14 +22,28 @@ test.describe('reservation grid', () => {
 		await page.goto('/')
 		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+-w\d+\/?$/)
 
+		// Read actual roomType count via API — DO NOT hardcode aria-rowcount.
+		// Per-worker tenant accumulates roomTypes когда other specs (G7
+		// «change-room-type» test) require a 2nd roomType. Hardcoded value 2
+		// breaks under cross-spec test pollution. Per `[[strict-tests]]` —
+		// strict assertion of MEANING (count matches API truth), not magic numbers.
+		const propsRes = await page.request.get(`${API_BASE}/properties`)
+		const propertyId = ((await propsRes.json()) as { data: Array<{ id: string }> }).data[0]?.id
+		if (!propertyId) throw new Error('no property')
+		const rtRes = await page.request.get(`${API_BASE}/properties/${propertyId}/room-types`)
+		const roomTypesCount = ((await rtRes.json()) as { data: Array<unknown> }).data.length
+		expect(roomTypesCount).toBeGreaterThanOrEqual(1) // wizard seeds ≥1
+
 		await page.locator('[data-section-id="grid"]').first().click()
 		await expect(page).toHaveURL(/\/o\/e2e-hotel-\d+-w\d+\/grid$/)
 
 		// Grid container present with correct ARIA metadata.
 		const grid = page.getByRole('grid')
 		await expect(grid).toBeVisible()
-		await expect(grid).toHaveAttribute('aria-rowcount', '2') // 1 header + 1 roomType
-		await expect(grid).toHaveAttribute('aria-colcount', '16') // 1 rowheader + 15 date cols
+		// aria-rowcount = N roomTypes + 1 header row. Parameterized к match
+		// actual state — passes regardless of cross-spec pollution.
+		await expect(grid).toHaveAttribute('aria-rowcount', String(roomTypesCount + 1))
+		await expect(grid).toHaveAttribute('aria-colcount', '16') // 1 rowheader + 15 date cols (window-size invariant)
 	})
 
 	test('roomType row shows "Стандарт" from setup wizard', async ({ page }) => {

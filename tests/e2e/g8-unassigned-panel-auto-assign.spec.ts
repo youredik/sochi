@@ -323,9 +323,12 @@ test.describe('G8 Unassigned Reservations panel + auto-assign', () => {
 		}
 		expect(body.data.assigned).toHaveLength(0)
 		expect(body.data.skipped.length).toBeGreaterThanOrEqual(1)
-		// Reason MUST be 'room_inactive' (all rooms isActive=false) — per
-		// Cloudbeds canon + algorithm D-G8.5.
-		expect(body.data.skipped[0]?.reason).toBe('room_inactive')
+		// Reason MUST include 'room_inactive' (all rooms isActive=false) — per
+		// Cloudbeds canon + algorithm D-G8.5. Per `[[strict-tests]]` assert
+		// MEANING ('inactive cause surfaces') not ORDER (cross-spec G7 may
+		// inject 'wrong_type' skips for unassigned bookings on its 2nd roomType).
+		const reasons = body.data.skipped.map((s) => s.reason)
+		expect(reasons).toContain('room_inactive')
 		// Re-activate rooms для cleanup (other specs могут needed).
 		for (const rid of roomIds) {
 			await page.request.patch(`${API_BASE}/rooms/${rid}`, {

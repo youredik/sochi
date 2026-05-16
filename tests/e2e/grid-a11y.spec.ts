@@ -149,13 +149,72 @@ test.describe('reservation grid — axe-core WCAG 2.2 AA audit', () => {
 	test('booking-EDIT dialog passes WCAG 2.2 AA (action buttons + state-machine labels)', async ({
 		page,
 	}) => {
-		// Edit dialog a11y — opens on an existing band. Prior tests leave
-		// bands in various statuses (confirmed / in_house / cancelled / …).
-		// Pick the FIRST band in DOM and open its edit dialog.
+		// Self-contained per `[[strict-tests]]`: seed our own booking via API
+		// at distant date (day 50 — beyond G4-G8 dayOffsets 0-15). Then scroll
+		// grid forward к see + click it. Avoids dependence on cross-spec band
+		// pollution AND avoids «no band visible» empty-grid race.
 		await page.goto('/')
-		await page.locator('[data-section-id="grid"]').first().click()
+		const propsRes = await page.request.get('http://localhost:8787/api/v1/properties')
+		const propertyId = ((await propsRes.json()) as { data: Array<{ id: string }> }).data[0]?.id
+		if (!propertyId) throw new Error('no property')
+		const [rtRes, rpRes] = await Promise.all([
+			page.request.get(`http://localhost:8787/api/v1/properties/${propertyId}/room-types`),
+			page.request.get(`http://localhost:8787/api/v1/properties/${propertyId}/rate-plans`),
+		])
+		const roomTypeId = ((await rtRes.json()) as { data: Array<{ id: string }> }).data[0]?.id
+		const ratePlanId = ((await rpRes.json()) as { data: Array<{ id: string }> }).data[0]?.id
+		if (!roomTypeId || !ratePlanId) throw new Error('roomType/ratePlan missing')
 
-		const firstBand = page.locator('[data-booking-id]').first()
+		const futureIso = (d: number) => {
+			const dt = new Date()
+			dt.setUTCHours(12, 0, 0, 0)
+			dt.setUTCDate(dt.getUTCDate() + d)
+			return dt.toISOString().slice(0, 10)
+		}
+		const checkIn = futureIso(50)
+		const checkOut = futureIso(51)
+		const docNum = `4510a11y${Date.now().toString().slice(-4)}`
+		const gRes = await page.request.post('http://localhost:8787/api/v1/guests', {
+			data: {
+				lastName: 'Axe',
+				firstName: 'Edit',
+				citizenship: 'RU',
+				documentType: 'passport',
+				documentNumber: docNum,
+			},
+		})
+		const guestId = ((await gRes.json()) as { data: { id: string } }).data.id
+		const bRes = await page.request.post(
+			`http://localhost:8787/api/v1/properties/${propertyId}/bookings`,
+			{
+				data: {
+					roomTypeId,
+					ratePlanId,
+					checkIn,
+					checkOut,
+					guestsCount: 1,
+					primaryGuestId: guestId,
+					guestSnapshot: {
+						firstName: 'Edit',
+						lastName: 'Axe',
+						citizenship: 'RU',
+						documentType: 'passport',
+						documentNumber: docNum,
+					},
+					channelCode: 'walkIn',
+				},
+			},
+		)
+		if (!bRes.ok()) throw new Error(`booking.create ${bRes.status()}: ${await bRes.text()}`)
+		const bookingId = ((await bRes.json()) as { data: { id: string } }).data.id
+
+		await page.locator('[data-section-id="grid"]').first().click()
+		// Scroll forward 3× = +45 days → window 45..59 covers day 50 booking.
+		// 4× would jump к 60..74 (past it).
+		const fwd = page.getByRole('button', { name: 'Следующие 15 дней' })
+		for (let i = 0; i < 3; i++) await fwd.click()
+
+		const firstBand = page.locator(`[data-booking-id="${bookingId}"]`)
 		await expect(firstBand).toBeVisible()
 		await firstBand.click()
 
