@@ -5,10 +5,14 @@ import { MotionConfig } from 'motion/react'
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { Toaster } from 'sonner'
+import { broadcastQueryClient } from '@tanstack/query-broadcast-client-experimental'
+import { OfflineBanner } from './components/offline-banner'
+import { SwUpdatePrompt } from './components/sw-update-prompt'
 import { i18n, setupI18n } from './features/i18n/setup.ts'
 import { setupOtel } from './features/observability/setup-otel.ts'
 import { ErrorBoundary } from './lib/error-boundary.tsx'
 import { logger } from './lib/logger.ts'
+import { createOfflineQueryPersister } from './lib/offline/persister.ts'
 import { ThemeProvider } from './lib/theme-provider.tsx'
 import { reportWebVitals } from './lib/web-vitals.ts'
 import { routeTree } from './routeTree.gen.ts'
@@ -36,14 +40,37 @@ reportWebVitals()
 // блокировать LCP-критический путь impportom.
 void import('./lib/rum/index.ts').then((m) => m.startRum())
 
+// G11 (2026-05-16) — TanStack Query offline canon (R1+R2 ≥ 2026-05-16):
+//   - networkMode: 'offlineFirst' (createPersister default — fires request
+//     so SW can intercept; cache hit success; cache miss pauses retries)
+//   - gcTime 7 days (weekend offline coverage; matches persister maxAge)
+//   - per-query persister via experimental_createQueryPersister + idb-keyval
+//   - buster=VITE_GIT_SHA invalidates ALL cache on deploy
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 const queryClient = new QueryClient({
 	defaultOptions: {
 		queries: {
 			staleTime: 60_000,
+			gcTime: SEVEN_DAYS_MS,
+			networkMode: 'offlineFirst',
 			refetchOnWindowFocus: false,
+			persister: createOfflineQueryPersister().persisterFn,
+		},
+		mutations: {
+			networkMode: 'offlineFirst',
 		},
 	},
 })
+
+// G11 v2 (2026-05-16) — cross-tab cache invalidation per R1+R2 ≥ 2026-05-15
+// canon. `broadcastQueryClient` uses BroadcastChannel — when operator
+// edits booking в tab A, tab B's cache invalidates automatically. No
+// mutation-state sync (TanStack limitation — last-write-wins per-tab),
+// но invalidations + data updates auto-sync. Production canon 2026.
+if (typeof window !== 'undefined') {
+	broadcastQueryClient({ queryClient, broadcastChannel: 'sochi-pms-cache' })
+	logger.info('offline: cross-tab broadcastQueryClient mounted')
+}
 
 const router = createRouter({
 	routeTree,
@@ -95,7 +122,9 @@ createRoot(rootEl, {
 				<MotionConfig reducedMotion="user">
 					<ThemeProvider>
 						<QueryClientProvider client={queryClient}>
+							<OfflineBanner />
 							<RouterProvider router={router} />
+							<SwUpdatePrompt />
 							<Toaster
 								position="top-right"
 								richColors

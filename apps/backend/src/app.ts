@@ -782,7 +782,12 @@ const routes = app
 	.route('/api/v1', createBookingRoutes(bookingFactory, idempotency))
 	.route(
 		'/api/v1',
-		createPropertyBlockRoutes(propertyBlockFactory, bookingFactory.repo, roomFactory.service),
+		createPropertyBlockRoutes(
+			propertyBlockFactory,
+			bookingFactory.repo,
+			roomFactory.service,
+			idempotency,
+		),
 	)
 	// G10 (2026-05-16) — SSE real-time для chessboard. EventSource subscribes
 	// per propertyId; CDC consumer fans booking events out via broadcaster.

@@ -994,15 +994,223 @@ ADD CONSUMER sse_booking_writer`
 
 **Complexity**: HIGH realized. Single atomic commit ~30-40 files.
 
-### Phase G11 — Offline mode (Bnovo canon, deferred decision)
+### Phase G11 — Offline mode (PWA + TanStack persister cache + cross-tab sync) — IN PROGRESS 2026-05-16 (PIVOTED к v2 per deep R1+R2 ≥ 2026-05-15)
 
-**Empirical bound source**: §3.1 Bnovo 36 days local cache (2 back + 34 forward).
-Сочи infra reality.
+**Empirical bound source**: §3.4 Сочи горный регион infra reality
+(Красная Поляна / гостевые дома). Bnovo «36 days» canon claim deemed
+unverified by R2 ≥ 2026-05-16 research — drop as anchor; use ±21 days
+sweet-spot per iOS 50MB ceiling.
 
-**Scope**: PWA service worker + IndexedDB cache for last-seen grid + queue
-mutations offline. Per `[[m5-tech-decisions]]` vite-plugin-pwa already canon.
+**Scope** (canonical atomic ship per `[[no-half-measures]]`):
 
-**Complexity**: HIGH. Decide post-G10. Defer unless infra outage data motivates.
+- PWA prompt-mode SW (vite-plugin-pwa 1.3.0 уже canon из M5)
+- IndexedDB cache via TanStack Query persister + idb-keyval
+- Dexie 4.x mutation queue + idempotency-key replay
+- 152-ФЗ AES-GCM 256-bit encryption-at-rest на guest PII fields
+- Offline UX: banner / queue badge / conflict modal / SW update prompt
+- Prerequisite: idempotency-middleware wiring к ALL mutation routes
+
+**D-G11.x corrections from R1+R2 ≥ 2026-05-16 research-agent:**
+
+- **D-G11.1 vite-plugin-pwa@1.3.0** (уже installed). `registerType: 'prompt'`
+  NOT `autoUpdate` — forms в app (booking edit, wizard) → data loss
+  risk на silent reload. `useRegisterSW` hook + Sonner action toast.
+- **D-G11.2 Two libs, two purposes:**
+  - `idb-keyval@6.2.2` (295-573 bytes) — TanStack persister storage
+    (AsyncStorage get/set/del interface)
+  - `dexie@4.4.2` + `dexie-react-hooks` (~14KB) — mutation queue +
+    `useLiveQuery` reactive badge counter
+    Avoid bundle waste: idb-keyval НЕ для queue, dexie НЕ для key-value.
+- **D-G11.3 Cache scope ±21 days from today.** Bnovo «36 days» canon
+  NOT confirmed empirically (R2: self-cited memory, unverified). ±21
+  fits iOS 50MB IndexedDB ceiling × 50-room property с guest PII.
+  Per-tenant opt-in для +90-day extended (Сочи long-stay).
+- **D-G11.4 TanStack Query config:**
+  - `networkMode: 'offlineFirst'` global (createPersister default)
+  - `staleTime: 5 * 60_000` (5 min — SSE keeps fresh online)
+  - `gcTime: 7 * 24 * 60 * 60_000` (7 days weekend coverage)
+  - `maxAge: 7 * 24 * 60 * 60_000` matches gcTime
+  - `buster: import.meta.env.VITE_GIT_SHA` per-deploy invalidation
+- **D-G11.5 Idempotency-Key UUID v4** generated at `mutate()` call time
+  (NOT at retry). Same key on all retries. Stored в Dexie queue row.
+  Per IETF draft-07 + Stripe canon: same key + same body → cached;
+  same key + different body → 422 (programmer bug).
+- **D-G11.6 Mutation queue Dexie schema:**
+  ```typescript
+  db.version(1).stores({
+  	mutationQueue: '++localId, idempotencyKey, mutationKey, createdAt, status, retryCount',
+  })
+  // status: 'pending' | 'in-flight' | 'failed-409' | 'failed-422' | 'failed-network'
+  ```
+- **D-G11.7 Replay flow** via `queryClient.resumePausedMutations()`
+  on `online` event → invalidateQueries. `setMutationDefaults` для
+  every mutationKey upfront в main.tsx (required: persisted mutation
+  state lacks mutationFn; must be re-registered).
+- **D-G11.8 Conflict resolution modal** (NOT silent LWW):
+  - Triggered on 409 from replay
+  - Side-by-side diff: «Ваше изменение (offline)» vs «Текущее состояние сервера»
+  - 3 actions: «Применить моё» (re-send PATCH с If-Match) / «Принять
+    серверное» (discard) / «Решу позже» (keep in queue)
+  - Stack: «Конфликт 1 из 3»
+- **D-G11.9 422 на replay** → log + remove + Sonner alert (программерская
+  ошибка — key reused с разным body, не должно происходить нормально).
+- **D-G11.10 NO workbox-background-sync** — Safari iOS gap (BG Sync API
+  не impl); in-app retry via TanStack Query on `online`/`visibilitychange`
+  events более reliable. Defer BG Sync до Android-only operator app.
+- **D-G11.11 152-ФЗ encryption-at-rest** ON by default:
+  - Web Crypto API: AES-GCM 256-bit per-tenant DEK
+  - DEK derived from session-bound material + PBKDF2 (salt = tenantId)
+  - DEK in-memory только (`CryptoKey` non-extractable). На logout / tab
+    close → DEK gone; next session re-derives.
+  - **Encrypt fields**: firstName, lastName, middleName, passportSeries,
+    passportNumber, dateOfBirth, citizenship, phone, email
+  - **NOT encrypt**: bookingId, dates, status, rateAmount (operational
+    metadata, no direct identifier)
+  - На logout: `indexedDB.deleteDatabase('sochi-cache')` + `queryClient
+.clear()` + SW `caches.delete()` для PII-containing routes
+- **D-G11.12 Offline UX wording RU:**
+  - Sticky banner top `role="status"` `aria-live="polite"`:
+    «Нет соединения. Изменения сохраняются локально и отправятся при
+    восстановлении сети.» (amber)
+  - Online + queue replaying: «Синхронизация… 3 из 7»
+  - All synced: toast «Все изменения сохранены», 3s auto-dismiss
+  - Sidebar mutation badge: useLiveQuery count
+- **D-G11.13 SW update prompt UI:** Sonner sticky toast «Доступна
+  новая версия» с [Обновить] button → `updateServiceWorker(true)`.
+  `onOfflineReady` → one-shot toast «Приложение готово работать offline».
+- **D-G11.14 Always-on offline** (Сочи infra). Per-tenant opt-out NOT
+  provided. Single setting: «Расширенный offline-режим (90 дней)»
+  checkbox в Settings.
+- **D-G11.15 PWA manifest** уже в vite.config.ts (M5 done). Verify
+  per R2 spec: name «Сочи PMS», RU lang, theme_color, icons, shortcuts.
+- **D-G11.16 runtimeCaching strategy:**
+  - `/assets/*` (hashed Vite): CacheFirst 365d
+  - `/fonts/*`, `/icons/*`: CacheFirst 365d
+  - `/api/v1/*` GET: TanStack persister handles; SW NetworkOnly (не
+    duplicate cache layer)
+  - `/api/v1/sse`: NetworkOnly (no caching SSE stream)
+  - `/api/v1/*` POST/PATCH/DELETE: TanStack mutations + Dexie queue;
+    SW NetworkOnly
+  - `/index.html`: NetworkFirst 30s timeout fallback (app shell freshness)
+- **D-G11.17 Prerequisite idempotency fixes** (backend recon gaps):
+  - POST /properties/:propertyId/blocks (property-block.routes.ts) — add idempotency middleware
+  - PATCH /bookings/:id/{cancel,check-in,check-out,no-show} — add idempotency
+- **D-G11.18 152-ФЗ operator onboarding banner** (one-shot):
+  «Данные гостей шифруются на этом устройстве. Не используйте offline-
+  режим на общем компьютере. После окончания смены выйдите из аккаунта.»
+  Постоянная subtle indication в sidebar: «🔒 Шифрование локальной БД: включено».
+
+**Backend (modified files):**
+
+- Booking routes + property-block routes — add idempotency middleware
+- (No new schemas/migrations — existing idempotencyKey table works)
+
+**Frontend (new files):**
+
+- `apps/frontend/src/lib/offline/encryption.ts` — Web Crypto AES-GCM
+- `apps/frontend/src/lib/offline/dexie-mutation-queue.ts` — schema + API
+- `apps/frontend/src/lib/offline/persister.ts` — TanStack persister wiring
+- `apps/frontend/src/lib/offline/online-status.ts` — useOnlineStatus hook
+- `apps/frontend/src/lib/offline/setup-mutation-defaults.ts` — registerSetMutationDefaults
+- `apps/frontend/src/components/offline-banner.tsx`
+- `apps/frontend/src/components/mutation-queue-badge.tsx`
+- `apps/frontend/src/components/conflict-resolution-dialog.tsx`
+- `apps/frontend/src/components/sw-update-prompt.tsx`
+- `apps/frontend/src/main.tsx` — wire all above
+- `apps/frontend/vite.config.ts` — switch к `registerType: 'prompt'`
+
+**Tests:**
+
+- Shared unit: encryption round-trip + queue ordering + conflict diff
+- Backend integration: idempotency replay для blocks + booking transitions
+- E2E: Playwright `context.setOffline(true)` → mutate → reconnect → assert
+  replay; conflict modal flow; SW update prompt visible
+
+**Complexity**: HIGH realized. Single atomic commit ~25-30 files + 5 deps.
+
+### G11 v2 PIVOT (post-deep-R1+R2 ≥ 2026-05-15) — 4 halfmeasures collapsed
+
+User pinged «реинвентируешь, копай глубже, современней». Deep R1+R2 launched
+с strict freshness ≥ 2026-05-15. Output identified **4 halfmeasures** in v1:
+
+1. **Reinvented mutation queue** — Dexie+useOfflineMutation+handler-registry
+   = duplicate of TanStack Query's built-in `setMutationDefaults` +
+   persistQueryClient + native pause/resume. Per `[[no-half-measures]]`
+   canon: drop, use first-party primitive.
+2. **One queue for everything** — 2026 canon is TIERED: Workbox BG Sync для
+   low-stakes (telemetry/notes/tags), foreground TanStack для booking-class.
+3. **Diff modal for conflict** — engineer-correct, operator-wrong. 2026
+   canon (Replicache hotel example + Smashing May 2026): «re-run mutator
+   on rebase + Sonner toast 'не прошло' + sidebar dot», NOT side-by-side.
+4. **Encrypt PII в browser** — solving wrong problem. 2026 canon: «don't
+   cache PII at all» (matches Cloudbeds/Mews production behavior). Cache
+   operational metadata only; fetch PII on-demand from server.
+
+**D-G11.20..30 v2 corrections (R1+R2 ≥ 2026-05-15):**
+
+- **D-G11.20** Drop encryption layer (AES-GCM + PBKDF2 + per-tenant DEK).
+  No PII in cache = no 152-ФЗ surface = no encryption needed.
+- **D-G11.21** Drop Dexie mutation queue + useOfflineMutation + handler-
+  registry + replay-loop. Use TanStack Query persister directly via
+  `experimental_createQueryPersister` + per-mutation `Idempotency-Key`
+  header (existing pattern — already canonical).
+- **D-G11.22** Drop ConflictResolutionDialog. Toast canon: «Не удалось
+  сохранить: <reason>. [Открыть]» с action button к current state.
+  Operator-correct UX vs engineer-correct modal.
+- **D-G11.23** Persister `serialize` strips PII fields before write
+  (firstName/lastName/middleName/passport\*/dateOfBirth/citizenship/
+  phone/email/documentNumber → null placeholder, structural shape kept).
+- **D-G11.24** Cross-tab cache sync via
+  `@tanstack/query-broadcast-client-experimental` + BroadcastChannel
+  «sochi-pms-cache». Operator с 2 tabs → edit in A → cache invalidates
+  in B automatically.
+- **D-G11.25** OfflineBanner uses `useIsMutating()` from TanStack (native
+  in-flight counter) instead of Dexie useLiveQuery. Less code, more canon.
+- **D-G11.26** Logout cleanup: drop Dexie destroy, keep `clearOfflineCache()`
+  - `queryClient.clear()` (best-effort).
+- **D-G11.27** Workbox `BackgroundSyncPlugin` для low-stakes routes —
+  DEFERRED until telemetry/notes/tags endpoints ship. No surface к wire
+  against in current backend. Document как follow-up task.
+- **D-G11.28** TanStack DB 0.6 (March 2026) `@tanstack/query-db-collection`
+  - `@tanstack/offline-transactions` (alpha) — DEFERRED к v0.7 stable
+    (research: «alpha persistence»; revisit Q3 2026).
+- **D-G11.29** Backend PII split endpoint (`GET /bookings/:id/guest`
+  separately) — DEFERRED. Current persister PII-strip covers compliance
+  surface при minimal backend change. Future ship splits на separate
+  endpoints for full «PII on-demand» canon.
+- **D-G11.30** iOS install banner («Add к Home Screen» для 7-day eviction
+  defense) — DEFERRED. Sochi PMS desktop-default user base; iOS install
+  prompt UX adds work для low-frequency case.
+
+**Backend (modified files v2):**
+
+- `apps/backend/src/domains/property-block/property-block.routes.ts` —
+  idempotency middleware param added (signature change)
+- `apps/backend/src/app.ts` — pass idempotency к property-block routes
+- No new schemas/migrations
+
+**Frontend v2 (NEW + MODIFIED):**
+
+- `apps/frontend/src/lib/offline/persister.ts` — TanStack persister с
+  PII-strip serialize
+- `apps/frontend/src/lib/offline/online-status.ts` — useOnlineStatus hook
+- `apps/frontend/src/components/offline-banner.tsx` — useIsMutating-driven
+- `apps/frontend/src/components/sw-update-prompt.tsx` — Sonner action toast
+- `apps/frontend/src/main.tsx` — persister + broadcastQueryClient + SW
+  prompt mount
+- `apps/frontend/vite.config.ts` — `registerType: 'prompt'`
+- `apps/frontend/env.d.ts` — VITE_GIT_SHA + vite-plugin-pwa/react types
+- `apps/frontend/src/features/auth/hooks/use-auth-mutations.ts` —
+  clearOfflineCache на logout
+- `apps/frontend/src/lib/api-errors.ts` — `statusCode` field for routing
+
+**Tests v2:**
+
+- v1 unit tests dropped с infrastructure (encryption + queue)
+- Pipeline covered via existing mutation hooks' tests + future e2e
+
+**Throwaway from v1**: ~40-50% React-layer code per research. Confirms
+canon-correct atomic ship vs engineering-correct halfmeasure.
 
 ## §5 — Empirical signals to track (per `[[memory-is-canon-not-backlog]]`)
 

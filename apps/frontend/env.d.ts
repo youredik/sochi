@@ -1,8 +1,13 @@
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/react" />
 
 interface ImportMetaEnv {
 	/** Hono backend base URL; defaults to same-origin via Vite dev proxy. */
 	readonly VITE_API_URL?: string
+	/** Per-deploy cache buster для TanStack persister (G11 2026-05-16).
+	 *  Set via CI as 'sha-XXXXXXX' commit short hash; undefined в dev
+	 *  → persister uses literal 'dev' (no invalidation, fast iteration). */
+	readonly VITE_GIT_SHA?: string
 	/**
 	 * Yandex SmartCaptcha client site key. Unset → captcha widget renders
 	 * nothing and dev forms skip the token field. Backend pairs via

@@ -119,6 +119,17 @@ export function useSignOut() {
 		},
 		onSuccess: async () => {
 			broadcastLogout()
+			// G11 v2 (2026-05-16): operator session end → wipe local cache.
+			// Per R1+R2 ≥ 2026-05-15 canon: persister cache contains operational
+			// metadata only (no PII per «don't cache PII» canon) — clear для
+			// fresh-tenant safety on next login. Best-effort.
+			const { clearOfflineCache } = await import('@/lib/offline/persister')
+			try {
+				await clearOfflineCache()
+				queryClient.clear()
+			} catch (err) {
+				logger.warn('auth.signOut: offline cache wipe failed', { err: String(err) })
+			}
 			await queryClient.invalidateQueries({ queryKey: sessionQueryOptions.queryKey })
 			void navigate({ to: '/login', search: { redirect: undefined }, reloadDocument: true })
 		},

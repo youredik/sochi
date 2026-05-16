@@ -95,7 +95,7 @@ export default {
 			comment: 'Excludes @/* tsconfig path aliases (covered by Biome noUnresolvedImports).',
 			severity: 'error',
 			from: {},
-			to: { couldNotResolve: true, pathNot: ['^@/'] },
+			to: { couldNotResolve: true, pathNot: ['^@/', '^virtual:'] },
 		},
 		{
 			name: 'no-orphans',

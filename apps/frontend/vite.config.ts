@@ -38,7 +38,11 @@ export default defineConfig({
 		// Safari «Open as Web App» — game-changer (per plan §M9.4 + iOS 26
 		// research: Apple добавил «Open as Web App» по умолчанию ON 2025-09).
 		VitePWA({
-			registerType: 'autoUpdate',
+			// G11 (2026-05-16) — `prompt` (NOT autoUpdate) per R1+R2 ≥ 2026-05-16
+			// canon: operator app has forms (booking edit, wizard) → silent reload
+			// mid-edit = data loss. `useRegisterSW` hook + Sonner action toast
+			// «Доступна новая версия. [Обновить]» (см. SwUpdatePrompt component).
+			registerType: 'prompt',
 			// devOptions.enabled — генерирует manifest + SW в dev mode для local
 			// smoke testing. Без этого Vite SPA fallback ловит /manifest.webmanifest
 			// и возвращает index.html (parser fail в Playwright PWA verify).
