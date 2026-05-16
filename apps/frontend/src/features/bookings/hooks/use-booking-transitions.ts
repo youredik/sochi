@@ -1,4 +1,4 @@
-import type { BookingStatus } from '@horeca/shared'
+import type { BookingGuestSnapshot, BookingStatus } from '@horeca/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
@@ -42,6 +42,12 @@ type BookingShape = {
 	// inline edit affordances. Already returned by `GET /bookings/:id`.
 	ratePlanId?: string
 	guestsCount?: number
+	// G8 (2026-05-16) — assignedRoomId needed для unassigned-list filter и
+	// «Назначить номер» dialog. Server already serializes на every Booking row.
+	assignedRoomId?: string | null
+	// G8 — guestSnapshot нужен для UnassignedPanel list 152-ФЗ mask (per
+	// G4 canon). Server already serializes на every Booking row.
+	guestSnapshot?: BookingGuestSnapshot
 	cancelReason?: string | null
 	cancelledAt?: string | null
 	checkedInAt?: string | null
@@ -353,5 +359,118 @@ export function useGridDragMoveRoomType(
 		onSuccess: () => {
 			toast.success('Бронь перемещена в новую категорию')
 		},
+	})
+}
+
+// ---------------------------------------------------------------------------
+// G8 Unassigned Reservations panel + auto-assign (2026-05-16).
+//
+// Per Cloudbeds canon + Kleinberg-Tardos Interval-Partition Greedy algorithm
+// (verified 2026-05-16 research):
+//   - useAssignRoom: per-booking pin specific roomId (idempotent same-room)
+//   - useAutoAssignUnassigned: mass-assign via backend Interval-Partition
+//     algorithm; partial-success canon — returns { assigned, skipped }
+//   - useUnassignedBookings: list + count via polling (refetchInterval 5s)
+//     для panel badge real-time refresh
+// ---------------------------------------------------------------------------
+
+function assignErrorMessage(err: ApiError, defaultMsg: string): string {
+	if (err.code === 'INVALID_BOOKING_AMEND_STATE') {
+		return 'Назначение недоступно в текущем статусе брони'
+	}
+	if (err.code === 'ROOM_ASSIGNMENT_CONFLICT') {
+		return 'Номер не подходит: занят, другой категории, или отключён'
+	}
+	if (err.code === 'NOT_FOUND') {
+		return 'Бронь или номер не найдены'
+	}
+	return err.message || defaultMsg
+}
+
+export function useAssignRoom(deps: AmendDeps) {
+	return useAmendMutation<{ roomId: string }>(
+		deps,
+		'Номер назначен',
+		'Не удалось назначить номер',
+		(vars) =>
+			api.api.v1.bookings[':id']['assign-room'].$patch({
+				param: { id: deps.bookingId },
+				json: { roomId: vars.roomId },
+			}),
+	)
+}
+
+interface AutoAssignDeps {
+	propertyId: string | null
+	windowFrom: string
+	windowTo: string
+}
+
+export function useAutoAssignUnassigned(deps: AutoAssignDeps) {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: async () => {
+			if (!deps.propertyId) throw new Error('propertyId required')
+			const res = await api.api.v1.properties[':propertyId'].bookings['auto-assign'].$post({
+				param: { propertyId: deps.propertyId },
+			})
+			if (!res.ok) throw await errorFromResponse(res)
+			const body = (await res.json()) as {
+				data: {
+					assigned: Array<{ bookingId: string; roomId: string }>
+					skipped: Array<{ bookingId: string; reason: string }>
+				}
+			}
+			return body.data
+		},
+		onError: (err: ApiError) => {
+			logger.warn('booking.autoAssign failed', { code: err.code, message: err.message })
+			toast.error(assignErrorMessage(err, 'Не удалось распределить брони'))
+		},
+		onSettled: async () => {
+			await queryClient.invalidateQueries({ queryKey: ['bookings', deps.propertyId] })
+			await queryClient.invalidateQueries({ queryKey: ['unassigned', deps.propertyId] })
+		},
+		onSuccess: (data) => {
+			const assignedN = data.assigned.length
+			const skippedN = data.skipped.length
+			if (assignedN === 0 && skippedN === 0) {
+				toast.info('Нет броней для распределения')
+			} else if (skippedN === 0) {
+				toast.success(`Распределено: ${assignedN}`)
+			} else {
+				toast.success(`Распределено: ${assignedN}. Пропущено: ${skippedN}`)
+			}
+		},
+	})
+}
+
+/**
+ * Polled unassigned-bookings list для panel badge + click-list. Per Cloudbeds
+ * canon + TanStack 2026 polling docs (refetchInterval 5_000 — verified
+ * research 2026-05-16). Cache key independent from grid bookings query —
+ * panel survives grid window-shift.
+ */
+export function useUnassignedBookings(propertyId: string | null) {
+	return useQuery({
+		queryKey: ['unassigned', propertyId] as const,
+		queryFn: async () => {
+			if (!propertyId) return [] as BookingShape[]
+			// Reuse list endpoint c assignedRoomId=null filter? No such filter
+			// в bookingListParams; instead fetch all and filter client-side OR
+			// use dedicated endpoint. For MVP: list w/ wide window и filter
+			// client-side (SMB scale: ≤200 bookings per property).
+			const res = await api.api.v1.properties[':propertyId'].bookings.$get({
+				param: { propertyId },
+				query: { status: 'confirmed' },
+			})
+			if (!res.ok) throw new Error('unassigned.list failed')
+			const body = (await res.json()) as { data: BookingShape[] }
+			return body.data.filter((b) => !b.assignedRoomId)
+		},
+		enabled: Boolean(propertyId),
+		refetchInterval: 5_000,
+		refetchIntervalInBackground: false,
+		staleTime: 2_000,
 	})
 }

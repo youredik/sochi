@@ -27,6 +27,7 @@ import {
 	InvalidBookingAmendStateError,
 	InvalidBookingTransitionError,
 	NoInventoryError,
+	RoomAssignmentConflictError,
 } from '../../errors/domain.ts'
 
 type SqlInstance = typeof SQL
@@ -1147,6 +1148,138 @@ export function createBookingRepo(sql: SqlInstance) {
 					throw err.cause
 				throw err
 			}
+		},
+
+		/**
+		 * G8 (2026-05-16) — pin specific room к booking (single-assign).
+		 *
+		 * Service-layer pre-checks (property/roomType/isActive); repo enforces
+		 * overlap-with-other-booking guard inside atomic tx + CAS predicate
+		 * для concurrency.
+		 *
+		 * Status guard: confirmed-only (in_house = guest physically already
+		 * located в a room; reassignment = check-out + re-booking flow).
+		 *
+		 * Idempotent: same `roomId` → no-op return current (operator-trust
+		 * canon, mirrors G5 change-rate-plan + G7 change-room-type pattern).
+		 */
+		async assignRoom(
+			tenantId: string,
+			id: string,
+			ctx: { roomId: string; actorUserId: string },
+		): Promise<Booking | null> {
+			try {
+				return await sql.begin({ idempotent: true }, async (tx) => {
+					const current = await loadByIdForTx(tx, tenantId, id)
+					if (!current) return null
+					if (current.status !== 'confirmed') {
+						throw new InvalidBookingAmendStateError(current.status, 'assign-room')
+					}
+					if (current.assignedRoomId === ctx.roomId) {
+						return current
+					}
+					// Overlap check inside tx: any OTHER booking with same roomId
+					// in overlapping date range (using ixBookingRoom index).
+					const checkInDate = dateFromIso(current.checkIn)
+					const checkOutDate = dateFromIso(current.checkOut)
+					const [overlapRows = []] = await tx<{ id: string }[]>`
+						SELECT id FROM booking VIEW ixBookingRoom
+						WHERE tenantId = ${tenantId}
+							AND assignedRoomId = ${ctx.roomId}
+							AND id != ${current.id}
+							AND checkIn < ${checkOutDate}
+							AND checkOut > ${checkInDate}
+							AND status IN ('confirmed', 'in_house')
+						LIMIT 1
+					`
+					if (overlapRows[0]) {
+						throw new RoomAssignmentConflictError('room_occupied', `bookingId=${overlapRows[0].id}`)
+					}
+
+					const now = new Date()
+					await upsertAmendedBookingRow(tx, current, {
+						updatedAt: now,
+						updatedBy: ctx.actorUserId,
+						assignedRoomId: ctx.roomId,
+					})
+
+					return {
+						...current,
+						assignedRoomId: ctx.roomId,
+						updatedAt: now.toISOString(),
+						updatedBy: ctx.actorUserId,
+					}
+				})
+			} catch (err) {
+				if (err instanceof Error && err.cause instanceof InvalidBookingAmendStateError)
+					throw err.cause
+				if (err instanceof Error && err.cause instanceof RoomAssignmentConflictError)
+					throw err.cause
+				throw err
+			}
+		},
+
+		/**
+		 * G8 — list confirmed bookings без assignedRoomId for а property.
+		 * Used by auto-assign service + UnassignedPanel count query.
+		 */
+		async listUnassignedByProperty(tenantId: string, propertyId: string): Promise<Booking[]> {
+			const [rows = []] = await sql<BookingRow[]>`
+				SELECT * FROM booking
+				WHERE tenantId = ${tenantId}
+					AND propertyId = ${propertyId}
+					AND status = 'confirmed'
+					AND assignedRoomId IS NULL
+				ORDER BY checkIn ASC, id ASC
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map(rowToBooking)
+		},
+
+		/**
+		 * G8 — list existing assignments (confirmed + in_house bookings с
+		 * assignedRoomId IS NOT NULL) для overlap matrix в auto-assign.
+		 */
+		async listAssignmentsByProperty(tenantId: string, propertyId: string): Promise<Booking[]> {
+			const [rows = []] = await sql<BookingRow[]>`
+				SELECT * FROM booking
+				WHERE tenantId = ${tenantId}
+					AND propertyId = ${propertyId}
+					AND status IN ('confirmed', 'in_house')
+					AND assignedRoomId IS NOT NULL
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map(rowToBooking)
+		},
+
+		/**
+		 * G8 — apply auto-assign plan per-row, each в own tx. Partial-
+		 * success тroughout — operator-trust canon (Cloudbeds). Existing
+		 * assignments NEVER touched (algorithm output targets `unassigned`
+		 * subset). Per-row tx avoids YDB session-pool edge that flakes
+		 * multi-write batch tx с тяжёлой upsert payload (Sochi-local
+		 * empirical, не upstream bug).
+		 *
+		 * Caller (service) returns plan as-is; this method updates DB к
+		 * match. На race (status changed mid-flight), row silently skipped.
+		 */
+		async batchAssignRooms(
+			tenantId: string,
+			assignments: ReadonlyArray<{ bookingId: string; roomId: string }>,
+			actorUserId: string,
+		): Promise<number> {
+			if (assignments.length === 0) return 0
+			let written = 0
+			for (const a of assignments) {
+				const ok = await this.assignRoom(tenantId, a.bookingId, {
+					roomId: a.roomId,
+					actorUserId,
+				}).catch(() => null)
+				if (ok) written += 1
+			}
+			return written
 		},
 	}
 

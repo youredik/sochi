@@ -1,5 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import {
+	bookingAssignRoomInput,
 	bookingCancelInput,
 	bookingChangeGuestsCountInput,
 	bookingChangeRatePlanInput,
@@ -149,6 +150,35 @@ export function createBookingRoutes(f: BookingFactory, idempotency: IdempotencyM
 					const updated = await service.changeGuestsCount(c.var.tenantId, id, input, c.var.user.id)
 					if (!updated) throw new BookingNotFoundError(id)
 					return c.json({ data: updated }, 200)
+				},
+			)
+			// G8 (2026-05-16) — assign specific physical room. Cloudbeds canon
+			// «Назначить номер» single-booking + drag-from-unassigned-panel target.
+			.patch(
+				'/bookings/:id/assign-room',
+				zValidator('param', bookingIdParam),
+				zValidator('json', bookingAssignRoomInput),
+				async (c) => {
+					const { id } = c.req.valid('param')
+					const input = c.req.valid('json')
+					const updated = await service.assignRoom(c.var.tenantId, id, input, c.var.user.id)
+					if (!updated) throw new BookingNotFoundError(id)
+					return c.json({ data: updated }, 200)
+				},
+			)
+			// G8 — mass auto-assign per Interval-Partition Greedy algorithm.
+			// Partial-success preferred per Cloudbeds canon.
+			.post(
+				'/properties/:propertyId/bookings/auto-assign',
+				zValidator('param', bookingPropertyParam),
+				async (c) => {
+					const { propertyId } = c.req.valid('param')
+					const result = await service.autoAssignUnassigned(
+						c.var.tenantId,
+						propertyId,
+						c.var.user.id,
+					)
+					return c.json({ data: result }, 200)
 				},
 			)
 			// G7 (2026-05-16) drag-move band к different roomType row OR pointer-

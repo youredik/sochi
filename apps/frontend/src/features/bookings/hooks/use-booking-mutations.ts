@@ -61,6 +61,33 @@ export function useRatePlans(propertyId: string | null, roomTypeId: string | nul
  * к see inactive ones for context, OR backend doesn't expose isActive
  * field — same behaviour как existing useGridData fetch).
  */
+/**
+ * G8 (2026-05-16) — list rooms по roomType для «Назначить номер» amend
+ * dropdown. Filters server-side via roomTypeId query param (existing room
+ * routes canon — see apps/backend/src/domains/room/room.routes.ts).
+ *
+ * Includes only isActive=true rooms (default backend behavior).
+ */
+export function useRoomsByRoomType(propertyId: string | null, roomTypeId: string | null) {
+	return useQuery({
+		queryKey: ['rooms', propertyId, roomTypeId] as const,
+		queryFn: async () => {
+			if (!propertyId || !roomTypeId) return []
+			const res = await api.api.v1.properties[':propertyId'].rooms.$get({
+				param: { propertyId },
+				query: { roomTypeId },
+			})
+			if (!res.ok) throw new Error('rooms.list failed')
+			const body = (await res.json()) as {
+				data: Array<{ id: string; number: string; isActive: boolean }>
+			}
+			return body.data.filter((r) => r.isActive)
+		},
+		enabled: Boolean(propertyId && roomTypeId),
+		staleTime: 30_000,
+	})
+}
+
 export function useRoomTypes(propertyId: string | null) {
 	return useQuery({
 		queryKey: ['roomTypes', propertyId] as const,

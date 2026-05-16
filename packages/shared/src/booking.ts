@@ -209,6 +209,34 @@ export const bookingChangeGuestsCountInput = z.object({
 })
 export type BookingChangeGuestsCountInput = z.infer<typeof bookingChangeGuestsCountInput>
 
+/** G8 (2026-05-16) PATCH /bookings/:id/assign-room — pin a specific
+ *  physical room к the booking. Status guard: confirmed-only (in_house =
+ *  guest already physically placed; cancelled/terminal = nothing к assign).
+ *  Server validates room belongs к same property + same roomType + isActive +
+ *  no overlap с другими bookings того roomId в date range. Idempotent в
+ *  смысле «same roomId → no-op return current» когда already pinned.
+ */
+export const bookingAssignRoomInput = z.object({
+	roomId: idSchema('room'),
+})
+export type BookingAssignRoomInput = z.infer<typeof bookingAssignRoomInput>
+
+/** G8 (2026-05-16) POST /properties/:propertyId/bookings/auto-assign —
+ *  mass-assign all confirmed bookings с assignedRoomId=null per Interval-
+ *  Partition Greedy algorithm (Kleinberg-Tardos §4.1 canonical). Sort by
+ *  checkIn ASC + top-down roomNumber ASC tie-break (Mews canon). Partial-
+ *  success preferred (Cloudbeds parity): existing assignments NEVER
+ *  mutated (operator-trust idempotency canon).
+ */
+export type BookingAutoAssignReason = 'no_room' | 'wrong_type' | 'room_inactive'
+export interface BookingAutoAssignResult {
+	readonly assigned: ReadonlyArray<{ readonly bookingId: string; readonly roomId: string }>
+	readonly skipped: ReadonlyArray<{
+		readonly bookingId: string
+		readonly reason: BookingAutoAssignReason
+	}>
+}
+
 /** G7 (2026-05-16) PATCH /bookings/:id/change-room-type — drag-move band
  *  across roomType rows OR pointer-alternative «Переместить в категорию»
  *  amend dialog. Same dates → server auto-picks default active ratePlan for

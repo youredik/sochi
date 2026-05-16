@@ -124,10 +124,20 @@ export class InvalidBookingTransitionError extends ConflictError {
 export class InvalidBookingAmendStateError extends ConflictError {
 	override readonly code = 'INVALID_BOOKING_AMEND_STATE'
 	readonly bookingStatus: string
-	readonly operation: 'move-dates' | 'change-rate-plan' | 'change-guests-count' | 'change-room-type'
+	readonly operation:
+		| 'move-dates'
+		| 'change-rate-plan'
+		| 'change-guests-count'
+		| 'change-room-type'
+		| 'assign-room'
 	constructor(
 		bookingStatus: string,
-		operation: 'move-dates' | 'change-rate-plan' | 'change-guests-count' | 'change-room-type',
+		operation:
+			| 'move-dates'
+			| 'change-rate-plan'
+			| 'change-guests-count'
+			| 'change-room-type'
+			| 'assign-room',
 	) {
 		super(
 			`Booking with status '${bookingStatus}' cannot be amended via '${operation}'. ` +
@@ -136,6 +146,38 @@ export class InvalidBookingAmendStateError extends ConflictError {
 		this.name = 'InvalidBookingAmendStateError'
 		this.bookingStatus = bookingStatus
 		this.operation = operation
+	}
+}
+
+/**
+ * G8 (2026-05-16) — `PATCH /bookings/:id/assign-room` validation
+ * failures. 409 CONFLICT в HTTP layer.
+ *
+ * Reasons:
+ *   - `wrong_property` — room.propertyId не match booking.propertyId
+ *   - `wrong_room_type` — room.roomTypeId не match booking.roomTypeId
+ *   - `room_inactive` — room.isActive === false (OoS / decommissioned)
+ *   - `room_occupied` — room уже assigned к другой booking overlapping dates
+ *   - `cas_race` — concurrent operator already changed assignedRoomId
+ */
+export class RoomAssignmentConflictError extends ConflictError {
+	override readonly code = 'ROOM_ASSIGNMENT_CONFLICT'
+	readonly reason:
+		| 'wrong_property'
+		| 'wrong_room_type'
+		| 'room_inactive'
+		| 'room_occupied'
+		| 'cas_race'
+	constructor(
+		reason: 'wrong_property' | 'wrong_room_type' | 'room_inactive' | 'room_occupied' | 'cas_race',
+		detail = '',
+	) {
+		super(
+			`Room assignment conflict (${reason})${detail ? `: ${detail}` : ''}. ` +
+				`Cloudbeds canon: skip locked / OoS rooms and reject double-bookings.`,
+		)
+		this.name = 'RoomAssignmentConflictError'
+		this.reason = reason
 	}
 }
 

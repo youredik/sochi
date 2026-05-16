@@ -1,4 +1,6 @@
 import type {
+	BookingAssignRoomInput,
+	BookingAutoAssignResult,
 	BookingCancelInput,
 	BookingChangeGuestsCountInput,
 	BookingChangeRatePlanInput,
@@ -25,11 +27,14 @@ import {
 	NoInventoryError,
 	PropertyNotFoundError,
 	RatePlanNotFoundError,
+	RoomAssignmentConflictError,
 	RoomTypeNotFoundError,
 } from '../../errors/domain.ts'
+import { planAutoAssign } from './auto-assign.ts'
 import type { PropertyService } from '../property/property.service.ts'
 import type { RateRepo } from '../rate/rate.repo.ts'
 import type { RatePlanService } from '../ratePlan/ratePlan.service.ts'
+import type { RoomService } from '../room/room.service.ts'
 import type { RoomTypeService } from '../roomType/roomType.service.ts'
 import { __bookingRepoInternals, type BookingRepo } from './booking.repo.ts'
 
@@ -160,6 +165,10 @@ export function createBookingService(
 	propertyService: PropertyService,
 	roomTypeService: RoomTypeService,
 	ratePlanService: RatePlanService,
+	// G8 (2026-05-16) — optional roomService для assign-room + auto-assign.
+	// Backward-compat undefined для legacy callers (returns 501 at runtime
+	// if endpoints invoked sans wiring).
+	roomService?: RoomService,
 ) {
 	return {
 		getById: (tenantId: string, id: string) => repo.getById(tenantId, id),
@@ -484,6 +493,121 @@ export function createBookingService(
 				tourismTaxMicros: computeTourismTax(totalMicros, prop.tourismTaxRateBps, nights.length),
 				actorUserId,
 			})
+		},
+
+		/**
+		 * G8 (2026-05-16) — Pin specific physical room к booking.
+		 *
+		 * Validates room belongs к same property + same roomType + isActive;
+		 * delegates overlap-check к repo (atomic с CAS predicate). Status
+		 * guard: confirmed-only (in_house = guest physically already placed —
+		 * reassignment is check-out + new booking flow).
+		 *
+		 * Idempotent: same `roomId` returns current unchanged (operator-trust
+		 * canon — mirrors G5 change-rate-plan + G7 change-room-type pattern).
+		 */
+		assignRoom: async (
+			tenantId: string,
+			id: string,
+			input: BookingAssignRoomInput,
+			actorUserId: string,
+		) => {
+			if (!roomService) {
+				throw new Error('roomService not wired — G8 assign-room requires factory update')
+			}
+			const current = await repo.getById(tenantId, id)
+			if (!current) return null
+			if (current.status !== 'confirmed') {
+				throw new InvalidBookingAmendStateError(current.status, 'assign-room')
+			}
+			if (current.assignedRoomId === input.roomId) {
+				return current
+			}
+			const room = await roomService.getById(tenantId, input.roomId)
+			if (!room) {
+				throw new RoomAssignmentConflictError(
+					'wrong_property',
+					`room ${input.roomId} not found in tenant`,
+				)
+			}
+			if (room.propertyId !== current.propertyId) {
+				throw new RoomAssignmentConflictError(
+					'wrong_property',
+					`room.propertyId=${room.propertyId} != booking.propertyId=${current.propertyId}`,
+				)
+			}
+			if (room.roomTypeId !== current.roomTypeId) {
+				throw new RoomAssignmentConflictError(
+					'wrong_room_type',
+					`room.roomTypeId=${room.roomTypeId} != booking.roomTypeId=${current.roomTypeId}`,
+				)
+			}
+			if (!room.isActive) {
+				throw new RoomAssignmentConflictError(
+					'room_inactive',
+					`room ${input.roomId} isActive=false`,
+				)
+			}
+			return repo.assignRoom(tenantId, id, {
+				roomId: input.roomId,
+				actorUserId,
+			})
+		},
+
+		/**
+		 * G8 (2026-05-16) — Mass auto-assign all confirmed unassigned bookings
+		 * к available rooms per Interval-Partition Greedy algorithm.
+		 *
+		 * Pure algorithm (`planAutoAssign`) operates on snapshot;
+		 * `batchAssignRooms` writes plan atomically. Partial-success
+		 * preferred (Cloudbeds canon) — returns `{ assigned, skipped }` со
+		 * causes. Existing assignments NEVER mutated (idempotency).
+		 *
+		 * Re-runnable safely: only previously-unassigned bookings touched.
+		 */
+		autoAssignUnassigned: async (
+			tenantId: string,
+			propertyId: string,
+			actorUserId: string,
+		): Promise<BookingAutoAssignResult> => {
+			if (!roomService) {
+				throw new Error('roomService not wired — G8 auto-assign requires factory update')
+			}
+			const prop = await propertyService.getById(tenantId, propertyId)
+			if (!prop) throw new PropertyNotFoundError(propertyId)
+
+			const [unassigned, existingPins, rooms] = await Promise.all([
+				repo.listUnassignedByProperty(tenantId, propertyId),
+				repo.listAssignmentsByProperty(tenantId, propertyId),
+				roomService.listByProperty(tenantId, propertyId, { includeInactive: true }),
+			])
+
+			const plan = planAutoAssign({
+				unassigned: unassigned.map((b) => ({
+					id: b.id,
+					roomTypeId: b.roomTypeId,
+					checkIn: b.checkIn,
+					checkOut: b.checkOut,
+				})),
+				rooms: rooms.map((r) => ({
+					id: r.id,
+					roomTypeId: r.roomTypeId,
+					roomNumber: r.number,
+					isActive: r.isActive,
+				})),
+				existingPins: existingPins
+					.filter((b) => b.assignedRoomId !== null)
+					.map((b) => ({
+						bookingId: b.id,
+						// biome-ignore lint/style/noNonNullAssertion: filter above guarantees non-null per type-narrowing limitation
+						roomId: b.assignedRoomId!,
+						checkIn: b.checkIn,
+						checkOut: b.checkOut,
+					})),
+			})
+
+			await repo.batchAssignRooms(tenantId, plan.assigned, actorUserId)
+			return plan
 		},
 
 		/**

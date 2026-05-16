@@ -65,3 +65,5 @@ export function createRoomService(
 		delete: (tenantId: string, id: string) => repo.delete(tenantId, id),
 	}
 }
+
+export type RoomService = ReturnType<typeof createRoomService>

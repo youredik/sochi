@@ -121,6 +121,8 @@ const bookingFactory = createBookingFactory(
 	propertyFactory.service,
 	roomTypeFactory.service,
 	ratePlanFactory.service,
+	// G8 (2026-05-16) — roomService wired для assign-room + auto-assign endpoints.
+	roomFactory.service,
 )
 const activityFactory = createActivityFactory(sql)
 const notificationFactory = createNotificationFactory(sql, activityFactory.repo)

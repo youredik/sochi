@@ -18,10 +18,15 @@ import {
 	SelectValue,
 } from '@/components/ui/select'
 import { intRangeNumberValidator } from '../../../lib/forms/int-range-field-schema'
-import { useRatePlans, useRoomTypes } from '../../bookings/hooks/use-booking-mutations'
+import {
+	useRatePlans,
+	useRoomsByRoomType,
+	useRoomTypes,
+} from '../../bookings/hooks/use-booking-mutations'
 import { TextField } from '../../forms/text-field'
 import { TextareaField } from '../../forms/textarea-field'
 import {
+	useAssignRoom,
 	useBooking,
 	useCancelBooking,
 	useChangeGuestsCountBooking,
@@ -42,7 +47,12 @@ import {
 
 const validateGuestsCount = intRangeNumberValidator({ min: 1, max: 20 })
 
-type AmendMode = 'move-dates' | 'change-rate-plan' | 'change-guests-count' | 'change-room-type'
+type AmendMode =
+	| 'move-dates'
+	| 'change-rate-plan'
+	| 'change-guests-count'
+	| 'change-room-type'
+	| 'assign-room'
 type ExpandedMode = BookingTransition | AmendMode | null
 
 /**
@@ -198,6 +208,7 @@ function ActionView(props: {
 		checkOut: string
 		ratePlanId?: string
 		guestsCount?: number
+		assignedRoomId?: string | null
 	}
 	propertyId: string | null
 	windowFrom: string
@@ -234,6 +245,7 @@ function ActionView(props: {
 	const changeRatePlan = useChangeRatePlanBooking(amendDeps)
 	const changeGuestsCount = useChangeGuestsCountBooking(amendDeps)
 	const changeRoomType = useChangeRoomTypeBooking(amendDeps)
+	const assignRoom = useAssignRoom(amendDeps)
 
 	// G5: rate plans fetched only когда change-rate-plan editor expanded —
 	// avoids unnecessary network when operator opens edit sheet to just
@@ -246,6 +258,13 @@ function ActionView(props: {
 	// G7: roomTypes fetched only когда change-room-type editor expanded.
 	const roomTypesQ = useRoomTypes(expanded === 'change-room-type' ? props.propertyId : null)
 	const roomTypeSelectId = useId()
+	// G8 (2026-05-16) — rooms fetched only когда assign-room editor expanded.
+	// Filtered к booking.roomTypeId (server query param).
+	const roomsQ = useRoomsByRoomType(
+		expanded === 'assign-room' ? props.propertyId : null,
+		expanded === 'assign-room' ? booking.roomTypeId : null,
+	)
+	const roomSelectId = useId()
 
 	const isPending =
 		checkIn.isPending ||
@@ -255,7 +274,8 @@ function ActionView(props: {
 		moveDates.isPending ||
 		changeRatePlan.isPending ||
 		changeGuestsCount.isPending ||
-		changeRoomType.isPending
+		changeRoomType.isPending ||
+		assignRoom.isPending
 
 	const cancelForm = useForm({
 		defaultValues: { reason: '' },
@@ -307,6 +327,16 @@ function ActionView(props: {
 		defaultValues: { roomTypeId: booking.roomTypeId },
 		onSubmit: async ({ value }) => {
 			await changeRoomType.mutateAsync({ roomTypeId: value.roomTypeId })
+			props.onClose()
+		},
+	})
+
+	// G8 — assign-room amend form. Pre-populates с current assignedRoomId (or
+	// empty for unassigned). Submit disabled когда same OR empty.
+	const assignRoomForm = useForm({
+		defaultValues: { roomId: booking.assignedRoomId ?? '' },
+		onSubmit: async ({ value }) => {
+			await assignRoom.mutateAsync({ roomId: value.roomId })
 			props.onClose()
 		},
 	})
@@ -632,6 +662,71 @@ function ActionView(props: {
 						)}
 					</changeRoomTypeForm.Subscribe>
 				</form>
+			) : expanded === 'assign-room' ? (
+				<form
+					onSubmit={(e) => {
+						e.preventDefault()
+						void assignRoomForm.handleSubmit()
+					}}
+					className="space-y-3"
+					noValidate
+					data-slot="amend-assign-room-form"
+				>
+					<assignRoomForm.Field name="roomId">
+						{(field) => {
+							const allRooms = roomsQ.data ?? []
+							return (
+								<div className="space-y-1.5">
+									<Label htmlFor={roomSelectId}>Назначить номер</Label>
+									<Select
+										value={field.state.value}
+										onValueChange={(v) => field.handleChange(v)}
+										disabled={allRooms.length === 0}
+									>
+										<SelectTrigger id={roomSelectId} aria-label="Назначить номер">
+											<SelectValue
+												placeholder={
+													roomsQ.isPending
+														? 'Загружаем номера…'
+														: allRooms.length === 0
+															? 'Нет доступных номеров'
+															: 'Выберите номер'
+												}
+											/>
+										</SelectTrigger>
+										<SelectContent>
+											{allRooms.map((r) => (
+												<SelectItem key={r.id} value={r.id}>
+													№ {r.number}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+							)
+						}}
+					</assignRoomForm.Field>
+					<assignRoomForm.Subscribe selector={(s) => s.values.roomId}>
+						{(roomId) => (
+							<ResponsiveSheetFooter>
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => setExpanded(null)}
+									disabled={isPending}
+								>
+									Назад
+								</Button>
+								<Button
+									type="submit"
+									disabled={isPending || roomId === '' || roomId === (booking.assignedRoomId ?? '')}
+								>
+									{isPending ? 'Назначаем…' : 'Назначить'}
+								</Button>
+							</ResponsiveSheetFooter>
+						)}
+					</assignRoomForm.Subscribe>
+				</form>
 			) : (
 				<>
 					<p className="text-muted-foreground text-sm">Выберите действие:</p>
@@ -701,6 +796,21 @@ function ActionView(props: {
 										className="w-full"
 									>
 										Переместить в категорию
+									</Button>
+									{/* G8 (2026-05-16) «Назначить номер» — WCAG 2.5.7
+									    pointer-alternative для UnassignedPanel + grid-
+									    drag-target в G8.bis. Label-flip: «Назначить» если
+									    null, «Переназначить» если уже pinned. */}
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										disabled={isPending}
+										onClick={() => setExpanded('assign-room')}
+										data-amend="assign-room"
+										className="w-full"
+									>
+										{booking.assignedRoomId ? 'Переназначить номер' : 'Назначить номер'}
 									</Button>
 								</>
 							) : null}

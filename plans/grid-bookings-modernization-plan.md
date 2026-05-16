@@ -3,10 +3,12 @@
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
 **Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + G3 ✓ + G3.bis ✓ + G4 ✓ + G4.bis ✓ +
-G5 ✓ + G6 ✓ + G6.bis ✓ + **G7 ✓ shipped 2026-05-16** (Pragmatic DnD 1.8.1
-drag-move band + WCAG 2.5.7 pointer-alternative dialog «Переместить в
-категорию» + 14 G7-e2e + 6 AT integration). Next: G8 (Unassigned panel +
-auto-assign) — needs backend allocation service + per-sub-phase R1+R2.
+G5 ✓ + G6 ✓ + G6.bis ✓ + G7 ✓ + **G8 ✓ shipped 2026-05-16** (Cloudbeds
+Unassigned panel + Kleinberg-Tardos Interval-Partition Greedy auto-assign
+
+- ActionView amend «Назначить номер» + WCAG 2.2 SC 4.1.3 aria-live badge
+- 15 G8-e2e + 27 integration + 12 property-based). Next: G9 (OOO maint
+- live overlap) — нужен новый propertyBlock domain + per-sub-phase R1+R2.
 
 History (2026-05-15 session):
 
@@ -720,21 +722,88 @@ HTML5 drag events reliably в headless Chromium — research-agent была
 осторожна «may be inconsistent» but empirical E13 test passed. Per
 `[[empirical-before-asserting-limits]]` always TRY first.
 
-### Phase G8 — Unassigned Reservations panel + auto-assign
+### Phase G8 ✓ DONE 2026-05-16 — Unassigned Reservations panel + auto-assign
 
-**Empirical bound source**: §3.1 Cloudbeds Spring 2026 panel; §0.1 booking has
-`assignedRoomId` nullable.
+**Pre-impl research 2026-05-16** (per `[[research-strictness-today]]` +
+HoReCa leaders + `[[gh-api-ground-truth]]` empirical npm/gh verify):
+plan refined ↓.
 
-**Scope**:
+**Empirical bound sources** verified 2026-05-16:
 
-- Top-left panel «Нераспределённые» с orange-dot count of bookings
-  с `assignedRoomId === null && status='confirmed'`.
-- Click panel → list view → click booking → assign room flow (separate
-  room selector dialog OR drag from panel к row).
-- «Авто-назначение» button → backend service to mass-assign per allocation
-  rules.
+- Cloudbeds KB «Find and handle unassigned reservations» — orange dot +
+  auto-assign canon, skip locked/OoS, list ordered by checkIn ASC.
+- Mews community / Apaleo Room Rack KB — modal-primary «assign single
+  room», top-down room order tie-breaker.
+- Mews `Optimize space allocation` — preview-before-commit pattern
+  (deferred к G8.bis).
+- Kleinberg-Tardos §4.1 Interval Partitioning — canonical algorithm
+  (sort by start time + min-heap of room latest end).
+- RoomTetris paper — first-fit greedy ~9.5% denial, acceptable SMB scale.
+- TanStack Query 5.100.10 (2026-05-11) + Pragmatic DnD 1.8.1 (G7 wired).
+- WCAG 2.2 SC 4.1.3 Status Messages — `role="status" aria-live="polite"`.
+- Hostaway: NO drag-from-sidebar gesture; modal primary on mobile.
 
-**Complexity**: MED-HIGH. Backend allocation service. 2-3 commits.
+**Concrete D-decisions (R1+R2 ≥ 2026-05-16 fresh)**:
+
+- **D-G8.1** Panel position: top-left of grid header (above day-axis),
+  pinned. Mirrors Cloudbeds canon.
+- **D-G8.2** Badge: orange dot 12px + count chip when N>0; `role="status"
+aria-live="polite" aria-label="Нераспределённых броней: N"`. HIDE
+  entirely when N=0 (Cloudbeds canon — no-zero-clutter).
+- **D-G8.3** Panel click → ResponsiveSheet (desktop side-panel / mobile
+  bottom-drawer per existing G3 canon) listing unassigned bookings.
+  Sort: **checkIn ASC then createdAt ASC** (most-urgent first).
+- **D-G8.4** Per-row «Назначить» button → secondary Sheet с list of
+  available rooms (filtered by roomType, date-range availability,
+  exclude rooms где isActive=false). Click room → POST single-assign.
+- **D-G8.5** Auto-assign algorithm: **Interval-Partition Greedy** —
+  sort unassigned bookings by checkIn ASC; iterate; для each pick first
+  room (top-down `roomNumber ASC`) where `[checkIn, checkOut)` overlaps
+  с no existing booking AND room.roomTypeId matches AND room.isActive.
+  O(N·K·days) acceptable (N≤200, K≤50, days≤365). Top-down tie-break
+  matches Mews default.
+- **D-G8.6** Backend `POST /api/v1/properties/:propertyId/bookings/
+auto-assign` body `{ }` (whole pool, нет date filter в M0) →
+  `{ data: { assigned: [{bookingId, roomId}], skipped: [{bookingId,
+reason: 'no_room' | 'wrong_type' | 'room_inactive'}] } }`. Single
+  YDB sql.begin tx; partial-success preferred (Cloudbeds parity).
+  Existing-assignments NEVER mutated (idempotency canon — operator trust).
+- **D-G8.7** Backend `POST /api/v1/bookings/:id/assign-room` body
+  `{ roomId }` → `{ data: Booking }` или 409 `INVALID_ROOM_ASSIGNMENT`.
+  Status guard: confirmed-only (in_house = guest physically already
+  placed; cancelled/terminal = nothing к assign).
+- **D-G8.8** Concurrency: row-level CAS `UPDATE booking SET
+assignedRoomId=:roomId WHERE id=:id AND assignedRoomId IS NULL`.
+  Second-operator racing → 0 rows updated → throw 409. Plus overlap-
+  check inside tx.
+- **D-G8.9** Auto-assign button label «Авто-распределить (N)» в Sheet
+  header. Confirm-dialog: «Распределить N броней?» с preview-counts
+  (assigned/skipped) — preview-before-commit DEFERRED к G8.bis (Mews
+  «Optimize» canon, needs separate dry-run endpoint).
+- **D-G8.10** TanStack Query: `refetchInterval: 5_000` on unassigned-
+  count query (Cloudbeds badge canon); on every mutation
+  invalidateQueries(['bookings', propertyId]).
+- **D-G8.11** A11y: badge `role="status" aria-live="polite"` (WCAG 2.2
+  SC 4.1.3); ResponsiveSheet inherits G3 focus-trap; per-row «Назначить»
+  button is keyboard-reachable alternative для potential future drag.
+- **D-G8.12** Testing: backend property-based (random N×K — assert
+  zero overlaps в output); e2e — admin endpoint seeds 3 unassigned →
+  open panel → auto-assign → assert all 3 placed + grid badges flip
+  off + axe scan.
+
+**Deferred к G8.bis**:
+
+- Drag-from-panel-к-row gesture (Hostaway 2026 не has, modal sufficient).
+- Preview-before-commit dry-run modal (Mews canon — separate endpoint).
+- minStay/maxStay constraints в allocation (M0 не уверен в data).
+- HK-status indicator (clean/dirty) — needs new domain.
+- Locked/OoS skip — G9 adds propertyBlock domain.
+
+**Complexity**: MED-HIGH. Single atomic commit per `[[no-half-measures]]`.
+~2000 LoC: backend services + repo + 2 routes + shared schemas (~700) +
+algorithm pure module ~150 + frontend (UnassignedPanel + 2 sheets +
+hooks) ~400 + integration tests ~400 (allocation property-based + AT-
+cases) + e2e ~350.
 
 ### Phase G9 — Live overlap detection + block-cell (OOO maintenance)
 

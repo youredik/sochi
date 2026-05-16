@@ -34,6 +34,7 @@ import { BookingBandTooltip } from './booking-band-tooltip'
 import { ChessboardDatePicker } from './chessboard-date-picker'
 import { ChessboardViewModeSelector } from './chessboard-view-mode-selector'
 import { ChessboardWindowSelector } from './chessboard-window-selector'
+import { UnassignedPanel } from './unassigned-panel'
 
 interface ClickedCell {
 	roomTypeId: string
@@ -317,9 +318,19 @@ export function Chessboard() {
 			 * НЕ viewport. Per plan §M9.3 + §6.7 anti-pattern (no shadcn
 			 * dup): Tailwind v4 native syntax. */}
 			<header className="@md/chessboard:flex-row @md/chessboard:items-center @md/chessboard:justify-between mb-4 flex flex-col gap-4">
-				<div>
-					<h1 className="text-2xl font-semibold tracking-tight">Шахматка</h1>
-					{propertyName ? <p className="text-muted-foreground text-sm">{propertyName}</p> : null}
+				<div className="flex items-center gap-3">
+					<div>
+						<h1 className="text-2xl font-semibold tracking-tight">Шахматка</h1>
+						{propertyName ? <p className="text-muted-foreground text-sm">{propertyName}</p> : null}
+					</div>
+					{/* G8 (2026-05-16) — UnassignedPanel в top-left position per
+					    Cloudbeds 2026 canon (D-G8.1). Self-hides когда N=0. */}
+					<UnassignedPanel
+						propertyId={propertyId}
+						windowFrom={windowFrom}
+						windowTo={windowTo}
+						onOpenBooking={(bookingId) => setEditingBookingId(bookingId)}
+					/>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
 					<ChessboardViewModeSelector />
