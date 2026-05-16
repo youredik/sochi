@@ -287,3 +287,71 @@ export function useChangeGuestsCountBooking(deps: AmendDeps) {
 			}),
 	)
 }
+
+/**
+ * G7 (2026-05-16) — move band к different roomType row.
+ * Drag-move target gesture OR pointer-alternative ActionView dialog.
+ *
+ * Backend auto-picks default active ratePlan для new roomType (drag UX
+ * simplicity — operator only changes the row). Same dates → atomic
+ * inventory swap. Errors mapped к canonical RU messages:
+ *   - 409 NO_INVENTORY → «Нет свободных номеров в выбранной категории»
+ *   - 409 INVALID_BOOKING_AMEND_STATE → «Изменение недоступно...»
+ *   - 404 NOT_FOUND → «Бронь или категория не найдены»
+ */
+export function useChangeRoomTypeBooking(deps: AmendDeps) {
+	return useAmendMutation<{ roomTypeId: string }>(
+		deps,
+		'Бронь перемещена в новую категорию',
+		'Не удалось переместить бронь',
+		(vars) =>
+			api.api.v1.bookings[':id']['change-room-type'].$patch({
+				param: { id: deps.bookingId },
+				json: { roomTypeId: vars.roomTypeId },
+			}),
+	)
+}
+
+/**
+ * G7 (2026-05-16) — grid-level drag-move mutation.
+ *
+ * Unlike `useChangeRoomTypeBooking` (per-booking, used в edit-sheet
+ * ActionView), this hook is constructed ONCE per grid render и accepts
+ * `bookingId` at mutateAsync time. Suitable для Pragmatic DnD onDrop
+ * handler где target booking determined dynamically.
+ *
+ * Cache invalidation на settled: grid bookings list (window-scoped) +
+ * single-booking cache when applicable.
+ */
+export function useGridDragMoveRoomType(
+	propertyId: string | null,
+	_windowFrom: string,
+	_windowTo: string,
+) {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: async (vars: { bookingId: string; roomTypeId: string }) => {
+			const res = await api.api.v1.bookings[':id']['change-room-type'].$patch({
+				param: { id: vars.bookingId },
+				json: { roomTypeId: vars.roomTypeId },
+			})
+			if (!res.ok) throw await errorFromResponse(res)
+			const body = (await res.json()) as { data: BookingShape }
+			return body.data
+		},
+		onError: (err: ApiError) => {
+			logger.warn('booking.dragMoveRoomType failed', {
+				code: err.code,
+				message: err.message,
+			})
+			toast.error(amendErrorMessage(err, 'Не удалось переместить бронь'))
+		},
+		onSettled: async (_data, _err, vars) => {
+			await queryClient.invalidateQueries({ queryKey: ['bookings', propertyId] })
+			await queryClient.invalidateQueries({ queryKey: ['booking', vars.bookingId] })
+		},
+		onSuccess: () => {
+			toast.success('Бронь перемещена в новую категорию')
+		},
+	})
+}

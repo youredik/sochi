@@ -502,7 +502,7 @@ describe('booking.service G5 amend-stay (integration)', () => {
 		expect(result).toBeNull()
 	})
 
-	test('[AX1] all three amend ops return null on non-existent id (NOT throw)', async () => {
+	test('[AX1] all four amend ops return null on non-existent id (NOT throw)', async () => {
 		const bogus = newId('booking')
 		await expect(
 			booking.moveDates(TENANT_A, bogus, { checkIn: '2033-03-10', checkOut: '2033-03-11' }, USER_A),
@@ -513,5 +513,156 @@ describe('booking.service G5 amend-stay (integration)', () => {
 		await expect(
 			booking.changeGuestsCount(TENANT_A, bogus, { guestsCount: 2 }, USER_A),
 		).resolves.toBeNull()
+		await expect(
+			booking.moveToRoomType(TENANT_A, bogus, { roomTypeId: newId('roomType') }, USER_A),
+		).resolves.toBeNull()
+	})
+
+	// ============================================================
+	// [AT*] G7 changeRoomType (moveToRoomType service method)
+	// ============================================================
+
+	async function seedSecondRoomTypeWithRates(
+		tenantId: string,
+		prop: { id: string },
+		dates: string[],
+		amountDecimal = '4000',
+	) {
+		const rt2 = await roomType.create(tenantId, prop.id, {
+			name: 'Suite',
+			maxOccupancy: 4,
+			baseBeds: 2,
+			extraBeds: 1,
+			inventoryCount: 3,
+		})
+		cleanup.push(() => roomType.delete(tenantId, rt2.id).then(() => undefined))
+		const rp2 = await ratePlan.create(tenantId, {
+			roomTypeId: rt2.id,
+			name: 'Suite BAR',
+			code: `SUITE-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+			isDefault: true,
+			isRefundable: true,
+			cancellationHours: 24,
+			mealsIncluded: 'none',
+			minStay: 1,
+			currency: 'RUB',
+		})
+		cleanup.push(() => ratePlan.delete(tenantId, rp2.id).then(() => undefined))
+		await rateRepo.bulkUpsert(tenantId, prop.id, rt2.id, rp2.id, {
+			rates: dates.map((date) => ({ date, amount: amountDecimal, currency: 'RUB' })),
+		})
+		await availability.bulkUpsert(tenantId, rt2.id, {
+			rates: dates.map((date) => ({ date, allotment: 3 })),
+		})
+		return { rt2, rp2 }
+	}
+
+	test('[AT1] moveToRoomType happy path — roomTypeId updated, ratePlan auto-picked, totalMicros recomputed', async () => {
+		const dates = ['2033-04-10', '2033-04-11']
+		const { prop, rt, rp } = await seedChain({ tenantId: TENANT_A, dates, amountDecimal: '5000' })
+		const { rt2, rp2 } = await seedSecondRoomTypeWithRates(TENANT_A, prop, dates, '4000')
+
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2033-04-10', checkOut: '2033-04-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		expect(b.roomTypeId).toBe(rt.id)
+		expect(b.totalMicros).toBe((5_000n * 1_000_000n).toString())
+
+		const moved = await booking.moveToRoomType(TENANT_A, b.id, { roomTypeId: rt2.id }, USER_A)
+		expect(moved?.roomTypeId).toBe(rt2.id)
+		expect(moved?.ratePlanId).toBe(rp2.id) // auto-picked default
+		expect(moved?.totalMicros).toBe((4_000n * 1_000_000n).toString())
+		// Dates unchanged
+		expect(moved?.checkIn).toBe('2033-04-10')
+		expect(moved?.checkOut).toBe('2033-04-11')
+	})
+
+	test('[AT2] moveToRoomType inventory swap — old roomType released, new reserved', async () => {
+		const dates = ['2033-05-10', '2033-05-11']
+		const { prop, rt, rp } = await seedChain({ tenantId: TENANT_A, dates, allotment: 3 })
+		const { rt2 } = await seedSecondRoomTypeWithRates(TENANT_A, prop, dates)
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2033-05-10', checkOut: '2033-05-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		expect(await getSold(TENANT_A, prop.id, rt.id, '2033-05-10')).toBe(1)
+		expect(await getSold(TENANT_A, prop.id, rt2.id, '2033-05-10')).toBe(0)
+
+		await booking.moveToRoomType(TENANT_A, b.id, { roomTypeId: rt2.id }, USER_A)
+		expect(await getSold(TENANT_A, prop.id, rt.id, '2033-05-10')).toBe(0) // released
+		expect(await getSold(TENANT_A, prop.id, rt2.id, '2033-05-10')).toBe(1) // reserved
+	})
+
+	test('[AT3] moveToRoomType idempotent no-op — same roomTypeId returns current row', async () => {
+		const dates = ['2033-06-10']
+		const { prop, rt, rp } = await seedChain({ tenantId: TENANT_A, dates })
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2033-06-10', checkOut: '2033-06-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		const before = b.updatedAt
+		const same = await booking.moveToRoomType(TENANT_A, b.id, { roomTypeId: rt.id }, USER_A)
+		expect(same?.updatedAt).toBe(before) // NO write — returns current
+		expect(same?.roomTypeId).toBe(rt.id)
+	})
+
+	test('[AT4] moveToRoomType cross-property — roomType from другой property throws RoomTypeNotFoundError', async () => {
+		const dates = ['2033-07-10']
+		const { prop: propA, rt: rtA, rp: rpA } = await seedChain({ tenantId: TENANT_A, dates })
+		// Second property с its own roomType
+		const { rt: rtForeign } = await seedChain({ tenantId: TENANT_A, dates })
+		const b = await booking.create(
+			TENANT_A,
+			propA.id,
+			buildBookingInput(rtA, rpA, { checkIn: '2033-07-10', checkOut: '2033-07-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		await expect(
+			booking.moveToRoomType(TENANT_A, b.id, { roomTypeId: rtForeign.id }, USER_A),
+		).rejects.toBeInstanceOf(Error) // RoomTypeNotFoundError-shaped
+	})
+
+	test('[AT5] moveToRoomType status guard — cancelled throws InvalidBookingAmendStateError', async () => {
+		const dates = ['2033-08-10']
+		const { prop, rt, rp } = await seedChain({ tenantId: TENANT_A, dates })
+		const { rt2 } = await seedSecondRoomTypeWithRates(TENANT_A, prop, dates)
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2033-08-10', checkOut: '2033-08-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		await booking.cancel(TENANT_A, b.id, { reason: 'test AT5' }, USER_A)
+
+		await expect(
+			booking.moveToRoomType(TENANT_A, b.id, { roomTypeId: rt2.id }, USER_A),
+		).rejects.toBeInstanceOf(InvalidBookingAmendStateError)
+	})
+
+	test('[AT6] moveToRoomType cross-tenant — wrong tenant returns null, no leak', async () => {
+		const dates = ['2033-09-10']
+		const { prop, rt, rp } = await seedChain({ tenantId: TENANT_A, dates })
+		const { rt2 } = await seedSecondRoomTypeWithRates(TENANT_A, prop, dates)
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2033-09-10', checkOut: '2033-09-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		const result = await booking.moveToRoomType(TENANT_B, b.id, { roomTypeId: rt2.id }, USER_A)
+		expect(result).toBeNull()
 	})
 })

@@ -3,12 +3,10 @@
 **Owner**: ed (Claude Opus 4.7, 1M context).
 **Created**: 2026-05-15.
 **Status**: G1 ✓ + G2 ✓ + G2.bis ✓ + G3 ✓ + G3.bis ✓ + G4 ✓ + G4.bis ✓ +
-**G5 ✓ pushed** (commit `a4c09ae` Apaleo Amend-Stay — move-dates +
-change-rate-plan + change-guests-count, 2026-05-15) + G6 ✓ + G6.bis ✓.
-
-ВСЕ ground-truth plan items закрыты. Outstanding только G7/G8/G9 (DnD +
-unassigned panel + live overlap) — все требуют additional backend +
-больше дизайн-итераций; их в backlog для отдельной фокусной сессии.
+G5 ✓ + G6 ✓ + G6.bis ✓ + **G7 ✓ shipped 2026-05-16** (Pragmatic DnD 1.8.1
+drag-move band + WCAG 2.5.7 pointer-alternative dialog «Переместить в
+категорию» + 14 G7-e2e + 6 AT integration). Next: G8 (Unassigned panel +
+auto-assign) — needs backend allocation service + per-sub-phase R1+R2.
 
 History (2026-05-15 session):
 
@@ -625,27 +623,102 @@ current `ChessboardWindowSelector` has 15/30/fit.
 
 **Complexity actual**: LOW. 1 atomic commit ~107 LoC.
 
-### Phase G7 — Drag-move + drag-resize gestures (Pragmatic DnD)
+### Phase G7 ✓ DONE 2026-05-16 — Drag-move band gesture (Pragmatic DnD)
 
-**Empirical bound source**: §3.4 Pragmatic DnD canon; §3.6 anti-pattern Mews
-multi-click complaint.
+**Pre-impl research 2026-05-16** (per `[[research-strictness-today]]` +
+`[[research-protocol]]` 2026 only + HoReCa leaders + `[[gh-api-ground-truth]]`
+empirical npm view): scope CORRECTED ↓.
 
-**Scope**:
+**Empirical bound source**: §3.4 Pragmatic DnD canon (verified 2026-05-16:
+**1.8.1** latest stable, NOT 1.7.x); §3.6 Hostaway mobile-disable canon
+(verified 2026-05-16 still current). Mews/Cloudbeds/Bnovo canon: WHOLE-band
+drag (not grip-handle). Apaleo amend-stay = form-based, NOT drag-resize.
 
-- Adopt `@atlaskit/pragmatic-drag-and-drop` 1.7.x.
-- **Drag-move band**: room ↔ room same dates. Existing `useTransitionMutation`
-  pattern для optimistic + rollback. NEW backend endpoint required
-  (`PATCH /bookings/:id/move` accepting target roomTypeId — overlap check).
-- **Drag-resize band edges**: extend/shorten dates. NEW endpoint
-  (`PATCH /bookings/:id/dates` OR reuse G5 general PATCH).
-- **Drag-create**: drag across empty cells → opens create-sheet с pre-filled
-  range.
-- **Keyboard equivalents**: Enter grabs, arrows move, Shift+arrows resize,
-  Esc cancels. Per React Aria GridList.
-- **Mobile**: drag explicitly disabled per Hostaway product canon (§3.6 #5).
-  Touch users → dropdown/sheet alternative.
+**Concrete D-decisions (R1+R2 ≥ 2026-05-16 fresh)**:
 
-**Complexity**: HIGH. Backend coupling. 3-4 commits.
+- **D-G7.1** `@atlaskit/pragmatic-drag-and-drop@1.8.1` (NOT 1.7.x как план
+  написал — устарело за день). Sub-packages: `*-react-drop-indicator@3.2.15`
+  - `*-react-accessibility@2.2.9`. Все React 19 compat verified via
+    `npm view ... peerDependencies`.
+- **D-G7.2** Gesture: **whole-band drag** (Mews/Cloudbeds/Bnovo consensus).
+  NO grip handle. Locked blocks (in_house / cancelled / checked_out / no_show)
+  opt-out via `canDrag: () => false`.
+- **D-G7.3** Visual: pragmatic native drag preview + `react-drop-indicator`
+  drop-zone outline. Popover API path (1.8.0+) default; Safari 17 / Chrome
+  114 baseline acceptable per browserlist.
+- **D-G7.4** Conflict resolution: pre-detect overlap on `onDrag` (not
+  `onDrop`); highlight target row red; reject drop. Mews upgrade-only
+  invariant DEFERRED (no category-upgrade UX в M0).
+- **D-G7.5** Mobile policy: drag DISABLED on `@media (pointer: coarse)` +
+  `matchMedia` runtime guard. Mobile users use ActionView amend dialog
+  (same canon как Hostaway 2026 + satisfies WCAG 2.2 SC 2.5.7).
+- **D-G7.6** **WCAG 2.2 SC 2.5.7 (mandatory AA)**: ALL drag functionality
+  MUST have single-pointer non-drag alternative. **Implementation**:
+  ActionView `booking-edit-sheet.tsx` получает NEW «Переместить в категорию»
+  amend button + roomType dropdown form. Это pointer alternative + keyboard
+  - mobile fallback ONE shape. Reuses G5 amend canon.
+- **D-G7.7** Keyboard: focus band → Enter opens ActionView (already
+  existing canon) → operator picks new roomType. NO custom drag-mode
+  keyboard handler — would conflict с roving tabindex grid model. Per
+  `[[no-half-measures]]` reuse existing affordance не invent.
+- **D-G7.8** Drag-resize edges + drag-create: **DEFERRED**. Apaleo canon
+  doesn't use drag-resize (form-based amend); Mews/Cloudbeds vague на
+  resize gesture. Drag-create — no leader 2026 canon found. Wait для user
+  signal before adding.
+- **D-G7.9** Playwright e2e suite: drag-happy (desktop), drag-conflict-
+  reject, drag-locked-block-disabled, mobile-pointer-coarse-disabled, ALL
+  affordances ALSO via ActionView dialog (pointer alternative), keyboard
+  Enter→dialog→change, cross-tenant 404. Plus axe scan на drag-mode entry.
+- **D-G7.10** Watch GitHub issues (verified open 2026-05-16): #234
+  (`dropTargets` empty в location.current edge), #229 (horizontal scroll
+  jitter — RELEVANT — наша Шахматка имеет horizontal date scroll). Add
+  regression e2e if reproducible.
+
+**Backend new endpoint** (mirrors G5 amend canon):
+
+- `PATCH /bookings/:id/change-room-type` — body `{ roomTypeId }`. Service
+  validates new roomType belongs к same property; verifies rates exist для
+  booking dates на new roomType; atomic inventory swap (release old
+  roomType nights × sold-1, reserve new roomType nights × sold+1 с
+  stopSell + allotment guards); recompute timeSlices + fees + tax.
+- New `bookingChangeRoomTypeInput` schema + `InvalidBookingAmendStateError`
+  reuse + `RoomTypeNotFoundError` reuse.
+- Status guard: confirmed-only (matches change-rate-plan canon).
+
+**Complexity actual**: MED-HIGH. Single atomic commit ~2000 LoC matching
+estimate. Backend ~600 (route + service + repo с upsertAmendedBookingRow
+extension + AmendOverride с roomTypeId/ratePlanId/assignedRoomId) +
+frontend hooks ~120 (useChangeRoomTypeBooking + useGridDragMoveRoomType +
+useRoomTypes) + ActionView extend ~80 + chessboard.tsx DnD wiring +
+CSS visual feedback ~150 + integration tests ~250 (6 AT-cases) + e2e
+~410 (14 G7-cases).
+
+**Layer 4+5 verified**:
+
+- ✅ Backend integration: 20/20 real-YDB (14 G5 + 6 G7 AT1-AT6: happy
+  path / inventory swap via direct SQL / idempotent no-op / cross-property
+  RoomTypeNotFoundError / cancelled-status guard / cross-tenant null)
+- ✅ Frontend chromium e2e: 14/14 G7 (dialog button visible / hidden для
+  terminal / happy path / no-op submit-disabled / cross-tenant 404 /
+  status-guard 409 / idempotent 200 / data-row-room-type-id wire /
+  locked-block opt-out / **keyboard alternative** / **mobile pointer-coarse
+  gate** / **axe WCAG 2.2 AA after dialog open** / **Pragmatic dragTo
+  empirical drag-gesture E13**)
+- ✅ Full booking-surface regression: 73/73 (bookings + bookings-edit +
+  g4-compliance + g5-amend-stay + **g7-room-type-move** + grid +
+  grid-a11y + grid-keyboard)
+- ✅ Frontend unit: 1795/0 (no regression)
+- ✅ Adversarial 9-item passed; surfaced defensive `assignedRoomId: null`
+  clear на roomType swap (prevents stale pointer к specific room в old
+  roomType when feature evolves к allow assignedRoomId on confirmed).
+- ✅ Memory canons recorded: `[[pragmatic-dnd-1.8.1-canon]]` +
+  `[[id-prefixes-check-before-test]]`.
+- ✅ Ratchet green.
+
+**Empirical surprise**: Playwright `dragTo` DOES trigger Pragmatic DnD
+HTML5 drag events reliably в headless Chromium — research-agent была
+осторожна «may be inconsistent» but empirical E13 test passed. Per
+`[[empirical-before-asserting-limits]]` always TRY first.
 
 ### Phase G8 — Unassigned Reservations panel + auto-assign
 

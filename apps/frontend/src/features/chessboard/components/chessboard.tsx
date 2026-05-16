@@ -1,5 +1,10 @@
+// biome-ignore lint/correctness/noUnresolvedImports: pragmatic-drag-and-drop 1.8.1 sub-package entry-points use per-folder package.json canon (Atlassian pattern); biome resolver doesn't traverse this. Empirically verified — tsgo typecheck OK + e2e G7-E13 drag-gesture works.
+import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
+// biome-ignore lint/correctness/noUnresolvedImports: same canon as above (per-folder package.json sub-entry).
+import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
 import { CalendarRangeIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useGridDragMoveRoomType } from '../../bookings/hooks/use-booking-transitions'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { Button } from '@/components/ui/button'
@@ -186,6 +191,86 @@ export function Chessboard() {
 		el?.focus()
 	}, [focus])
 
+	// G7 (2026-05-16) — Pragmatic DnD wiring: whole-band draggable →
+	// rowheader drop target → mutation. Mobile gated via pointer:coarse
+	// per Hostaway 2026 canon + WCAG 2.2 SC 2.5.7 (pointer-alternative =
+	// ActionView amend dialog «Переместить в категорию», covered separately).
+	const dragMoveMutation = useGridDragMoveRoomType(propertyId, windowFrom, windowTo)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: rowsLayout не referenced directly внутри effect, но drives DOM band layout via React render. Effect MUST re-run after layout change к re-wire draggables/dropTargets via querySelector (new band nodes replace old ones; stale listeners на removed nodes are GC'd but new ones need explicit wiring). React state → DOM dependency не visible to biome static analysis.
+	useEffect(() => {
+		if (typeof window === 'undefined') return
+		const grid = gridRef.current
+		if (!grid) return
+		// D-G7.5 mobile gate — touch input has SC 2.5.7 pointer-alt via
+		// ActionView dialog; drag-gesture suppressed.
+		if (window.matchMedia('(pointer: coarse)').matches) return
+		// Re-wire on every layout change (bookings list change triggers
+		// rowsLayout dep → useMemo recomputes → DOM rebuild).
+		const cleanups: Array<() => void> = []
+		// Draggable: every band button с confirmed status. D-G7.2 locked-block
+		// opt-out via querySelector filter (non-confirmed bands не получают
+		// draggable).
+		for (const el of grid.querySelectorAll<HTMLButtonElement>(
+			'[data-booking-id][data-band-status="confirmed"]',
+		)) {
+			const bookingId = el.dataset.bookingId
+			const sourceRoomTypeId = el.dataset.bandRoomTypeId
+			if (!bookingId || !sourceRoomTypeId) continue
+			cleanups.push(
+				draggable({
+					element: el,
+					getInitialData: () => ({
+						type: 'booking-band',
+						bookingId,
+						sourceRoomTypeId,
+					}),
+					onDragStart: () => {
+						el.setAttribute('data-dragging', 'true')
+					},
+					onDrop: () => {
+						el.removeAttribute('data-dragging')
+					},
+				}),
+			)
+		}
+		// Drop target: each row's sticky rowheader cell (carries roomType
+		// identity via data-row-room-type-id).
+		for (const el of grid.querySelectorAll<HTMLElement>('[data-row-room-type-id]')) {
+			const targetRoomTypeId = el.dataset.rowRoomTypeId
+			if (!targetRoomTypeId) continue
+			cleanups.push(
+				dropTargetForElements({
+					element: el,
+					canDrop: ({ source }) => source.data.type === 'booking-band',
+					getData: () => ({ targetRoomTypeId }),
+					onDragEnter: ({ source }) => {
+						// D-G7.4 conflict hint: highlight target row красным когда
+						// drag-source same roomType (no-op move). Backend rejects
+						// other conflicts (overlap / stopSell) с toast.
+						if (source.data.sourceRoomTypeId === targetRoomTypeId) {
+							el.setAttribute('data-drop-noop', 'true')
+						} else {
+							el.setAttribute('data-drop-active', 'true')
+						}
+					},
+					onDragLeave: () => {
+						el.removeAttribute('data-drop-active')
+						el.removeAttribute('data-drop-noop')
+					},
+					onDrop: ({ source }) => {
+						el.removeAttribute('data-drop-active')
+						el.removeAttribute('data-drop-noop')
+						const bookingId = source.data.bookingId
+						if (typeof bookingId !== 'string') return
+						if (source.data.sourceRoomTypeId === targetRoomTypeId) return
+						dragMoveMutation.mutate({ bookingId, roomTypeId: targetRoomTypeId })
+					},
+				}),
+			)
+		}
+		return combine(...cleanups)
+	}, [rowsLayout, dragMoveMutation])
+
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
 		const action = keyToAction(e)
 		if (!action) return
@@ -344,10 +429,17 @@ export function Chessboard() {
 						    Playwright hit-testing in sticky-header grids). */}
 						{rowsLayout.map(({ rt, bandByStart, covered }, rowIdx) => (
 							<div key={rt.id} role="row" aria-rowindex={rowIdx + 2} className="contents">
+								{/* G7 drop-target rowheader. data-drop-active fires when
+								    a draggable band hovers; data-drop-noop fires when
+								    source roomType == target (no-op move attempt).
+								    Tailwind v4 arbitrary data-* modifiers provide visual
+								    feedback per D-G7.4 (conflict highlight canon). */}
 								<div
-									className="border-border bg-background sticky left-0 z-10 border-r border-b p-2 font-medium"
+									className="border-border bg-background data-[drop-active=true]:bg-status-confirmed/15 data-[drop-active=true]:outline data-[drop-active=true]:outline-2 data-[drop-active=true]:outline-status-confirmed data-[drop-noop=true]:bg-status-past/15 data-[drop-noop=true]:outline data-[drop-noop=true]:outline-2 data-[drop-noop=true]:outline-status-past sticky left-0 z-10 border-r border-b p-2 font-medium transition-colors"
 									role="rowheader"
 									aria-colindex={1}
+									data-row-room-type-id={rt.id}
+									data-row-room-type-name={rt.name}
 								>
 									<div>{rt.name}</div>
 									<div className="text-muted-foreground text-[10px]">
@@ -418,7 +510,7 @@ export function Chessboard() {
 												{({ popoverId, onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
 													<button
 														type="button"
-														className={`focus-visible:outline-ring border-border relative flex h-10 items-center overflow-hidden border-b px-2 text-[11px] focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${style.bg} ${style.text}`}
+														className={`focus-visible:outline-ring border-border data-[band-status=confirmed]:cursor-grab data-[dragging=true]:cursor-grabbing data-[dragging=true]:opacity-50 relative flex h-10 items-center overflow-hidden border-b px-2 text-[11px] focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${style.bg} ${style.text}`}
 														style={{ gridColumn: `span ${band.span}` }}
 														role="gridcell"
 														aria-colindex={ariaColIdx}
@@ -430,6 +522,8 @@ export function Chessboard() {
 														}. Enter — открыть действия.`}
 														aria-details={popoverId}
 														data-booking-id={band.id}
+														data-band-status={band.status}
+														data-band-room-type-id={rt.id}
 														data-row-idx={rowIdx}
 														data-col-idx={ariaColIdx}
 														tabIndex={tabStop ? 0 : -1}

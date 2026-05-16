@@ -1,4 +1,4 @@
-import type { BookingStatus, Guest, RatePlan } from '@horeca/shared'
+import type { BookingStatus, Guest, RatePlan, RoomType } from '@horeca/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
@@ -47,6 +47,31 @@ export function useRatePlans(propertyId: string | null, roomTypeId: string | nul
 			})
 			if (!res.ok) throw new Error('ratePlans.list failed')
 			const body = (await res.json()) as { data: RatePlan[] }
+			return body.data
+		},
+		enabled: Boolean(propertyId),
+		staleTime: 30_000,
+	})
+}
+
+/**
+ * G7 (2026-05-16) — roomTypes by property, для «Переместить в категорию»
+ * amend dropdown (pointer-alternative WCAG 2.5.7) + drag-target validation.
+ * Returns ALL roomTypes (don't filter on isActive — operator may need
+ * к see inactive ones for context, OR backend doesn't expose isActive
+ * field — same behaviour как existing useGridData fetch).
+ */
+export function useRoomTypes(propertyId: string | null) {
+	return useQuery({
+		queryKey: ['roomTypes', propertyId] as const,
+		queryFn: async () => {
+			if (!propertyId) return [] as RoomType[]
+			const res = await api.api.v1.properties[':propertyId']['room-types'].$get({
+				param: { propertyId },
+				query: {},
+			})
+			if (!res.ok) throw new Error('roomTypes.list failed')
+			const body = (await res.json()) as { data: RoomType[] }
 			return body.data
 		},
 		enabled: Boolean(propertyId),

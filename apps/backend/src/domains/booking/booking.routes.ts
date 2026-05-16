@@ -3,6 +3,7 @@ import {
 	bookingCancelInput,
 	bookingChangeGuestsCountInput,
 	bookingChangeRatePlanInput,
+	bookingChangeRoomTypeInput,
 	bookingCheckInInput,
 	bookingCreateInput,
 	bookingIdParam,
@@ -146,6 +147,20 @@ export function createBookingRoutes(f: BookingFactory, idempotency: IdempotencyM
 					const { id } = c.req.valid('param')
 					const input = c.req.valid('json')
 					const updated = await service.changeGuestsCount(c.var.tenantId, id, input, c.var.user.id)
+					if (!updated) throw new BookingNotFoundError(id)
+					return c.json({ data: updated }, 200)
+				},
+			)
+			// G7 (2026-05-16) drag-move band к different roomType row OR pointer-
+			// alternative «Переместить в категорию» amend dialog (WCAG 2.5.7).
+			.patch(
+				'/bookings/:id/change-room-type',
+				zValidator('param', bookingIdParam),
+				zValidator('json', bookingChangeRoomTypeInput),
+				async (c) => {
+					const { id } = c.req.valid('param')
+					const input = c.req.valid('json')
+					const updated = await service.moveToRoomType(c.var.tenantId, id, input, c.var.user.id)
 					if (!updated) throw new BookingNotFoundError(id)
 					return c.json({ data: updated }, 200)
 				},

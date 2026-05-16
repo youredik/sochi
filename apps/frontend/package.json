@@ -10,6 +10,7 @@
 		"test": "bun test"
 	},
 	"dependencies": {
+		"@atlaskit/pragmatic-drag-and-drop": "1.8.1",
 		"@base-ui/react": "^1.4.1",
 		"@better-auth/passkey": "^1.6.11",
 		"@floating-ui/dom": "1.7.6",

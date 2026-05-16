@@ -18,7 +18,7 @@ import {
 	SelectValue,
 } from '@/components/ui/select'
 import { intRangeNumberValidator } from '../../../lib/forms/int-range-field-schema'
-import { useRatePlans } from '../../bookings/hooks/use-booking-mutations'
+import { useRatePlans, useRoomTypes } from '../../bookings/hooks/use-booking-mutations'
 import { TextField } from '../../forms/text-field'
 import { TextareaField } from '../../forms/textarea-field'
 import {
@@ -26,6 +26,7 @@ import {
 	useCancelBooking,
 	useChangeGuestsCountBooking,
 	useChangeRatePlanBooking,
+	useChangeRoomTypeBooking,
 	useCheckInBooking,
 	useCheckOutBooking,
 	useMarkNoShowBooking,
@@ -41,7 +42,7 @@ import {
 
 const validateGuestsCount = intRangeNumberValidator({ min: 1, max: 20 })
 
-type AmendMode = 'move-dates' | 'change-rate-plan' | 'change-guests-count'
+type AmendMode = 'move-dates' | 'change-rate-plan' | 'change-guests-count' | 'change-room-type'
 type ExpandedMode = BookingTransition | AmendMode | null
 
 /**
@@ -232,6 +233,7 @@ function ActionView(props: {
 	const moveDates = useMoveDatesBooking(amendDeps)
 	const changeRatePlan = useChangeRatePlanBooking(amendDeps)
 	const changeGuestsCount = useChangeGuestsCountBooking(amendDeps)
+	const changeRoomType = useChangeRoomTypeBooking(amendDeps)
 
 	// G5: rate plans fetched only когда change-rate-plan editor expanded —
 	// avoids unnecessary network when operator opens edit sheet to just
@@ -241,6 +243,10 @@ function ActionView(props: {
 		expanded === 'change-rate-plan' ? booking.roomTypeId : '',
 	)
 
+	// G7: roomTypes fetched only когда change-room-type editor expanded.
+	const roomTypesQ = useRoomTypes(expanded === 'change-room-type' ? props.propertyId : null)
+	const roomTypeSelectId = useId()
+
 	const isPending =
 		checkIn.isPending ||
 		checkOut.isPending ||
@@ -248,7 +254,8 @@ function ActionView(props: {
 		noShow.isPending ||
 		moveDates.isPending ||
 		changeRatePlan.isPending ||
-		changeGuestsCount.isPending
+		changeGuestsCount.isPending ||
+		changeRoomType.isPending
 
 	const cancelForm = useForm({
 		defaultValues: { reason: '' },
@@ -290,6 +297,16 @@ function ActionView(props: {
 		defaultValues: { guestsCount: booking.guestsCount ?? 1 },
 		onSubmit: async ({ value }) => {
 			await changeGuestsCount.mutateAsync({ guestsCount: value.guestsCount })
+			props.onClose()
+		},
+	})
+
+	// G7 — change-room-type amend form. Pre-populates с current roomTypeId
+	// so submit-disabled когда operator не выбрал новую категорию.
+	const changeRoomTypeForm = useForm({
+		defaultValues: { roomTypeId: booking.roomTypeId },
+		onSubmit: async ({ value }) => {
+			await changeRoomType.mutateAsync({ roomTypeId: value.roomTypeId })
 			props.onClose()
 		},
 	})
@@ -554,6 +571,67 @@ function ActionView(props: {
 						)}
 					</changeGuestsCountForm.Subscribe>
 				</form>
+			) : expanded === 'change-room-type' ? (
+				<form
+					onSubmit={(e) => {
+						e.preventDefault()
+						void changeRoomTypeForm.handleSubmit()
+					}}
+					className="space-y-3"
+					noValidate
+					data-slot="amend-change-room-type-form"
+				>
+					<changeRoomTypeForm.Field name="roomTypeId">
+						{(field) => {
+							const allRoomTypes = roomTypesQ.data ?? []
+							return (
+								<div className="space-y-1.5">
+									<Label htmlFor={roomTypeSelectId}>Новая категория</Label>
+									<Select
+										value={field.state.value}
+										onValueChange={(v) => field.handleChange(v)}
+										disabled={allRoomTypes.length === 0}
+									>
+										<SelectTrigger id={roomTypeSelectId} aria-label="Новая категория">
+											<SelectValue
+												placeholder={
+													roomTypesQ.isPending ? 'Загружаем категории…' : 'Выберите категорию'
+												}
+											/>
+										</SelectTrigger>
+										<SelectContent>
+											{allRoomTypes.map((r) => (
+												<SelectItem key={r.id} value={r.id}>
+													{r.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+							)
+						}}
+					</changeRoomTypeForm.Field>
+					<changeRoomTypeForm.Subscribe selector={(s) => s.values.roomTypeId}>
+						{(roomTypeId) => (
+							<ResponsiveSheetFooter>
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => setExpanded(null)}
+									disabled={isPending}
+								>
+									Назад
+								</Button>
+								<Button
+									type="submit"
+									disabled={isPending || roomTypeId === '' || roomTypeId === booking.roomTypeId}
+								>
+									{isPending ? 'Перемещаем…' : 'Переместить'}
+								</Button>
+							</ResponsiveSheetFooter>
+						)}
+					</changeRoomTypeForm.Subscribe>
+				</form>
 			) : (
 				<>
 					<p className="text-muted-foreground text-sm">Выберите действие:</p>
@@ -608,6 +686,21 @@ function ActionView(props: {
 										className="w-full"
 									>
 										Сменить тариф
+									</Button>
+									{/* G7 (2026-05-16) pointer-alternative для drag-move
+									    gesture per WCAG 2.2 SC 2.5.7 (mandatory AA).
+									    Also serves keyboard + mobile users (operator
+									    focus band → Enter → этот dialog). */}
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										disabled={isPending}
+										onClick={() => setExpanded('change-room-type')}
+										data-amend="change-room-type"
+										className="w-full"
+									>
+										Переместить в категорию
 									</Button>
 								</>
 							) : null}

@@ -262,7 +262,14 @@ type AmendOverride = {
 	updatedBy: string
 	checkIn?: string
 	checkOut?: string
+	roomTypeId?: string
 	ratePlanId?: string
+	/**
+	 * Explicit clear allowed (defensive): roomType swap orphan-fies any
+	 * previously-pinned specific room (which lived в old roomType). Use
+	 * `assignedRoomId: null` when amend operation must invalidate pin.
+	 */
+	assignedRoomId?: string | null
 	guestsCount?: number
 	nightsCount?: number
 	timeSlices?: BookingTimeSlice[]
@@ -288,7 +295,9 @@ async function upsertAmendedBookingRow(
 	const nowTs = toTs(next.updatedAt)
 	const checkIn = next.checkIn ?? current.checkIn
 	const checkOut = next.checkOut ?? current.checkOut
+	const roomTypeId = next.roomTypeId ?? current.roomTypeId
 	const ratePlanId = next.ratePlanId ?? current.ratePlanId
+	const assignedRoomId = 'assignedRoomId' in next ? next.assignedRoomId : current.assignedRoomId
 	const guestsCount = next.guestsCount ?? current.guestsCount
 	const nightsCount = next.nightsCount ?? current.nightsCount
 	const timeSlices = next.timeSlices ?? current.timeSlices
@@ -315,8 +324,8 @@ async function upsertAmendedBookingRow(
 			\`notes\`, \`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
 		) VALUES (
 			${current.tenantId}, ${current.propertyId}, ${dateFromIso(checkIn)}, ${current.id},
-			${dateFromIso(checkOut)}, ${current.roomTypeId}, ${ratePlanId},
-			${current.assignedRoomId ?? NULL_TEXT},
+			${dateFromIso(checkOut)}, ${roomTypeId}, ${ratePlanId},
+			${assignedRoomId ?? NULL_TEXT},
 			${guestsCount}, ${nightsCount},
 			${current.primaryGuestId}, ${toJson(current.guestSnapshot)},
 			${current.status}, ${tsFromIso(current.confirmedAt)},
@@ -939,6 +948,147 @@ export function createBookingRepo(sql: SqlInstance) {
 					return {
 						...current,
 						ratePlanId: ctx.newRatePlanId,
+						timeSlices: ctx.timeSlices,
+						totalMicros: totalMicros.toString(),
+						cancellationFee: ctx.cancellationFee,
+						noShowFee: ctx.noShowFee,
+						tourismTaxBaseMicros: ctx.tourismTaxBaseMicros.toString(),
+						tourismTaxMicros: ctx.tourismTaxMicros.toString(),
+						updatedAt: now.toISOString(),
+						updatedBy: ctx.actorUserId,
+					}
+				})
+			} catch (err) {
+				if (err instanceof Error && err.cause instanceof InvalidBookingAmendStateError)
+					throw err.cause
+				if (err instanceof Error && err.cause instanceof NoInventoryError) throw err.cause
+				throw err
+			}
+		},
+
+		/**
+		 * G7 (2026-05-16) — Move band к different roomType row (PATCH
+		 * /bookings/:id/change-room-type).
+		 *
+		 * Drag-move gesture target OR pointer-alternative ActionView amend
+		 * dialog. Same dates → atomic inventory swap: release N nights ×
+		 * old roomType, reserve N nights × new roomType с stopSell +
+		 * allotment guards (mirrors create-flow canon). Service auto-picks
+		 * default active ratePlan для new roomType, recomputes timeSlices /
+		 * fees / tax from its rates.
+		 *
+		 * Status guard: confirmed-only. `in_house` rejected — guest
+		 * physically located в old room; bed swap = check-out + new
+		 * booking (separate operator workflow).
+		 *
+		 * Idempotent no-op: same roomTypeId returns current row unchanged.
+		 */
+		async changeRoomType(
+			tenantId: string,
+			id: string,
+			ctx: {
+				newRoomTypeId: string
+				newRatePlanId: string
+				timeSlices: BookingTimeSlice[]
+				cancellationFee: BookingFeeSnapshot | null
+				noShowFee: BookingFeeSnapshot | null
+				tourismTaxBaseMicros: bigint
+				tourismTaxMicros: bigint
+				actorUserId: string
+			},
+		): Promise<Booking | null> {
+			try {
+				return await sql.begin({ idempotent: true }, async (tx) => {
+					const current = await loadByIdForTx(tx, tenantId, id)
+					if (!current) return null
+					if (current.status !== 'confirmed') {
+						throw new InvalidBookingAmendStateError(current.status, 'change-room-type')
+					}
+					if (ctx.newRoomTypeId === current.roomTypeId) {
+						// Idempotent no-op: same roomType → return current row unchanged.
+						return current
+					}
+					if (ctx.timeSlices.length !== current.nightsCount) {
+						throw new NoInventoryError(
+							`timeSlices length ${ctx.timeSlices.length} != current.nightsCount ${current.nightsCount}`,
+						)
+					}
+
+					const now = new Date()
+					const nowTs = toTs(now)
+					const nights = nightsBetween(current.checkIn, current.checkOut)
+
+					// Release old roomType inventory.
+					for (const night of nights) {
+						await tx`
+							UPDATE availability SET sold = sold - 1, updatedAt = ${nowTs}
+							WHERE tenantId = ${tenantId}
+								AND propertyId = ${current.propertyId}
+								AND roomTypeId = ${current.roomTypeId}
+								AND date = ${dateFromIso(night)}
+								AND sold > 0
+						`
+					}
+
+					// Reserve new roomType inventory с stopSell + allotment guards
+					// (matches create-flow + moveDates canon).
+					for (const night of nights) {
+						const [availRows = []] = await tx<
+							{ allotment: number | bigint; sold: number | bigint; stopSell: boolean }[]
+						>`
+							SELECT allotment, sold, stopSell FROM availability
+							WHERE tenantId = ${tenantId}
+								AND propertyId = ${current.propertyId}
+								AND roomTypeId = ${ctx.newRoomTypeId}
+								AND date = ${dateFromIso(night)}
+							LIMIT 1
+						`
+						const avail = availRows[0]
+						if (!avail) {
+							throw new NoInventoryError(`no availability row for ${night}`)
+						}
+						if (avail.stopSell) {
+							throw new NoInventoryError(`stopSell set for ${night}`)
+						}
+						const sold = Number(avail.sold)
+						const allotment = Number(avail.allotment)
+						if (sold >= allotment) {
+							throw new NoInventoryError(`sold ${sold} >= allotment ${allotment} for ${night}`)
+						}
+						await tx`
+							UPDATE availability SET sold = sold + 1, updatedAt = ${nowTs}
+							WHERE tenantId = ${tenantId}
+								AND propertyId = ${current.propertyId}
+								AND roomTypeId = ${ctx.newRoomTypeId}
+								AND date = ${dateFromIso(night)}
+						`
+					}
+
+					const totalMicros = ctx.timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
+					await upsertAmendedBookingRow(tx, current, {
+						updatedAt: now,
+						updatedBy: ctx.actorUserId,
+						roomTypeId: ctx.newRoomTypeId,
+						ratePlanId: ctx.newRatePlanId,
+						// Defensive: clear assignedRoomId — points к specific room в
+						// OLD roomType which is no longer canonical reference после swap.
+						// Status guard ensures we're 'confirmed' (assignedRoomId
+						// only set on 'in_house' transition by current canon), но
+						// future-evolution-safe.
+						assignedRoomId: null,
+						timeSlices: ctx.timeSlices,
+						totalMicros,
+						cancellationFee: ctx.cancellationFee,
+						noShowFee: ctx.noShowFee,
+						tourismTaxBaseMicros: ctx.tourismTaxBaseMicros,
+						tourismTaxMicros: ctx.tourismTaxMicros,
+					})
+
+					return {
+						...current,
+						roomTypeId: ctx.newRoomTypeId,
+						ratePlanId: ctx.newRatePlanId,
+						assignedRoomId: null,
 						timeSlices: ctx.timeSlices,
 						totalMicros: totalMicros.toString(),
 						cancellationFee: ctx.cancellationFee,

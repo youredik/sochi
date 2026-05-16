@@ -124,14 +124,14 @@ export class InvalidBookingTransitionError extends ConflictError {
 export class InvalidBookingAmendStateError extends ConflictError {
 	override readonly code = 'INVALID_BOOKING_AMEND_STATE'
 	readonly bookingStatus: string
-	readonly operation: 'move-dates' | 'change-rate-plan' | 'change-guests-count'
+	readonly operation: 'move-dates' | 'change-rate-plan' | 'change-guests-count' | 'change-room-type'
 	constructor(
 		bookingStatus: string,
-		operation: 'move-dates' | 'change-rate-plan' | 'change-guests-count',
+		operation: 'move-dates' | 'change-rate-plan' | 'change-guests-count' | 'change-room-type',
 	) {
 		super(
 			`Booking with status '${bookingStatus}' cannot be amended via '${operation}'. ` +
-				`Apaleo canon: confirmed-only for date/rate edits; confirmed-or-in_house for guests-count.`,
+				`Apaleo canon: confirmed-only for date/rate/room edits; confirmed-or-in_house for guests-count.`,
 		)
 		this.name = 'InvalidBookingAmendStateError'
 		this.bookingStatus = bookingStatus

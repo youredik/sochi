@@ -209,6 +209,21 @@ export const bookingChangeGuestsCountInput = z.object({
 })
 export type BookingChangeGuestsCountInput = z.infer<typeof bookingChangeGuestsCountInput>
 
+/** G7 (2026-05-16) PATCH /bookings/:id/change-room-type — drag-move band
+ *  across roomType rows OR pointer-alternative «Переместить в категорию»
+ *  amend dialog. Same dates → server auto-picks default active ratePlan for
+ *  new roomType + recomputes timeSlices/fees/tax from new rate rows; atomic
+ *  inventory swap (release old × N nights, reserve new × N nights с
+ *  stopSell + allotment guards).
+ *
+ *  Status guard: confirmed-only (mirrors change-rate-plan canon —
+ *  in_house = guest physically in old room, can't logically move bed).
+ */
+export const bookingChangeRoomTypeInput = z.object({
+	roomTypeId: idSchema('roomType'),
+})
+export type BookingChangeRoomTypeInput = z.infer<typeof bookingChangeRoomTypeInput>
+
 export const bookingIdParam = z.object({ id: idSchema('booking') })
 export const bookingPropertyParam = z.object({ propertyId: idSchema('property') })
 

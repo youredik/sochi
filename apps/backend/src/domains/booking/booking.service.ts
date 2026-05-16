@@ -2,6 +2,7 @@ import type {
 	BookingCancelInput,
 	BookingChangeGuestsCountInput,
 	BookingChangeRatePlanInput,
+	BookingChangeRoomTypeInput,
 	BookingCheckInInput,
 	BookingCreateInput,
 	BookingFeeSnapshot,
@@ -405,6 +406,85 @@ export function createBookingService(
 				newGuestsCount: input.guestsCount,
 				actorUserId,
 			}),
+
+		/**
+		 * G7 (2026-05-16) — Move booking к different roomType (drag-move band).
+		 *
+		 * Same dates → service auto-picks default ACTIVE ratePlan для new
+		 * roomType (operator drag UX simplicity — only roomType row changes
+		 * in DOM); recomputes timeSlices / fees / tax. Atomic inventory swap
+		 * delegated к repo.
+		 *
+		 * Validation: new roomType belongs к same property; default ratePlan
+		 * exists для new roomType + has rate rows для все booking dates.
+		 * Idempotent no-op when same roomType selected.
+		 */
+		moveToRoomType: async (
+			tenantId: string,
+			id: string,
+			input: BookingChangeRoomTypeInput,
+			actorUserId: string,
+		) => {
+			const current = await repo.getById(tenantId, id)
+			if (!current) return null
+			if (current.status !== 'confirmed') {
+				throw new InvalidBookingAmendStateError(current.status, 'change-room-type')
+			}
+			if (input.roomTypeId === current.roomTypeId) {
+				return current
+			}
+			const prop = await propertyService.getById(tenantId, current.propertyId)
+			if (!prop) throw new PropertyNotFoundError(current.propertyId)
+			const newRt = await roomTypeService.getById(tenantId, input.roomTypeId)
+			if (!newRt || newRt.propertyId !== current.propertyId) {
+				throw new RoomTypeNotFoundError(input.roomTypeId)
+			}
+
+			// Auto-pick default ACTIVE ratePlan для new roomType. Falls back к
+			// first active plan if no default flagged. NoInventoryError when
+			// roomType has zero active plans (operator hasn't seeded prices).
+			const newRoomTypePlans = await ratePlanService.listByProperty(tenantId, current.propertyId, {
+				roomTypeId: input.roomTypeId,
+				includeInactive: false,
+			})
+			const newRp = newRoomTypePlans.find((p) => p.isDefault) ?? newRoomTypePlans[0]
+			if (!newRp) {
+				throw new NoInventoryError(`no active rate plan available for roomType ${input.roomTypeId}`)
+			}
+
+			const nights = nightsBetween(current.checkIn, current.checkOut)
+			const rates = await rateRepo.listRange(
+				tenantId,
+				current.propertyId,
+				input.roomTypeId,
+				newRp.id,
+				{ from: nights[0] ?? '', to: nights[nights.length - 1] ?? '' },
+			)
+			const rateByDate = new Map(rates.map((r) => [r.date, r]))
+			const timeSlices: BookingTimeSlice[] = []
+			for (const night of nights) {
+				const r = rateByDate.get(night)
+				if (!r) throw new NoInventoryError(`no rate row for ${night}`)
+				timeSlices.push({
+					date: night,
+					grossMicros: decimalToMicros(r.amount),
+					ratePlanId: r.ratePlanId,
+					ratePlanVersion: newRp.updatedAt,
+					currency: r.currency,
+				})
+			}
+			const totalMicros = timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
+			return repo.changeRoomType(tenantId, id, {
+				newRoomTypeId: input.roomTypeId,
+				newRatePlanId: newRp.id,
+				timeSlices,
+				cancellationFee: computeCancellationFeeSnapshot(totalMicros, newRp, current.checkIn),
+				noShowFee: computeNoShowFeeSnapshot(totalMicros, newRp),
+				tourismTaxBaseMicros: totalMicros,
+				tourismTaxMicros: computeTourismTax(totalMicros, prop.tourismTaxRateBps, nights.length),
+				actorUserId,
+			})
+		},
 
 		/**
 		 * Aggregate tourism-tax liability for quarterly fiscal reporting.
