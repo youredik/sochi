@@ -34,7 +34,9 @@ import { BookingBandTooltip } from './booking-band-tooltip'
 import { ChessboardDatePicker } from './chessboard-date-picker'
 import { ChessboardViewModeSelector } from './chessboard-view-mode-selector'
 import { ChessboardWindowSelector } from './chessboard-window-selector'
+import { PropertyBlockCreateSheet } from './property-block-create-sheet'
 import { UnassignedPanel } from './unassigned-panel'
+import { propertyBlockReasonLabels } from '../hooks/use-property-blocks'
 
 interface ClickedCell {
 	roomTypeId: string
@@ -99,14 +101,21 @@ export function Chessboard() {
 	// vs per-cell callback refs that re-register on every render.
 	const gridRef = useRef<HTMLDivElement>(null)
 
-	const { propertyId, propertyName, roomTypes, bookings, isLoading, isError } = useGridData(
-		windowFrom,
-		windowTo,
-	)
+	const { propertyId, propertyName, roomTypes, bookings, rooms, blocks, isLoading, isError } =
+		useGridData(windowFrom, windowTo)
+	// G9 (2026-05-16) — open «Заблокировать номер» sheet from toolbar.
+	const [blockCreateOpen, setBlockCreateOpen] = useState(false)
+
+	// G9: roomId → roomTypeId map for placing OOO blocks на correct row.
+	const roomTypeByRoomId = useMemo(() => {
+		const m = new Map<string, string>()
+		for (const r of rooms) m.set(r.id, r.roomTypeId)
+		return m
+	}, [rooms])
 
 	// Pre-compute per-row band layout + navigation skeleton. Navigation
 	// model is consumed by the keymap lib; render uses the same data.
-	// One pass, memoized on (roomTypes, bookings, windowFrom, windowTo).
+	// One pass, memoized on (roomTypes, bookings, blocks, windowFrom, windowTo).
 	const rowsLayout = useMemo(
 		() =>
 			roomTypes.map((rt) => {
@@ -154,9 +163,54 @@ export function Chessboard() {
 					})
 					for (let i = pos.colStart; i < pos.colEnd; i++) covered.add(i)
 				}
-				return { rt, bandByStart, covered }
+
+				// G9 (2026-05-16) — OOO block bands (per-room, placed on
+				// roomType row). Skip cells already occupied by booking band
+				// (booking wins visually — operator sees "double-trouble" via
+				// availability check banner). Multi-block-per-cell collapses
+				// к latest (rare overlap edge — Bnovo accepts same trade-off).
+				const blockByStart = new Map<
+					number,
+					{
+						id: string
+						roomId: string
+						checkIn: string
+						checkOut: string
+						reason: (typeof blocks)[number]['reason']
+						comment: string | null
+						span: number
+						truncatedLeft: boolean
+						truncatedRight: boolean
+					}
+				>()
+				const rowBlocks = blocks.filter((blk) => roomTypeByRoomId.get(blk.roomId) === rt.id)
+				for (const blk of rowBlocks) {
+					const pos = bandPosition(
+						{ checkIn: blk.startDate, checkOut: blk.endDate },
+						windowFrom,
+						windowTo,
+					)
+					if (!pos) continue
+					// Skip к next slot if a booking already covers this colStart
+					if (covered.has(pos.colStart)) continue
+					const span = pos.colEnd - pos.colStart
+					blockByStart.set(pos.colStart, {
+						id: blk.id,
+						roomId: blk.roomId,
+						checkIn: blk.startDate,
+						checkOut: blk.endDate,
+						reason: blk.reason,
+						comment: blk.comment,
+						span,
+						truncatedLeft: pos.truncatedLeft,
+						truncatedRight: pos.truncatedRight,
+					})
+					for (let i = pos.colStart; i < pos.colEnd; i++) covered.add(i)
+				}
+
+				return { rt, bandByStart, blockByStart, covered }
 			}),
-		[roomTypes, bookings, windowFrom, windowTo],
+		[roomTypes, bookings, blocks, roomTypeByRoomId, windowFrom, windowTo],
 	)
 
 	const navModel: GridNavModel = useMemo(() => {
@@ -333,6 +387,18 @@ export function Chessboard() {
 					/>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
+					{/* G9 (2026-05-16) — open Заблокировать sheet from toolbar.
+					    Visible only when property loaded (no-op без roomType ctx). */}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={() => setBlockCreateOpen(true)}
+						disabled={!propertyId}
+						data-slot="chessboard-block-create-trigger"
+					>
+						Заблокировать номер
+					</Button>
 					<ChessboardViewModeSelector />
 					<ChessboardWindowSelector />
 					<ChessboardDatePicker value={windowFrom} onChange={setWindowFrom} />
@@ -438,7 +504,7 @@ export function Chessboard() {
 						    gridcell focus targets onto neighboring dates breaking screen-
 						    reader navigation per Sarah Higley 2026, and (b) confuses
 						    Playwright hit-testing in sticky-header grids). */}
-						{rowsLayout.map(({ rt, bandByStart, covered }, rowIdx) => (
+						{rowsLayout.map(({ rt, bandByStart, blockByStart, covered }, rowIdx) => (
 							<div key={rt.id} role="row" aria-rowindex={rowIdx + 2} className="contents">
 								{/* G7 drop-target rowheader. data-drop-active fires when
 								    a draggable band hovers; data-drop-noop fires when
@@ -579,6 +645,34 @@ export function Chessboard() {
 											</BookingBandTooltip>
 										)
 									}
+									// G9 (2026-05-16) — render OOO block band если starts at this col.
+									const block = blockByStart.get(colIdx)
+									if (block) {
+										const reasonLabel = propertyBlockReasonLabels[block.reason]
+										return (
+											<div
+												key={`${rt.id}:block:${ariaColIdx}`}
+												className="border-border bg-slate-200 [background-image:repeating-linear-gradient(45deg,_rgba(100,116,139,0.25)_0_8px,_transparent_8px_16px)] border-b border-slate-400 flex h-10 items-center overflow-hidden px-2 text-[11px] text-slate-900"
+												style={{ gridColumn: `span ${block.span}` }}
+												role="gridcell"
+												aria-colindex={ariaColIdx}
+												aria-colspan={block.span}
+												aria-label={`Блокировка: ${reasonLabel}, ${rt.name}, ${block.checkIn} — ${block.checkOut}${
+													block.comment ? `, ${block.comment}` : ''
+												}`}
+												data-block-id={block.id}
+												data-block-reason={block.reason}
+												data-band-room-type-id={rt.id}
+												data-row-idx={rowIdx}
+												data-col-idx={ariaColIdx}
+												data-slot="block-band"
+											>
+												<span className="truncate font-medium" data-slot="block-band-label">
+													{reasonLabel}
+												</span>
+											</div>
+										)
+									}
 									if (covered.has(colIdx)) return null // already spanned by band
 									const tabStop = isTabStop(rowIdx, ariaColIdx)
 									return (
@@ -636,6 +730,15 @@ export function Chessboard() {
 					windowTo={windowTo}
 				/>
 			) : null}
+
+			{/* G9 (2026-05-16) — PropertyBlockCreateSheet mounted at chessboard
+			    level так single instance handles toolbar trigger. Empty initial
+			    roomType так operator picks freely per Bnovo modal canon. */}
+			<PropertyBlockCreateSheet
+				open={blockCreateOpen}
+				onOpenChange={setBlockCreateOpen}
+				propertyId={propertyId}
+			/>
 		</main>
 	)
 }

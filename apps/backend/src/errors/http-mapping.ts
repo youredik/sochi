@@ -42,4 +42,7 @@ export const HTTP_STATUS_MAP: Record<string, ContentfulStatusCode> = {
 	// Widget booking-create (M9.widget.4)
 	STALE_AVAILABILITY: 409,
 	WIDGET_CONSENT_MISSING: 422,
+	// PropertyBlock / OOO (G9 2026-05-16)
+	PROPERTY_BLOCK_BOOKING_CONFLICT: 409,
+	PROPERTY_BLOCK_PAST_IMMUTABLE: 409,
 }

@@ -7,7 +7,10 @@ G5 ✓ + G6 ✓ + G6.bis ✓ + G7 ✓ + **G8 ✓ shipped 2026-05-16** (Cloudbeds
 Unassigned panel + Kleinberg-Tardos Interval-Partition Greedy auto-assign
 
 - ActionView amend «Назначить номер» + WCAG 2.2 SC 4.1.3 aria-live badge
-- 15 G8-e2e + 27 integration + 12 property-based). Next: G9 (OOO maint
+- 15 G8-e2e + 27 integration + 12 property-based). G9 DONE 2026-05-16
+- (11 G9-e2e + 13 integration DB + 22 unit; +3 memory canons; +1 test:fast:shared
+- pre-existing gap fix). Next: G10 (SSE real-time + mobile-list — needs new
+- R1+R2 per `[[research-strictness-today]]`). Original: Next: G9 (OOO maint
 - live overlap) — нужен новый propertyBlock domain + per-sub-phase R1+R2.
 
 History (2026-05-15 session):
@@ -805,19 +808,99 @@ algorithm pure module ~150 + frontend (UnassignedPanel + 2 sheets +
 hooks) ~400 + integration tests ~400 (allocation property-based + AT-
 cases) + e2e ~350.
 
-### Phase G9 — Live overlap detection + block-cell (OOO maintenance)
+### Phase G9 — Live overlap detection + block-cell (OOO maintenance) — ✓ DONE 2026-05-16 (single atomic commit per `[[no-half-measures]]`)
 
 **Empirical bound source**: §3.1 Bnovo overbooking red highlight; no current
 availability endpoint per §0.1.
 
-**Scope**:
+**Scope** (canonical commitment, atomic ship):
 
 - **Live overlap check**: while filling create-sheet, re-query bookings list
-  for selected dates + roomType. Show conflict banner inline.
-- **OOO band**: separate `propertyBlock` domain или extend booking с
-  `type='maintenance'`. Render Grey band. Backend addition.
+  for selected dates + roomType. Show conflict banner inline. ✓
+- **OOO band**: separate `propertyBlock` domain (5/6 leaders canon). Render
+  grey-striped band на roomType row. Backend addition. ✓
 
-**Complexity**: HIGH. New domain. 3-4 commits.
+**D-G9.x research-agent corrections (R1+R2 ≥ 2026-05-16):**
+
+- **D-G9.1** — Separate domain (NOT booking subtype). Per-room granularity
+  (matches Mews/Apaleo/OPERA/Cloudbeds/Bnovo). Memory canon:
+  `[[property-block-separate-domain-canon]]`.
+- **D-G9.2** — Reason enum 4 RU values (`repair / deep_clean / personal_use
+/ hold_other`) + optional ≤200-char comment. Bnovo's 3-bucket refined +
+  free-text.
+- **D-G9.3** — 152-ФЗ PII guard на comment field at Zod refine layer:
+  reject 10+ consecutive digits + email-like regex. Memory canon:
+  `[[pii-guard-free-text-canon]]`.
+- **D-G9.4** — Block-over-booking HARD-block (Apaleo/OPERA canon). Booking-
+  over-block soft-warn + force-confirm (Bnovo RU flex). Asymmetric per
+  RU regulator + 2% туристический налог reporting requirements.
+- **D-G9.5** — Update past-immutable: cannot shrink endDate earlier than
+  today (TravelLine canon). Future-extension always OK.
+- **D-G9.6** — Multi-room create atomic-fail на booking conflict, partial-
+  success skipped для existing-block / inactive-room overlap (operator
+  UX clarity per Cloudbeds canon).
+- **D-G9.7** — Per-row tx canon (per `[[interval-partition-greedy-canon]]`)
+  для batch operations — avoids YDB session-pool edge.
+- **D-G9.8** — Live overlap UX: 300ms desktop / 500ms `pointer:coarse`
+  debounce + `role="status"` polite banner + submit NOT-disabled (Bnovo
+  flex). Memory canon: `[[live-overlap-debounce-canon]]`.
+- **D-G9.9** — Inline ~10 LOC `useDebouncedValue` > +`@tanstack/react-pacer`
+  dep (per `[[dependency-freshness]]` — fewer audit-surface deps).
+- **D-G9.10** — Grid render: `bg-slate-200` + diagonal stripes via Tailwind
+  v4 `[background-image:repeating-linear-gradient(...)]` + `border-slate-400`.
+  Non-text contrast 3:1 (WCAG 1.4.11). Pattern carries «non-bookable»
+  semantics without color-alone reliance (WCAG 1.4.1).
+- **D-G9.11** — Operator workflow: modal-driven create (Bnovo/TravelLine
+  canon, NOT drag — deferred к G10+). Multi-room checkbox-select.
+- **D-G9.12** — Frontend `useGridData` extended с rooms + blocks fetches
+  (single SoT для grid render). `usePropertyBlocks` / `useDeletePropertyBlock`
+  hooks deferred к G9.next когда block-edit UI ships.
+
+**Backend (10 files):**
+
+- `apps/backend/src/db/migrations/0060_property_block.sql` — table + 2 indexes
+- `apps/backend/src/domains/property-block/property-block.repo.ts` — CRUD + overlap
+- `apps/backend/src/domains/property-block/property-block.service.ts` — pre-validate + per-row insert
+- `apps/backend/src/domains/property-block/property-block.routes.ts` — CRUD + GET /availability
+- `apps/backend/src/domains/property-block/property-block.factory.ts`
+- Booking repo +2 methods: `findOverlappingBookingsByRoom`, `listAssignedBookingsByRoomTypeWindow`
+- Domain errors: `PropertyBlockNotFoundError`, `PropertyBlockBookingConflictError`, `PropertyBlockPastImmutableError`
+- HTTP mapping: 2 new codes → 409 / 404
+- `app.ts` wires propertyBlockFactory + routes
+- ID prefix `pblk` added к `packages/shared/src/ids.ts`
+
+**Shared (1 file):** `packages/shared/src/property-block.ts` — Zod schemas +
+`isPropertyBlockCommentPII` + `PropertyBlockReason` enum + `propertyBlockReasonLabelsRu`
+
+- `AvailabilityCheckResult` type.
+
+**Frontend (5 files):**
+
+- `apps/frontend/src/features/chessboard/hooks/use-property-blocks.ts` — useAvailabilityCheck (debounced) + useCreatePropertyBlocks
+- `apps/frontend/src/features/chessboard/hooks/use-grid-data.ts` — extended с rooms + blocks
+- `apps/frontend/src/features/chessboard/components/property-block-create-sheet.tsx`
+- `apps/frontend/src/features/chessboard/components/chessboard.tsx` — block-band render layer + toolbar trigger
+- `apps/frontend/src/features/bookings/components/booking-overlap-banner.tsx`
+- `apps/frontend/src/features/bookings/components/booking-create-sheet.tsx` — banner integration
+
+**Tests:**
+
+- Shared unit: 22 pass — PII-guard + Zod schemas
+- Backend integration DB: 13 pass — PB1..PB13 (create/overlap/booking-conflict/past-immutable/cross-tenant)
+- E2E: 11 pass — G9-E1..E11 (toolbar / create-via-UI / banner positive / banner conflict / PII 400 / booking-conflict 409 / cross-tenant 404 / axe / DELETE / rooms-list reload)
+- Axe matrix: chessboard + create-sheet open WCAG 2.2 AA clean
+
+**Test infrastructure:** Added `test:fast:shared` к package.json — fixes
+pre-existing gap (162 shared test files weren't в CI). Also fixed
+tenant-compliance.test taxRegime expectation (7→8) — stale snapshot
+unrelated к G9.
+
+**Adversarial 9-item caught:** form state-leak в PropertyBlockCreateSheet
+(open→pick rooms→cancel→reopen showed stale state). Fixed с useEffect
+reset on `!open`.
+
+**Complexity verdict:** HIGH realized. Single atomic commit ~31 files.
+Algorithm cleanliness + canon discipline kept it manageable.
 
 ### Phase G10 — SSE real-time + mobile-list view
 

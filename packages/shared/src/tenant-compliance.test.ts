@@ -283,8 +283,8 @@ describe('tenantComplianceSchema (Zod parsing)', () => {
 		expect(ksrCategoryValues).toHaveLength(11)
 	})
 
-	it('exposes 7 taxRegime values', () => {
-		expect(taxRegimeValues).toHaveLength(7)
+	it('exposes 8 taxRegime values (7 active + UNKNOWN placeholder)', () => {
+		expect(taxRegimeValues).toHaveLength(8)
 	})
 
 	it('exposes 5 legalEntityType values', () => {

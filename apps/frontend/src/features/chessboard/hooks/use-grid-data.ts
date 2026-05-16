@@ -3,6 +3,8 @@ import type {
 	BookingGuestSnapshot,
 	BookingRegistrationStatus,
 	BookingStatus,
+	PropertyBlock,
+	Room,
 	RoomType,
 } from '@horeca/shared'
 import { useQuery } from '@tanstack/react-query'
@@ -105,12 +107,58 @@ export function useGridData(from: string, to: string) {
 		staleTime: 5_000,
 	})
 
+	// G9 (2026-05-16): rooms fetch для OOO block→roomType mapping (blocks
+	// are per-room, grid is per-roomType row — must resolve roomTypeId on
+	// the client to place the grey band correctly). Active rooms only —
+	// inactive can never have active blocks.
+	const rooms = useQuery({
+		queryKey: ['rooms', propertyId, null] as const,
+		queryFn: async () => {
+			if (!propertyId) return [] as Room[]
+			const res = await api.api.v1.properties[':propertyId'].rooms.$get({
+				param: { propertyId },
+				query: {},
+			})
+			if (!res.ok) throw new Error('rooms.list failed')
+			const body = (await res.json()) as { data: Room[] }
+			return body.data
+		},
+		enabled: Boolean(propertyId),
+		staleTime: 30_000,
+	})
+
+	// G9 (2026-05-16): property-blocks (OOO/maintenance) for grid render.
+	// Server returns per-room blocks; chessboard groups by room.roomTypeId.
+	const blocks = useQuery({
+		queryKey: ['property-blocks', propertyId, from, to] as const,
+		queryFn: async () => {
+			if (!propertyId) return [] as PropertyBlock[]
+			const res = await api.api.v1.properties[':propertyId'].blocks.$get({
+				param: { propertyId },
+				query: { from, to },
+			})
+			if (!res.ok) throw new Error('property-blocks.list failed')
+			const body = (await res.json()) as { data: PropertyBlock[] }
+			return body.data
+		},
+		enabled: Boolean(propertyId),
+		staleTime: 5_000,
+	})
+
 	return {
 		propertyId,
 		propertyName: property.data?.[0]?.name ?? null,
 		roomTypes: roomTypes.data ?? [],
 		bookings: bookings.data ?? [],
-		isLoading: property.isPending || roomTypes.isPending || bookings.isPending,
-		isError: property.isError || roomTypes.isError || bookings.isError,
+		rooms: rooms.data ?? [],
+		blocks: blocks.data ?? [],
+		isLoading:
+			property.isPending ||
+			roomTypes.isPending ||
+			bookings.isPending ||
+			rooms.isPending ||
+			blocks.isPending,
+		isError:
+			property.isError || roomTypes.isError || bookings.isError || rooms.isError || blocks.isError,
 	}
 }

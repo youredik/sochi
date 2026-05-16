@@ -11,6 +11,7 @@ import {
 	ResponsiveSheetHeader,
 	ResponsiveSheetTitle,
 } from '@/components/ui/responsive-sheet'
+import { BookingOverlapBanner } from './booking-overlap-banner'
 import {
 	Select,
 	SelectContent,
@@ -289,6 +290,17 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 							const nights = safeNightsCount(ci, co)
 							return (
 								<>
+									{/* G9 (2026-05-16) — live overlap banner. role=status,
+									    aria-live=polite. NOT-disabled submit per Bnovo RU
+									    flex canon — operator may force-book (server returns
+									    409 if hard conflict). */}
+									<BookingOverlapBanner
+										propertyId={props.propertyId}
+										roomTypeId={props.roomTypeId}
+										checkIn={ci}
+										checkOut={co}
+									/>
+
 									<BookingPricePreview
 										propertyId={props.propertyId}
 										ratePlanId={planId}

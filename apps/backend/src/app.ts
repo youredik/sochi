@@ -15,6 +15,8 @@ import { createAvailabilityFactory } from './domains/availability/availability.f
 import { createAvailabilityRoutes } from './domains/availability/availability.routes.ts'
 import { createBookingFactory } from './domains/booking/booking.factory.ts'
 import { createBookingRoutes } from './domains/booking/booking.routes.ts'
+import { createPropertyBlockFactory } from './domains/property-block/property-block.factory.ts'
+import { createPropertyBlockRoutes } from './domains/property-block/property-block.routes.ts'
 import { createGuestPortalRepo } from './domains/booking/guest-portal.repo.ts'
 import { createGuestPortalRoutes } from './domains/booking/guest-portal.routes.ts'
 import { createChannelFactory } from './domains/channel/channel.factory.ts'
@@ -122,6 +124,14 @@ const bookingFactory = createBookingFactory(
 	roomTypeFactory.service,
 	ratePlanFactory.service,
 	// G8 (2026-05-16) — roomService wired для assign-room + auto-assign endpoints.
+	roomFactory.service,
+)
+// G9 (2026-05-16) — property-block (OOO/maintenance) domain. Depends on
+// booking.repo (block-over-booking overlap check) + roomService + property.
+const propertyBlockFactory = createPropertyBlockFactory(
+	sql,
+	bookingFactory.repo,
+	propertyFactory.service,
 	roomFactory.service,
 )
 const activityFactory = createActivityFactory(sql)
@@ -742,6 +752,10 @@ const routes = app
 	.route('/api/v1', createRateRoutes(rateFactory))
 	.route('/api/v1', createAvailabilityRoutes(availabilityFactory))
 	.route('/api/v1', createBookingRoutes(bookingFactory, idempotency))
+	.route(
+		'/api/v1',
+		createPropertyBlockRoutes(propertyBlockFactory, bookingFactory.repo, roomFactory.service),
+	)
 	.route('/api/v1', createActivityRoutes(activityFactory))
 	.route('/api/v1', createGuestRoutes(guestFactory, idempotency))
 	.route(

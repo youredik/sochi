@@ -1281,6 +1281,67 @@ export function createBookingRepo(sql: SqlInstance) {
 			}
 			return written
 		},
+
+		/**
+		 * G9 — find active bookings (status='confirmed'|'in_house') assigned
+		 * к specific room that overlap [startDate, endDate). Used by
+		 * property-block.service для block-over-booking hard-block check.
+		 * Reads via `ixBookingRoom` index — same predicate as assignRoom CAS.
+		 */
+		async findOverlappingBookingsByRoom(
+			tenantId: string,
+			roomId: string,
+			startDate: string,
+			endDate: string,
+		): Promise<Booking[]> {
+			const startD = dateFromIso(startDate)
+			const endD = dateFromIso(endDate)
+			const [rows = []] = await sql<BookingRow[]>`
+				SELECT * FROM booking VIEW ixBookingRoom
+				WHERE tenantId = ${tenantId}
+					AND assignedRoomId = ${roomId}
+					AND checkIn < ${endD}
+					AND checkOut > ${startD}
+					AND status IN ('confirmed', 'in_house')
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map(rowToBooking)
+		},
+
+		/**
+		 * G9 — list active assignments for a specific roomType in window.
+		 * Used by availability endpoint к compute bookedCount.
+		 *
+		 * Returns full booking shape; caller derives uniqueness of roomIds
+		 * + per-night occupancy. Currently returns ALL active bookings of
+		 * the property (post-filter by roomTypeId in JS) — pragmatic для
+		 * small-medium property scale (5-50 rooms × 60 day window ≈ ≤300
+		 * active rows worst case).
+		 */
+		async listAssignedBookingsByRoomTypeWindow(
+			tenantId: string,
+			propertyId: string,
+			roomTypeId: string,
+			from: string,
+			to: string,
+		): Promise<Booking[]> {
+			const fromD = dateFromIso(from)
+			const toD = dateFromIso(to)
+			const [rows = []] = await sql<BookingRow[]>`
+				SELECT * FROM booking
+				WHERE tenantId = ${tenantId}
+					AND propertyId = ${propertyId}
+					AND roomTypeId = ${roomTypeId}
+					AND status IN ('confirmed', 'in_house')
+					AND checkIn < ${toD}
+					AND checkOut > ${fromD}
+					AND assignedRoomId IS NOT NULL
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map(rowToBooking)
+		},
 	}
 
 	async function loadByIdForTx(tx: TX, tenantId: string, id: string): Promise<Booking | null> {

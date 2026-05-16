@@ -476,3 +476,51 @@ export class WidgetGuestInputError extends DomainError {
 		this.name = 'WidgetGuestInputError'
 	}
 }
+
+/** Property-block (OOO/maintenance) row not found OR cross-tenant. */
+export class PropertyBlockNotFoundError extends NotFoundError {
+	constructor(id: string) {
+		super('PropertyBlock', id)
+		this.name = 'PropertyBlockNotFoundError'
+	}
+}
+
+/**
+ * Block-over-booking attempt: operator tried to create or extend a
+ * propertyBlock covering room(s) that have active (confirmed | in_house)
+ * bookings in the requested window. Apaleo / OPERA / Cloudbeds canon:
+ * hard-block, operator must move/cancel the booking first. RU regulatory
+ * + 2% туристический налог reporting need clean denominators.
+ *
+ * `bookedRoomIds` лists the offending rooms — frontend renders human-
+ * readable hint pointing at them.
+ */
+export class PropertyBlockBookingConflictError extends ConflictError {
+	override readonly code = 'PROPERTY_BLOCK_BOOKING_CONFLICT'
+	readonly bookedRoomIds: string[]
+	constructor(bookedRoomIds: string[]) {
+		super(
+			`Cannot block rooms with active bookings: ${bookedRoomIds.join(', ')}. ` +
+				`Move or cancel the booking first (Apaleo/OPERA/Cloudbeds canon).`,
+		)
+		this.name = 'PropertyBlockBookingConflictError'
+		this.bookedRoomIds = bookedRoomIds
+	}
+}
+
+/**
+ * Edit a block whose dates are past: TravelLine immutable-past canon —
+ * past blocks document historical state, shrinking endDate earlier than
+ * today would falsify housekeeping records. Future-extension OK; past-
+ * contraction blocked.
+ */
+export class PropertyBlockPastImmutableError extends ConflictError {
+	override readonly code = 'PROPERTY_BLOCK_PAST_IMMUTABLE'
+	constructor() {
+		super(
+			'Cannot shrink block end-date earlier than today. ' +
+				'Past blocks are immutable (TravelLine canon).',
+		)
+		this.name = 'PropertyBlockPastImmutableError'
+	}
+}

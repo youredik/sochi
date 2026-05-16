@@ -49,6 +49,11 @@ export const ID_PREFIXES = {
 	// M9.widget.6 / А4.3 — append-only audit log for embed bundle release lifecycle
 	// (publish / revoke / reauthorize). Tamper-evidence baseline для kill-switch.
 	widgetReleaseAudit: 'wrla',
+	// G9 (2026-05-16) — operator-side maintenance / OOO blocks at room level.
+	// Separate domain (Mews ResourceBlock / Apaleo OOO / OPERA OOO / Cloudbeds
+	// blocks / Bnovo ремонт canon — 5 of 6 industry leaders model this as a
+	// distinct entity, not booking subtype). No guest PII, no folio.
+	propertyBlock: 'pblk',
 } as const
 
 export type EntityKind = keyof typeof ID_PREFIXES
