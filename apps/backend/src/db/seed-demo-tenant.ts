@@ -750,15 +750,31 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 			documentType: 'PASSPORT_RF',
 			citizenship: 'RU',
 		}
-		const timeSlices = [
-			{
-				checkIn: typeof checkInDate === 'string' ? checkInDate : checkInDate.toString(),
-				checkOut: typeof checkOutDate === 'string' ? checkOutDate : checkOutDate.toString(),
-				rateMicros: nightlyMicros.toString(),
+		// Canonical timeSlices per `packages/shared/src/booking.ts:85` —
+		// one slice per night с `date` (ISO yyyy-mm-dd) + `grossMicros`
+		// (string-stringified bigint для JSON safety). Pre-2026-05-16 bug:
+		// (a) used field name `rateMicros` (drifted от writer/reader contract),
+		// (b) called `YdbDate.toString()` returning «[object Object]» literal,
+		// (c) одна slice on multi-night bookings (vs one-per-night canon).
+		// All three caused 30+ silent `night-audit: failed to coerce
+		// grossMicros to BigInt` warnings + skipped tourism-tax audits.
+		const timeSlices: Array<{
+			date: string
+			grossMicros: string
+			roomTypeId: string
+			ratePlanId: string
+			currency: string
+		}> = []
+		for (let n = 0; n < b.nights; n++) {
+			const nightObj = offsetDays(b.dayOffset + n)
+			timeSlices.push({
+				date: isoDay(nightObj),
+				grossMicros: nightlyMicros.toString(),
 				roomTypeId,
 				ratePlanId,
-			},
-		]
+				currency: 'RUB',
+			})
+		}
 		// Сочи tourism tax 2% (200 bps) — applied к totalMicros для demo.
 		const tourismTaxBaseMicros = totalMicros
 		const tourismTaxMicros = (totalMicros * 200n) / 10_000n

@@ -9,6 +9,13 @@
  *   5. updatedAt strictly monotonic; ms precision preserved (no Timestamp truncation).
  *   6. Integer defaults: isActive=true, extraBeds starts as input (schema default 0).
  *   7. Update of missing row returns null; no UPSERT leak.
+ *   8. **inventoryCount canon (2026-05-16)**: ALL read paths (create,
+ *      getById, listByProperty, update) return DERIVED count = COUNT
+ *      (active rooms WHERE roomTypeId=X). Stored `roomType.inventoryCount`
+ *      column persists onboarding-time planning intent but drifts когда
+ *      bulk-rooms admin adds/removes — never read on operator-facing
+ *      surfaces. Tests assert derived (0 when no rooms; N when N rooms;
+ *      decrements когда room deactivated; matches across all read paths).
  *
  * Requires local YDB (docker-compose up ydb).
  */
@@ -17,6 +24,7 @@ import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
 
 jest.setTimeout(60_000)
 
+import { NULL_TEXT } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import { createRoomTypeRepo } from './roomType.repo.ts'
 
@@ -70,7 +78,12 @@ describe('roomType.repo', () => {
 		expect(created.baseBeds).toBe(1)
 		expect(created.extraBeds).toBe(1)
 		expect(created.areaSqm).toBe(22)
-		expect(created.inventoryCount).toBe(10)
+		// Per canon (invariant #8): inventoryCount = derived COUNT(active rooms).
+		// Brand-new roomType с input.inventoryCount=10 (planning intent), but
+		// zero rooms physically exist yet → derived = 0. Input.inventoryCount
+		// only drives downstream bulk-rooms creation (in onboarding flow),
+		// NOT the read-path response shape.
+		expect(created.inventoryCount).toBe(0)
 		expect(created.isActive).toBe(true)
 		expect(created.createdAt).toMatch(ISO_DATETIME)
 		expect(created.createdAt).toBe(created.updatedAt)
@@ -119,7 +132,10 @@ describe('roomType.repo', () => {
 		expect(created.baseBeds).toBe(10)
 		expect(created.extraBeds).toBe(10)
 		expect(created.areaSqm).toBe(1000)
-		expect(created.inventoryCount).toBe(500)
+		// inventoryCount canon (invariant #8): derived = 0 при absence rooms,
+		// regardless of input.inventoryCount=500. 500 was the planning intent
+		// for the operator's onboarding wizard; only used to drive bulk-rooms.
+		expect(created.inventoryCount).toBe(0)
 	})
 
 	test('tenant isolation: getById across tenants returns null', async () => {
@@ -323,7 +339,11 @@ describe('roomType.repo', () => {
 		createdIds.push({ tenantId: TENANT_A, id: created.id })
 
 		const patched = await repo.update(TENANT_A, created.id, { inventoryCount: 8 })
-		expect(patched?.inventoryCount).toBe(8)
+		// inventoryCount canon (invariant #8): derived. Patching the stored
+		// field updates the DB row (legacy onboarding-intent column), but
+		// the response shape always returns derived count. With zero rooms
+		// for this roomType → derived = 0 regardless of patch value.
+		expect(patched?.inventoryCount).toBe(0)
 		expect(patched?.name).toBe('Partial')
 		expect(patched?.description).toBe('keep')
 		expect(patched?.maxOccupancy).toBe(4)
@@ -369,5 +389,155 @@ describe('roomType.repo', () => {
 		expect(await repo.delete(TENANT_A, created.id)).toBe(true)
 		expect(await repo.getById(TENANT_A, created.id)).toBeNull()
 		expect(await repo.delete(TENANT_A, created.id)).toBe(false)
+	})
+
+	// === Invariant #8: inventoryCount derived from active rooms ===
+	// Strict tests proving the canon end-to-end. The bug that motivated
+	// this fix (2026-05-16): operator's tenant Люкс 1 had 10 actual rooms
+	// in DB but UI rendered «1 номер» from stale stored value, masking
+	// 9 sellable rooms на shahmatka + guest widget capacity.
+
+	test('inventoryCount: zero rooms → 0 in create/getById/listByProperty/update', async () => {
+		const rt = await repo.create(TENANT_A, PROP_A1, {
+			name: 'EmptyRT',
+			maxOccupancy: 2,
+			baseBeds: 1,
+			extraBeds: 0,
+			inventoryCount: 99, // planning intent — must NOT echo back
+		})
+		createdIds.push({ tenantId: TENANT_A, id: rt.id })
+
+		expect(rt.inventoryCount).toBe(0)
+		expect((await repo.getById(TENANT_A, rt.id))?.inventoryCount).toBe(0)
+		const list = await repo.listByProperty(TENANT_A, PROP_A1, { includeInactive: false })
+		expect(list.find((r) => r.id === rt.id)?.inventoryCount).toBe(0)
+		const patched = await repo.update(TENANT_A, rt.id, { name: 'EmptyRT-v2' })
+		expect(patched?.inventoryCount).toBe(0)
+	})
+
+	test('inventoryCount: N active rooms → derived = N across all read paths', async () => {
+		const sql = getTestSql()
+		const rt = await repo.create(TENANT_A, PROP_A1, {
+			name: 'CountedRT',
+			maxOccupancy: 2,
+			baseBeds: 1,
+			extraBeds: 0,
+			inventoryCount: 1, // intentional mismatch с actual rooms below
+		})
+		createdIds.push({ tenantId: TENANT_A, id: rt.id })
+
+		// Bulk-insert 7 active rooms через raw SQL (matches admin
+		// bulk-rooms admin write path; integration test crosses domain).
+		const ts = new Date()
+		for (let i = 0; i < 7; i++) {
+			const roomId = `room_test_cnt_${RUN_ID}_${i}`
+			await sql`
+				UPSERT INTO room (
+					\`tenantId\`, \`id\`, \`propertyId\`, \`roomTypeId\`, \`number\`,
+					\`floor\`, \`isActive\`, \`notes\`, \`createdAt\`, \`updatedAt\`
+				) VALUES (
+					${TENANT_A}, ${roomId}, ${PROP_A1}, ${rt.id}, ${`9${String(i).padStart(2, '0')}`},
+					${1}, ${true}, ${NULL_TEXT}, ${ts}, ${ts}
+				)
+			`
+		}
+
+		expect((await repo.getById(TENANT_A, rt.id))?.inventoryCount).toBe(7)
+		const list = await repo.listByProperty(TENANT_A, PROP_A1, { includeInactive: false })
+		expect(list.find((r) => r.id === rt.id)?.inventoryCount).toBe(7)
+		const patched = await repo.update(TENANT_A, rt.id, { name: 'CountedRT-v2' })
+		expect(patched?.inventoryCount).toBe(7)
+
+		// Cleanup rooms
+		for (let i = 0; i < 7; i++) {
+			const roomId = `room_test_cnt_${RUN_ID}_${i}`
+			await sql`DELETE FROM room WHERE tenantId = ${TENANT_A} AND id = ${roomId}`
+		}
+	})
+
+	test('inventoryCount: inactive rooms excluded from derived count', async () => {
+		const sql = getTestSql()
+		const rt = await repo.create(TENANT_A, PROP_A1, {
+			name: 'PartialRT',
+			maxOccupancy: 2,
+			baseBeds: 1,
+			extraBeds: 0,
+			inventoryCount: 5,
+		})
+		createdIds.push({ tenantId: TENANT_A, id: rt.id })
+
+		const ts = new Date()
+		// 3 active + 2 inactive — derived must be 3.
+		for (let i = 0; i < 5; i++) {
+			const roomId = `room_test_part_${RUN_ID}_${i}`
+			const isActive = i < 3
+			await sql`
+				UPSERT INTO room (
+					\`tenantId\`, \`id\`, \`propertyId\`, \`roomTypeId\`, \`number\`,
+					\`floor\`, \`isActive\`, \`notes\`, \`createdAt\`, \`updatedAt\`
+				) VALUES (
+					${TENANT_A}, ${roomId}, ${PROP_A1}, ${rt.id}, ${`8${String(i).padStart(2, '0')}`},
+					${1}, ${isActive}, ${NULL_TEXT}, ${ts}, ${ts}
+				)
+			`
+		}
+
+		expect((await repo.getById(TENANT_A, rt.id))?.inventoryCount).toBe(3)
+
+		// Cleanup
+		for (let i = 0; i < 5; i++) {
+			const roomId = `room_test_part_${RUN_ID}_${i}`
+			await sql`DELETE FROM room WHERE tenantId = ${TENANT_A} AND id = ${roomId}`
+		}
+	})
+
+	test('inventoryCount: tenant isolation — other tenant rooms do NOT leak into count', async () => {
+		const sql = getTestSql()
+		// TENANT_A roomType
+		const rtA = await repo.create(TENANT_A, PROP_A1, {
+			name: 'IsolatedCountRT',
+			maxOccupancy: 2,
+			baseBeds: 1,
+			extraBeds: 0,
+			inventoryCount: 1,
+		})
+		createdIds.push({ tenantId: TENANT_A, id: rtA.id })
+
+		const ts = new Date()
+		// 2 rooms на TENANT_A — these should count
+		for (let i = 0; i < 2; i++) {
+			await sql`
+				UPSERT INTO room (
+					\`tenantId\`, \`id\`, \`propertyId\`, \`roomTypeId\`, \`number\`,
+					\`floor\`, \`isActive\`, \`notes\`, \`createdAt\`, \`updatedAt\`
+				) VALUES (
+					${TENANT_A}, ${`room_test_iso_a_${RUN_ID}_${i}`}, ${PROP_A1}, ${rtA.id},
+					${`7${String(i).padStart(2, '0')}`}, ${1}, ${true}, ${NULL_TEXT}, ${ts}, ${ts}
+				)
+			`
+		}
+		// 5 rooms на TENANT_B с тем же roomTypeId (adversarial — id collision shouldn't matter)
+		for (let i = 0; i < 5; i++) {
+			await sql`
+				UPSERT INTO room (
+					\`tenantId\`, \`id\`, \`propertyId\`, \`roomTypeId\`, \`number\`,
+					\`floor\`, \`isActive\`, \`notes\`, \`createdAt\`, \`updatedAt\`
+				) VALUES (
+					${TENANT_B}, ${`room_test_iso_b_${RUN_ID}_${i}`}, ${PROP_B1}, ${rtA.id},
+					${`6${String(i).padStart(2, '0')}`}, ${1}, ${true}, ${NULL_TEXT}, ${ts}, ${ts}
+				)
+			`
+		}
+
+		// TENANT_A perspective: только 2 rooms count (not 7).
+		expect((await repo.getById(TENANT_A, rtA.id))?.inventoryCount).toBe(2)
+
+		// Cleanup
+		for (let i = 0; i < 2; i++) {
+			await sql`DELETE FROM room WHERE tenantId = ${TENANT_A} AND id = ${`room_test_iso_a_${RUN_ID}_${i}`}`
+		}
+		for (let i = 0; i < 5; i++) {
+			await sql`DELETE FROM room WHERE tenantId = ${TENANT_B} AND id = ${`room_test_iso_b_${RUN_ID}_${i}`}`
+		}
 	})
 })

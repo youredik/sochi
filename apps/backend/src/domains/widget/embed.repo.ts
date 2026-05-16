@@ -152,6 +152,15 @@ export function createEmbedRepo(sqlInstance: SqlInstance) {
 			const property = propRows[0]
 			if (!property) return null
 
+			// Derived `inventoryCount` via YQL named-result-set + LEFT JOIN
+			// (YDB doesn't allow correlated subqueries в SELECT). JSON-LD
+			// schema.org markup feeds Google's `numberOfRooms`
+			// (iframe-html.routes.ts:246). Stale stored value misrepresents
+			// capacity to search engines + guest-facing embed widget.
+			// Same canonical fix as `roomType.repo.listByProperty`
+			// (2026-05-16).
+			// Per YDB JOIN canon: explicit `AS` aliases keep column names
+			// bare (not «rt.name») so destructure matches row-shape contract.
 			const [roomTypeRows = []] = await sqlInstance<
 				{
 					name: string
@@ -160,14 +169,20 @@ export function createEmbedRepo(sqlInstance: SqlInstance) {
 					baseBeds: number
 					extraBeds: number
 					areaSqm: number | null
-					inventoryCount: number
+					derivedRoomCount: number | bigint | null
 				}[]
 			>`
-				SELECT name, description, maxOccupancy, baseBeds, extraBeds, areaSqm, inventoryCount
-				FROM roomType
-				WHERE tenantId = ${tenantId} AND propertyId = ${propertyId}
-				  AND isActive = ${true}
-				ORDER BY name
+				$counts = SELECT roomTypeId, COUNT(*) AS cnt FROM room
+					WHERE tenantId = ${tenantId} AND isActive = ${true}
+					GROUP BY roomTypeId;
+				SELECT rt.name AS name, rt.description AS description,
+				       rt.maxOccupancy AS maxOccupancy, rt.baseBeds AS baseBeds,
+				       rt.extraBeds AS extraBeds, rt.areaSqm AS areaSqm,
+				       c.cnt AS derivedRoomCount
+				FROM roomType AS rt LEFT JOIN $counts AS c ON c.roomTypeId = rt.id
+				WHERE rt.tenantId = ${tenantId} AND rt.propertyId = ${propertyId}
+				  AND rt.isActive = ${true}
+				ORDER BY rt.name
 			`
 				.isolation('snapshotReadOnly')
 				.idempotent(true)
@@ -181,7 +196,7 @@ export function createEmbedRepo(sqlInstance: SqlInstance) {
 					baseBeds: r.baseBeds,
 					extraBeds: r.extraBeds,
 					areaSqm: r.areaSqm,
-					inventoryCount: r.inventoryCount,
+					inventoryCount: Number(r.derivedRoomCount ?? 0),
 				})),
 			}
 		},

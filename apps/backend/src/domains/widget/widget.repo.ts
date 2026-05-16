@@ -127,13 +127,30 @@ export function createWidgetRepo(sqlInstance = sql) {
 			tenantId: string,
 			propertyId: string,
 		): Promise<PublicRoomType[]> {
-			const [rows = []] = await sqlInstance<RoomTypeFullRow[]>`
-				SELECT id, propertyId, name, description, maxOccupancy, baseBeds,
-				       extraBeds, areaSqm, inventoryCount, isActive
-				FROM roomType
-				WHERE tenantId = ${tenantId} AND propertyId = ${propertyId}
-				  AND isActive = ${true}
-				ORDER BY name ASC
+			// Derived `inventoryCount` via YQL named-result-set + LEFT JOIN
+			// — same canonical fix as `roomType.repo.listByProperty`
+			// (2026-05-16). Critical здесь because widget.service:287 uses
+			// `inventoryCount` as guest booking capacity cap — stale value
+			// = lost revenue (guest gets «нет мест» хотя rooms физически
+			// свободны). YDB не поддерживает correlated subquery в SELECT.
+			// Per YDB JOIN canon: `SELECT rt.id` returns column as «rt.id»
+			// (table-qualified), not bare «id». Aliases via `AS` keep JS
+			// row-shape contract intact с original column names.
+			type RowWithCount = RoomTypeFullRow & { derivedRoomCount: number | bigint | null }
+			const [rows = []] = await sqlInstance<RowWithCount[]>`
+				$counts = SELECT roomTypeId, COUNT(*) AS cnt FROM room
+					WHERE tenantId = ${tenantId} AND isActive = ${true}
+					GROUP BY roomTypeId;
+				SELECT rt.id AS id, rt.propertyId AS propertyId, rt.name AS name,
+				       rt.description AS description, rt.maxOccupancy AS maxOccupancy,
+				       rt.baseBeds AS baseBeds, rt.extraBeds AS extraBeds,
+				       rt.areaSqm AS areaSqm, rt.inventoryCount AS inventoryCount,
+				       rt.isActive AS isActive,
+				       c.cnt AS derivedRoomCount
+				FROM roomType AS rt LEFT JOIN $counts AS c ON c.roomTypeId = rt.id
+				WHERE rt.tenantId = ${tenantId} AND rt.propertyId = ${propertyId}
+				  AND rt.isActive = ${true}
+				ORDER BY rt.name ASC
 			`
 				.isolation('snapshotReadOnly')
 				.idempotent(true)
@@ -146,7 +163,7 @@ export function createWidgetRepo(sqlInstance = sql) {
 				baseBeds: r.baseBeds,
 				extraBeds: r.extraBeds,
 				areaSqm: r.areaSqm ?? null,
-				inventoryCount: r.inventoryCount,
+				inventoryCount: Number(r.derivedRoomCount ?? 0),
 			}))
 		},
 
