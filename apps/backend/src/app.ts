@@ -86,6 +86,9 @@ import { createOtelIngest } from './otel-ingest.ts'
 import { createAdminChannelRoutes } from './routes/admin/channels.ts'
 import { createAdminNotificationsRoutes } from './routes/admin/notifications.ts'
 import { createAdminTaxRoutes } from './routes/admin/tax.ts'
+import { createBookingSseCdcHandler } from './sse/booking-cdc-projection.ts'
+import { createBookingEventBroadcaster } from './sse/booking-event-broadcaster.ts'
+import { broadcastShutdown, createSseRoutes } from './sse/sse.routes.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
 import { startDemoRefreshCron } from './workers/demo-refresh.cron.ts'
 import { createCancelFeeFinalizerHandler } from './workers/handlers/cancel-fee-finalizer.ts'
@@ -535,6 +538,20 @@ const channelBroadcastConsumer = startCdcConsumer(driver, sql, {
 	label: 'channel_broadcast:booking',
 })
 
+// G10 (2026-05-16) — SSE booking event dispatcher.
+// CDC consumer reads booking_events топик и публикует в in-memory
+// broadcaster, который держит subscriber registry + 60s ring buffer per
+// propertyId. SSE route subscribes per-client → live fan-out + Last-Event-
+// ID replay. Single-instance only (multi-replica нужен per-instance
+// consumer-name или shared bus per `[[no-half-measures]]` deferred).
+const bookingEventBroadcaster = createBookingEventBroadcaster()
+const sseBookingConsumer = startCdcConsumer(driver, sql, {
+	topic: 'booking/booking_events',
+	consumer: 'sse_booking_writer',
+	projection: createBookingSseCdcHandler(bookingEventBroadcaster),
+	label: 'sse:booking',
+})
+
 // Night-audit cron — posts per-night accommodation lines on `in_house`
 // bookings at 03:00 Europe/Moscow. Boot catch-up handles restart-during-window
 // gaps. Idempotent via deterministic folioLine.id (PK collision = no-op).
@@ -592,6 +609,7 @@ const allCdcConsumers = [
 	tourismTaxConsumer,
 	cancelFeeConsumer,
 	channelBroadcastConsumer,
+	sseBookingConsumer,
 ] as const
 
 // Graceful shutdown: SIGTERM (Serverless Container / K8s) drains the CDC
@@ -604,6 +622,16 @@ const allCdcConsumers = [
  * need programmatic teardown in addition to SIGTERM/SIGINT delivery.
  */
 export async function stopApp(): Promise<void> {
+	// G10 (2026-05-16) graceful shutdown canon (R2 ≥ 2026-05-16 + sse-starlette
+	// v3.4.4 + OneUptime 2026): emit `event: shutdown` к ALL active SSE
+	// subscribers BEFORE we tear down the broadcaster. Client reconnects
+	// after `reconnectInMs` к the new replica. Synchronous publish → completes
+	// within K8s `terminationGracePeriodSeconds` budget.
+	const activeSubs = bookingEventBroadcaster.totalSubscriberCount()
+	if (activeSubs > 0) {
+		logger.info({ activeSubs }, 'shutdown: broadcasting SSE shutdown к active subscribers')
+		broadcastShutdown(bookingEventBroadcaster)
+	}
 	logger.info({ count: allCdcConsumers.length }, 'shutdown: stopping CDC consumers + YDB driver')
 	await Promise.all(allCdcConsumers.map((c) => c.stop()))
 	if (nightAuditCron) await nightAuditCron.stop()
@@ -756,6 +784,9 @@ const routes = app
 		'/api/v1',
 		createPropertyBlockRoutes(propertyBlockFactory, bookingFactory.repo, roomFactory.service),
 	)
+	// G10 (2026-05-16) — SSE real-time для chessboard. EventSource subscribes
+	// per propertyId; CDC consumer fans booking events out via broadcaster.
+	.route('/api/v1', createSseRoutes(bookingEventBroadcaster, propertyFactory.service))
 	.route('/api/v1', createActivityRoutes(activityFactory))
 	.route('/api/v1', createGuestRoutes(guestFactory, idempotency))
 	.route(

@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BookingCreateSheet } from '../../bookings/components/booking-create-sheet'
 import { BookingEditSheet } from '../../bookings/components/booking-edit-sheet'
 import { useFitWindowDays } from '../hooks/use-fit-window-days'
+import { useBookingEventsStream } from '../hooks/use-booking-events-stream'
 import { useGridData } from '../hooks/use-grid-data'
 import {
 	channelIndicator,
@@ -103,6 +104,10 @@ export function Chessboard() {
 
 	const { propertyId, propertyName, roomTypes, bookings, rooms, blocks, isLoading, isError } =
 		useGridData(windowFrom, windowTo)
+	// G10 (2026-05-16) — SSE real-time subscription. EventSource auto-
+	// reconnects per `retry: 5000` server hint; toast + query-invalidate
+	// on every booking.* event. Per R1+R2 ≥ 2026-05-16 canon.
+	useBookingEventsStream({ propertyId })
 	// G9 (2026-05-16) — open «Заблокировать номер» sheet from toolbar.
 	const [blockCreateOpen, setBlockCreateOpen] = useState(false)
 

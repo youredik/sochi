@@ -902,19 +902,97 @@ reset on `!open`.
 **Complexity verdict:** HIGH realized. Single atomic commit ~31 files.
 Algorithm cleanliness + canon discipline kept it manageable.
 
-### Phase G10 — SSE real-time + mobile-list view
+### Phase G10 — SSE real-time + mobile-list view — ✓ DONE 2026-05-16 (single atomic commit per `[[no-half-measures]]`)
 
 **Empirical bound source**: §3.4 SSE 2026 canon; §3.1 Bnovo live updates + offline.
 
-**Scope**:
+**Scope** (canonical atomic ship per `[[no-half-measures]]`):
 
-- **SSE endpoint**: `GET /api/v1/properties/:propertyId/events?stream=bookings`.
-  YDB CDC topic → SSE → frontend `EventSource` → `queryClient.invalidateQueries`.
-- **Toast on remote change** per Bnovo canon.
-- **Mobile list-first view** (Hostaway canon) — separate `<ChessboardMobile>`
-  component, breakpoint switch.
+- **SSE endpoint** `GET /api/v1/properties/:propertyId/events?stream=bookings`
+- **CDC dispatcher consumer** — 9-й consumer на `booking/booking_events` topic
+- **In-memory subscriber registry** + 60s ring buffer для `Last-Event-ID` replay
+- **Toast on remote change** per Bnovo canon (id-dedup + suppress-own-session)
+- **Mobile list-first view** separate `<ChessboardMobile>` (Hostaway/Bnovo canon)
 
-**Complexity**: HIGH. CDC pipeline + new transport. 4-5 commits.
+**D-G10.x corrections from R1+R2 ≥ 2026-05-16 research-agent:**
+
+- **D-G10.1 Transport: SSE НЕ WebSocket.** Cloudbeds/Apaleo/Bnovo/Hostaway/
+  TravelLine = webhooks (server→server); только Mews + OPERA Cloud имеют WS
+  для in-house realtime. SSE — strictly better operator-UX layer чем
+  webhook-only baseline. Works через nginx/Yandex Cloud ALB без WS upgrade.
+- **D-G10.2 Hono `streamSSE`** (built-in `hono/streaming`) — NOT `better-sse`
+  dep. Current need = single broadcast topic.
+- **D-G10.3 Heartbeat 25s** `: heartbeat\n\n` — survives nginx 60s + ALB 30s
+  defaults с margin. HireNodeJS 2026 canon.
+- **D-G10.4 `retry: 5000`** в initial frame. Native EventSource reconnect.
+- **D-G10.5 Auth ТОЛЬКО cookie `withCredentials: true`** — EventSource
+  spec disallows custom headers. Better Auth `__Host-session` reuse.
+  CORS `Access-Control-Allow-Credentials: true` + explicit origin.
+- **D-G10.6 Headers canon**: `Content-Type: text/event-stream`, `Cache-
+Control: no-cache, no-transform`, `X-Accel-Buffering: no`, `Connection:
+keep-alive` — CodeToDeploy 2026 nginx-defeating canon.
+- **D-G10.7 Tenant isolation на SSE handler, НЕ на CDC consumer.** One
+  consumer per instance reads ALL events; per-connection filter по
+  propertyId + session match. Reject 403 если mismatch — NEVER silent.
+- **D-G10.8 Event format с CDC virtual-timestamp ID** (`<vt.global>:<vt.txid>`)
+  for ordered resumption.
+- **D-G10.9 `Last-Event-ID` replay** через in-memory ring buffer 60s per
+  propertyId. Stale → `event: cache-stale` → client full-refetch.
+- **D-G10.10 Toast (Sonner) id-dedup** + skip-если-own-session
+  (backend tags `actorSessionId`). RU wording: Создана/Изменена/Отменена
+  бронь №N + sub-line channelLabel. NO sound. Throttle 2s.
+- **D-G10.11 TanStack Query `invalidateQueries`** на любой `booking.*` event.
+  NOT `setQueryData()`. Also invalidate `['availability', propertyId, ...]`.
+- **D-G10.12 Breakpoint CAPABILITY-based:** `useMediaQuery('(hover: none)
+and (pointer: coarse)')`. Smashing 2026 canon. Handles iPad-as-laptop.
+- **D-G10.13 Separate `<ChessboardMobile>`** (NOT responsive variant).
+  Route renders `{isCoarse ? Mobile : Desktop}` once after hydration.
+- **D-G10.14 Mobile card shape** (Bnovo+Hostaway converged):
+  - channelDot + `Фамилия И.` mask (reuse `maskGuestNameRu`) + `№B-1234`
+  - dates + `(N ночей)` plural
+  - `Room 101 · Стандарт`
+  - badge row — статус / МВД / НДС (reuse `paletteFor`, `registrationBadgeFor`,
+    `formatTourismTaxRub`)
+  - tap → existing `<BookingEditSheet>` (preserve amend flow)
+  - Min target 44×44 px (WCAG 2.5.5 + coarse-pointer)
+  - Sticky filter row: search (name OR booking#) + status chips + date jumpscroll
+  - Group-by-date headers (Hostaway pattern)
+- **D-G10.15 NO pull-to-refresh** — SSE active = cache fresh. P2R = UX noise.
+- **D-G10.16 NO virtualization** — 30×15=450 cells + ~30-50 cards both <50.
+- **D-G10.17 Stale connection** — EventSource native handles. `onerror` →
+  toast «Соединение прервано. Восстанавливаем…» dismiss on reopen.
+- **D-G10.18 HTTP/1.1 6-conn cap** — moot под HTTP/2 + 1 SSE/propertyId/tab.
+
+**Backend (new files):**
+
+- `packages/shared/src/sse-protocol.ts` — event-type enum + Zod payload schemas
+- `apps/backend/src/sse/booking-event-broadcaster.ts` — subscriber registry +
+  60s ring buffer
+- `apps/backend/src/sse/booking-cdc-projection.ts` — CDC handler fans events
+  out to broadcaster
+- `apps/backend/src/sse/sse.routes.ts` — `GET /properties/:propertyId/events`
+- `apps/backend/src/app.ts` — wire CDC consumer `sse_booking_writer` + routes
+- Migration: `0061_sse_booking_consumer.sql` — `ALTER TOPIC booking/booking_events
+ADD CONSUMER sse_booking_writer`
+
+**Frontend (new files):**
+
+- `apps/frontend/src/features/chessboard/hooks/use-booking-events-stream.ts`
+- `apps/frontend/src/features/chessboard/hooks/use-flash-toast.ts`
+- `apps/frontend/src/features/chessboard/components/chessboard-mobile.tsx`
+- `apps/frontend/src/features/chessboard/lib/mobile-list-grouping.ts`
+- Route file modify: breakpoint switch desktop vs mobile
+
+**Tests:**
+
+- Shared unit: SSE protocol schemas + mobile-list-grouping pure fn
+- Backend integration: SSE handshake / heartbeat / ring-buffer replay /
+  cross-tenant 403 / own-session filter
+- Property-based: mobile-list-grouping invariants (counts/order)
+- E2E: 2-context test — A creates → B receives toast within 3s + invalidate.
+  Mobile pointer:coarse emulation + axe matrix.
+
+**Complexity**: HIGH realized. Single atomic commit ~30-40 files.
 
 ### Phase G11 — Offline mode (Bnovo canon, deferred decision)
 

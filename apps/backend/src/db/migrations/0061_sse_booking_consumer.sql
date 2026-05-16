@@ -1,0 +1,24 @@
+-- 0061_sse_booking_consumer.sql — G10 (2026-05-16)
+--
+-- Adds `sse_booking_writer` consumer on `booking/booking_events` topic.
+-- This consumer reads ALL booking CDC events и fans them out к в-memory
+-- SSE subscriber registry (apps/backend/src/sse/booking-event-broadcaster.ts).
+--
+-- 9-й consumer на booking_events — proven multi-consumer canon (already
+-- 8 consumers: activity_writer, folio_balance_writer, notification_writer,
+-- folio_creator_writer, migration_registration_enqueuer, tourism_tax_writer,
+-- cancel_fee_writer, channel_broadcast_writer).
+--
+-- Per `[[backend-recon-end-to-end]]` G10 recon: each consumer maintains
+-- independent commit cursor + scoped partition session per (consumer-name,
+-- topic, partition). No mutex required.
+--
+-- Single-instance only: if backend runs multi-replica, EACH instance must
+-- have its OWN consumer name (e.g. sse_booking_writer_${INSTANCE_ID}) OR
+-- share a message bus (Redis Pub/Sub). For G10 v1 (single-replica) the
+-- shared consumer name is acceptable: only one instance owns partition,
+-- other instances would block waiting (no events delivered к their
+-- broadcasters). Multi-replica deployment requires per-instance consumer
+-- name OR external bus per `[[no-half-measures]]` future canon.
+
+ALTER TOPIC `booking/booking_events` ADD CONSUMER `sse_booking_writer`;

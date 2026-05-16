@@ -48,6 +48,17 @@ export function useTenantMode(): TenantMode | undefined {
 }
 
 /**
+ * Current user id from `/api/v1/me`. Returns `undefined` while loading.
+ * Used by G10 SSE hook к filter own-user events (suppress self-echo
+ * toast per R2 ≥ 2026-05-16 canon — operator already saw their write
+ * succeed via REST response).
+ */
+export function useCurrentUserId(): string | undefined {
+	const { data } = useQuery(meQueryOptions)
+	return data?.userId
+}
+
+/**
  * `useCan(permissions)` — boolean check whether current user satisfies all
  * requested permissions. Returns `false` while role loading (deny-by-default).
  *
