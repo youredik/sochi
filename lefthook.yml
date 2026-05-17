@@ -73,6 +73,15 @@ pre-commit:
       glob: '{apps/backend,packages/shared}/src/**/*.{ts,tsx}'
       run: bash scripts/backend-no-import-meta-env.sh
 
+    - name: check-dev-server-age
+      # Advisory pre-flight check (exit 0 always) — warns если frontend dev
+      # server (port 5273) potentially stale. Vite HMR does NOT reload on
+      # vite.config / new deps / route-tree regen / shared schema changes.
+      # Caught 2026-05-17 when vite uptime 2d10h served pre-G3 code through
+      # all G3-G11 commits → 5 min phantom debug session.
+      # See `[[dev-server-staleness-canon]]` 2026-05-17.
+      run: bash scripts/check-dev-server-age.sh
+
 # Pre-push: minimal blocking gate (≤5s hard cap).
 # Skip via `LEFTHOOK=0 git push` (built-in env override; не --no-verify).
 #
