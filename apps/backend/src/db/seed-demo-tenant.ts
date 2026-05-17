@@ -422,6 +422,22 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	// All linked to 30 deterministic guests (ИИ-generated Russian names via fixed lookup).
 	console.log('  → Step 9/10: 30 guests + 30 bookings (varied statuses + dates)')
 
+	// Pre-cleanup (2026-05-17 fix): booking PK = (tenantId, propertyId,
+	// checkIn, id) means same `id` UPSERTed с different checkIn (today-
+	// relative anchor changes daily) creates a NEW row, NOT replaces.
+	// Demo tenant accumulated 111 rows for 30 distinct IDs over 3 daily
+	// restarts (some IDs с 4 dupes). DELETE WHERE id LIKE 'demo-booking-%'
+	// before UPSERT prevents accumulation + duplicate CDC events without
+	// touching the underlying PK design (separate migration task).
+	await sql`
+		DELETE FROM booking
+		WHERE tenantId = ${TENANT_ID} AND id LIKE 'demo-booking-%'
+	`
+	await sql`
+		DELETE FROM guest
+		WHERE tenantId = ${TENANT_ID} AND id LIKE 'demo-guest-%'
+	`
+
 	// Deterministic surname / first-name pool (fixed lookup, NO Math.random).
 	// Common Russian surnames; matches realistic demo without hitting actual people.
 	const SURNAMES = [
