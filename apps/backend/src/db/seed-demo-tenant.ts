@@ -27,6 +27,14 @@
  */
 
 import { newId } from '@horeca/shared'
+import { createAvailabilityFactory } from '../domains/availability/availability.factory.ts'
+import { createBookingFactory } from '../domains/booking/booking.factory.ts'
+import { createPropertyFactory } from '../domains/property/property.factory.ts'
+import { createRateFactory } from '../domains/rate/rate.factory.ts'
+import { createRatePlanFactory } from '../domains/ratePlan/ratePlan.factory.ts'
+import { createRoomFactory } from '../domains/room/room.factory.ts'
+import { createRoomTypeFactory } from '../domains/roomType/roomType.factory.ts'
+import { InvalidBookingTransitionError, NoInventoryError } from '../errors/domain.ts'
 import { sql } from './index.ts'
 import { dateFromIso, NULL_INT32, NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from './ydb-helpers.ts'
 
@@ -191,11 +199,20 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		`
 	}
 
-	console.log('  → Step 6/7: 60-day availability calendar (2 roomTypes × 60 days = 120 rows)')
+	console.log('  → Step 6/7: 120-day availability calendar (2 roomTypes × 120 days = 240 rows)')
 	const today = new Date()
 	today.setUTCHours(0, 0, 0, 0)
 	const dates: string[] = []
-	for (let i = 0; i < 60; i++) {
+	// Past 60 days + future 60 days = 120 days total. Past range required
+	// since BOOKING_PLAN contains historical seed bookings (checked_out
+	// dayOffset=-45, no_show -14, etc.) — per canonical refactor 2026-05-18,
+	// each booking goes через `bookingService.create()` which reads
+	// availability + rate rows for each night. Без past dates, repo throws
+	// NoInventoryError для historical bookings (correct domain behavior —
+	// real API would require availability seed first). 60 days covers
+	// max-past spec в BOOKING_PLAN с margin.
+	const PAST_DAYS = 60
+	for (let i = -PAST_DAYS; i < 60; i++) {
 		const d = new Date(today.getTime() + i * 86_400_000)
 		dates.push(
 			`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
@@ -207,9 +224,11 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	for (const roomTypeId of [DEMO_ROOM_TYPE_DELUXE_ID, DEMO_ROOM_TYPE_STANDARD_ID]) {
 		const inventory = roomTypeId === DEMO_ROOM_TYPE_DELUXE_ID ? 5 : 10
 		for (const dateIso of dates) {
-			// Demo: light pseudo-sold pattern (5-10% sold) для realistic-feel availability.
-			// Не критично для widget gating, но showcases «N rooms left» badge UI.
-			const sold = Number.parseInt(dateIso.slice(8, 10), 10) % 7 === 0 ? 1 : 0
+			// Canon 2026-05-18: initial `sold=0`. Booking service (called в Step 9)
+			// атomically increments per-night sold + writes occupancy + slot rows
+			// via canonical repo path. Pre-refactor pseudo-sold pattern broke
+			// behaviour-faithful contract (demo state не reachable через real API).
+			const sold = 0
 			await sql`
 				UPSERT INTO availability (
 					\`tenantId\`, \`propertyId\`, \`roomTypeId\`, \`date\`,
@@ -226,7 +245,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		}
 	}
 
-	console.log('  → Step 7/7: 60-day rates (4 ratePlans × 60 days = 240 rows)')
+	console.log('  → Step 7/7: 120-day rates (4 ratePlans × 120 days = 480 rows)')
 	for (const rp of ratePlans) {
 		for (const dateIso of dates) {
 			// Weekend uplift +20% (Сочи canon: пятница/суббота).
@@ -423,21 +442,18 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	// All linked to 30 deterministic guests (ИИ-generated Russian names via fixed lookup).
 	console.log('  → Step 9/10: 30 guests + 30 bookings (varied statuses + dates)')
 
-	// Pre-cleanup (2026-05-17 fix): booking PK = (tenantId, propertyId,
-	// checkIn, id) means same `id` UPSERTed с different checkIn (today-
-	// relative anchor changes daily) creates a NEW row, NOT replaces.
-	// Demo tenant accumulated 111 rows for 30 distinct IDs over 3 daily
-	// restarts (some IDs с 4 dupes). DELETE WHERE id LIKE 'demo-booking-%'
-	// before UPSERT prevents accumulation + duplicate CDC events without
-	// touching the underlying PK design (separate migration task).
-	await sql`
-		DELETE FROM booking
-		WHERE tenantId = ${TENANT_ID} AND id LIKE 'demo-booking-%'
-	`
-	await sql`
-		DELETE FROM guest
-		WHERE tenantId = ${TENANT_ID} AND id LIKE 'demo-guest-%'
-	`
+	// Pre-cleanup (canon refactor 2026-05-18): wholesale tenant-scoped DELETE.
+	// Previously `LIKE 'demo-booking-%'` pattern — но canonical refactor switches
+	// к `newId('booking')` = `book_XXX` typeid, breaking pattern match. Plus
+	// each booking now triggers CDC cascade (folio, occupancy, slot, activity,
+	// notification outbox, channel dispatch) → wholesale per-tenant cleanup
+	// matches «golden state reset» semantics того demo refresh cron canon
+	// (project_demo_strategy.md). Idempotent: re-runs produce identical state.
+	await sql`DELETE FROM roomNightOccupancy WHERE tenantId = ${TENANT_ID}`
+	await sql`DELETE FROM roomTypeNightSlot WHERE tenantId = ${TENANT_ID}`
+	await sql`DELETE FROM folio WHERE tenantId = ${TENANT_ID}`
+	await sql`DELETE FROM booking WHERE tenantId = ${TENANT_ID}`
+	await sql`DELETE FROM guest WHERE tenantId = ${TENANT_ID}`
 
 	// Deterministic surname / first-name pool (fixed lookup, NO Math.random).
 	// Common Russian surnames; matches realistic demo without hitting actual people.
@@ -709,6 +725,38 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		[8_000_000_000n, 7_200_000_000n], // Deluxe Flex/NR
 		[5_000_000_000n, 4_500_000_000n], // Standard Flex/NR
 	]
+	void ratePlanNightlyMicros // service-driven: rate rows seeded above are source of truth
+
+	// Canon refactor 2026-05-18: wire domain factories so seed creates bookings
+	// via canonical service path (NOT raw UPSERT). Mirror app.ts DI exactly so
+	// seed produces states reachable through real API. Per `[[project-north-
+	// star-canonical]]` behaviour-faithful demo: demo-on-prod должен показывать
+	// canonically-reachable state only — иначе клиент видит artifacts (overbook,
+	// missing slot rows, drift sold counter) которые real PMS блокирует.
+	const propertyFactory = createPropertyFactory(sql)
+	const roomTypeFactory = createRoomTypeFactory(sql, propertyFactory.service)
+	const roomFactory = createRoomFactory(sql, propertyFactory.service, roomTypeFactory.service)
+	const ratePlanFactory = createRatePlanFactory(
+		sql,
+		propertyFactory.service,
+		roomTypeFactory.service,
+	)
+	const rateFactory = createRateFactory(sql, ratePlanFactory.service)
+	const availabilityFactory = createAvailabilityFactory(sql, roomTypeFactory.service)
+	void availabilityFactory
+	const bookingFactory = createBookingFactory(
+		sql,
+		rateFactory.repo,
+		propertyFactory.service,
+		roomTypeFactory.service,
+		ratePlanFactory.service,
+		roomFactory.service,
+	)
+	const bookingService = bookingFactory.service
+	const SEED_ACTOR = newId('user') // typeid format (passes any future validation)
+
+	let seededCount = 0
+	let skippedCount = 0
 
 	for (let i = 0; i < BOOKING_PLAN.length; i++) {
 		const b = BOOKING_PLAN[i]
@@ -746,93 +794,84 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 
 		const checkInDateObj = offsetDays(b.dayOffset)
 		const checkOutDateObj = offsetDays(b.dayOffset + b.nights)
-		// YDB Date column requires `dateFromIso` wrap; plain JS Date binds к
-		// Datetime which YDB rejects (per project_ydb_specifics.md #10).
 		const isoDay = (d: Date) =>
 			`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
 				d.getUTCDate(),
 			).padStart(2, '0')}`
-		const checkInDate = dateFromIso(isoDay(checkInDateObj))
-		const checkOutDate = dateFromIso(isoDay(checkOutDateObj))
-		const nightlyMicros = ratePlanNightlyMicros[b.roomTypeIdx]?.[b.ratePlanIdx] ?? 5_000_000_000n
-		const totalMicros = nightlyMicros * BigInt(b.nights)
-		const paidMicros = b.status === 'cancelled' ? 0n : totalMicros
-		const totalRub = (Number(totalMicros) / 1_000_000_000).toFixed(2)
-		const paidRub = (Number(paidMicros) / 1_000_000_000).toFixed(2)
-		// Canonical typeid prefix `book_<26-char-ulid>` per ID_PREFIXES.
-		// Same fix as guestId — see comment above.
-		const bookingId = newId('booking')
 		const roomTypeId = roomTypeIds[b.roomTypeIdx] ?? DEMO_ROOM_TYPE_DELUXE_ID
 		const ratePlanId =
 			ratePlanIds[b.roomTypeIdx]?.[b.ratePlanIdx] ?? 'demo-rateplan-deluxe-bar-flex'
 
+		// Canon refactor 2026-05-18: schema-strict guestSnapshot (no email/phone —
+		// those live на `guest` table). Per `[[strict-tests]]` + Zod schema
+		// `bookingGuestSnapshotSchema` в shared/booking.ts.
 		const guestSnapshot = {
 			firstName,
 			lastName: surname,
 			middleName: null,
-			email: `demo-guest-${i}@example.test`,
-			phone: `+7900${String(1000000 + i).padStart(7, '0')}`,
-			documentType: 'PASSPORT_RF',
 			citizenship: 'RU',
+			documentType: 'PASSPORT_RF',
+			documentNumber: docNumber.slice(5),
 		}
-		// Canonical timeSlices per `packages/shared/src/booking.ts:85` —
-		// one slice per night с `date` (ISO yyyy-mm-dd) + `grossMicros`
-		// (string-stringified bigint для JSON safety). Pre-2026-05-16 bug:
-		// (a) used field name `rateMicros` (drifted от writer/reader contract),
-		// (b) called `YdbDate.toString()` returning «[object Object]» literal,
-		// (c) одна slice on multi-night bookings (vs one-per-night canon).
-		// All three caused 30+ silent `night-audit: failed to coerce
-		// grossMicros to BigInt` warnings + skipped tourism-tax audits.
-		const timeSlices: Array<{
-			date: string
-			grossMicros: string
-			roomTypeId: string
-			ratePlanId: string
-			currency: string
-		}> = []
-		for (let n = 0; n < b.nights; n++) {
-			const nightObj = offsetDays(b.dayOffset + n)
-			timeSlices.push({
-				date: isoDay(nightObj),
-				grossMicros: nightlyMicros.toString(),
-				roomTypeId,
-				ratePlanId,
-				currency: 'RUB',
-			})
-		}
-		// Сочи tourism tax 2% (200 bps) — applied к totalMicros для demo.
-		const tourismTaxBaseMicros = totalMicros
-		const tourismTaxMicros = (totalMicros * 200n) / 10_000n
-		void totalRub
-		void paidRub
-		await sql`
-			UPSERT INTO booking (
-				\`tenantId\`, \`id\`, \`propertyId\`,
-				\`roomTypeId\`, \`ratePlanId\`, \`assignedRoomId\`,
-				\`primaryGuestId\`, \`guestSnapshot\`,
-				\`checkIn\`, \`checkOut\`, \`nightsCount\`,
-				\`status\`, \`confirmedAt\`,
-				\`channelCode\`, \`externalId\`,
-				\`guestsCount\`, \`totalMicros\`, \`paidMicros\`, \`currency\`, \`timeSlices\`,
-				\`registrationStatus\`, \`rklCheckResult\`,
-				\`tourismTaxBaseMicros\`, \`tourismTaxMicros\`,
-				\`notes\`,
-				\`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
-			) VALUES (
-				${TENANT_ID}, ${bookingId}, ${DEMO_PROPERTY_ID},
-				${roomTypeId}, ${ratePlanId}, ${NULL_TEXT},
-				${guestId}, ${toJson(guestSnapshot)},
-				${checkInDate}, ${checkOutDate}, ${b.nights},
-				${b.status}, ${nowTs},
-				${b.channelCode ?? 'direct'}, ${NULL_TEXT},
-				${b.guestCount}, ${totalMicros}, ${paidMicros}, ${'RUB'}, ${toJson(timeSlices)},
-				${'not_required'}, ${'not_checked'},
-				${tourismTaxBaseMicros}, ${tourismTaxMicros},
-				${'demo seed'},
-				${nowTs}, ${nowTs}, ${'system:demo-seed'}, ${'system:demo-seed'}
+
+		// Step 1: create as confirmed via canonical service path. Service
+		// validates property/roomType/ratePlan + reads rate rows + atomically
+		// increments availability.sold + writes occupancy + slot rows + emits
+		// CDC events. Same path real channel-push and operator-create take.
+		const channelCode = (b.channelCode ?? 'direct') as Parameters<
+			typeof bookingService.create
+		>[2]['channelCode']
+		try {
+			const created = await bookingService.create(
+				TENANT_ID,
+				DEMO_PROPERTY_ID,
+				{
+					roomTypeId,
+					ratePlanId,
+					checkIn: isoDay(checkInDateObj),
+					checkOut: isoDay(checkOutDateObj),
+					guestsCount: b.guestCount,
+					primaryGuestId: guestId,
+					guestSnapshot,
+					channelCode,
+				},
+				SEED_ACTOR,
 			)
-		`
+
+			// Step 2: transition к target status using canonical service path.
+			// Each transition writes audit + CDC events identically to real flow.
+			if (b.status === 'in_house') {
+				await bookingService.checkIn(TENANT_ID, created.id, {}, SEED_ACTOR)
+			} else if (b.status === 'checked_out') {
+				await bookingService.checkIn(TENANT_ID, created.id, {}, SEED_ACTOR)
+				await bookingService.checkOut(TENANT_ID, created.id, SEED_ACTOR)
+			} else if (b.status === 'cancelled') {
+				await bookingService.cancel(TENANT_ID, created.id, { reason: 'demo seed' }, SEED_ACTOR)
+			} else if (b.status === 'no_show') {
+				await bookingService.markNoShow(
+					TENANT_ID,
+					created.id,
+					{ reason: 'demo seed: guest no-show' },
+					SEED_ACTOR,
+				)
+			}
+			seededCount += 1
+		} catch (err) {
+			// Canon: real channel-push would 409 NO_INVENTORY same way. Log + skip,
+			// don't bypass guards. Demo состояние = strict subset of canonical state.
+			if (err instanceof NoInventoryError || err instanceof InvalidBookingTransitionError) {
+				console.warn(
+					`  ⚠ seed booking #${i} skipped (${b.status}, ${roomTypeId}, day${b.dayOffset >= 0 ? '+' : ''}${b.dayOffset}/${b.nights}n): ${err.message}`,
+				)
+				skippedCount += 1
+				continue
+			}
+			throw err
+		}
 	}
+	console.log(
+		`  → bookings seeded: ${seededCount} successful, ${skippedCount} skipped (canon-rejected: allotment/transition)`,
+	)
 
 	// M10 / A7.5.fix — channel connections для demo tenant (Боль 2.2 visible).
 	// 3 channel adapters TL/YT/ETG bound к demo property. mock-mode + isEnabled=true.
