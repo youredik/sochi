@@ -11,6 +11,7 @@ import type {
 	BookingTimeSlice,
 } from '@horeca/shared'
 import { newId } from '@horeca/shared'
+import { YDBError } from '@ydbjs/error'
 import type { TX } from '@ydbjs/query'
 import type { sql as SQL } from '../../db/index.ts'
 import {
@@ -29,6 +30,73 @@ import {
 	NoInventoryError,
 	RoomAssignmentConflictError,
 } from '../../errors/domain.ts'
+
+/**
+ * YDB PRECONDITION_FAILED status (issueCode 2012 «Conflict with existing key»).
+ * Surfaces from `INSERT INTO roomNightOccupancy` when (tenantId, propertyId,
+ * roomId, date) PK already taken — i.e. DB-level overbooking-prevention canon
+ * 2026-05-18 catches an attempted double-pin.
+ *
+ * Same code surfaces from any GLOBAL UNIQUE SYNC index violation (e.g.
+ * `ixBookingExternal` UNIQUE on externalId), so caller MUST disambiguate by
+ * which write threw — see `assignRoom` / `moveDates` callsites.
+ */
+const YDB_PRECONDITION_FAILED = 400120
+function isPkOrUniqueConflict(err: unknown): err is YDBError {
+	return err instanceof YDBError && err.code === YDB_PRECONDITION_FAILED
+}
+
+/**
+ * INSERT a per-night occupancy row inside `tx`. PK collision = another booking
+ * already owns this (roomId, date) — caller catches via `isPkOrUniqueConflict`
+ * + translates к `RoomAssignmentConflictError('room_occupied')`. Per agent
+ * research 2026-05-18: this is the YDB-canonical replacement для Postgres
+ * `EXCLUDE USING gist (... WITH &&)` since YDB lacks range types and CHECK
+ * constraints. Apaleo + Mews 2026 production canon use same per-night
+ * materialization pattern.
+ */
+async function insertOccupancyForNights(
+	tx: TX,
+	tenantId: string,
+	propertyId: string,
+	roomId: string,
+	bookingId: string,
+	nights: string[],
+	nowTs: ReturnType<typeof toTs>,
+): Promise<void> {
+	for (const night of nights) {
+		await tx`
+			INSERT INTO roomNightOccupancy (
+				\`tenantId\`, \`propertyId\`, \`roomId\`, \`date\`, \`bookingId\`, \`createdAt\`
+			) VALUES (
+				${tenantId}, ${propertyId}, ${roomId}, ${dateFromIso(night)}, ${bookingId}, ${nowTs}
+			)
+		`
+	}
+}
+
+/**
+ * DELETE per-night occupancy rows by exact PK (tenantId, propertyId, roomId,
+ * date). Used by cancel / checkOut / moveDates / changeRoomType. Idempotent —
+ * DELETE WHERE non-existent PK = 0 rows affected, no error.
+ */
+async function deleteOccupancyForNights(
+	tx: TX,
+	tenantId: string,
+	propertyId: string,
+	roomId: string,
+	nights: string[],
+): Promise<void> {
+	for (const night of nights) {
+		await tx`
+			DELETE FROM roomNightOccupancy
+			WHERE tenantId = ${tenantId}
+				AND propertyId = ${propertyId}
+				AND roomId = ${roomId}
+				AND date = ${dateFromIso(night)}
+		`
+	}
+}
 
 type SqlInstance = typeof SQL
 
@@ -498,11 +566,21 @@ export function createBookingRepo(sql: SqlInstance) {
 
 					// Read availability for each night, check + update sold in the same tx.
 					// OCC range-locks: concurrent writers get ABORTED/TRANSACTION_LOCKS_INVALIDATED.
+					//
+					// Effective allotment formula (Apaleo «Allowed Overbooking» canon 2026):
+					//   `effective = allotment + oversellDelta` (default 0 if NULL)
+					// Operator may +N для intentional oversell (revenue-mgr policy) or -N к
+					// pull units offline без touching roomType.inventoryCount.
 					for (const night of nights) {
 						const [availRows = []] = await tx<
-							{ allotment: number | bigint; sold: number | bigint; stopSell: boolean }[]
+							{
+								allotment: number | bigint
+								sold: number | bigint
+								stopSell: boolean
+								oversellDelta: number | bigint | null
+							}[]
 						>`
-							SELECT allotment, sold, stopSell FROM availability
+							SELECT allotment, sold, stopSell, oversellDelta FROM availability
 							WHERE tenantId = ${tenantId}
 								AND propertyId = ${propertyId}
 								AND roomTypeId = ${input.roomTypeId}
@@ -518,8 +596,12 @@ export function createBookingRepo(sql: SqlInstance) {
 						}
 						const sold = Number(avail.sold)
 						const allotment = Number(avail.allotment)
-						if (sold >= allotment) {
-							throw new NoInventoryError(`sold ${sold} >= allotment ${allotment} for ${night}`)
+						const oversellDelta = avail.oversellDelta === null ? 0 : Number(avail.oversellDelta)
+						const effective = allotment + oversellDelta
+						if (sold >= effective) {
+							throw new NoInventoryError(
+								`sold ${sold} >= effective ${effective} (allotment ${allotment} + oversellDelta ${oversellDelta}) for ${night}`,
+							)
 						}
 						await tx`
 							UPDATE availability SET sold = sold + 1, updatedAt = ${nowTs}
@@ -658,6 +740,19 @@ export function createBookingRepo(sql: SqlInstance) {
 						`
 					}
 
+					// Release per-night occupancy если booking was pinned к specific room.
+					// Cancelled booking frees the unit для future bookings — matches
+					// sold-- decrement semantics.
+					if (current.assignedRoomId !== null) {
+						await deleteOccupancyForNights(
+							tx,
+							tenantId,
+							current.propertyId,
+							current.assignedRoomId,
+							nights,
+						)
+					}
+
 					const next: TransitionOverride = {
 						status: 'cancelled',
 						updatedAt: now,
@@ -689,6 +784,35 @@ export function createBookingRepo(sql: SqlInstance) {
 						throw new InvalidBookingTransitionError(current.status, 'in_house')
 					}
 					const now = new Date()
+					const nowTs = toTs(now)
+					const newPin =
+						'assignedRoomId' in opts ? (opts.assignedRoomId ?? null) : current.assignedRoomId
+					const oldPin = current.assignedRoomId
+
+					// Occupancy sync — if pin changes at check-in time, atomically
+					// rebalance. INSERT PK conflict (newPin already occupied) bubbles
+					// out as PRECONDITION_FAILED → caller translates к
+					// RoomAssignmentConflictError. Per overbooking-prevention canon
+					// 2026-05-18 — closes the «operator pins room at check-in без
+					// прохода через assignRoom» gap.
+					if (oldPin !== newPin) {
+						const nights = nightsBetween(current.checkIn, current.checkOut)
+						if (oldPin !== null) {
+							await deleteOccupancyForNights(tx, tenantId, current.propertyId, oldPin, nights)
+						}
+						if (newPin !== null) {
+							await insertOccupancyForNights(
+								tx,
+								tenantId,
+								current.propertyId,
+								newPin,
+								current.id,
+								nights,
+								nowTs,
+							)
+						}
+					}
+
 					const next: TransitionOverride = {
 						status: 'in_house',
 						updatedAt: now,
@@ -702,6 +826,17 @@ export function createBookingRepo(sql: SqlInstance) {
 			} catch (err) {
 				if (err instanceof Error && err.cause instanceof InvalidBookingTransitionError)
 					throw err.cause
+				if (err instanceof Error && err.cause instanceof RoomAssignmentConflictError)
+					throw err.cause
+				if (
+					isPkOrUniqueConflict(err) ||
+					(err instanceof Error && isPkOrUniqueConflict(err.cause))
+				) {
+					throw new RoomAssignmentConflictError(
+						'room_occupied',
+						'check-in target room overlaps another booking',
+					)
+				}
 				throw err
 			}
 		},
@@ -715,6 +850,20 @@ export function createBookingRepo(sql: SqlInstance) {
 						throw new InvalidBookingTransitionError(current.status, 'checked_out')
 					}
 					const now = new Date()
+					// Release per-night occupancy — guest is gone, room becomes available
+					// for future bookings. `sold` counter intentionally NOT decremented
+					// (revenue happened, audit retain). Occupancy is physical-state,
+					// distinct from accounting-state.
+					if (current.assignedRoomId !== null) {
+						const nights = nightsBetween(current.checkIn, current.checkOut)
+						await deleteOccupancyForNights(
+							tx,
+							tenantId,
+							current.propertyId,
+							current.assignedRoomId,
+							nights,
+						)
+					}
 					const next: TransitionOverride = {
 						status: 'checked_out',
 						updatedAt: now,
@@ -837,13 +986,19 @@ export function createBookingRepo(sql: SqlInstance) {
 					}
 
 					// Reserve inventory для nights ∈ (new \ old) с allotment + stopSell
-					// guards (matches create-flow canon).
+					// guards (matches create-flow canon). Effective allotment includes
+					// oversellDelta per Apaleo canon.
 					for (const night of newNights) {
 						if (oldSet.has(night)) continue
 						const [availRows = []] = await tx<
-							{ allotment: number | bigint; sold: number | bigint; stopSell: boolean }[]
+							{
+								allotment: number | bigint
+								sold: number | bigint
+								stopSell: boolean
+								oversellDelta: number | bigint | null
+							}[]
 						>`
-							SELECT allotment, sold, stopSell FROM availability
+							SELECT allotment, sold, stopSell, oversellDelta FROM availability
 							WHERE tenantId = ${tenantId}
 								AND propertyId = ${current.propertyId}
 								AND roomTypeId = ${current.roomTypeId}
@@ -859,8 +1014,12 @@ export function createBookingRepo(sql: SqlInstance) {
 						}
 						const sold = Number(avail.sold)
 						const allotment = Number(avail.allotment)
-						if (sold >= allotment) {
-							throw new NoInventoryError(`sold ${sold} >= allotment ${allotment} for ${night}`)
+						const oversellDelta = avail.oversellDelta === null ? 0 : Number(avail.oversellDelta)
+						const effective = allotment + oversellDelta
+						if (sold >= effective) {
+							throw new NoInventoryError(
+								`sold ${sold} >= effective ${effective} (allotment ${allotment} + oversellDelta ${oversellDelta}) for ${night}`,
+							)
 						}
 						await tx`
 							UPDATE availability SET sold = sold + 1, updatedAt = ${nowTs}
@@ -869,6 +1028,39 @@ export function createBookingRepo(sql: SqlInstance) {
 								AND roomTypeId = ${current.roomTypeId}
 								AND date = ${dateFromIso(night)}
 						`
+					}
+
+					// **Gap B fix (2026-05-18)** — rebalance per-night occupancy if booking
+					// is pinned. Pre-fix: `moveDates` updated booking row + availability
+					// counter but SILENTLY skipped overlap check on assignedRoomId →
+					// pinned booking could be moved into nights already occupied by
+					// another pinned booking. INSERT here triggers PK conflict if any
+					// new night already taken → translated к RoomAssignmentConflictError
+					// (canonical 422 «room_occupied»). DB-level invariant per
+					// `[[overbooking-prevention-canon]]` 2026-05-18.
+					if (current.assignedRoomId !== null) {
+						const nightsToRelease = oldNights.filter((n) => !newSet.has(n))
+						const nightsToOccupy = newNights.filter((n) => !oldSet.has(n))
+						if (nightsToRelease.length > 0) {
+							await deleteOccupancyForNights(
+								tx,
+								tenantId,
+								current.propertyId,
+								current.assignedRoomId,
+								nightsToRelease,
+							)
+						}
+						if (nightsToOccupy.length > 0) {
+							await insertOccupancyForNights(
+								tx,
+								tenantId,
+								current.propertyId,
+								current.assignedRoomId,
+								current.id,
+								nightsToOccupy,
+								nowTs,
+							)
+						}
 					}
 
 					const totalMicros = ctx.timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
@@ -905,6 +1097,17 @@ export function createBookingRepo(sql: SqlInstance) {
 				if (err instanceof Error && err.cause instanceof InvalidBookingAmendStateError)
 					throw err.cause
 				if (err instanceof Error && err.cause instanceof NoInventoryError) throw err.cause
+				if (err instanceof Error && err.cause instanceof RoomAssignmentConflictError)
+					throw err.cause
+				if (
+					isPkOrUniqueConflict(err) ||
+					(err instanceof Error && isPkOrUniqueConflict(err.cause))
+				) {
+					throw new RoomAssignmentConflictError(
+						'room_occupied',
+						'move-dates target overlaps another pinned booking',
+					)
+				}
 				throw err
 			}
 		},
@@ -1044,13 +1247,33 @@ export function createBookingRepo(sql: SqlInstance) {
 						`
 					}
 
+					// Release per-night occupancy для OLD pin — `assignedRoomId` gets
+					// nulled below (line «assignedRoomId: null»), so occupancy для
+					// the old room must vacate. No INSERT here: new roomType means
+					// new pin will come via subsequent `assignRoom` operator action.
+					if (current.assignedRoomId !== null) {
+						await deleteOccupancyForNights(
+							tx,
+							tenantId,
+							current.propertyId,
+							current.assignedRoomId,
+							nights,
+						)
+					}
+
 					// Reserve new roomType inventory с stopSell + allotment guards
-					// (matches create-flow + moveDates canon).
+					// (matches create-flow + moveDates canon). Effective allotment
+					// includes oversellDelta per Apaleo canon.
 					for (const night of nights) {
 						const [availRows = []] = await tx<
-							{ allotment: number | bigint; sold: number | bigint; stopSell: boolean }[]
+							{
+								allotment: number | bigint
+								sold: number | bigint
+								stopSell: boolean
+								oversellDelta: number | bigint | null
+							}[]
 						>`
-							SELECT allotment, sold, stopSell FROM availability
+							SELECT allotment, sold, stopSell, oversellDelta FROM availability
 							WHERE tenantId = ${tenantId}
 								AND propertyId = ${current.propertyId}
 								AND roomTypeId = ${ctx.newRoomTypeId}
@@ -1066,8 +1289,12 @@ export function createBookingRepo(sql: SqlInstance) {
 						}
 						const sold = Number(avail.sold)
 						const allotment = Number(avail.allotment)
-						if (sold >= allotment) {
-							throw new NoInventoryError(`sold ${sold} >= allotment ${allotment} for ${night}`)
+						const oversellDelta = avail.oversellDelta === null ? 0 : Number(avail.oversellDelta)
+						const effective = allotment + oversellDelta
+						if (sold >= effective) {
+							throw new NoInventoryError(
+								`sold ${sold} >= effective ${effective} (allotment ${allotment} + oversellDelta ${oversellDelta}) for ${night}`,
+							)
 						}
 						await tx`
 							UPDATE availability SET sold = sold + 1, updatedAt = ${nowTs}
@@ -1191,8 +1418,12 @@ export function createBookingRepo(sql: SqlInstance) {
 					if (current.assignedRoomId === ctx.roomId) {
 						return current
 					}
-					// Overlap check inside tx: any OTHER booking with same roomId
-					// in overlapping date range (using ixBookingRoom index).
+					// Defense layer 1: app-level overlap check via `ixBookingRoom`
+					// (gives operator a concrete bookingId in the error message —
+					// «room_occupied: bookingId=book_…»). Predicate matches
+					// `confirmed`/`in_house` only — `no_show` excluded here on purpose
+					// (operator workflow: no_show keeps physical room blocked для audit,
+					// so layer 2 below catches the no_show case with same code).
 					const checkInDate = dateFromIso(current.checkIn)
 					const checkOutDate = dateFromIso(current.checkOut)
 					const [overlapRows = []] = await tx<{ id: string }[]>`
@@ -1210,6 +1441,39 @@ export function createBookingRepo(sql: SqlInstance) {
 					}
 
 					const now = new Date()
+					const nowTs = toTs(now)
+					const nights = nightsBetween(current.checkIn, current.checkOut)
+
+					// Re-pin case: vacate occupancy для previous room before INSERTing
+					// new (avoids PK conflict against own prior rows in re-pin path).
+					if (current.assignedRoomId !== null) {
+						await deleteOccupancyForNights(
+							tx,
+							tenantId,
+							current.propertyId,
+							current.assignedRoomId,
+							nights,
+						)
+					}
+
+					// Defense layer 2: DB-level invariant via `roomNightOccupancy` PK.
+					// Per `[[overbooking-prevention-canon]]` 2026-05-18: this is THE
+					// canonical YDB-native overbooking-prevention seam. INSERT
+					// PK collision = another booking owns this (roomId, date), surfaces
+					// as PRECONDITION_FAILED → translated к RoomAssignmentConflictError
+					// in outer catch. Catches what layer 1 missed (e.g. no_show
+					// blocking, mass-import scripts that bypass repo, race condition
+					// after layer 1 SELECT).
+					await insertOccupancyForNights(
+						tx,
+						tenantId,
+						current.propertyId,
+						ctx.roomId,
+						current.id,
+						nights,
+						nowTs,
+					)
+
 					await upsertAmendedBookingRow(tx, current, {
 						updatedAt: now,
 						updatedBy: ctx.actorUserId,
@@ -1228,6 +1492,15 @@ export function createBookingRepo(sql: SqlInstance) {
 					throw err.cause
 				if (err instanceof Error && err.cause instanceof RoomAssignmentConflictError)
 					throw err.cause
+				if (
+					isPkOrUniqueConflict(err) ||
+					(err instanceof Error && isPkOrUniqueConflict(err.cause))
+				) {
+					throw new RoomAssignmentConflictError(
+						'room_occupied',
+						'target room overlaps another booking (DB-level constraint)',
+					)
+				}
 				throw err
 			}
 		},

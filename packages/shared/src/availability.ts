@@ -29,10 +29,19 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD'
 
 const allotmentSchema = z.coerce.number().int().min(0).max(10_000)
 const losSchema = z.coerce.number().int().min(1).max(365)
+/**
+ * Apaleo «Allowed Overbooking» canon (2026): per-day operator-set delta.
+ * Effective allotment = `allotment + oversellDelta`. Negative values block
+ * physical units from sale (e.g. maintenance hold without changing roomType
+ * inventory). Repo guards `allotment + oversellDelta >= sold` on write —
+ * YDB has no CHECK constraints, so invariant lives in `availability.repo`.
+ */
+const oversellDeltaSchema = z.coerce.number().int().min(-1_000).max(1_000)
 
 const singleAvailabilitySchema = z.object({
 	date: dateSchema,
 	allotment: allotmentSchema,
+	oversellDelta: oversellDeltaSchema.optional(),
 	minStay: losSchema.nullable().optional(),
 	maxStay: losSchema.nullable().optional(),
 	// Booleans are `.optional()` not `.default(false)` so `z.infer<>` output
@@ -73,6 +82,12 @@ export type Availability = {
 	allotment: number
 	/** Booked count — adjusted only by the booking service, read-only from availability API. */
 	sold: number
+	/**
+	 * Per-day operator-set delta (Apaleo «Allowed Overbooking» canon 2026).
+	 * Effective allotment = `allotment + oversellDelta`. Defaults к 0 when
+	 * column NULL in DB.
+	 */
+	oversellDelta: number
 	minStay: number | null
 	maxStay: number | null
 	closedToArrival: boolean

@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
 
 jest.setTimeout(60_000)
 
+import { dateFromIso, toTs } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import { createAvailabilityRepo } from './availability.repo.ts'
 
@@ -274,5 +275,128 @@ describe('availability.repo', () => {
 			{ from: '2027-06-01', to: '2027-06-01' },
 		)
 		expect(empty).toEqual([])
+	})
+
+	// ============================================================================
+	// [OB*] Overbooking-prevention canon (2026-05-18) — `oversellDelta` column
+	// (Apaleo «Allowed Overbooking» canon) + bulkUpsert capacity-vs-sold guard.
+	// ============================================================================
+
+	test('[OB1] oversellDelta defaults к 0 on first insert (column NULL → coerce 0)', async () => {
+		const [row] = await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-01-10', allotment: 5 }],
+		})
+		track(TENANT_A, PROP_A, RT_A, ['2028-01-10'])
+		expect(row?.oversellDelta).toBe(0)
+	})
+
+	test('[OB2] oversellDelta positive value roundtrip (operator-set oversell)', async () => {
+		const [row] = await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-02-10', allotment: 5, oversellDelta: 2 }],
+		})
+		track(TENANT_A, PROP_A, RT_A, ['2028-02-10'])
+		expect(row?.oversellDelta).toBe(2)
+	})
+
+	test('[OB3] oversellDelta negative value roundtrip (operator pulls units offline)', async () => {
+		const [row] = await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-03-10', allotment: 5, oversellDelta: -1 }],
+		})
+		track(TENANT_A, PROP_A, RT_A, ['2028-03-10'])
+		expect(row?.oversellDelta).toBe(-1)
+	})
+
+	test('[OB4] oversellDelta preserved on overwrite when omitted from payload', async () => {
+		await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-04-10', allotment: 5, oversellDelta: 3 }],
+		})
+		track(TENANT_A, PROP_A, RT_A, ['2028-04-10'])
+		// Second upsert without oversellDelta should preserve the prior value.
+		const [row] = await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-04-10', allotment: 8 }],
+		})
+		expect(row?.oversellDelta).toBe(3)
+		expect(row?.allotment).toBe(8)
+	})
+
+	test('[OB5] bulkUpsert rejects allotment + oversellDelta < sold (Gap C — capacity-below-sold)', async () => {
+		// Seed allotment=5, then manually bump sold к 4 (simulating committed bookings).
+		const sql = getTestSql()
+		const now = toTs(new Date())
+		await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-05-10', allotment: 5 }],
+		})
+		track(TENANT_A, PROP_A, RT_A, ['2028-05-10'])
+		await sql`
+			UPDATE availability SET sold = 4, updatedAt = ${now}
+			WHERE tenantId = ${TENANT_A} AND propertyId = ${PROP_A}
+				AND roomTypeId = ${RT_A} AND date = ${dateFromIso('2028-05-10')}
+		`
+
+		// Operator tries к drop allotment к 3 — would leave 4 phantom bookings over.
+		await expect(
+			repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+				rates: [{ date: '2028-05-10', allotment: 3 }],
+			}),
+		).rejects.toThrow(/Cannot reduce capacity below sold/i)
+
+		// State unchanged (allotment 5, sold 4 still).
+		const r = await repo.getOne(TENANT_A, PROP_A, RT_A, '2028-05-10')
+		expect(r?.allotment).toBe(5)
+		expect(r?.sold).toBe(4)
+	})
+
+	test('[OB6] bulkUpsert: oversellDelta rescues allotment reduction (allotment+oversell >= sold)', async () => {
+		const sql = getTestSql()
+		const now = toTs(new Date())
+		await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-06-10', allotment: 5 }],
+		})
+		track(TENANT_A, PROP_A, RT_A, ['2028-06-10'])
+		await sql`
+			UPDATE availability SET sold = 4, updatedAt = ${now}
+			WHERE tenantId = ${TENANT_A} AND propertyId = ${PROP_A}
+				AND roomTypeId = ${RT_A} AND date = ${dateFromIso('2028-06-10')}
+		`
+
+		// Drop allotment к 3 BUT bump oversellDelta к +1 → effective 4 == sold OK.
+		const [row] = await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-06-10', allotment: 3, oversellDelta: 1 }],
+		})
+		expect(row?.allotment).toBe(3)
+		expect(row?.oversellDelta).toBe(1)
+		expect(row?.sold).toBe(4)
+	})
+
+	test('[OB7] bulkUpsert: exact boundary allotment+oversellDelta === sold accepted', async () => {
+		const sql = getTestSql()
+		const now = toTs(new Date())
+		await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-07-10', allotment: 5 }],
+		})
+		track(TENANT_A, PROP_A, RT_A, ['2028-07-10'])
+		await sql`
+			UPDATE availability SET sold = 5, updatedAt = ${now}
+			WHERE tenantId = ${TENANT_A} AND propertyId = ${PROP_A}
+				AND roomTypeId = ${RT_A} AND date = ${dateFromIso('2028-07-10')}
+		`
+
+		// Same allotment as sold — effective = sold, boundary OK (no overshoot).
+		const [row] = await repo.bulkUpsert(TENANT_A, PROP_A, RT_A, {
+			rates: [{ date: '2028-07-10', allotment: 5 }],
+		})
+		expect(row?.allotment).toBe(5)
+		expect(row?.sold).toBe(5)
+	})
+
+	test('[OB8] oversellDelta Zod bounds: out-of-range (-1001) rejected at schema layer', async () => {
+		// Schema bounds are -1000..+1000 per shared/availability.ts. Caller-side
+		// Zod parse should reject before hitting repo. Verify via service-level
+		// schema parse — repo bypass would be misuse.
+		const { availabilityBulkUpsertInput } = await import('@horeca/shared')
+		const result = availabilityBulkUpsertInput.safeParse({
+			rates: [{ date: '2028-08-10', allotment: 5, oversellDelta: -1001 }],
+		})
+		expect(result.success).toBe(false)
 	})
 })
