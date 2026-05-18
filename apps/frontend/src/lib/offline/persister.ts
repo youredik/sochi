@@ -79,6 +79,30 @@ function stripPiiFromTree(value: unknown): unknown {
 }
 
 /**
+ * Predicate — return `false` to EXCLUDE а query from IndexedDB persistence.
+ *
+ * **G11 v3 (2026-05-18) — auth/session exclusion fix.**
+ * Pre-fix bug: anonymous `/login` probe wrote `data: null` к persister.
+ * After fresh magic-link verify set cookie + redirected к `/`, the
+ * `_app.tsx` beforeLoad called `ensureQueryData(sessionQueryOptions)`
+ * which got the cached `null` (within 30s `staleTime`) → redirected
+ * back к `/login` despite a valid server session. Manifested empirically
+ * for 2 users (5 valid sessions accumulated в DB per user, all unused).
+ *
+ * Rationale for **scoped** queryKey match `['auth', 'session']` (NOT
+ * prefix-block `['auth', ...]`): future BA features may add
+ * `['auth', 'devices']` (passkey list) OR `['auth', 'sessions']` (active
+ * device list) — operationally fine к persist для offline UX. Only the
+ * authoritative SESSION state is sensitive к persisted-null poisoning.
+ *
+ * Adversarial guard: tests pin this exact shape (see persister.test.ts).
+ */
+export function shouldPersistQuery(queryKey: readonly unknown[]): boolean {
+	if (queryKey.length < 2) return true
+	return !(queryKey[0] === 'auth' && queryKey[1] === 'session')
+}
+
+/**
  * Create persister с per-deploy buster + 7-day maxAge + PII-strip serialize.
  * `buster` falls back к literal 'dev' когда VITE_GIT_SHA undefined.
  */
@@ -88,6 +112,11 @@ export function createOfflineQueryPersister() {
 		storage: idbKeyvalStorage,
 		maxAge: SEVEN_DAYS_MS,
 		buster,
+		// G11 v3 (2026-05-18): exclude `['auth', 'session']` from persist.
+		// See `shouldPersistQuery` jsdoc для full rationale.
+		filters: {
+			predicate: (query) => shouldPersistQuery(query.queryKey),
+		},
 		serialize: (persistedQuery) => {
 			// Strip PII fields BEFORE JSON.stringify — eliminates 152-ФЗ
 			// surface. Cache contains operational metadata only (IDs, dates,

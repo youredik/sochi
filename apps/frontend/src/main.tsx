@@ -47,6 +47,7 @@ void import('./lib/rum/index.ts').then((m) => m.startRum())
 //   - per-query persister via experimental_createQueryPersister + idb-keyval
 //   - buster=VITE_GIT_SHA invalidates ALL cache on deploy
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+const queryPersister = createOfflineQueryPersister()
 const queryClient = new QueryClient({
 	defaultOptions: {
 		queries: {
@@ -54,7 +55,7 @@ const queryClient = new QueryClient({
 			gcTime: SEVEN_DAYS_MS,
 			networkMode: 'offlineFirst',
 			refetchOnWindowFocus: false,
-			persister: createOfflineQueryPersister().persisterFn,
+			persister: queryPersister.persisterFn,
 		},
 		mutations: {
 			networkMode: 'offlineFirst',
@@ -70,6 +71,19 @@ const queryClient = new QueryClient({
 if (typeof window !== 'undefined') {
 	broadcastQueryClient({ queryClient, broadcastChannel: 'sochi-pms-cache' })
 	logger.info('offline: cross-tab broadcastQueryClient mounted')
+
+	// G11 v3 (2026-05-18) — one-shot boot wipe of any auth state poisoned
+	// by pre-fix persister builds. Existing users have `['auth', 'session']`
+	// stored в IndexedDB с stale `null` от anonymous probe; predicate fix
+	// prevents FUTURE writes, but the already-stored entry needs explicit
+	// removal — otherwise `experimental_createQueryPersister` rehydrates
+	// it on cold boot ДО any auth event can fire. `queryClient.removeQueries`
+	// touches только in-memory cache; `persister.removeQueries` hits
+	// IndexedDB via the storage adapter (`idb-keyval` `del`). Both needed:
+	// remove already-mounted query state + delete persistent storage.
+	// Idempotent: после первого успешного boot key gone, future boots no-op.
+	queryClient.removeQueries({ queryKey: ['auth'] })
+	void queryPersister.removeQueries({ queryKey: ['auth'], exact: false })
 }
 
 const router = createRouter({
