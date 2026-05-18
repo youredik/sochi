@@ -251,11 +251,27 @@ export interface RegistrationBadge {
 	readonly urgent: boolean
 }
 
+/**
+ * G11 v3 (2026-05-18) — accepts `isForeignCitizen: boolean` instead of
+ * raw `citizenship: string`. Grid path no longer carries full citizenship
+ * code (PII per 152-ФЗ ст. 3 if combined с other identifying fields);
+ * caller (grid query projection) pre-computes the single-bit flag from
+ * `isRussianCitizenship(snapshot.citizenship)` ON RECEIVE и drops the
+ * raw value before TanStack caches it. Edit Sheet uses `useBooking(id)`
+ * detail query (NOT cached, `meta: { persist: false }`) для full info.
+ *
+ * Backward-compat overload retained for tests that still pass citizenship
+ * directly: if а string is passed, infer boolean via existing helper.
+ */
 export function registrationBadgeFor(
 	status: BookingRegistrationStatus,
-	citizenship: string,
+	isForeignCitizenOrCitizenship: boolean | string,
 ): RegistrationBadge | null {
-	if (isRussianCitizenship(citizenship)) return null
+	const isForeign =
+		typeof isForeignCitizenOrCitizenship === 'boolean'
+			? isForeignCitizenOrCitizenship
+			: !isRussianCitizenship(isForeignCitizenOrCitizenship)
+	if (!isForeign) return null
 	switch (status) {
 		case 'notRequired':
 			return null

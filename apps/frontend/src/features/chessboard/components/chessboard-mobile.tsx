@@ -100,10 +100,9 @@ export function ChessboardMobile() {
 		const byStatus = filterByStatus(bookings, statusFilter)
 		return filterBySearch(
 			byStatus,
-			(b) => {
-				const mask = b.guestSnapshot ? maskGuestNameRu(b.guestSnapshot) : ''
-				return `${mask} ${b.id}`
-			},
+			// G11 v3 (2026-05-18) — `guestMask` pre-computed via queryFn projection
+			// (raw guestSnapshot не cached). Search by mask + bookingId.
+			(b) => `${b.guestMask ?? ''} ${b.id}`,
 			searchText,
 		)
 	}, [bookings, statusFilter, searchText])
@@ -237,7 +236,10 @@ export function ChessboardMobile() {
 							</h2>
 							<ul className="space-y-2">
 								{g.bookings.map((b) => {
-									const guestMask = b.guestSnapshot ? maskGuestNameRu(b.guestSnapshot) : '—'
+									// G11 v3 (2026-05-18) — narrow GridBooking shape (no PII).
+									// `guestMask` + `isForeignCitizen` pre-computed via queryFn
+									// projection. Raw guestSnapshot не cached.
+									const guestMask = b.guestMask ?? '—'
 									const num = (b.id ?? '').slice(-6).toUpperCase()
 									const palette = paletteFor({
 										booking: {
@@ -248,10 +250,9 @@ export function ChessboardMobile() {
 										todayIso: today,
 									})
 									const channel = b.channelCode ? channelIndicator(b.channelCode) : null
-									const mvd =
-										b.registrationStatus && b.guestSnapshot
-											? registrationBadgeFor(b.registrationStatus, b.guestSnapshot.citizenship)
-											: null
+									const mvd = b.registrationStatus
+										? registrationBadgeFor(b.registrationStatus, b.isForeignCitizen)
+										: null
 									const tax =
 										b.tourismTaxMicros !== undefined && b.status !== 'cancelled'
 											? formatTourismTaxRub(b.tourismTaxMicros)

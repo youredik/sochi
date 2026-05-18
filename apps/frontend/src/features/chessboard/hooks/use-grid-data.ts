@@ -7,45 +7,65 @@ import type {
 	Room,
 	RoomType,
 } from '@horeca/shared'
+import { isRussianCitizenship } from '@horeca/shared'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../../lib/api.ts'
+import { maskGuestNameRu } from '../lib/booking-palette.ts'
 
 /**
- * Narrow shape of a booking as it arrives from the JSON wire — bigint
- * fields (money micros) come back as strings per BigInt#toJSON patch on
- * the backend (see apps/backend/src/patches.ts). Grid doesn't need the
- * money fields; we only read identity + state + dates.
+ * G11 v3 (2026-05-18) — narrow grid row WITHOUT PII fields. Backend list
+ * endpoint returns full Booking shape, но queryFn PROJECTS к this narrow
+ * shape ДО TanStack caches it. PII (guestSnapshot.{firstName, lastName,
+ * middleName, passportSeries, documentNumber, dateOfBirth, citizenship,
+ * phone, email}) НИКОГДА не попадает в IndexedDB persister storage.
+ *
+ * Mask + isForeignCitizen computed client-side ONCE on receive — both
+ * derived from PII but не contain it. `guestMask` is the 152-ФЗ default
+ * «Иванов И.» display string (already not-PII per Stakhanov 2026 canon
+ * — single-letter initial не identifies physical person alone).
+ * `isForeignCitizen` is а single bit (RU true/false) — also not PII per
+ * 152-ФЗ ст. 3 «определяет физлицо».
+ *
+ * Per research ≥ 2026-05-18 (TanStack TkDodo offline-react-query +
+ * Booking.com Reservations API IDs-first canon + 152-ФЗ ст. 5 ч. 5
+ * data-minimization), THIS is the canonical browser-cache PII pattern.
+ * Supersedes G11 v2 `stripPiiFromTree` (rejected — lied к TypeScript
+ * `string` type, crashed downstream `.trim()` calls).
+ *
+ * For FULL PII (booking detail edit Sheet), use `useBooking(id)` hook
+ * which fetches via `['booking', id]` queryKey marked `meta: { persist:
+ * false }` — server-roundtrip every consume, never cached.
  */
-interface GridBooking {
+export interface GridBooking {
 	id: string
 	roomTypeId: string
 	status: BookingStatus
 	checkIn: string
 	checkOut: string
-	// G2 (2026-05-15): added для UI-derived `unassigned` palette state per
-	// TravelLine 8-color canon (turquoise band when assignedRoomId is null
-	// AND status='confirmed'). Server already serves this field on Booking
-	// rows — narrowed-out previously для bandwidth, but the palette derive
-	// requires it. Stays nullable per domain (`assignedRoomId: string | null`
-	// в `apps/backend/.../booking.repo.ts`).
-	assignedRoomId?: string | null
-	// G2.bis (2026-05-15): channel-color differentiator dot per TravelLine
-	// canon. Server already serves; narrowing extended. Indicates origin
-	// channel of the booking (yandexTravel red-orange vs generic OTA yellow
-	// vs direct/walkIn no-indicator).
+	assignedRoomId: string | null
 	channelCode?: BookingChannelCode
-	// G4 (2026-05-15): RU compliance overlays. All three fields ALREADY
-	// serialized by the backend `listByProperty` (returns full Booking shape) —
-	// previously narrowed-out for bandwidth. Reuse:
-	//   - guestSnapshot: render `Фамилия И.` mask on band per 152-ФЗ canon
-	//     (Mews / Cloudbeds / Apaleo industry default).
-	//   - registrationStatus + guestSnapshot.citizenship: МВД badge for foreign
-	//     guests, identifies operator action (Боль 1.1 canon).
-	//   - tourismTaxMicros: «ТН» chip / tooltip line — Сочи 2% per
-	//     `[[ru-legal-canonical]]`. BigInt#toJSON serializes к строка.
-	guestSnapshot?: BookingGuestSnapshot
 	registrationStatus?: BookingRegistrationStatus
 	tourismTaxMicros?: string | number
+	/** Pre-computed «Иванов И.» mask — null если guest snapshot отсутствует. */
+	guestMask: string | null
+	/** Single bit для МВД badge logic — full citizenship code не cached. */
+	isForeignCitizen: boolean
+}
+
+/** Wire shape — backend returns full booking с PII. Used ONLY inside
+ *  queryFn для projection. NOT exported — никаких downstream consumers
+ *  получают raw PII через grid path. */
+interface WireBookingRow {
+	id: string
+	roomTypeId: string
+	status: BookingStatus
+	checkIn: string
+	checkOut: string
+	assignedRoomId: string | null
+	channelCode?: BookingChannelCode
+	registrationStatus?: BookingRegistrationStatus
+	tourismTaxMicros?: string | number
+	guestSnapshot?: BookingGuestSnapshot
 }
 
 /**
@@ -99,8 +119,31 @@ export function useGridData(from: string, to: string) {
 				query: { from, to },
 			})
 			if (!res.ok) throw new Error('bookings.list failed')
-			const body = (await res.json()) as { data: GridBooking[] }
-			return body.data
+			const body = (await res.json()) as { data: WireBookingRow[] }
+			// G11 v3 (2026-05-18) — PROJECT к narrow shape ДО TanStack caches.
+			// PII (guestSnapshot) is function-local; garbage-collected после
+			// queryFn returns. TanStack stores только the projected
+			// `GridBooking[]` — IndexedDB persister sees no PII.
+			// `exactOptionalPropertyTypes: true` requires conditional shape
+			// build (omit key vs explicit undefined). Spread pattern.
+			return body.data.map<GridBooking>((b) => {
+				const row: GridBooking = {
+					id: b.id,
+					roomTypeId: b.roomTypeId,
+					status: b.status,
+					checkIn: b.checkIn,
+					checkOut: b.checkOut,
+					assignedRoomId: b.assignedRoomId,
+					guestMask: b.guestSnapshot ? maskGuestNameRu(b.guestSnapshot) : null,
+					isForeignCitizen: b.guestSnapshot
+						? !isRussianCitizenship(b.guestSnapshot.citizenship)
+						: false,
+				}
+				if (b.channelCode !== undefined) row.channelCode = b.channelCode
+				if (b.registrationStatus !== undefined) row.registrationStatus = b.registrationStatus
+				if (b.tourismTaxMicros !== undefined) row.tourismTaxMicros = b.tourismTaxMicros
+				return row
+			})
 		},
 		enabled: Boolean(propertyId),
 		// Stale quickly so M5e booking create/mutate re-fetches on next paint.

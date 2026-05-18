@@ -134,7 +134,12 @@ export function Chessboard() {
 						checkOut: string
 						assignedRoomId: string | null
 						channelCode: (typeof rowBookings)[number]['channelCode']
-						guestSnapshot: (typeof rowBookings)[number]['guestSnapshot']
+						// G11 v3 (2026-05-18) — narrowed shape (no PII): grid query
+						// projects к pre-computed `guestMask` + `isForeignCitizen`
+						// (single bit, не PII per 152-ФЗ ст. 3). Raw guestSnapshot
+						// NEVER reaches grid layout state.
+						guestMask: string | null
+						isForeignCitizen: boolean
 						registrationStatus: (typeof rowBookings)[number]['registrationStatus']
 						tourismTaxMicros: (typeof rowBookings)[number]['tourismTaxMicros']
 						span: number
@@ -152,14 +157,10 @@ export function Chessboard() {
 						status: b.status,
 						checkIn: b.checkIn,
 						checkOut: b.checkOut,
-						// G2: thread assignedRoomId через layout state так paletteFor()
-						// может render «unassigned» turquoise overlay.
 						assignedRoomId: b.assignedRoomId ?? null,
-						// G2.bis: thread channelCode для channelIndicator() differentiator.
 						channelCode: b.channelCode,
-						// G4: thread RU compliance fields — guest mask label,
-						// registration МВД badge, tourism tax chip / tooltip line.
-						guestSnapshot: b.guestSnapshot,
+						guestMask: b.guestMask,
+						isForeignCitizen: b.isForeignCitizen,
 						registrationStatus: b.registrationStatus,
 						tourismTaxMicros: b.tourismTaxMicros,
 						span,
@@ -552,17 +553,16 @@ export function Chessboard() {
 										// stays in aria-label (screen-reader semantic) + colour
 										// (sighted urgency) — visible text now identifies the
 										// booking, per Mews / Cloudbeds / Apaleo canon.
-										const guestMask = band.guestSnapshot
-											? maskGuestNameRu(band.guestSnapshot)
-											: null
+										// G11 v3 (2026-05-18) — `guestMask` + `isForeignCitizen` come
+										// pre-computed from `use-grid-data.ts` projection on receive.
+										// Raw `guestSnapshot` (PII) НЕ хранится в TanStack cache /
+										// IndexedDB persister. Per 152-ФЗ data-minimization + TanStack
+										// TkDodo offline-react-query canon ≥ 2026-05-18.
+										const guestMask = band.guestMask
 										const visibleLabel = guestMask ?? style.label
-										const mvdBadge =
-											band.registrationStatus && band.guestSnapshot
-												? registrationBadgeFor(
-														band.registrationStatus,
-														band.guestSnapshot.citizenship,
-													)
-												: null
+										const mvdBadge = band.registrationStatus
+											? registrationBadgeFor(band.registrationStatus, band.isForeignCitizen)
+											: null
 										const taxRub =
 											band.tourismTaxMicros !== undefined && band.status !== 'cancelled'
 												? formatTourismTaxRub(band.tourismTaxMicros)
@@ -577,15 +577,12 @@ export function Chessboard() {
 												checkIn={band.checkIn}
 												checkOut={band.checkOut}
 												channelLabel={channel?.label ?? null}
-												guestFullName={
-													band.guestSnapshot
-														? `${band.guestSnapshot.lastName} ${band.guestSnapshot.firstName}${
-																band.guestSnapshot.middleName
-																	? ` ${band.guestSnapshot.middleName}`
-																	: ''
-															}`
-														: null
-												}
+												// G11 v3 (2026-05-18) — full PII не cached в grid path.
+												// Tooltip отображает masked name только (152-ФЗ default-mask
+												// canon). Full PII доступна только в edit Sheet via
+												// `useBooking(id)` detail query (NOT cached). Operator
+												// clicks band → opens Sheet → fresh detail fetch.
+												guestFullName={band.guestMask}
 												mvdLabel={mvdBadge?.label ?? null}
 												taxRub={taxRub}
 											>

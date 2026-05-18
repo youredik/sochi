@@ -15,28 +15,20 @@
 import { describe, expect, it } from 'bun:test'
 import { shouldPersistQuery } from './persister.ts'
 
-describe('shouldPersistQuery — auth-session exclusion canon (G11 v3 2026-05-18)', () => {
+describe('shouldPersistQuery — auth-session + meta.persist canon (G11 v3 2026-05-18)', () => {
 	it('[E1] excludes EXACTLY `["auth", "session"]`', () => {
 		expect(shouldPersistQuery(['auth', 'session'])).toBe(false)
 	})
 
 	it('[E2] excludes `["auth", "session", ...extra]` (deeper queries still under session umbrella)', () => {
-		// Defensive: if BA adds nested session-scoped queries («session», «detail», userId)
-		// the same canon — auth session state never persists.
 		expect(shouldPersistQuery(['auth', 'session', 'meta'])).toBe(false)
 	})
 
 	it('[K1] permits `["auth", "devices"]` (passkey/device list — offline-friendly)', () => {
-		// Adversarial guard from agent research: prefix-block `["auth", ...]`
-		// would break legitimate future offline surfaces. Scoped match keeps
-		// предохранитель minimal.
 		expect(shouldPersistQuery(['auth', 'devices'])).toBe(true)
 	})
 
 	it('[K2] permits `["auth", "sessions"]` (plural — device-list, NOT current session)', () => {
-		// Distinct from singular `session` (current-tab auth state). Plural
-		// `sessions` typically = BA "list active devices" surface — operationally
-		// offline-friendly UX.
 		expect(shouldPersistQuery(['auth', 'sessions'])).toBe(true)
 	})
 
@@ -56,10 +48,36 @@ describe('shouldPersistQuery — auth-session exclusion canon (G11 v3 2026-05-18
 		expect(shouldPersistQuery(['health'])).toBe(true)
 	})
 
-	it('[A1] adversarial — string `"auth"` ALONE (not array) — predicate guards К tuple shape', () => {
-		// Defensive: queryKey IS array per TanStack contract; но if internal
-		// caller pass non-array, predicate must not crash. Treated as permit
-		// (offline-safe default).
-		expect(shouldPersistQuery(['auth'])).toBe(true) // length < 2 → permit
+	it('[A1] adversarial — `["auth"]` alone (length < 2) → permit', () => {
+		expect(shouldPersistQuery(['auth'])).toBe(true)
+	})
+
+	// G11 v3 meta.persist canon (2026-05-18) — per-query opt-out via meta hint.
+	// TanStack TkDodo canonical pattern; PII-bearing queries tag themselves.
+	// Test pin'ит both edges чтобы future contributor не сломал contract.
+	it('[M1] meta.persist === false → EXCLUDE (canonical opt-out)', () => {
+		expect(shouldPersistQuery(['booking', 'detail', 'book_abc'], { persist: false })).toBe(false)
+	})
+
+	it('[M2] meta.persist === true → respect queryKey logic (still excludes auth-session)', () => {
+		expect(shouldPersistQuery(['auth', 'session'], { persist: true })).toBe(false)
+	})
+
+	it('[M3] meta.persist === undefined → fall-through к queryKey logic (PERMIT non-auth)', () => {
+		expect(shouldPersistQuery(['bookings', 'grid', 'prop-1'], {})).toBe(true)
+	})
+
+	it('[M4] meta missing entirely → fall-through (PERMIT non-auth)', () => {
+		expect(shouldPersistQuery(['bookings', 'grid', 'prop-1'])).toBe(true)
+	})
+
+	it('[M5] meta.persist === false на PII detail query (`["booking", id]`) → EXCLUDE', () => {
+		// Real-world: `useBooking(id)` opts out — full guestSnapshot stays
+		// in-memory only, never IndexedDB. 152-ФЗ-compliant detail-fetch.
+		expect(shouldPersistQuery(['booking', 'book_abc123'], { persist: false })).toBe(false)
+	})
+
+	it('[M6] meta.persist === false на unassigned list (с PII guestSnapshot) → EXCLUDE', () => {
+		expect(shouldPersistQuery(['unassigned', 'prop-1'], { persist: false })).toBe(false)
 	})
 })

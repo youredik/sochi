@@ -72,18 +72,25 @@ if (typeof window !== 'undefined') {
 	broadcastQueryClient({ queryClient, broadcastChannel: 'sochi-pms-cache' })
 	logger.info('offline: cross-tab broadcastQueryClient mounted')
 
-	// G11 v3 (2026-05-18) — one-shot boot wipe of any auth state poisoned
-	// by pre-fix persister builds. Existing users have `['auth', 'session']`
-	// stored в IndexedDB с stale `null` от anonymous probe; predicate fix
-	// prevents FUTURE writes, but the already-stored entry needs explicit
-	// removal — otherwise `experimental_createQueryPersister` rehydrates
-	// it on cold boot ДО any auth event can fire. `queryClient.removeQueries`
-	// touches только in-memory cache; `persister.removeQueries` hits
-	// IndexedDB via the storage adapter (`idb-keyval` `del`). Both needed:
-	// remove already-mounted query state + delete persistent storage.
-	// Idempotent: после первого успешного boot key gone, future boots no-op.
-	queryClient.removeQueries({ queryKey: ['auth'] })
-	void queryPersister.removeQueries({ queryKey: ['auth'], exact: false })
+	// G11 v3 (2026-05-18) — one-shot boot wipe of state poisoned by pre-fix
+	// G11 v2 persister builds. Three categories of stale IndexedDB entries:
+	//   1. `['auth', 'session']` — cached null от anonymous probe →
+	//      bounced fresh magic-link verify (first reported bug).
+	//   2. `['bookings', ...]` — guestSnapshot stripped к null via prior
+	//      `stripPiiFromTree` → downstream `.trim()` crashed («Cannot read
+	//      properties of null (reading 'trim')», 2nd reported bug 2026-05-18).
+	//      v3 fix projects grid query к narrow shape (no PII) на receive;
+	//      old persisted entries still carry stripped guestSnapshot rooted
+	//      в IDB until wiped.
+	//   3. `['booking', id]` + `['unassigned', ...]` — same stripped-null
+	//      cascade; v3 marks these queries `meta: { persist: false }`.
+	// `queryClient.removeQueries` touches in-memory; `persister.removeQueries`
+	// hits IndexedDB. Both needed. Idempotent: after first boot все ключи
+	// gone, future boots no-op.
+	for (const key of [['auth'], ['bookings'], ['booking'], ['unassigned']] as const) {
+		queryClient.removeQueries({ queryKey: key })
+		void queryPersister.removeQueries({ queryKey: key, exact: false })
+	}
 }
 
 const router = createRouter({

@@ -72,6 +72,10 @@ export function useBooking(id: string | null) {
 		},
 		enabled: Boolean(id),
 		staleTime: 5_000,
+		// G11 v3 (2026-05-18) — full booking PII (guestSnapshot, document
+		// fields). NEVER persisted к IndexedDB per 152-ФЗ. Fresh fetch
+		// каждый раз операторе opens edit Sheet.
+		meta: { persist: false },
 	})
 }
 
@@ -472,5 +476,9 @@ export function useUnassignedBookings(propertyId: string | null) {
 		refetchInterval: 5_000,
 		refetchIntervalInBackground: false,
 		staleTime: 2_000,
+		// G11 v3 (2026-05-18) — PII present (guestSnapshot full). NEVER persist
+		// к IndexedDB per 152-ФЗ data-minimization + TanStack TkDodo canon.
+		// In-memory only; refetched fresh after page reload.
+		meta: { persist: false },
 	})
 }
