@@ -121,38 +121,64 @@ export function Chessboard() {
 	// Pre-compute per-row band layout + navigation skeleton. Navigation
 	// model is consumed by the keymap lib; render uses the same data.
 	// One pass, memoized on (roomTypes, bookings, blocks, windowFrom, windowTo).
+	//
+	// G11 v3.5 (2026-05-18) — **Lane assignment via interval-graph coloring**.
+	// Pre-fix `bandByStart: Map<colStart, band>` silently overwrote bookings
+	// с identical checkIn → одна booking dropped on render. Plus CSS Grid
+	// auto-place spawned implicit rows для overlapping bands w/o `gridRow` →
+	// cross-row contamination via `display:contents`. Per agent research
+	// ≥ 2026-05-18 + Apaleo/Mews/Bnovo industry canon.
+	//
+	// Algorithm: sort bookings by (checkIn, id); for each, assign lowest-free
+	// lane such that no earlier band в that lane overlaps (laneEnds[lane] >
+	// colStart blocks). Result: explicit `lane` per band → explicit `gridRow`
+	// в render. No more silent drops, no more cross-row drift.
 	const rowsLayout = useMemo(
 		() =>
 			roomTypes.map((rt) => {
 				const rowBookings = bookings.filter((b) => b.roomTypeId === rt.id)
-				const bandByStart = new Map<
-					number,
-					{
-						id: string
-						status: (typeof rowBookings)[number]['status']
-						checkIn: string
-						checkOut: string
-						assignedRoomId: string | null
-						channelCode: (typeof rowBookings)[number]['channelCode']
-						// G11 v3 (2026-05-18) — narrowed shape (no PII): grid query
-						// projects к pre-computed `guestMask` + `isForeignCitizen`
-						// (single bit, не PII per 152-ФЗ ст. 3). Raw guestSnapshot
-						// NEVER reaches grid layout state.
-						guestMask: string | null
-						isForeignCitizen: boolean
-						registrationStatus: (typeof rowBookings)[number]['registrationStatus']
-						tourismTaxMicros: (typeof rowBookings)[number]['tourismTaxMicros']
-						span: number
-						truncatedLeft: boolean
-						truncatedRight: boolean
-					}
-				>()
-				const covered = new Set<number>()
+				type Band = {
+					id: string
+					status: (typeof rowBookings)[number]['status']
+					checkIn: string
+					checkOut: string
+					assignedRoomId: string | null
+					channelCode: (typeof rowBookings)[number]['channelCode']
+					guestMask: string | null
+					isForeignCitizen: boolean
+					registrationStatus: (typeof rowBookings)[number]['registrationStatus']
+					tourismTaxMicros: (typeof rowBookings)[number]['tourismTaxMicros']
+					colStart: number
+					span: number
+					truncatedLeft: boolean
+					truncatedRight: boolean
+					lane: number
+				}
+				const positioned: Array<{
+					b: (typeof rowBookings)[number]
+					pos: NonNullable<ReturnType<typeof bandPosition>>
+				}> = []
 				for (const b of rowBookings) {
 					const pos = bandPosition(b, windowFrom, windowTo)
-					if (!pos) continue
-					const span = pos.colEnd - pos.colStart
-					bandByStart.set(pos.colStart, {
+					if (pos) positioned.push({ b, pos })
+				}
+				// Sort by checkIn ASC (colStart proxy), id ASC для deterministic
+				// tiebreak (same-checkIn overlapping bookings always get same lane
+				// assignment across re-renders → React reconciliation stable).
+				positioned.sort((a, b) => {
+					if (a.pos.colStart !== b.pos.colStart) return a.pos.colStart - b.pos.colStart
+					return a.b.id < b.b.id ? -1 : 1
+				})
+				const laneEnds: number[] = []
+				const bands: Band[] = []
+				for (const { b, pos } of positioned) {
+					// Find lowest lane чьё last-end <= colStart (no overlap)
+					let lane = 0
+					while (lane < laneEnds.length && (laneEnds[lane] ?? 0) > pos.colStart) {
+						lane += 1
+					}
+					laneEnds[lane] = pos.colEnd
+					bands.push({
 						id: b.id,
 						status: b.status,
 						checkIn: b.checkIn,
@@ -163,18 +189,28 @@ export function Chessboard() {
 						isForeignCitizen: b.isForeignCitizen,
 						registrationStatus: b.registrationStatus,
 						tourismTaxMicros: b.tourismTaxMicros,
-						span,
+						colStart: pos.colStart,
+						span: pos.colEnd - pos.colStart,
 						truncatedLeft: pos.truncatedLeft,
 						truncatedRight: pos.truncatedRight,
+						lane,
 					})
-					for (let i = pos.colStart; i < pos.colEnd; i++) covered.add(i)
 				}
+				const maxLane = Math.max(1, laneEnds.length)
 
 				// G9 (2026-05-16) — OOO block bands (per-room, placed on
 				// roomType row). Skip cells already occupied by booking band
 				// (booking wins visually — operator sees "double-trouble" via
 				// availability check banner). Multi-block-per-cell collapses
 				// к latest (rare overlap edge — Bnovo accepts same trade-off).
+				// Booking-covered cells (any lane) — used к suppress block overlap.
+				const bookingCovered = new Set<number>()
+				for (const band of bands) {
+					for (let i = band.colStart; i < band.colStart + band.span; i++) {
+						bookingCovered.add(i)
+					}
+				}
+
 				const blockByStart = new Map<
 					number,
 					{
@@ -190,6 +226,7 @@ export function Chessboard() {
 					}
 				>()
 				const rowBlocks = blocks.filter((blk) => roomTypeByRoomId.get(blk.roomId) === rt.id)
+				const blockCovered = new Set<number>()
 				for (const blk of rowBlocks) {
 					const pos = bandPosition(
 						{ checkIn: blk.startDate, checkOut: blk.endDate },
@@ -198,7 +235,8 @@ export function Chessboard() {
 					)
 					if (!pos) continue
 					// Skip к next slot if a booking already covers this colStart
-					if (covered.has(pos.colStart)) continue
+					if (bookingCovered.has(pos.colStart)) continue
+					if (blockCovered.has(pos.colStart)) continue
 					const span = pos.colEnd - pos.colStart
 					blockByStart.set(pos.colStart, {
 						id: blk.id,
@@ -211,25 +249,42 @@ export function Chessboard() {
 						truncatedLeft: pos.truncatedLeft,
 						truncatedRight: pos.truncatedRight,
 					})
-					for (let i = pos.colStart; i < pos.colEnd; i++) covered.add(i)
+					for (let i = pos.colStart; i < pos.colEnd; i++) blockCovered.add(i)
 				}
 
-				return { rt, bandByStart, blockByStart, covered }
+				return { rt, bands, blockByStart, maxLane, bookingCovered, blockCovered }
 			}),
 		[roomTypes, bookings, blocks, roomTypeByRoomId, windowFrom, windowTo],
 	)
 
+	// Compute cumulative grid-row offsets per roomType. Row 1 = header,
+	// row 2..N = each roomType spans `maxLane` grid rows.
+	const rowsWithOffsets = useMemo(() => {
+		let cumulativeRow = 2
+		return rowsLayout.map((row) => {
+			const gridRowOffset = cumulativeRow
+			cumulativeRow += row.maxLane
+			return { ...row, gridRowOffset }
+		})
+	}, [rowsLayout])
+
 	const navModel: GridNavModel = useMemo(() => {
-		const rows: RowNav[] = rowsLayout.map(({ bandByStart, covered }) => {
+		const rows: RowNav[] = rowsLayout.map(({ bands, bookingCovered, blockCovered }) => {
 			const starts: number[] = []
 			const spans: number[] = []
+			// Bands in lane 0 act as «primary» row-keyboard targets per APG canon
+			// (Sarah Higley 2026 «Grids Part 2»). Other lanes are reachable via
+			// arrow-down within same column.
+			const lane0Bands = new Map<number, number>() // colStart → span
+			for (const band of bands) {
+				if (band.lane === 0) lane0Bands.set(band.colStart, band.span)
+			}
 			for (let colIdx = 0; colIdx < dates.length; colIdx++) {
-				const band = bandByStart.get(colIdx)
-				if (band) {
-					// aria-colindex of band = colIdx+2 (col 1 is rowheader)
+				const span = lane0Bands.get(colIdx)
+				if (span !== undefined) {
 					starts.push(colIdx + 2)
-					spans.push(band.span)
-				} else if (!covered.has(colIdx)) {
+					spans.push(span)
+				} else if (!bookingCovered.has(colIdx) && !blockCovered.has(colIdx)) {
 					starts.push(colIdx + 2)
 					spans.push(1)
 				}
@@ -483,6 +538,14 @@ export function Chessboard() {
 							// per WebKit 1fr-collapse fix — JS fit math already enforces
 							// 40px floor by construction. See `lib/layout.ts` constants.
 							gridTemplateColumns: `minmax(${ROW_HEADER_WIDTH}px, ${ROW_HEADER_WIDTH}px) repeat(${dates.length}, minmax(0, 1fr))`,
+							// G11 v3.5 (2026-05-18) — Lock implicit-row height к 40px so
+							// lane-stacked overlapping bands have predictable height.
+							// Each lane = one CSS grid row. Per agent research §1 + MDN
+							// `grid-auto-rows` canon: without this, implicit rows fall к
+							// `auto` → tall band content (truncated label wrapping) silently
+							// grows row, cascade-affecting all rows downstream via
+							// `display: contents` row wrappers.
+							gridAutoRows: '40px',
 						}}
 					>
 						{/* Header row: empty corner + date columns. WRAPPED in
@@ -519,41 +582,74 @@ export function Chessboard() {
 						    gridcell focus targets onto neighboring dates breaking screen-
 						    reader navigation per Sarah Higley 2026, and (b) confuses
 						    Playwright hit-testing in sticky-header grids). */}
-						{rowsLayout.map(({ rt, bandByStart, blockByStart, covered }, rowIdx) => (
-							<div key={rt.id} role="row" aria-rowindex={rowIdx + 2} className="contents">
-								{/* G7 drop-target rowheader. data-drop-active fires when
-								    a draggable band hovers; data-drop-noop fires when
-								    source roomType == target (no-op move attempt).
-								    Tailwind v4 arbitrary data-* modifiers provide visual
-								    feedback per D-G7.4 (conflict highlight canon). */}
-								<div
-									className="border-border bg-background data-[drop-active=true]:bg-status-confirmed/15 data-[drop-active=true]:outline data-[drop-active=true]:outline-2 data-[drop-active=true]:outline-status-confirmed data-[drop-noop=true]:bg-status-past/15 data-[drop-noop=true]:outline data-[drop-noop=true]:outline-2 data-[drop-noop=true]:outline-status-past sticky left-0 z-10 min-w-0 overflow-hidden border-r border-b p-2 font-medium transition-colors"
-									role="rowheader"
-									aria-colindex={1}
-									data-row-room-type-id={rt.id}
-									data-row-room-type-name={rt.name}
-								>
-									{/* G11 v3.3 (2026-05-18) — `truncate` (overflow:hidden +
-									    text-overflow:ellipsis + white-space:nowrap) defends
-									    against any future track-collapse edge OR long
-									    roomType names («Двухкомнатные апартаменты Sea View»
-									    → «Двухкомн…»). Native browser tooltip via `title`
-									    surfaces full name on hover (WCAG-friendly fallback
-									    per Sarah Higley «Grids Part 2: Semantics» 2026). */}
-									<div className="truncate" title={rt.name}>
-										{rt.name}
+						{rowsWithOffsets.map(
+							(
+								{ rt, bands, blockByStart, maxLane, bookingCovered, blockCovered, gridRowOffset },
+								rowIdx,
+							) => (
+								<div key={rt.id} role="row" aria-rowindex={rowIdx + 2} className="contents">
+									{/* G7 drop-target rowheader. G11 v3.5 (2026-05-18) — spans
+								    `maxLane` grid rows so visible height matches lane stack. */}
+									<div
+										className="border-border bg-background data-[drop-active=true]:bg-status-confirmed/15 data-[drop-active=true]:outline data-[drop-active=true]:outline-2 data-[drop-active=true]:outline-status-confirmed data-[drop-noop=true]:bg-status-past/15 data-[drop-noop=true]:outline data-[drop-noop=true]:outline-2 data-[drop-noop=true]:outline-status-past sticky left-0 z-10 min-w-0 overflow-hidden border-r border-b p-2 font-medium transition-colors"
+										role="rowheader"
+										aria-colindex={1}
+										data-row-room-type-id={rt.id}
+										data-row-room-type-name={rt.name}
+										style={{
+											gridColumn: 1,
+											gridRow: `${gridRowOffset} / span ${maxLane}`,
+										}}
+									>
+										<div className="truncate" title={rt.name}>
+											{rt.name}
+										</div>
+										<div className="text-muted-foreground truncate text-[10px]">
+											{rt.inventoryCount} {rt.inventoryCount === 1 ? 'номер' : 'номеров'}
+										</div>
 									</div>
-									<div className="text-muted-foreground truncate text-[10px]">
-										{rt.inventoryCount} {rt.inventoryCount === 1 ? 'номер' : 'номеров'}
-									</div>
-								</div>
-								{dates.map((d, colIdx) => {
-									const ariaColIdx = colIdx + 2
-									const band = bandByStart.get(colIdx)
-									if (band) {
-										// G2: paletteFor combines status + checkIn-vs-today
-										// (overdue) + assignedRoomId-null (unassigned) per
-										// TravelLine 8-color canon.
+									{/* Empty cells per date — span ALL lanes of this row (gridRow
+								    spans maxLane). Bands overlay specific lanes via higher
+								    z-index. Click on empty cell → create booking. */}
+									{dates.map((d, colIdx) => {
+										const ariaColIdx = colIdx + 2
+										// Suppress empty cell когда entire row covered by band на col
+										// (any lane) AND row is single-lane — no operator interaction
+										// possible. Multi-lane rows always render empty backdrop.
+										if (maxLane === 1 && bookingCovered.has(colIdx)) return null
+										if (maxLane === 1 && blockCovered.has(colIdx)) return null
+										const tabStop = isTabStop(rowIdx, ariaColIdx)
+										return (
+											<button
+												key={`${rt.id}:empty:${ariaColIdx}`}
+												type="button"
+												className={`border-border hover:bg-muted/60 focus-visible:outline-ring border-b text-left transition-colors focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${
+													colIdx === todayIdx ? 'bg-blue-50' : ''
+												}`}
+												role="gridcell"
+												aria-colindex={ariaColIdx}
+												aria-label={`Свободно, ${rt.name}, ${d}. Enter — создать бронь.`}
+												data-cell-room-type-id={rt.id}
+												data-cell-date={d}
+												data-row-idx={rowIdx}
+												data-col-idx={ariaColIdx}
+												tabIndex={tabStop ? 0 : -1}
+												style={{
+													gridColumn: ariaColIdx,
+													gridRow: `${gridRowOffset} / span ${maxLane}`,
+												}}
+												onClick={() =>
+													setClickedCell({ roomTypeId: rt.id, roomTypeName: rt.name, date: d })
+												}
+												onFocus={() => setFocus({ rowIdx, colIdx: ariaColIdx })}
+											/>
+										)
+									})}
+									{/* Booking bands — explicit gridColumn + gridRow per band.
+								    Lane assigned via interval-graph coloring. z-index above
+								    empty backdrop. */}
+									{bands.map((band) => {
+										const ariaColIdx = band.colStart + 2
 										const style = paletteFor({
 											booking: {
 												status: band.status,
@@ -562,20 +658,7 @@ export function Chessboard() {
 											},
 											todayIso: today,
 										})
-										// G2.bis: channel-origin differentiator dot. null когда
-										// direct/walkIn (operator-originated, no clutter).
 										const channel = band.channelCode ? channelIndicator(band.channelCode) : null
-										// G4: RU compliance overlays. Guest mask = ALWAYS rendered
-										// when snapshot present (152-ФЗ default). registrationBadge
-										// + tourismTax = optional chips (null = omit). Status label
-										// stays in aria-label (screen-reader semantic) + colour
-										// (sighted urgency) — visible text now identifies the
-										// booking, per Mews / Cloudbeds / Apaleo canon.
-										// G11 v3 (2026-05-18) — `guestMask` + `isForeignCitizen` come
-										// pre-computed from `use-grid-data.ts` projection on receive.
-										// Raw `guestSnapshot` (PII) НЕ хранится в TanStack cache /
-										// IndexedDB persister. Per 152-ФЗ data-minimization + TanStack
-										// TkDodo offline-react-query canon ≥ 2026-05-18.
 										const guestMask = band.guestMask
 										const visibleLabel = guestMask ?? style.label
 										const mvdBadge = band.registrationStatus
@@ -588,18 +671,13 @@ export function Chessboard() {
 										const tabStop = isTabStop(rowIdx, ariaColIdx)
 										return (
 											<BookingBandTooltip
-												key={`${rt.id}:${ariaColIdx}`}
+												key={`${rt.id}:band:${band.id}`}
 												bookingId={band.id}
 												statusLabel={style.label}
 												roomTypeName={rt.name}
 												checkIn={band.checkIn}
 												checkOut={band.checkOut}
 												channelLabel={channel?.label ?? null}
-												// G11 v3 (2026-05-18) — full PII не cached в grid path.
-												// Tooltip отображает masked name только (152-ФЗ default-mask
-												// canon). Full PII доступна только в edit Sheet via
-												// `useBooking(id)` detail query (NOT cached). Operator
-												// clicks band → opens Sheet → fresh detail fetch.
 												guestFullName={band.guestMask}
 												mvdLabel={mvdBadge?.label ?? null}
 												taxRub={taxRub}
@@ -607,16 +685,18 @@ export function Chessboard() {
 												{({ popoverId, onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
 													<button
 														type="button"
-														className={`focus-visible:outline-ring border-border data-[band-status=confirmed]:cursor-grab data-[dragging=true]:cursor-grabbing data-[dragging=true]:opacity-50 relative flex h-10 items-center overflow-hidden border-b px-2 text-[11px] focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${style.bg} ${style.text}`}
-														// G11 v3.4 (2026-05-18) — EXPLICIT gridColumn start.
-														// Pre-fix used `span N` без start; CSS Grid auto-flow
-														// placed bands sequentially, ignoring data colStart.
-														// For overlapping bookings (same row, conflicting
-														// dates) auto-place wrapped к next implicit row →
-														// «orphan» band visually appeared в pseudo-row.
-														// `ariaColIdx` = colIdx + 2 (label = col 1, dates
-														// start at col 2). Explicit start kills the drift.
-														style={{ gridColumn: `${ariaColIdx} / span ${band.span}` }}
+														className={`focus-visible:outline-ring border-border data-[band-status=confirmed]:cursor-grab data-[dragging=true]:cursor-grabbing data-[dragging=true]:opacity-50 relative flex min-w-0 items-center overflow-hidden border-b px-2 text-[11px] focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${style.bg} ${style.text}`}
+														// G11 v3.5 (2026-05-18) — Explicit gridColumn + gridRow.
+														// gridRow = gridRowOffset + band.lane pins band к its
+														// assigned lane within the row's lane stack. min-w-0 на
+														// button defends против label-overflow pushing track wider
+														// (DEV.to/CSS-Tricks canon — flex/grid children need
+														// explicit min-w-0 для ellipsis к engage).
+														style={{
+															gridColumn: `${ariaColIdx} / span ${band.span}`,
+															gridRow: gridRowOffset + band.lane,
+															zIndex: 1,
+														}}
 														role="gridcell"
 														aria-colindex={ariaColIdx}
 														aria-colspan={band.span}
@@ -629,6 +709,7 @@ export function Chessboard() {
 														data-booking-id={band.id}
 														data-band-status={band.status}
 														data-band-room-type-id={rt.id}
+														data-band-lane={band.lane}
 														data-row-idx={rowIdx}
 														data-col-idx={ariaColIdx}
 														tabIndex={tabStop ? 0 : -1}
@@ -646,9 +727,6 @@ export function Chessboard() {
 															{visibleLabel}
 															{band.truncatedRight ? '…' : ''}
 														</span>
-														{/* G2.bis channel dot — decorative (semantic carried в
-														    aria-label above). Top-right corner, размер 6px,
-														    contrast verified ≥3:1 non-text per WCAG 2.2. */}
 														{channel ? (
 															<span
 																aria-hidden="true"
@@ -656,10 +734,6 @@ export function Chessboard() {
 																data-channel-dot={band.channelCode}
 															/>
 														) : null}
-														{/* G4 МВД badge — decorative dot top-left corner. Color-
-														    coded по lifecycle state. Non-text contrast ≥3:1 per
-														    WCAG 2.2 SC 1.4.11 (reuses status-* tokens — already
-														    axe-verified). Semantic в aria-label выше + tooltip. */}
 														{mvdBadge ? (
 															<span
 																aria-hidden="true"
@@ -672,21 +746,21 @@ export function Chessboard() {
 												)}
 											</BookingBandTooltip>
 										)
-									}
-									// G9 (2026-05-16) — render OOO block band если starts at this col.
-									const block = blockByStart.get(colIdx)
-									if (block) {
+									})}
+									{/* OOO block bands — render at lane 0 (booking-covered cells
+								    suppressed via bookingCovered guard above). */}
+									{Array.from(blockByStart.entries()).map(([colIdx, block]) => {
+										const ariaColIdx = colIdx + 2
 										const reasonLabel = propertyBlockReasonLabels[block.reason]
 										return (
 											<div
-												key={`${rt.id}:block:${ariaColIdx}`}
-												className="border-border bg-slate-200 [background-image:repeating-linear-gradient(45deg,_rgba(100,116,139,0.25)_0_8px,_transparent_8px_16px)] border-b border-slate-400 flex h-10 items-center overflow-hidden px-2 text-[11px] text-slate-900"
-												// G11 v3.4 (2026-05-18) — sibling fix: same explicit
-												// gridColumn pattern as booking band above. Block bands
-												// can overlap booking bands semantically (G9 hard-block
-												// canon shows block-over-booking double-bands); without
-												// explicit start, CSS Grid auto-place drifts both.
-												style={{ gridColumn: `${ariaColIdx} / span ${block.span}` }}
+												key={`${rt.id}:block:${block.id}`}
+												className="border-border bg-slate-200 [background-image:repeating-linear-gradient(45deg,_rgba(100,116,139,0.25)_0_8px,_transparent_8px_16px)] border-b border-slate-400 flex min-w-0 items-center overflow-hidden px-2 text-[11px] text-slate-900"
+												style={{
+													gridColumn: `${ariaColIdx} / span ${block.span}`,
+													gridRow: gridRowOffset,
+													zIndex: 1,
+												}}
 												role="gridcell"
 												aria-colindex={ariaColIdx}
 												aria-colspan={block.span}
@@ -705,33 +779,10 @@ export function Chessboard() {
 												</span>
 											</div>
 										)
-									}
-									if (covered.has(colIdx)) return null // already spanned by band
-									const tabStop = isTabStop(rowIdx, ariaColIdx)
-									return (
-										<button
-											key={`${rt.id}:${ariaColIdx}`}
-											type="button"
-											className={`border-border hover:bg-muted/60 focus-visible:outline-ring h-10 border-b text-left transition-colors focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${
-												colIdx === todayIdx ? 'bg-blue-50' : ''
-											}`}
-											role="gridcell"
-											aria-colindex={ariaColIdx}
-											aria-label={`Свободно, ${rt.name}, ${d}. Enter — создать бронь.`}
-											data-cell-room-type-id={rt.id}
-											data-cell-date={d}
-											data-row-idx={rowIdx}
-											data-col-idx={ariaColIdx}
-											tabIndex={tabStop ? 0 : -1}
-											onClick={() =>
-												setClickedCell({ roomTypeId: rt.id, roomTypeName: rt.name, date: d })
-											}
-											onFocus={() => setFocus({ rowIdx, colIdx: ariaColIdx })}
-										/>
-									)
-								})}
-							</div>
-						))}
+									})}
+								</div>
+							),
+						)}
 					</div>
 				</div>
 			)}
