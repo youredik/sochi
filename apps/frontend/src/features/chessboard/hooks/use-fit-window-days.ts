@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useSyncExternalStore } from 'react'
+import { DAY_COLUMN_MIN_WIDTH, ROW_HEADER_WIDTH } from '../lib/layout'
 
 /**
  * useFitWindowDays — runtime resolves `windowDays === 'fit'` к computed
@@ -12,15 +13,19 @@ import { type RefObject, useCallback, useSyncExternalStore } from 'react'
  *   `Math.floor((containerWidth - rowHeaderWidth) / minDayWidth)`, clamped
  *   к [3, 60] для предотвращения 0/negative + extreme widths.
  *
+ * Defaults pull from `lib/layout` constants — single source of truth per
+ * G11 v3.3 fix (2026-05-18). Pre-fix duplicated `180` / `40` literals в
+ * 3 sites caused fit-math vs CSS-grid drift.
+ *
  * @param containerRef — div ref за чьим offsetWidth следим
- * @param rowHeaderWidth — sticky col-header width (px), default 180
- * @param minDayWidth — min cell width (px), default 40
+ * @param rowHeaderWidth — sticky col-header width (px), default ROW_HEADER_WIDTH
+ * @param minDayWidth — min cell width (px), default DAY_COLUMN_MIN_WIDTH
  * @returns numeric days count (≥3, ≤60), defaults к 15 на SSR / pre-mount
  */
 export function useFitWindowDays(
 	containerRef: RefObject<HTMLElement | null>,
-	rowHeaderWidth = 180,
-	minDayWidth = 40,
+	rowHeaderWidth = ROW_HEADER_WIDTH,
+	minDayWidth = DAY_COLUMN_MIN_WIDTH,
 ): number {
 	const subscribe = useCallback(
 		(notify: () => void) => {

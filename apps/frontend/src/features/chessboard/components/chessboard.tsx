@@ -30,7 +30,7 @@ import {
 	nextFocusPosition,
 	type RowNav,
 } from '../lib/keymap'
-import { bandPosition } from '../lib/layout'
+import { bandPosition, ROW_HEADER_WIDTH } from '../lib/layout'
 import { BookingBandTooltip } from './booking-band-tooltip'
 import { ChessboardDatePicker } from './chessboard-date-picker'
 import { ChessboardViewModeSelector } from './chessboard-view-mode-selector'
@@ -466,14 +466,23 @@ export function Chessboard() {
 						// focused cell after Ctrl+Home / PageDown jumps. scroll-
 						// padding reserves space equal to sticky header sizes.
 						scrollPaddingTop: '40px',
-						scrollPaddingLeft: '180px',
+						scrollPaddingLeft: `${ROW_HEADER_WIDTH}px`,
 					}}
 					onKeyDown={handleKeyDown}
 				>
 					<div
 						className="grid text-xs"
 						style={{
-							gridTemplateColumns: `180px repeat(${dates.length}, minmax(40px, 1fr))`,
+							// G11 v3.3 (2026-05-18) — `minmax(180px, 180px)` defends
+							// track против Chrome 130+ `@container` constrained-context
+							// collapse (per CSS Grid Level 2 §11 free-space algorithm +
+							// agent research ≥ 2026-05-17). Bare `180px` reduced к
+							// min-content (~60px) когда `180 + N×40` exceeded container,
+							// label «Люкс 1 10 номеров» wrapped к 4 lines, row-height
+							// blowout cascade. Day columns `minmax(0, 1fr)` (NOT `40px`)
+							// per WebKit 1fr-collapse fix — JS fit math already enforces
+							// 40px floor by construction. See `lib/layout.ts` constants.
+							gridTemplateColumns: `minmax(${ROW_HEADER_WIDTH}px, ${ROW_HEADER_WIDTH}px) repeat(${dates.length}, minmax(0, 1fr))`,
 						}}
 					>
 						{/* Header row: empty corner + date columns. WRAPPED in
@@ -518,14 +527,23 @@ export function Chessboard() {
 								    Tailwind v4 arbitrary data-* modifiers provide visual
 								    feedback per D-G7.4 (conflict highlight canon). */}
 								<div
-									className="border-border bg-background data-[drop-active=true]:bg-status-confirmed/15 data-[drop-active=true]:outline data-[drop-active=true]:outline-2 data-[drop-active=true]:outline-status-confirmed data-[drop-noop=true]:bg-status-past/15 data-[drop-noop=true]:outline data-[drop-noop=true]:outline-2 data-[drop-noop=true]:outline-status-past sticky left-0 z-10 border-r border-b p-2 font-medium transition-colors"
+									className="border-border bg-background data-[drop-active=true]:bg-status-confirmed/15 data-[drop-active=true]:outline data-[drop-active=true]:outline-2 data-[drop-active=true]:outline-status-confirmed data-[drop-noop=true]:bg-status-past/15 data-[drop-noop=true]:outline data-[drop-noop=true]:outline-2 data-[drop-noop=true]:outline-status-past sticky left-0 z-10 min-w-0 overflow-hidden border-r border-b p-2 font-medium transition-colors"
 									role="rowheader"
 									aria-colindex={1}
 									data-row-room-type-id={rt.id}
 									data-row-room-type-name={rt.name}
 								>
-									<div>{rt.name}</div>
-									<div className="text-muted-foreground text-[10px]">
+									{/* G11 v3.3 (2026-05-18) — `truncate` (overflow:hidden +
+									    text-overflow:ellipsis + white-space:nowrap) defends
+									    against any future track-collapse edge OR long
+									    roomType names («Двухкомнатные апартаменты Sea View»
+									    → «Двухкомн…»). Native browser tooltip via `title`
+									    surfaces full name on hover (WCAG-friendly fallback
+									    per Sarah Higley «Grids Part 2: Semantics» 2026). */}
+									<div className="truncate" title={rt.name}>
+										{rt.name}
+									</div>
+									<div className="text-muted-foreground truncate text-[10px]">
 										{rt.inventoryCount} {rt.inventoryCount === 1 ? 'номер' : 'номеров'}
 									</div>
 								</div>
