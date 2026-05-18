@@ -41,7 +41,7 @@ import { YDBError } from '@ydbjs/error'
 import { query } from '@ydbjs/query'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { dateFromIso, toTs } from './ydb-helpers.ts'
+import { dateFromIso, NULL_TEXT, timestampOpt, toJson, toTs, tsFromIso } from './ydb-helpers.ts'
 
 const TYPEID_RE = /^[a-z]+_[0-9a-hjkmnp-tv-z]{26}$/
 function assertValidTenantId(id: string): string {
@@ -83,12 +83,25 @@ type Counters = {
 	nightsAlreadyDone: number
 	phantomCollisions: number
 	exhaustedSlots: number
+	bookingsCancelled: number
 }
 
 export type BackfillOpts = {
 	readonly commit: boolean
 	readonly sampleLimit?: number
 	readonly tenantIds?: readonly string[]
+	/**
+	 * Resolve real overbook by cancelling «loser» bookings (those for which
+	 * no slot could be allocated → exhaustedSlots > 0). Cancellation writes
+	 * status='cancelled' + cancelReason='auto-resolved-overbook-2026-05-18'
+	 * + cancelledAt=now via UPSERT (full-row, per `[[ydb-update-tolerance]]`
+	 * canon — UPDATE на nullable cols flaky). Decrements availability.sold
+	 * if row exists.
+	 *
+	 * DESTRUCTIVE — explicit operator opt-in only. Default false. Pre-flight
+	 * verify via --dry-run что conflict count matches expectations.
+	 */
+	readonly cancelOverbook?: boolean
 }
 
 export type BackfillResult = {
@@ -216,6 +229,89 @@ async function attemptInsertSlot(
 	}
 }
 
+/**
+ * Cancel «loser» bookings via full-row UPSERT (per `[[ydb-update-tolerance]]`).
+ * UPDATE single col на booking (39 cols + CDC) hits ERROR(1060) plan-builder
+ * edge — full-row UPSERT bypasses it. Reads full row, merges status/cancelled
+ * fields, writes back atomically.
+ */
+async function cancelLosersFullRow(
+	sql: ReturnType<typeof query>,
+	losers: IterableIterator<{ tenantId: string; bookingId: string }>,
+	counters: Counters,
+): Promise<void> {
+	const nowTs = toTs(new Date())
+	const SYSTEM_ID = 'system:backfill-cancel-overbook'
+	for (const { tenantId, bookingId } of losers) {
+		const [rows = []] = await sql<Record<string, unknown>[]>`
+			SELECT * FROM booking VIEW ixBookingId
+			WHERE id = ${bookingId} AND tenantId = ${tenantId}
+			LIMIT 1
+		`
+		const row = rows[0]
+		if (!row) continue
+		if (row.status === 'cancelled') continue
+
+		try {
+			const checkInIso = (row.checkIn as Date).toISOString().slice(0, 10)
+			const checkOutIso = (row.checkOut as Date).toISOString().slice(0, 10)
+			await sql`
+				UPSERT INTO booking (
+					\`tenantId\`, \`propertyId\`, \`checkIn\`, \`id\`,
+					\`checkOut\`, \`roomTypeId\`, \`ratePlanId\`, \`assignedRoomId\`,
+					\`guestsCount\`, \`nightsCount\`,
+					\`primaryGuestId\`, \`guestSnapshot\`,
+					\`status\`, \`confirmedAt\`,
+					\`checkedInAt\`, \`checkedOutAt\`, \`cancelledAt\`, \`noShowAt\`, \`cancelReason\`,
+					\`channelCode\`, \`externalId\`, \`externalReferences\`,
+					\`totalMicros\`, \`paidMicros\`, \`currency\`, \`timeSlices\`,
+					\`cancellationFee\`, \`noShowFee\`,
+					\`registrationStatus\`, \`registrationMvdId\`, \`registrationSubmittedAt\`,
+					\`rklCheckResult\`, \`rklCheckedAt\`,
+					\`tourismTaxBaseMicros\`, \`tourismTaxMicros\`,
+					\`notes\`, \`createdAt\`, \`updatedAt\`, \`createdBy\`, \`updatedBy\`
+				) VALUES (
+					${tenantId}, ${row.propertyId as string}, ${dateFromIso(checkInIso)}, ${bookingId},
+					${dateFromIso(checkOutIso)}, ${row.roomTypeId as string}, ${row.ratePlanId as string},
+					${(row.assignedRoomId as string | null) ?? NULL_TEXT},
+					${row.guestsCount as number}, ${row.nightsCount as number},
+					${row.primaryGuestId as string}, ${toJson(row.guestSnapshot)},
+					${'cancelled'}, ${toTs(row.confirmedAt as Date)},
+					${timestampOpt((row.checkedInAt as Date | null) ?? null)},
+					${timestampOpt((row.checkedOutAt as Date | null) ?? null)},
+					${nowTs},
+					${timestampOpt((row.noShowAt as Date | null) ?? null)},
+					${'auto-resolved-overbook-2026-05-18'},
+					${row.channelCode as string}, ${(row.externalId as string | null) ?? NULL_TEXT},
+					${toJson(row.externalReferences)},
+					${BigInt(row.totalMicros as number | bigint)}, ${BigInt(row.paidMicros as number | bigint)},
+					${row.currency as string}, ${toJson(row.timeSlices)},
+					${toJson(row.cancellationFee)}, ${toJson(row.noShowFee)},
+					${row.registrationStatus as string}, ${(row.registrationMvdId as string | null) ?? NULL_TEXT},
+					${timestampOpt((row.registrationSubmittedAt as Date | null) ?? null)},
+					${row.rklCheckResult as string},
+					${timestampOpt((row.rklCheckedAt as Date | null) ?? null)},
+					${BigInt(row.tourismTaxBaseMicros as number | bigint)},
+					${BigInt(row.tourismTaxMicros as number | bigint)},
+					${(row.notes as string | null) ?? NULL_TEXT},
+					${toTs(row.createdAt as Date)}, ${nowTs},
+					${row.createdBy as string}, ${SYSTEM_ID}
+				)
+			`
+			counters.bookingsCancelled += 1
+		} catch (err) {
+			console.error(
+				JSON.stringify({
+					kind: 'cancel_failed',
+					tenantId,
+					bookingId,
+					error: err instanceof Error ? err.message : String(err),
+				}),
+			)
+		}
+	}
+}
+
 export async function runBackfill(connStr: string, opts: BackfillOpts): Promise<BackfillResult> {
 	const driver = new Driver(connStr, { credentialsProvider: new AnonymousCredentialsProvider() })
 	await driver.ready(AbortSignal.timeout(10_000))
@@ -228,8 +324,12 @@ export async function runBackfill(connStr: string, opts: BackfillOpts): Promise<
 		nightsAlreadyDone: 0,
 		phantomCollisions: 0,
 		exhaustedSlots: 0,
+		bookingsCancelled: 0,
 	}
 	const conflicts: ConflictEntry[] = []
+	// Track «loser» bookings (those whose slot allocation exhausted) — operators
+	// resolve via --cancel-overbook flag. Set к dedupe multi-night losers.
+	const loserBookings = new Map<string, { tenantId: string; bookingId: string }>()
 
 	try {
 		const tenantIds = (opts.tenantIds ?? []).map(assertValidTenantId)
@@ -307,6 +407,10 @@ export async function runBackfill(connStr: string, opts: BackfillOpts): Promise<
 						winnerBookingId: 'exhausted',
 						loserBookingId: b.id,
 					})
+					loserBookings.set(`${b.tenantId}|${b.id}`, {
+						tenantId: b.tenantId,
+						bookingId: b.id,
+					})
 					continue
 				}
 
@@ -359,6 +463,14 @@ export async function runBackfill(connStr: string, opts: BackfillOpts): Promise<
 			}
 		}
 
+		// --cancel-overbook resolution path (DESTRUCTIVE): cancel «loser»
+		// bookings that couldn't claim a slot. Per `[[ydb-update-tolerance]]`
+		// canon (memory project_ydb_specifics #14): UPDATE single column on
+		// booking (39-col + CDC) flaky → must use full-row UPSERT.
+		if (opts.commit && opts.cancelOverbook && loserBookings.size > 0) {
+			await cancelLosersFullRow(sql, loserBookings.values(), counters)
+		}
+
 		let reportPath: string | undefined
 		if (conflicts.length > 0) {
 			await mkdir('.artifacts', { recursive: true })
@@ -387,6 +499,7 @@ if (isCliEntry) {
 	const args = process.argv.slice(2)
 	const commit = args.includes('--commit')
 	const dryRun = args.includes('--dry-run')
+	const cancelOverbook = args.includes('--cancel-overbook')
 	const sampleIdx = args.indexOf('--sample')
 	const sampleArg = sampleIdx >= 0 ? args[sampleIdx + 1] : undefined
 	const sampleLimit = sampleArg !== undefined ? Number(sampleArg) : undefined
@@ -397,7 +510,7 @@ if (isCliEntry) {
 
 	if (!commit && !dryRun) {
 		console.error(
-			'Usage: backfill-room-type-night-slot --dry-run | --commit [--sample N] [--tenant <id>]...',
+			'Usage: backfill-room-type-night-slot --dry-run | --commit [--sample N] [--tenant <id>]... [--cancel-overbook]',
 		)
 		process.exit(2)
 	}
@@ -405,10 +518,16 @@ if (isCliEntry) {
 		console.error('--dry-run and --commit are mutually exclusive')
 		process.exit(2)
 	}
+	if (cancelOverbook && !commit) {
+		console.error('--cancel-overbook requires --commit (destructive operation)')
+		process.exit(2)
+	}
 
 	const connStr = process.env.YDB_CONNECTION_STRING ?? 'grpc://localhost:2236/local'
-	console.error(`backfill-room-type-night-slot: target=${connStr} commit=${commit}`)
-	const baseOpts: BackfillOpts = { commit }
+	console.error(
+		`backfill-room-type-night-slot: target=${connStr} commit=${commit} cancelOverbook=${cancelOverbook}`,
+	)
+	const baseOpts: BackfillOpts = { commit, cancelOverbook }
 	const withSample =
 		sampleLimit !== undefined && Number.isFinite(sampleLimit)
 			? { ...baseOpts, sampleLimit }

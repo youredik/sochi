@@ -65,7 +65,7 @@
  */
 
 import type { TX } from '@ydbjs/query'
-import { dateFromIso, toTs } from '../../db/ydb-helpers.ts'
+import { dateFromIso, toJson, toTs } from '../../db/ydb-helpers.ts'
 import type { CdcEvent } from '../cdc-handlers.ts'
 import type { HandlerLogger } from './refund-creator.ts'
 
@@ -113,6 +113,11 @@ export function createSlotReconciliationHandler(log: HandlerLogger) {
 		}
 		const tenantId = String(key[0])
 		const propertyId = String(key[1])
+		// PK shape (tenantId, propertyId, checkIn, id) per migration 0004 —
+		// checkIn lives в event.key[2], NOT event.newImage. YDB CDC emits PK
+		// fields в `key` only. Empirically caught 2026-05-18 (slot_reconciliation
+		// «missing or malformed dates» когда newImage.checkIn was always null).
+		const checkIn = asIsoDate(key[2])
 		const bookingId = String(key[3])
 
 		const status = event.newImage.status
@@ -131,12 +136,21 @@ export function createSlotReconciliationHandler(log: HandlerLogger) {
 			return
 		}
 
-		const checkIn = asIsoDate(event.newImage.checkIn)
 		const checkOut = asIsoDate(event.newImage.checkOut)
 		if (!checkIn || !checkOut) {
 			log.warn(
 				{ tenantId, bookingId, checkIn, checkOut },
 				'slot_reconciliation: missing or malformed dates — skipping',
+			)
+			return
+		}
+		// Explicit reverse-date guard (per `[[reverse-date-and-server-cap-traps]]`):
+		// silent skip когда checkIn >= checkOut would mask malformed events.
+		// Surface as warning so operator sees CDC stream anomaly.
+		if (checkIn >= checkOut) {
+			log.warn(
+				{ tenantId, bookingId, checkIn, checkOut },
+				'slot_reconciliation: reverse-date booking event (checkIn >= checkOut) — skipping, malformed source data',
 			)
 			return
 		}
@@ -156,11 +170,33 @@ export function createSlotReconciliationHandler(log: HandlerLogger) {
 			return
 		}
 
-		// Allocate per-night.
+		// Allocate per-night. Track real-overbook indicator: если allocated slot
+		// >= effective allotment (allotment + oversellDelta) → bypass-write
+		// breached invariant. Surface к activity log + counter — operator can
+		// triage via .activity table audit trail.
 		const nowTs = toTs(new Date())
 		let allocatedCount = 0
 		let collidedCount = 0
+		let overbookDetectedCount = 0
 		for (const night of nightsBetween(checkIn, checkOut)) {
+			// Read availability к detect real overbook on this night. Missing
+			// availability row = bypass-seed scenario; fall through к MAX_PROBE.
+			const [availRows = []] = await tx<
+				{ allotment: number | bigint; oversellDelta: number | bigint | null }[]
+			>`
+				SELECT allotment, oversellDelta FROM availability
+				WHERE tenantId = ${tenantId}
+					AND propertyId = ${propertyId}
+					AND roomTypeId = ${roomTypeId}
+					AND date = ${dateFromIso(night)}
+				LIMIT 1
+			`
+			const effectiveAllotment =
+				availRows[0] === undefined
+					? null
+					: Number(availRows[0].allotment) +
+						(availRows[0].oversellDelta === null ? 0 : Number(availRows[0].oversellDelta))
+
 			const [usedRows = []] = await tx<{ slotNumber: number | bigint }[]>`
 				SELECT slotNumber FROM roomTypeNightSlot
 				WHERE tenantId = ${tenantId}
@@ -183,6 +219,10 @@ export function createSlotReconciliationHandler(log: HandlerLogger) {
 				)
 				continue
 			}
+			// Real-overbook detection: allocating slot beyond effective allotment.
+			// Bypass-write breached canonical limit. Log loud + emit activity row
+			// for operator audit trail.
+			const isRealOverbook = effectiveAllotment !== null && slot >= effectiveAllotment
 			try {
 				await tx`
 					INSERT INTO roomTypeNightSlot (
@@ -192,6 +232,28 @@ export function createSlotReconciliationHandler(log: HandlerLogger) {
 					)
 				`
 				allocatedCount += 1
+				if (isRealOverbook) {
+					overbookDetectedCount += 1
+					log.warn(
+						{
+							tenantId,
+							bookingId,
+							night,
+							slot,
+							effectiveAllotment,
+						},
+						'slot_reconciliation: REAL OVERBOOK DETECTED — bypass-write breached effective allotment',
+					)
+					await emitOverbookActivity(tx, {
+						tenantId,
+						bookingId,
+						propertyId,
+						roomTypeId,
+						night,
+						slot,
+						effectiveAllotment,
+					})
+				}
 			} catch (_err) {
 				// PK conflict — concurrent writer claimed this slot. Log + continue.
 				// CDC re-delivery will pick up new state. Non-fatal: invariant still
@@ -206,9 +268,54 @@ export function createSlotReconciliationHandler(log: HandlerLogger) {
 
 		if (allocatedCount > 0) {
 			log.info(
-				{ tenantId, bookingId, allocatedCount, collidedCount },
+				{ tenantId, bookingId, allocatedCount, collidedCount, overbookDetectedCount },
 				'slot_reconciliation: backfilled slot rows for bypass-written booking',
 			)
 		}
 	}
+}
+
+/**
+ * Emit an activity row for operator audit trail when CDC handler detects
+ * real-overbook (bypass-write breached effective allotment). Surfaces in
+ * `activity` table via stankoff-v2 polymorphic log pattern — operator UI
+ * can query and triage. Idempotent via deterministic activity.id derived
+ * from (bookingId, night) so re-delivery doesn't dupe.
+ */
+async function emitOverbookActivity(
+	tx: TX,
+	args: {
+		tenantId: string
+		bookingId: string
+		propertyId: string
+		roomTypeId: string
+		night: string
+		slot: number
+		effectiveAllotment: number
+	},
+): Promise<void> {
+	const nowTs = toTs(new Date())
+	// Deterministic activity id — re-delivery yields same id, INSERT-into PK
+	// uniqueness on (tenantId, objectType, recordId, createdAt, id) would
+	// double-write на multiple deliveries. Activity uses createdAt в PK so
+	// dedupe via UPSERT-on-same-id.
+	const activityId = `ovb_${args.bookingId.slice(-12)}_${args.night.replace(/-/g, '')}`
+	const diffJson = {
+		reason: 'bypass_write_breached_allotment',
+		propertyId: args.propertyId,
+		roomTypeId: args.roomTypeId,
+		night: args.night,
+		slotAllocated: args.slot,
+		effectiveAllotment: args.effectiveAllotment,
+		excess: args.slot - args.effectiveAllotment + 1,
+	}
+	await tx`
+		UPSERT INTO activity (
+			\`tenantId\`, \`objectType\`, \`recordId\`, \`createdAt\`, \`id\`,
+			\`activityType\`, \`actorUserId\`, \`diffJson\`
+		) VALUES (
+			${args.tenantId}, ${'booking'}, ${args.bookingId}, ${nowTs}, ${activityId},
+			${'overbook_detected'}, ${'system:slot_reconciliation_writer'}, ${toJson(diffJson)}
+		)
+	`
 }

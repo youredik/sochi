@@ -34,6 +34,7 @@ import { afterAll, beforeAll, describe, expect, jest, test } from 'bun:test'
 
 jest.setTimeout(60_000)
 
+import { dateFromIso, toTs } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import type { CdcEvent } from '../cdc-handlers.ts'
 import { createSlotReconciliationHandler } from './slot-reconciliation.ts'
@@ -78,11 +79,16 @@ function buildBookingEvent(overrides: BuildOverrides = {}): CdcEvent {
 	if (!overrides.omitNewImage) {
 		const img: Record<string, unknown> = { status }
 		if (!overrides.omitRoomTypeId) img.roomTypeId = roomTypeId
+		// checkIn lives в event.key[2] (PK column) per YDB CDC canon —
+		// NOT in newImage. checkOut is non-PK column and IS в newImage.
 		if (!overrides.omitDates) {
-			img.checkIn = checkIn
 			img.checkOut = checkOut
 		}
 		event.newImage = img
+	}
+	if (overrides.omitDates) {
+		// Force checkIn=null в key к simulate missing-date scenario
+		event.key = [tenantId, propertyId, null, bookingId]
 	}
 	if (overrides.includeOldImage) {
 		event.oldImage = { status: 'confirmed' }
@@ -253,6 +259,89 @@ describe('slot_reconciliation_writer — defensive guards', () => {
 	test('[G4] empty status → skip silent', async () => {
 		const ev = buildBookingEvent({ status: '' })
 		await runHandler(ev)
+		const tenantId = String(ev.key?.[0])
+		const bookingId = String(ev.key?.[3])
+		expect(await countSlotsForBooking(tenantId, bookingId)).toBe(0)
+	})
+})
+
+describe('slot_reconciliation_writer — real-overbook detection', () => {
+	test('[OD1] allocation beyond effective allotment → activity row emitted', async () => {
+		const sql = getTestSql()
+		const TENANT = newId('organization')
+		const PROPERTY = newId('property')
+		const ROOMTYPE = newId('roomType')
+		const date = '2041-08-10'
+		const now = toTs(new Date())
+		// Seed availability с allotment=1 → second booking-via-bypass triggers overbook detect
+		await sql`
+			UPSERT INTO availability (
+				\`tenantId\`, \`propertyId\`, \`roomTypeId\`, \`date\`,
+				\`allotment\`, \`sold\`, \`oversellDelta\`, \`minStay\`, \`maxStay\`,
+				\`closedToArrival\`, \`closedToDeparture\`, \`stopSell\`,
+				\`createdAt\`, \`updatedAt\`
+			) VALUES (
+				${TENANT}, ${PROPERTY}, ${ROOMTYPE}, ${dateFromIso(date)},
+				${1}, ${0}, ${0}, ${0}, ${0},
+				${false}, ${false}, ${false},
+				${now}, ${now}
+			)
+		`
+
+		// Seed slot 0 already taken (simulates legitimate booking)
+		await sql`
+			INSERT INTO roomTypeNightSlot (
+				\`tenantId\`, \`propertyId\`, \`roomTypeId\`, \`date\`, \`slotNumber\`, \`bookingId\`, \`createdAt\`
+			) VALUES (
+				${TENANT}, ${PROPERTY}, ${ROOMTYPE}, ${dateFromIso(date)}, ${0}, ${newId('booking')}, ${now}
+			)
+		`
+
+		// CDC event fires for bypass-written booking 2 — handler should allocate
+		// slot 1 (beyond effective allotment=1) AND emit overbook activity row.
+		const ev = buildBookingEvent({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: ROOMTYPE,
+			checkIn: date,
+			checkOut: '2041-08-11',
+		})
+		await runHandler(ev)
+		const bookingId = String(ev.key?.[3])
+
+		// Slot row created at slot 1 (overbook)
+		const [slotRows = []] = await sql<{ slotNumber: number | bigint }[]>`
+			SELECT slotNumber FROM roomTypeNightSlot
+			WHERE tenantId = ${TENANT} AND bookingId = ${bookingId}
+		`
+			.isolation('snapshotReadOnly')
+			.idempotent(true)
+		expect(Number(slotRows[0]?.slotNumber ?? -1)).toBe(1)
+
+		// Activity row emitted с activityType='overbook_detected'
+		const [activityRows = []] = await sql<{ activityType: string; diffJson: unknown }[]>`
+			SELECT activityType, diffJson FROM activity
+			WHERE tenantId = ${TENANT}
+				AND objectType = 'booking'
+				AND recordId = ${bookingId}
+		`
+			.isolation('snapshotReadOnly')
+			.idempotent(true)
+		expect(activityRows.length).toBeGreaterThan(0)
+		expect(activityRows[0]?.activityType).toBe('overbook_detected')
+
+		// Cleanup
+		await sql`DELETE FROM activity WHERE tenantId = ${TENANT}`
+		await sql`DELETE FROM roomTypeNightSlot ON SELECT tenantId, propertyId, roomTypeId, date, slotNumber FROM roomTypeNightSlot WHERE tenantId = ${TENANT}`
+		await sql`DELETE FROM availability WHERE tenantId = ${TENANT}`
+	})
+
+	test('[OD2] reverse-date event (checkIn >= checkOut) → skipped с warning', async () => {
+		const ev = buildBookingEvent({
+			checkIn: '2041-09-15',
+			checkOut: '2041-09-10', // reverse
+		})
+		await runHandler(ev) // should not throw
 		const tenantId = String(ev.key?.[0])
 		const bookingId = String(ev.key?.[3])
 		expect(await countSlotsForBooking(tenantId, bookingId)).toBe(0)

@@ -40,6 +40,17 @@ export interface OversellDeltaFieldProps {
 	readonly disabled?: boolean
 	readonly id?: string
 	readonly ariaDescribedBy?: string
+	/**
+	 * Optional callback fired when typed value is out-of-bounds AT blur. Per
+	 * `[[silent-clamp-anti-pattern]]`: каждое silent изменение operator intent
+	 * = bug. Component does NOT clamp on blur if this callback provided —
+	 * caller surfaces FieldError and keeps raw value visible. Caller must reset
+	 * к bounds explicitly via setValue.
+	 *
+	 * When undefined (legacy): on blur out-of-bounds → silent clamp к min/max.
+	 * Strict mode (canonical): provide handler + caller renders FieldError.
+	 */
+	readonly onOutOfRange?: (typed: number, bounds: { min: number; max: number }) => void
 }
 
 const DEFAULT_MIN = -1000
@@ -63,6 +74,7 @@ export function OversellDeltaField({
 	disabled = false,
 	id,
 	ariaDescribedBy,
+	onOutOfRange,
 }: OversellDeltaFieldProps) {
 	const decrement = useCallback(() => {
 		onChange(clamp(value - step, min, max))
@@ -94,8 +106,8 @@ export function OversellDeltaField({
 	const handleInputBlur = useCallback(
 		(e: React.FocusEvent<HTMLInputElement>) => {
 			const raw = e.target.value
-			// On blur: empty / single-minus → reset к 0. Out-of-bounds → clamp.
-			// Operator gets explicit value back, not silent gibberish.
+			// On blur: empty / single-minus → reset к 0 (defensive default for
+			// transient typing states).
 			if (raw === '' || raw === '-') {
 				onChange(0)
 				return
@@ -106,9 +118,22 @@ export function OversellDeltaField({
 				return
 			}
 			const intVal = Math.trunc(parsed)
-			onChange(clamp(intVal, min, max))
+			// Out-of-bounds branch (per `[[silent-clamp-anti-pattern]]`):
+			// - Strict mode (onOutOfRange provided): emit callback, keep raw
+			//   value, caller surfaces FieldError. NO silent mutation.
+			// - Legacy mode (no callback): clamp к bounds (preserves backward
+			//   compat with existing call-sites). Migrate callers к strict.
+			if (intVal < min || intVal > max) {
+				if (onOutOfRange) {
+					onOutOfRange(intVal, { min, max })
+					return
+				}
+				onChange(clamp(intVal, min, max))
+				return
+			}
+			onChange(intVal)
 		},
-		[min, max, onChange],
+		[min, max, onChange, onOutOfRange],
 	)
 
 	const handleKeyDown = useCallback(

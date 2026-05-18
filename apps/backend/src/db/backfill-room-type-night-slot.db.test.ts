@@ -300,6 +300,111 @@ describe('backfill-room-type-night-slot', () => {
 		expect(await countSlotsForTenant(TENANT)).toBe(0) // dry-run = no write
 	})
 
+	test('[BS7] --cancel-overbook resolves losers: status=cancelled, audit reason set', async () => {
+		const TENANT = newId('organization')
+		const PROPERTY = newId('property')
+		const ROOMTYPE = newId('roomType')
+		await seedAvailability({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: ROOMTYPE,
+			date: '2042-08-10',
+			allotment: 1,
+		})
+		// Seed 3 bookings same night allotment=1 → 2 losers
+		const a = await seedBooking({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: ROOMTYPE,
+			checkIn: '2042-08-10',
+			nights: 1,
+			status: 'confirmed',
+		})
+		const b = await seedBooking({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: ROOMTYPE,
+			checkIn: '2042-08-10',
+			nights: 1,
+			status: 'confirmed',
+		})
+		const c = await seedBooking({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: ROOMTYPE,
+			checkIn: '2042-08-10',
+			nights: 1,
+			status: 'confirmed',
+		})
+
+		const result = await runBackfill(CONN_STR, {
+			commit: true,
+			cancelOverbook: true,
+			tenantIds: [TENANT],
+		})
+		expect(result.counters.exhaustedSlots).toBe(2)
+		expect(result.counters.bookingsCancelled).toBe(2) // 2 losers cancelled
+
+		// Verify losers ended up status='cancelled' с audit reason
+		const sql = getTestSql()
+		const [rows = []] = await sql<{ status: string; cancelReason: string | null }[]>`
+			SELECT status, cancelReason FROM booking
+			WHERE tenantId = ${TENANT} AND status = 'cancelled'
+		`
+			.isolation('snapshotReadOnly')
+			.idempotent(true)
+		expect(rows.length).toBe(2)
+		expect(rows[0]?.cancelReason).toBe('auto-resolved-overbook-2026-05-18')
+
+		// Winner (1 of 3) still confirmed
+		const [winners = []] = await sql<{ id: string }[]>`
+			SELECT id FROM booking
+			WHERE tenantId = ${TENANT} AND status = 'confirmed'
+		`
+			.isolation('snapshotReadOnly')
+			.idempotent(true)
+		expect(winners.length).toBe(1)
+	})
+
+	test('[BS8] --cancel-overbook requires commit (CLI usage guard)', async () => {
+		// Tested via CLI guard (not via runBackfill). Confirm runBackfill itself
+		// honors cancelOverbook only когда commit=true. Calling с dry-run-ish
+		// args shouldn't cancel bookings.
+		const TENANT = newId('organization')
+		const PROPERTY = newId('property')
+		const ROOMTYPE = newId('roomType')
+		await seedAvailability({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: ROOMTYPE,
+			date: '2042-09-10',
+			allotment: 1,
+		})
+		await seedBooking({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: ROOMTYPE,
+			checkIn: '2042-09-10',
+			nights: 1,
+			status: 'confirmed',
+		})
+		await seedBooking({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: ROOMTYPE,
+			checkIn: '2042-09-10',
+			nights: 1,
+			status: 'confirmed',
+		})
+
+		const result = await runBackfill(CONN_STR, {
+			commit: false, // dry-run
+			cancelOverbook: true, // ignored когда commit=false
+			tenantIds: [TENANT],
+		})
+		expect(result.counters.bookingsCancelled).toBe(0) // never в dry-run
+	})
+
 	test('[BS6] --tenant scope isolates writes', async () => {
 		const T1 = newId('organization')
 		const T2 = newId('organization')

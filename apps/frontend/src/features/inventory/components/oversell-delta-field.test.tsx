@@ -188,12 +188,29 @@ describe('<OversellDeltaField>', () => {
 		expect(onChange).toHaveBeenCalledWith(0)
 	})
 
-	it('[T5] blur on out-of-bounds → clamped к max', () => {
+	it('[T5] legacy mode (no onOutOfRange): blur on out-of-bounds → clamped к max', () => {
 		const onChange = mock<(v: number) => void>(() => {})
 		render(<OversellDeltaField value={5} onChange={onChange} max={100} />)
 		const input = screen.getByRole('spinbutton') as HTMLInputElement
 		fireEvent.blur(input, { target: { value: '999' } })
 		expect(onChange).toHaveBeenCalledWith(100)
+	})
+
+	it('[T5b] strict mode (onOutOfRange callback): out-of-bounds → callback fired, NO silent clamp', () => {
+		// Per [[silent-clamp-anti-pattern]] strict canon: каждое silent изменение
+		// operator intent = bug. Strict-mode caller surfaces FieldError + keeps
+		// raw value visible. Component MUST NOT call onChange in this branch.
+		const onChange = mock<(v: number) => void>(() => {})
+		const onOutOfRange = mock<(typed: number, bounds: { min: number; max: number }) => void>(
+			() => {},
+		)
+		render(
+			<OversellDeltaField value={5} onChange={onChange} max={100} onOutOfRange={onOutOfRange} />,
+		)
+		const input = screen.getByRole('spinbutton') as HTMLInputElement
+		fireEvent.blur(input, { target: { value: '999' } })
+		expect(onOutOfRange).toHaveBeenCalledWith(999, { min: -1000, max: 100 })
+		expect(onChange).not.toHaveBeenCalled() // NO silent mutation
 	})
 
 	// ============== Adversarial ==============
