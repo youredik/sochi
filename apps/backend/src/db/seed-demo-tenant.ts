@@ -36,6 +36,7 @@ import { createRoomFactory } from '../domains/room/room.factory.ts'
 import { createRoomTypeFactory } from '../domains/roomType/roomType.factory.ts'
 import { InvalidBookingTransitionError, NoInventoryError } from '../errors/domain.ts'
 import { sql } from './index.ts'
+import { assertSeedState } from './verify-seed.ts'
 import { dateFromIso, NULL_INT32, NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from './ydb-helpers.ts'
 
 const TENANT_ID = 'demo-sochi-sirius'
@@ -916,7 +917,46 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	console.log(
 		'   M10 / A7.5.fix seed: 3 channel connections (TL/YT/ETG mock-mode, isEnabled=true).',
 	)
+
+	// Post-seed invariant verification. CDC consumers project asynchronously so
+	// some downstream rows (folio, slot, occupancy) materialize after a short
+	// drain window. Soft-retry up to ~6s before failing — matches the empirical
+	// CDC propagation budget observed (commit 5e19f60 reconciler land + Variant 3
+	// strict-tests baseline 1.5-2s typical). Past this budget, surface as hard
+	// failure so the seed signals «cannot reach canonical state» loudly.
+	await waitForInvariants(TENANT_ID)
 	return { tenantId: TENANT_ID }
+}
+
+/**
+ * Wait for CDC consumers to drain (folio_creator + slot writer + reconciler),
+ * then assert seed invariants pass. Polls verifySeedState() в exponential
+ * backoff until all clear OR budget exhausted; final attempt uses assertSeedState
+ * so violations surface как loud throws.
+ *
+ * Per `[[seed-canonical-no-bypass-2026-05-18]]`: bookings via service path mean
+ * CDC events emit per booking lifecycle event (create + checkIn + checkOut +
+ * cancel + markNoShow). All consumers must drain before we can claim canonical
+ * state. 6s budget = 30 bookings × ~200ms = generous но bounded.
+ */
+async function waitForInvariants(tenantId: string): Promise<void> {
+	const BUDGET_MS = 6_000
+	const start = Date.now()
+	let delayMs = 250
+	const { verifySeedState } = await import('./verify-seed.ts')
+	while (Date.now() - start < BUDGET_MS) {
+		const violations = await verifySeedState(tenantId)
+		if (violations.length === 0) {
+			console.log(
+				`  ✅ Seed invariants passed (post-CDC drain ${Math.round(Date.now() - start)}ms).`,
+			)
+			return
+		}
+		await new Promise((r) => setTimeout(r, delayMs))
+		delayMs = Math.min(delayMs * 2, 1_000)
+	}
+	// Budget exhausted — surface violations as hard failure.
+	await assertSeedState(tenantId)
 }
 
 const isCliEntry = typeof process !== 'undefined' && process.argv[1]?.includes('seed-demo-tenant')
