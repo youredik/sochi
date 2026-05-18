@@ -319,6 +319,7 @@ function buildDeps(
 				listByFolio: mock(),
 				listByBooking: mock(),
 				applyTransition: mock(),
+				applyWebhookEvent: mock(),
 			},
 			sql: sqlStub,
 		},

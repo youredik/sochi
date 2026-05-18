@@ -40,6 +40,7 @@
 		"@ydbjs/value": "6.0.7",
 		"better-auth": "^1.6.11",
 		"cloudevents": "10.0.0",
+		"cockatiel": "^3.2.1",
 		"croner": "^10.0.1",
 		"fflate": "0.8.2",
 		"hono": "^4.12.18",

@@ -547,6 +547,40 @@ export function createPaymentRepo(sql: SqlInstance) {
 				throw err
 			}
 		},
+
+		/**
+		 * Global lookup by `(providerCode, providerPaymentId)` — cross-tenant.
+		 * Used ONLY by the webhook handler (which has no auth/tenant context;
+		 * must derive tenantId from the payment row itself).
+		 *
+		 * Backed by `ixPaymentProvider` GLOBAL UNIQUE INDEX: SELECT with WHERE on
+		 * `providerCode + providerPaymentId` без tenantId prefix → partial-index
+		 * scan, O(1) for hit (UNIQUE constraint guarantees ≤1 row).
+		 *
+		 * SECURITY: caller MUST use returned `tenantId` для downstream operations.
+		 * NEVER pass route-supplied tenantId into a payment update.
+		 */
+		async findTenantByProviderPaymentId(
+			providerCode: PaymentProviderCode,
+			providerPaymentId: string,
+		): Promise<{ tenantId: string; paymentId: string } | null> {
+			const rows = await sql<{ tenantId: string; id: string }[]>`
+				SELECT tenantId, id FROM payment VIEW ixPaymentProvider
+				WHERE providerCode = ${providerCode}
+				  AND providerPaymentId = ${providerPaymentId}
+				LIMIT 2
+			`
+			const list = rows[0]
+			if (list === undefined || list.length === 0) return null
+			if (list.length > 1) {
+				throw new Error(
+					`payment.findTenantByProviderPaymentId: invariant violated — ${list.length} rows for providerCode=${providerCode} providerPaymentId=${providerPaymentId} (UNIQUE constraint broken?)`,
+				)
+			}
+			const row = list[0]
+			if (row === undefined) return null
+			return { tenantId: row.tenantId, paymentId: row.id }
+		},
 	}
 }
 

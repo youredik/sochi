@@ -163,6 +163,26 @@ export const envSchema = z.object({
 		.min(32, 'COMMIT_TOKEN_HMAC_CURRENT must be at least 32 chars')
 		.default('dev-current-stub-secret-MUST-rotate-32+chars'),
 	COMMIT_TOKEN_HMAC_PREVIOUS: z.string().optional(),
+
+	// Payment provider selection (P1.1, 2026-05-18).
+	//
+	//   PAYMENT_PROVIDER=stub      — синхронный autocapture-stub (default dev/test).
+	//                                Registered as `payment.stub` mode=`mock`.
+	//   PAYMENT_PROVIDER=yookassa  — live ЮKassa REST (test_xxx ключи в sandbox).
+	//                                Requires YOOKASSA_SHOP_ID + YOOKASSA_SECRET_KEY.
+	//                                Registered as `payment.yookassa` mode=`sandbox`
+	//                                (APP_MODE=sandbox) or `live` (APP_MODE=production).
+	//
+	// API base URL: единственный production endpoint у ЮKassa (api.yookassa.ru/v3) —
+	// НЕТ отдельного sandbox host'а, sandbox mode определяется test_xxx prefix
+	// в shopId+secretKey. Override only для network testing (mocked fetch, replay).
+	//
+	// Webhook: ЮKassa использует IP allowlist + GET-verify round-trip, NO HMAC.
+	// См. `project_yookassa_canon_corrections.md` (2026-04-29 empirical).
+	PAYMENT_PROVIDER: z.enum(['stub', 'yookassa']).default('stub'),
+	YOOKASSA_SHOP_ID: z.string().optional(),
+	YOOKASSA_SECRET_KEY: z.string().optional(),
+	YOOKASSA_API_BASE: z.url().default('https://api.yookassa.ru/v3'),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -170,6 +190,20 @@ const parsed = envSchema.safeParse(process.env)
 if (!parsed.success) {
 	console.error('❌ Invalid environment variables:')
 	console.error(z.prettifyError(parsed.error))
+	process.exit(1)
+}
+
+// Cross-field invariant: PAYMENT_PROVIDER=yookassa requires both creds.
+// Kept outside Zod schema так чтобы envSchema shape стабилен (env.test.ts
+// проверяет transform'ы без needing creds).
+if (
+	parsed.data.PAYMENT_PROVIDER === 'yookassa' &&
+	(!parsed.data.YOOKASSA_SHOP_ID || !parsed.data.YOOKASSA_SECRET_KEY)
+) {
+	console.error(
+		'❌ PAYMENT_PROVIDER=yookassa requires both YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY. ' +
+			'Get sandbox credentials at https://yookassa.ru/my (test_xxx keys, free, instant).',
+	)
 	process.exit(1)
 }
 

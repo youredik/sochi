@@ -45,7 +45,9 @@ import { RumBuffer } from './domains/observability/rum.repo.ts'
 import { createRumRoutes } from './domains/observability/rum.routes.ts'
 import { createPaymentFactory } from './domains/payment/payment.factory.ts'
 import { createPaymentRoutes } from './domains/payment/payment.routes.ts'
-import { createStubPaymentProvider } from './domains/payment/provider/stub-provider.ts'
+import { createPaymentWebhookEventRepo } from './domains/payment/payment-webhook-event.repo.ts'
+import { createPaymentWebhookRoutes } from './domains/payment/payment-webhook.routes.ts'
+import { createPaymentProviderFromEnv } from './domains/payment/provider/factory.ts'
 import { createPropertyFactory } from './domains/property/property.factory.ts'
 import { createPropertyRoutes } from './domains/property/property.routes.ts'
 import { createPropertyContentFactory } from './domains/property/property-content.factory.ts'
@@ -231,20 +233,30 @@ const migrationRegistrationFactory = createMigrationRegistrationFactory({
 	archive: archiveBuilder,
 	idGen: () => newId('migrationRegistration'),
 })
-// V1 demo: stub payment provider (synchronous-success autocapture mirror of SBP).
-// Real provider wiring (ЮKassa / T-Kassa / СБП) lands in Phase 3 alongside the
-// webhook handler. Switch via env `PAYMENT_PROVIDER` when those impls ship.
-const paymentProvider = createStubPaymentProvider()
-registerAdapter({
-	name: 'payment.stub',
-	category: 'payment',
-	mode: 'mock',
-	description:
-		'In-process payment stub (synchronous-success autocapture, mirrors СБП rail). ' +
-		'Replace with payment.yookassa in Phase 3 (M9).',
+// P1.1 (2026-05-18) — env-driven payment provider selection: stub | yookassa.
+// stub        → `payment.stub`     mode='mock'  (default in dev/test)
+// yookassa    → `payment.yookassa` mode='sandbox' (APP_MODE=sandbox)
+//                                   mode='live'    (APP_MODE=production)
+// P1.2 lands the real ЮKassa REST impl (initiate/capture/refund/verifyWebhook).
+// P1.3 lands the webhook handler route. See plans/demo-live-integrations-plan.md.
+const paymentProviderResult = createPaymentProviderFromEnv({
+	paymentProvider: env.PAYMENT_PROVIDER,
+	appMode: env.APP_MODE,
+	yookassaShopId: env.YOOKASSA_SHOP_ID,
+	yookassaSecretKey: env.YOOKASSA_SECRET_KEY,
+	yookassaApiBase: env.YOOKASSA_API_BASE,
+	// `return_url` для confirmation redirect — derive от PUBLIC_BASE_URL.
+	// PCI SAQ-A path: HTTPS-only в production (Yandex Cloud сертификаты).
+	yookassaReturnUrl: `${env.PUBLIC_BASE_URL}/booking/payment-return`,
 })
+const paymentProvider = paymentProviderResult.provider
+registerAdapter(paymentProviderResult.metadata)
 const paymentFactory = createPaymentFactory(sql, paymentProvider, folioFactory.service)
 const refundFactory = createRefundFactory(sql, paymentFactory.repo, paymentProvider)
+// P1 (2026-05-18) — inbound webhook event inbox (paymentWebhookEvent table,
+// PK 3D dedup with 30d TTL). NO CHANGEFEED — sink for verified webhooks,
+// downstream transitions emit via payment_events / refund_events.
+const paymentWebhookEventRepo = createPaymentWebhookEventRepo(sql)
 const idempotency = idempotencyMiddleware(createIdempotencyRepo(sql))
 
 // M9.widget.4 — booking-create factory (composes widget/guest/booking/payment).
@@ -814,6 +826,19 @@ const routes = app
 	)
 	.route('/api/v1', createFolioRoutes(folioFactory, idempotency))
 	.route('/api/v1', createPaymentRoutes(paymentFactory, idempotency))
+	// P1 (2026-05-18) — public webhook endpoint для ЮKassa (IP allowlist gate,
+	// NO HMAC per canon 2026-05-19). NO auth/tenant middleware — webhook handler
+	// derives tenantId from cross-tenant `findTenantByProviderPaymentId` lookup.
+	.route(
+		'/api/v1/payments/webhook',
+		createPaymentWebhookRoutes({
+			yookassaProvider: paymentProvider,
+			paymentRepo: paymentFactory.repo,
+			paymentService: paymentFactory.service,
+			webhookEventRepo: paymentWebhookEventRepo,
+			logger,
+		}),
+	)
 	.route('/api/v1', createRefundRoutes(refundFactory, idempotency))
 	.route('/api/v1', createMigrationRegistrationRoutes(migrationRegistrationFactory, idempotency))
 	.route('/api/v1', createVisionRoutes(visionOcrAdapter))

@@ -138,6 +138,9 @@ importers:
       cloudevents:
         specifier: 10.0.0
         version: 10.0.0
+      cockatiel:
+        specifier: ^3.2.1
+        version: 3.2.1
       croner:
         specifier: ^10.0.1
         version: 10.0.1
@@ -5643,6 +5646,10 @@ packages:
   clsx@2.1.1:
     resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
     engines: {node: '>=6'}
+
+  cockatiel@3.2.1:
+    resolution: {integrity: sha512-gfrHV6ZPkquExvMh9IOkKsBzNDk6sDuZ6DdBGUBkvFnTCqCxzpuq48RySgP0AnaqQkw2zynOFj9yly6T1Q2G5Q==}
+    engines: {node: '>=16'}
 
   color-convert@1.9.3:
     resolution: {integrity: sha512-QfAUtd+vFdAtFQcC8CCyYt1fYWxSqAiK2cSD6zDB8N3cpsEBAvRxp9zOGg6G/SHHJYAT88/az/IuDGALsNVbGg==}
@@ -14262,6 +14269,8 @@ snapshots:
       uuid: 11.1.1
 
   clsx@2.1.1: {}
+
+  cockatiel@3.2.1: {}
 
   color-convert@1.9.3:
     dependencies:

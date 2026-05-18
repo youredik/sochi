@@ -29,6 +29,7 @@ import type {
 	PaymentProviderCode,
 	PaymentSaleChannel,
 	PaymentStatus,
+	VerifiedWebhookEvent,
 } from '@horeca/shared'
 import {
 	FolioCurrencyMismatchError,
@@ -221,6 +222,88 @@ export function createPaymentService(
 			actorUserId: string,
 		): Promise<Payment> {
 			return await repo.applyTransition(tenantId, id, expectedVersion, next, actorUserId)
+		},
+
+		/**
+		 * Apply a verified webhook event to local state (P1 webhook handler entry).
+		 *
+		 * For payment-subject events: looks up payment by providerPaymentId,
+		 * applies state transition (`pending → succeeded` etc) reflecting
+		 * provider's view. Cross-checks tenant ownership.
+		 *
+		 * For refund-subject events: locates parent payment (parentProviderPaymentId),
+		 * returns metadata only. Actual refund-row creation lives в refund service
+		 * (decoupled — same canon path as outbound `refund` flow); webhook handler
+		 * records this for audit, не creates refund domain rows here.
+		 *
+		 * @returns Updated payment row (для payment subject) OR
+		 *          parent payment + skip-reason (для refund subject)
+		 */
+		async applyWebhookEvent(
+			tenantId: string,
+			event: VerifiedWebhookEvent,
+			actorUserId: string,
+		): Promise<
+			| { kind: 'payment-transitioned'; payment: Payment }
+			| { kind: 'refund-noted'; parentPayment: Payment; refundAmountMinor: bigint }
+			| { kind: 'payment-not-found'; providerPaymentId: string }
+		> {
+			if (event.subject.kind === 'payment') {
+				const snap = event.subject.snapshot
+				const payment = await repo.getByProviderId(
+					tenantId,
+					event.providerCode,
+					snap.providerPaymentId,
+				)
+				if (payment === null) {
+					return { kind: 'payment-not-found', providerPaymentId: snap.providerPaymentId }
+				}
+				// Apply transition reflecting provider's snapshot. SM guard in repo.
+				const next = {
+					status: snap.status,
+					authorizedMinor: snap.authorizedMinor,
+					capturedMinor: snap.capturedMinor,
+					confirmationUrl: snap.confirmationUrl,
+					holdExpiresAt: snap.holdExpiresAt === null ? null : new Date(snap.holdExpiresAt),
+					failureReason: snap.failureReason,
+					// Stamp timestamp на основе target status (null = not-set leg
+					// vs undefined = "do not include in patch" — TransitionOverride
+					// uses null discriminator).
+					authorizedAt:
+						snap.status === 'succeeded' || snap.status === 'waiting_for_capture'
+							? new Date()
+							: null,
+					capturedAt: snap.status === 'succeeded' ? new Date() : null,
+					canceledAt: snap.status === 'canceled' ? new Date() : null,
+					failedAt: snap.status === 'failed' ? new Date() : null,
+					expiredAt: snap.status === 'expired' ? new Date() : null,
+				}
+				const updated = await repo.applyTransition(
+					tenantId,
+					payment.id,
+					payment.version,
+					next,
+					actorUserId,
+				)
+				return { kind: 'payment-transitioned', payment: updated }
+			}
+			// refund subject: locate parent for audit/cross-reference.
+			const parent = await repo.getByProviderId(
+				tenantId,
+				event.providerCode,
+				event.subject.parentProviderPaymentId,
+			)
+			if (parent === null) {
+				return {
+					kind: 'payment-not-found',
+					providerPaymentId: event.subject.parentProviderPaymentId,
+				}
+			}
+			return {
+				kind: 'refund-noted',
+				parentPayment: parent,
+				refundAmountMinor: event.subject.refund.amountMinor,
+			}
 		},
 	}
 }
