@@ -427,16 +427,29 @@ export function createBookingRepo(sql: SqlInstance) {
 			propertyId: string,
 			opts: { from?: string; to?: string; status?: BookingStatus; roomTypeId?: string },
 		): Promise<Booking[]> {
-			// PK range scan on (tenantId, propertyId, checkIn, id). Other filters
-			// evaluated post-scan; acceptable at SMB volumes (<10k bookings/property/year).
+			// **Overlap filter** (NOT just `checkIn` range) — booking что
+			// started ДО window но still in-progress overlaps view. Per
+			// 2026-05-18 user-reported missing-bands bug: Сидоров in_house
+			// May 17-21 had `checkIn=17 < from=18` так filtered out, но
+			// Шахматка должна показывать его (overlaps view May 18-20).
+			//
+			// Same overlap pattern used by all sibling methods (lines 1190,
+			// 1303, 1337). Pre-fix singleton bug used `checkIn >= from AND
+			// checkIn <= to` — partition-prune friendly но semantically
+			// wrong. Per `[[silent-clamp-anti-pattern]]` canon, silently
+			// dropping operationally-visible bookings = data corruption.
+			//
+			// Partition pruning slightly degrades (no `checkIn >= from`
+			// prune), но SMB scale (<10k bookings/property/year per comment
+			// below) absorbs the extra scan rows.
 			const from = opts.from ? dateFromIso(opts.from) : dateFromIso('1970-01-01')
 			const to = opts.to ? dateFromIso(opts.to) : dateFromIso('2099-12-31')
 			const [rows = []] = await sql<BookingRow[]>`
 				SELECT * FROM booking
 				WHERE tenantId = ${tenantId}
 					AND propertyId = ${propertyId}
-					AND checkIn >= ${from}
-					AND checkIn <= ${to}
+					AND checkIn < ${to}
+					AND checkOut > ${from}
 				ORDER BY checkIn ASC, id ASC
 			`
 				.isolation('snapshotReadOnly')

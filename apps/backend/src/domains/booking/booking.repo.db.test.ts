@@ -497,6 +497,102 @@ describe('booking.repo', () => {
 		expect(list).toEqual([])
 	})
 
+	// G11 v3.2 (2026-05-18) — overlap filter canon. Pre-fix `listByProperty`
+	// used `checkIn >= from AND checkIn <= to` (PK-prefix scan), which
+	// silently DROPPED bookings spanning into view from before. Per
+	// `[[silent-clamp-anti-pattern]]` operator-data-corruption canon —
+	// pinned by strict adversarial tests below.
+	test('[W1] listByProperty: booking spanning into view (checkIn BEFORE from, checkOut WITHIN window) → INCLUDED', async () => {
+		await seedAvailability(TENANT_A, PROP_A, RT_A, ['2027-09-10', '2027-09-11', '2027-09-12'])
+		const slices = buildSlices(['2027-09-10', '2027-09-11', '2027-09-12'])
+		const created = await repo.create(
+			TENANT_A,
+			PROP_A,
+			buildInput({ checkIn: '2027-09-10', checkOut: '2027-09-13' }),
+			buildCtx(slices),
+		)
+		trackBooking(TENANT_A, PROP_A, created.checkIn, created.id)
+		// Window starts AFTER booking's checkIn — overlap filter must still include it.
+		const list = await repo.listByProperty(TENANT_A, PROP_A, {
+			from: '2027-09-11',
+			to: '2027-09-15',
+		})
+		const found = list.find((b) => b.id === created.id)
+		expect(found?.id).toBe(created.id)
+		expect(found?.checkIn).toBe('2027-09-10')
+		expect(found?.checkOut).toBe('2027-09-13')
+	})
+
+	test('[W2] listByProperty: booking ending exactly AT from (checkOut === from) → EXCLUDED (half-open)', async () => {
+		await seedAvailability(TENANT_A, PROP_A, RT_A, ['2027-09-20'])
+		const slices = buildSlices(['2027-09-20'])
+		const created = await repo.create(
+			TENANT_A,
+			PROP_A,
+			buildInput({ checkIn: '2027-09-20', checkOut: '2027-09-21' }),
+			buildCtx(slices),
+		)
+		trackBooking(TENANT_A, PROP_A, created.checkIn, created.id)
+		// checkOut=2027-09-21 equals from=2027-09-21 — half-open canon (lastNight = checkOut-1 = 09-20, BEFORE window).
+		const list = await repo.listByProperty(TENANT_A, PROP_A, {
+			from: '2027-09-21',
+			to: '2027-09-25',
+		})
+		expect(list.find((b) => b.id === created.id)).toBeUndefined()
+	})
+
+	test('[W3] listByProperty: booking starting exactly AT to (checkIn === to) → EXCLUDED (half-open)', async () => {
+		await seedAvailability(TENANT_A, PROP_A, RT_A, ['2027-10-05'])
+		const slices = buildSlices(['2027-10-05'])
+		const created = await repo.create(
+			TENANT_A,
+			PROP_A,
+			buildInput({ checkIn: '2027-10-05', checkOut: '2027-10-06' }),
+			buildCtx(slices),
+		)
+		trackBooking(TENANT_A, PROP_A, created.checkIn, created.id)
+		// checkIn=2027-10-05 equals to=2027-10-05 (exclusive). Booking starts ON window-end → excluded.
+		const list = await repo.listByProperty(TENANT_A, PROP_A, {
+			from: '2027-10-01',
+			to: '2027-10-05',
+		})
+		expect(list.find((b) => b.id === created.id)).toBeUndefined()
+	})
+
+	test('[W4] listByProperty: booking entirely BEFORE window → EXCLUDED', async () => {
+		await seedAvailability(TENANT_A, PROP_A, RT_A, ['2027-11-01'])
+		const slices = buildSlices(['2027-11-01'])
+		const created = await repo.create(
+			TENANT_A,
+			PROP_A,
+			buildInput({ checkIn: '2027-11-01', checkOut: '2027-11-02' }),
+			buildCtx(slices),
+		)
+		trackBooking(TENANT_A, PROP_A, created.checkIn, created.id)
+		const list = await repo.listByProperty(TENANT_A, PROP_A, {
+			from: '2027-11-10',
+			to: '2027-11-20',
+		})
+		expect(list.find((b) => b.id === created.id)).toBeUndefined()
+	})
+
+	test('[W5] listByProperty: booking entirely AFTER window → EXCLUDED', async () => {
+		await seedAvailability(TENANT_A, PROP_A, RT_A, ['2027-12-15'])
+		const slices = buildSlices(['2027-12-15'])
+		const created = await repo.create(
+			TENANT_A,
+			PROP_A,
+			buildInput({ checkIn: '2027-12-15', checkOut: '2027-12-16' }),
+			buildCtx(slices),
+		)
+		trackBooking(TENANT_A, PROP_A, created.checkIn, created.id)
+		const list = await repo.listByProperty(TENANT_A, PROP_A, {
+			from: '2027-12-01',
+			to: '2027-12-10',
+		})
+		expect(list.find((b) => b.id === created.id)).toBeUndefined()
+	})
+
 	test('[T3] create cannot consume availability from another tenant', async () => {
 		await seedAvailability(TENANT_A, PROP_A, RT_A, ['2027-08-20'])
 		// TENANT_B has NO availability row for same key — must fail.
