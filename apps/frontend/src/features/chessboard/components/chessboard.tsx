@@ -608,7 +608,15 @@ export function Chessboard() {
 													<button
 														type="button"
 														className={`focus-visible:outline-ring border-border data-[band-status=confirmed]:cursor-grab data-[dragging=true]:cursor-grabbing data-[dragging=true]:opacity-50 relative flex h-10 items-center overflow-hidden border-b px-2 text-[11px] focus:outline-2 focus:outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:[box-shadow:0_0_0_4px_var(--background)] ${style.bg} ${style.text}`}
-														style={{ gridColumn: `span ${band.span}` }}
+														// G11 v3.4 (2026-05-18) — EXPLICIT gridColumn start.
+														// Pre-fix used `span N` без start; CSS Grid auto-flow
+														// placed bands sequentially, ignoring data colStart.
+														// For overlapping bookings (same row, conflicting
+														// dates) auto-place wrapped к next implicit row →
+														// «orphan» band visually appeared в pseudo-row.
+														// `ariaColIdx` = colIdx + 2 (label = col 1, dates
+														// start at col 2). Explicit start kills the drift.
+														style={{ gridColumn: `${ariaColIdx} / span ${band.span}` }}
 														role="gridcell"
 														aria-colindex={ariaColIdx}
 														aria-colspan={band.span}
@@ -673,7 +681,12 @@ export function Chessboard() {
 											<div
 												key={`${rt.id}:block:${ariaColIdx}`}
 												className="border-border bg-slate-200 [background-image:repeating-linear-gradient(45deg,_rgba(100,116,139,0.25)_0_8px,_transparent_8px_16px)] border-b border-slate-400 flex h-10 items-center overflow-hidden px-2 text-[11px] text-slate-900"
-												style={{ gridColumn: `span ${block.span}` }}
+												// G11 v3.4 (2026-05-18) — sibling fix: same explicit
+												// gridColumn pattern as booking band above. Block bands
+												// can overlap booking bands semantically (G9 hard-block
+												// canon shows block-over-booking double-bands); without
+												// explicit start, CSS Grid auto-place drifts both.
+												style={{ gridColumn: `${ariaColIdx} / span ${block.span}` }}
 												role="gridcell"
 												aria-colindex={ariaColIdx}
 												aria-colspan={block.span}
