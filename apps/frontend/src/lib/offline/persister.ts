@@ -1,5 +1,5 @@
 import { experimental_createQueryPersister } from '@tanstack/react-query-persist-client'
-import { del, get, set } from 'idb-keyval'
+import { del, get, keys, set } from 'idb-keyval'
 
 /**
  * G11 v3 (2026-05-18) — TanStack Query persister per **split-query 152-ФЗ
@@ -37,7 +37,17 @@ import { del, get, set } from 'idb-keyval'
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
-/** AsyncStorage interface adapter — TanStack persister expects this shape. */
+/**
+ * AsyncStorage interface adapter — TanStack persister expects this shape.
+ *
+ * **`entries` is OPTIONAL per TanStack type but REQUIRED at runtime by
+ * `persister.removeQueries`** (TanStack iterates stored entries к match
+ * filter predicates). Composed from `idb-keyval` `keys() + get()` pair
+ * — keys() returns array of stored keys, parallel-get hydrates values.
+ * Implementation tested empirically post-G11 v3.1 (2026-05-18 user
+ * reported «Provided storage does not implement entries method» когда
+ * boot wipe called removeQueries без the method present).
+ */
 const idbKeyvalStorage = {
 	getItem: async (key: string): Promise<string | null> => {
 		const v = await get<string>(key)
@@ -48,6 +58,16 @@ const idbKeyvalStorage = {
 	},
 	removeItem: async (key: string): Promise<void> => {
 		await del(key)
+	},
+	entries: async (): Promise<Array<[string, string]>> => {
+		const allKeys = await keys()
+		const pairs: Array<[string, string]> = []
+		for (const k of allKeys) {
+			if (typeof k !== 'string') continue
+			const v = await get<string>(k)
+			if (typeof v === 'string') pairs.push([k, v])
+		}
+		return pairs
 	},
 }
 
@@ -81,7 +101,14 @@ export function shouldPersistQuery(
  * opt out via `meta: { persist: false }` filter.
  */
 export function createOfflineQueryPersister() {
-	const buster = import.meta.env.VITE_GIT_SHA ?? 'dev'
+	// G11 v3.1 (2026-05-18) — buster includes shape-version suffix so
+	// dev-environment (where VITE_GIT_SHA undefined) ALSO invalidates ALL
+	// persisted entries on shape-breaking changes. Production picks up
+	// VITE_GIT_SHA per commit. Bump suffix any time grid/booking row
+	// shape changes incompatibly (PII strip → narrow shape pivot was such
+	// a change; old persisted rows had `guestSnapshot` с null fields,
+	// new code expects pre-computed `guestMask` + `isForeignCitizen`).
+	const buster = import.meta.env.VITE_GIT_SHA ?? 'dev-g11-v3-2026-05-18'
 	return experimental_createQueryPersister({
 		storage: idbKeyvalStorage,
 		maxAge: SEVEN_DAYS_MS,

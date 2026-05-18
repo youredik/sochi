@@ -474,5 +474,31 @@ describe('channelIndicator — G2.bis channel-color differentiator', () => {
 				}
 			}
 		})
+
+		// G11 v3.1 (2026-05-18) — boolean overload + adversarial undefined handling.
+		// Per `[[adversarial-reading-before-done]]` null-slip canon — surfaced
+		// 2026-05-18 user-side crash когда stale persisted row (G11 v2 shape)
+		// rehydrated с undefined `isForeignCitizen` field → call site passed
+		// undefined → `isRussianCitizenship(undefined).toUpperCase()` crash.
+		it('[G11v3-B1] boolean true (isForeignCitizen) + pending → foreign-guest badge', () => {
+			const badge = registrationBadgeFor('pending', true)
+			expect(badge?.urgent).toBe(true)
+			expect(badge?.label).toBe('МУ не подан')
+		})
+		it('[G11v3-B2] boolean false (RU citizen) → ALWAYS null', () => {
+			for (const status of FOREIGN_STATUSES) {
+				expect(registrationBadgeFor(status, false)).toBeNull()
+			}
+		})
+		it('[G11v3-A1] undefined (stale persisted shape без isForeignCitizen) → null безопасно', () => {
+			// Defensive: cached row от старого G11 v2 build (без `isForeignCitizen`
+			// field) rehydrates → consumer passes undefined → must NOT crash в
+			// isRussianCitizenship(undefined).toUpperCase(). Per dev-server-
+			// staleness canon, IDB buster eventually invalidates stale rows,
+			// но в-flight queries during transition must degrade gracefully.
+			for (const status of FOREIGN_STATUSES) {
+				expect(registrationBadgeFor(status, undefined)).toBeNull()
+			}
+		})
 	})
 })

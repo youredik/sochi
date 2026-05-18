@@ -265,8 +265,15 @@ export interface RegistrationBadge {
  */
 export function registrationBadgeFor(
 	status: BookingRegistrationStatus,
-	isForeignCitizenOrCitizenship: boolean | string,
+	isForeignCitizenOrCitizenship: boolean | string | undefined,
 ): RegistrationBadge | null {
+	// Defensive против stale-persisted-shape rehydrate: if neither boolean
+	// nor string passed (undefined from old cache row без `isForeignCitizen`
+	// field), treat as «no MVD badge». Per `[[adversarial-reading-before-
+	// done]]` null-slip canon — undefined-slip surfaced 2026-05-18 после
+	// G11 v3 shape pivot crashed `isRussianCitizenship(undefined)
+	// .toUpperCase()`.
+	if (isForeignCitizenOrCitizenship === undefined) return null
 	const isForeign =
 		typeof isForeignCitizenOrCitizenship === 'boolean'
 			? isForeignCitizenOrCitizenship
