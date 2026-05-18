@@ -26,18 +26,37 @@
  *   - Projection succeeds + commit fails (rare race) → batch redelivers,
  *     re-runs projection. Projection MUST be idempotent on event identity.
  *
- * All M6.5 handlers are upsert-shaped or pre-check-then-write:
- *   - refund_creator_writer: SELECT-then-UPSERT on UNIQUE (tenant, causalityId).
- *   - notification_writer:    SELECT-then-UPSERT on UNIQUE (tenant, dedupKey).
- *   - payment_status_writer:  derived === current short-circuit + version-CAS.
- *   - folio_balance_writer:   computed === current short-circuit + version-CAS.
- *   - activity_writer:        UPSERT (tenant, objectType, recordId, ts, id);
- *                             id is random per insert — replays produce
- *                             duplicate audit rows in the rare commit-after-
- *                             projection-failure window. Acceptable for an
- *                             audit log; M6.5.1 may add an event-offset
- *                             dedup column if duplicates ever surface in
- *                             practice (production monitoring will tell).
+ * All handlers — audited 2026-05-18, all SAFE under at-least-once replay:
+ *   - refund_creator_writer:   SELECT-then-INSERT on UNIQUE `ixRefundCausality`
+ *                              (causalityId = dispute:<disputeId>).
+ *   - notification_writer:     SELECT-then-INSERT on UNIQUE `ixNotificationDedup`
+ *                              (sourceEventDedupKey from sourceObjectType+Id+kind).
+ *   - payment_status_writer:   derived === current short-circuit + version-CAS.
+ *   - folio_balance_writer:    computed === current short-circuit + version-CAS.
+ *   - folio_creator_writer:    SELECT-then-INSERT via `ixFolioBooking`
+ *                              (one folio per booking — pre-check skip).
+ *   - activity_writer:         SELECT-then-INSERT on UNIQUE `ixActivityDedup`
+ *                              (dedupKey = `${step}-${txId}-${index}` from CDC
+ *                              virtual-timestamp tuple; deterministic per event).
+ *                              Per migration 0018 — earlier «UPSERT с random id»
+ *                              shape was retired before M6.5.1, comment carried
+ *                              the stale concern. Re-deliveries produce 0 dup
+ *                              audit rows.
+ *   - cancel_fee_finalizer:    SELECT-then-skip pre-check on deterministic
+ *                              `cancelFeeLineId(bookingId)` folioLine ID.
+ *   - checkout_finalizer:      SELECT-then-skip pre-check on deterministic
+ *                              `tourismTaxLineId(bookingId)` folioLine ID.
+ *   - channel_broadcast:       Deterministic idempotencyKey
+ *                              `${tenantId}:${bookingId}:${cdcVersion}` —
+ *                              orchestrator handles dedup в outbox layer.
+ *   - migration_registration_enqueuer: SELECT-then-skip via
+ *                              `idxMigRegTenantBooking` (one row per booking).
+ *   - slot_reconciliation:     SELECT-then-skip via `idxSlotByBooking` —
+ *                              reconciler back-fills slot rows for active
+ *                              bookings, skips если slot already present.
+ *
+ * Audit refs: `[[cdc-consumer-idempotency-audit-2026-05-18]]` — all 12
+ * consumers verified deterministic + replay-safe.
  *
  * Single-flight: each consumer has ONE long-lived reader, serializes its
  * own batch processing naturally. No cross-consumer mutex needed; YDB topic
