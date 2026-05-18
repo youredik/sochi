@@ -559,4 +559,158 @@ describe('overbooking-prevention canon (db invariant)', () => {
 			),
 		).rejects.toBeInstanceOf(NoInventoryError)
 	})
+
+	// ============================================================
+	// [SL*] Variant 3 — roomTypeNightSlot slot allocation (migration 0063)
+	// ============================================================
+
+	async function countSlotsForBooking(bookingId: string): Promise<number> {
+		const sql = getTestSql()
+		const [rows = []] = await sql<{ cnt: number | bigint }[]>`
+			SELECT COUNT(*) AS cnt FROM roomTypeNightSlot
+			WHERE tenantId = ${TENANT_A} AND bookingId = ${bookingId}
+		`
+			.isolation('snapshotReadOnly')
+			.idempotent(true)
+		return Number(rows[0]?.cnt ?? 0)
+	}
+
+	async function countSlotsForNight(
+		propertyId: string,
+		roomTypeId: string,
+		date: string,
+	): Promise<number> {
+		const sql = getTestSql()
+		const [rows = []] = await sql<{ cnt: number | bigint }[]>`
+			SELECT COUNT(*) AS cnt FROM roomTypeNightSlot
+			WHERE tenantId = ${TENANT_A}
+				AND propertyId = ${propertyId}
+				AND roomTypeId = ${roomTypeId}
+				AND date = ${dateFromIso(date)}
+		`
+			.isolation('snapshotReadOnly')
+			.idempotent(true)
+		return Number(rows[0]?.cnt ?? 0)
+	}
+
+	test('[SL1] create writes slot rows: count == nights, even for unassigned booking', async () => {
+		const dates = ['2036-01-10', '2036-01-11', '2036-01-12']
+		const { prop, rt, rp } = await seedChain({ dates })
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2036-01-10', checkOut: '2036-01-13' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		expect(b.assignedRoomId).toBeNull() // unassigned (canonical create state)
+		expect(await countSlotsForBooking(b.id)).toBe(3) // 3 nights → 3 slot rows
+	})
+
+	test('[SL2] cancel removes slot rows (frees slot для new booking)', async () => {
+		const dates = ['2036-02-10']
+		const { prop, rt, rp } = await seedChain({ dates })
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2036-02-10', checkOut: '2036-02-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		expect(await countSlotsForBooking(b.id)).toBe(1)
+		await booking.cancel(TENANT_A, b.id, { reason: 'test' }, USER_A)
+		expect(await countSlotsForBooking(b.id)).toBe(0)
+	})
+
+	test('[SL3] checkOut removes slot rows (sold counter retained, slot freed)', async () => {
+		const dates = ['2036-03-10']
+		const { prop, rt, rp } = await seedChain({ dates })
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2036-03-10', checkOut: '2036-03-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		expect(await countSlotsForBooking(b.id)).toBe(1)
+		await booking.checkIn(TENANT_A, b.id, {}, USER_A)
+		await booking.checkOut(TENANT_A, b.id, USER_A)
+		expect(await countSlotsForBooking(b.id)).toBe(0)
+	})
+
+	test('[SL4] sequential bookings same night → slot 0, 1, 2 (lowest-free canon)', async () => {
+		const dates = ['2036-04-10']
+		const { prop, rt, rp } = await seedChain({ dates, allotment: 3 })
+		const a = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2036-04-10', checkOut: '2036-04-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(a)
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2036-04-10', checkOut: '2036-04-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		const c = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2036-04-10', checkOut: '2036-04-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(c)
+
+		expect(await countSlotsForNight(prop.id, rt.id, '2036-04-10')).toBe(3)
+
+		// Verify slot numbers are 0, 1, 2 (lowest-free deterministic)
+		const sql = getTestSql()
+		const [slotRows = []] = await sql<{ slotNumber: number | bigint; bookingId: string }[]>`
+			SELECT slotNumber, bookingId FROM roomTypeNightSlot
+			WHERE tenantId = ${TENANT_A}
+				AND propertyId = ${prop.id}
+				AND roomTypeId = ${rt.id}
+				AND date = ${dateFromIso('2036-04-10')}
+			ORDER BY slotNumber
+		`
+			.isolation('snapshotReadOnly')
+			.idempotent(true)
+		const slots = slotRows.map((r) => Number(r.slotNumber))
+		expect(slots).toEqual([0, 1, 2])
+	})
+
+	test('[SL5] cancelled slot freed → next create reuses slot 0 (lowest-free)', async () => {
+		const dates = ['2036-05-10']
+		const { prop, rt, rp } = await seedChain({ dates, allotment: 2 })
+		const a = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2036-05-10', checkOut: '2036-05-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(a)
+		// Cancel A — slot 0 freed
+		await booking.cancel(TENANT_A, a.id, { reason: 'test' }, USER_A)
+		expect(await countSlotsForNight(prop.id, rt.id, '2036-05-10')).toBe(0)
+
+		// New booking B should reuse slot 0
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2036-05-10', checkOut: '2036-05-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+
+		const sql = getTestSql()
+		const [rows = []] = await sql<{ slotNumber: number | bigint }[]>`
+			SELECT slotNumber FROM roomTypeNightSlot
+			WHERE tenantId = ${TENANT_A} AND bookingId = ${b.id}
+		`
+			.isolation('snapshotReadOnly')
+			.idempotent(true)
+		expect(Number(rows[0]?.slotNumber ?? -1)).toBe(0) // lowest-free reused
+	})
 })

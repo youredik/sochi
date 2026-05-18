@@ -98,6 +98,108 @@ async function deleteOccupancyForNights(
 	}
 }
 
+/**
+ * Allocate the lowest free integer slot ∈ [0, effectiveAllotment) for a given
+ * (tenantId, propertyId, roomTypeId, date) и INSERT the slot row. Returns
+ * slotNumber on success.
+ *
+ * Per `[[overbooking-prevention-canon-2026-05-18]]` Variant 3: DB-level
+ * invariant for unassigned bookings — PK (tenantId, propertyId, roomTypeId,
+ * date, slotNumber) prevents > effectiveAllotment bookings per night. Closes
+ * Gap F-unassigned (seed-bypass / channel-push without repo).
+ *
+ * Algorithm:
+ *   1. SELECT existing slotNumbers для night (snapshot read inside tx, range-
+ *      locked by Serializable isolation).
+ *   2. Pick lowest integer NOT in existing set, < effectiveAllotment.
+ *   3. INSERT row. PK conflict (race) → tx rolls back → idempotent retry
+ *      re-runs from step 1 with fresh state.
+ *   4. NoInventoryError if all slots taken (effective <= |existing|).
+ *
+ * Throws `NoInventoryError` when effective allotment is exhausted.
+ */
+async function allocateNightSlot(
+	tx: TX,
+	tenantId: string,
+	propertyId: string,
+	roomTypeId: string,
+	dateIso: string,
+	effectiveAllotment: number,
+	bookingId: string,
+	nowTs: ReturnType<typeof toTs>,
+): Promise<number> {
+	const [existing = []] = await tx<{ slotNumber: number | bigint }[]>`
+		SELECT slotNumber FROM roomTypeNightSlot
+		WHERE tenantId = ${tenantId}
+			AND propertyId = ${propertyId}
+			AND roomTypeId = ${roomTypeId}
+			AND date = ${dateFromIso(dateIso)}
+	`
+	const used = new Set(existing.map((r) => Number(r.slotNumber)))
+	let slot = -1
+	for (let i = 0; i < effectiveAllotment; i += 1) {
+		if (!used.has(i)) {
+			slot = i
+			break
+		}
+	}
+	if (slot === -1) {
+		throw new NoInventoryError(
+			`all ${effectiveAllotment} slots taken для ${dateIso} (sold-counter says ${used.size})`,
+		)
+	}
+	await tx`
+		INSERT INTO roomTypeNightSlot (
+			\`tenantId\`, \`propertyId\`, \`roomTypeId\`, \`date\`, \`slotNumber\`, \`bookingId\`, \`createdAt\`
+		) VALUES (
+			${tenantId}, ${propertyId}, ${roomTypeId}, ${dateFromIso(dateIso)}, ${slot}, ${bookingId}, ${nowTs}
+		)
+	`
+	return slot
+}
+
+/**
+ * DELETE all slot rows owned by `bookingId` via index `idxSlotByBooking`. Used
+ * on cancel / checkOut / moveDates old-nights / changeRoomType old-nights.
+ * Idempotent — repeated DELETE on non-existent rows is a no-op.
+ *
+ * Implementation note: YQL `DELETE FROM ... ON` reads only the index slice,
+ * avoiding full-table scan.
+ */
+async function deleteSlotsForBooking(tx: TX, tenantId: string, bookingId: string): Promise<void> {
+	await tx`
+		DELETE FROM roomTypeNightSlot ON
+		SELECT tenantId, propertyId, roomTypeId, date, slotNumber
+		FROM roomTypeNightSlot VIEW idxSlotByBooking
+		WHERE tenantId = ${tenantId} AND bookingId = ${bookingId}
+	`
+}
+
+/**
+ * DELETE slot rows for booking restricted к specific roomTypeId. Used by
+ * changeRoomType (clear old roomType's slots) и moveDates (per-night
+ * release когда dates partly overlap).
+ */
+async function deleteSlotsForBookingScoped(
+	tx: TX,
+	tenantId: string,
+	bookingId: string,
+	propertyId: string,
+	roomTypeId: string,
+	nights: string[],
+): Promise<void> {
+	for (const night of nights) {
+		await tx`
+			DELETE FROM roomTypeNightSlot
+			WHERE tenantId = ${tenantId}
+				AND propertyId = ${propertyId}
+				AND roomTypeId = ${roomTypeId}
+				AND date = ${dateFromIso(night)}
+				AND bookingId = ${bookingId}
+		`
+	}
+}
+
 type SqlInstance = typeof SQL
 
 type BookingRow = {
@@ -610,6 +712,21 @@ export function createBookingRepo(sql: SqlInstance) {
 								AND roomTypeId = ${input.roomTypeId}
 								AND date = ${dateFromIso(night)}
 						`
+
+						// Variant 3 «strongest possible» (migration 0063): allocate lowest-
+						// free slot per night. PK invariant prevents > effective bookings
+						// even если caller bypasses repo. Defense-in-depth alongside sold
+						// counter above.
+						await allocateNightSlot(
+							tx,
+							tenantId,
+							propertyId,
+							input.roomTypeId,
+							night,
+							effective,
+							id,
+							nowTs,
+						)
 					}
 
 					const externalId = input.externalId ?? NULL_TEXT
@@ -753,6 +870,10 @@ export function createBookingRepo(sql: SqlInstance) {
 						)
 					}
 
+					// Release roomType slots (migration 0063 invariant) — cancelled
+					// booking releases its (roomType, date, slot) seat для new bookings.
+					await deleteSlotsForBooking(tx, tenantId, current.id)
+
 					const next: TransitionOverride = {
 						status: 'cancelled',
 						updatedAt: now,
@@ -864,6 +985,9 @@ export function createBookingRepo(sql: SqlInstance) {
 							nights,
 						)
 					}
+					// Release roomType slot rows — past-date nights don't conflict
+					// с future bookings, но cleaner state matches accounting canon.
+					await deleteSlotsForBooking(tx, tenantId, current.id)
 					const next: TransitionOverride = {
 						status: 'checked_out',
 						updatedAt: now,
@@ -973,8 +1097,8 @@ export function createBookingRepo(sql: SqlInstance) {
 
 					// Release inventory для nights ∈ (old \ new). Guard sold > 0 so
 					// double-release не corrupts (defensive; tx idempotency catches re-run).
-					for (const night of oldNights) {
-						if (newSet.has(night)) continue
+					const nightsToRelease = oldNights.filter((n) => !newSet.has(n))
+					for (const night of nightsToRelease) {
 						await tx`
 							UPDATE availability SET sold = sold - 1, updatedAt = ${nowTs}
 							WHERE tenantId = ${tenantId}
@@ -984,12 +1108,21 @@ export function createBookingRepo(sql: SqlInstance) {
 								AND sold > 0
 						`
 					}
+					// Release roomType slots для freed nights (migration 0063 invariant).
+					await deleteSlotsForBookingScoped(
+						tx,
+						tenantId,
+						current.id,
+						current.propertyId,
+						current.roomTypeId,
+						nightsToRelease,
+					)
 
 					// Reserve inventory для nights ∈ (new \ old) с allotment + stopSell
 					// guards (matches create-flow canon). Effective allotment includes
 					// oversellDelta per Apaleo canon.
-					for (const night of newNights) {
-						if (oldSet.has(night)) continue
+					const nightsToReserve = newNights.filter((n) => !oldSet.has(n))
+					for (const night of nightsToReserve) {
 						const [availRows = []] = await tx<
 							{
 								allotment: number | bigint
@@ -1028,6 +1161,17 @@ export function createBookingRepo(sql: SqlInstance) {
 								AND roomTypeId = ${current.roomTypeId}
 								AND date = ${dateFromIso(night)}
 						`
+						// Allocate roomType slot для new night (migration 0063 invariant).
+						await allocateNightSlot(
+							tx,
+							tenantId,
+							current.propertyId,
+							current.roomTypeId,
+							night,
+							effective,
+							current.id,
+							nowTs,
+						)
 					}
 
 					// **Gap B fix (2026-05-18)** — rebalance per-night occupancy if booking
@@ -1246,6 +1390,16 @@ export function createBookingRepo(sql: SqlInstance) {
 								AND sold > 0
 						`
 					}
+					// Release OLD roomType slot rows (migration 0063 invariant) — booking
+					// moves к new roomType so its (old-roomType, date, slot) seat frees.
+					await deleteSlotsForBookingScoped(
+						tx,
+						tenantId,
+						current.id,
+						current.propertyId,
+						current.roomTypeId,
+						nights,
+					)
 
 					// Release per-night occupancy для OLD pin — `assignedRoomId` gets
 					// nulled below (line «assignedRoomId: null»), so occupancy для
@@ -1303,6 +1457,18 @@ export function createBookingRepo(sql: SqlInstance) {
 								AND roomTypeId = ${ctx.newRoomTypeId}
 								AND date = ${dateFromIso(night)}
 						`
+						// Allocate NEW roomType slot для each night (migration 0063
+						// invariant). PK conflict (race) → NoInventoryError.
+						await allocateNightSlot(
+							tx,
+							tenantId,
+							current.propertyId,
+							ctx.newRoomTypeId,
+							night,
+							effective,
+							current.id,
+							nowTs,
+						)
 					}
 
 					const totalMicros = ctx.timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
