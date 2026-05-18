@@ -541,7 +541,7 @@ describe('booking.repo', () => {
 		expect(list.find((b) => b.id === created.id)).toBeUndefined()
 	})
 
-	test('[W3] listByProperty: booking starting exactly AT to (checkIn === to) → EXCLUDED (half-open)', async () => {
+	test('[W3] listByProperty: booking starting exactly AT to (checkIn === to) → INCLUDED (inclusive window)', async () => {
 		await seedAvailability(TENANT_A, PROP_A, RT_A, ['2027-10-05'])
 		const slices = buildSlices(['2027-10-05'])
 		const created = await repo.create(
@@ -551,12 +551,20 @@ describe('booking.repo', () => {
 			buildCtx(slices),
 		)
 		trackBooking(TENANT_A, PROP_A, created.checkIn, created.id)
-		// checkIn=2027-10-05 equals to=2027-10-05 (exclusive). Booking starts ON window-end → excluded.
+		// Canon 2026-05-18: `to` is INCLUSIVE window endpoint. Operator selects
+		// «Oct 1 — Oct 5» expecting Oct 5's booking visible. Per `[[silent-clamp-
+		// anti-pattern]]` — silent drop of last-day booking = operator-visible
+		// data corruption. Previous half-open `<` дропал Сидоров in_house May
+		// 17-21 за filter «from=18». Sibling fix landed одновременно с
+		// listAssignedBookingsByRoomTypeWindow.
 		const list = await repo.listByProperty(TENANT_A, PROP_A, {
 			from: '2027-10-01',
 			to: '2027-10-05',
 		})
-		expect(list.find((b) => b.id === created.id)).toBeUndefined()
+		const found = list.find((b) => b.id === created.id)
+		expect(found?.id).toBe(created.id)
+		expect(found?.checkIn).toBe('2027-10-05')
+		expect(found?.checkOut).toBe('2027-10-06')
 	})
 
 	test('[W4] listByProperty: booking entirely BEFORE window → EXCLUDED', async () => {

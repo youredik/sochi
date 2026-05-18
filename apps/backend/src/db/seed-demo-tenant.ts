@@ -35,6 +35,7 @@ import { createRatePlanFactory } from '../domains/ratePlan/ratePlan.factory.ts'
 import { createRoomFactory } from '../domains/room/room.factory.ts'
 import { createRoomTypeFactory } from '../domains/roomType/roomType.factory.ts'
 import { InvalidBookingTransitionError, NoInventoryError } from '../errors/domain.ts'
+import { frozenTimeProvider } from '../lib/time-provider.ts'
 import { sql } from './index.ts'
 import { assertSeedState } from './verify-seed.ts'
 import { dateFromIso, NULL_INT32, NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from './ydb-helpers.ts'
@@ -745,6 +746,13 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	const rateFactory = createRateFactory(sql, ratePlanFactory.service)
 	const availabilityFactory = createAvailabilityFactory(sql, roomTypeFactory.service)
 	void availabilityFactory
+	// Canon 2026-05-18 (Stripe Test Clocks): seed binds bookingFactory к frozen
+	// clock anchored на «today UTC-midnight». Pre-injection seed used wall-clock
+	// `new Date()` для confirmedAt/checkedInAt/checkedOutAt etc — bookings drifted
+	// minute-to-minute even с identical input plan. Now confirmedAt deterministic
+	// per booking offset, full re-run produces byte-identical state-transition ts.
+	// Production code path uses default `realTimeProvider` (wall clock).
+	const seedClock = frozenTimeProvider(todayUtc)
 	const bookingFactory = createBookingFactory(
 		sql,
 		rateFactory.repo,
@@ -752,6 +760,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		roomTypeFactory.service,
 		ratePlanFactory.service,
 		roomFactory.service,
+		seedClock,
 	)
 	const bookingService = bookingFactory.service
 	const SEED_ACTOR = newId('user') // typeid format (passes any future validation)

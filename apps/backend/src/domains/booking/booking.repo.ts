@@ -30,6 +30,7 @@ import {
 	NoInventoryError,
 	RoomAssignmentConflictError,
 } from '../../errors/domain.ts'
+import { realTimeProvider, type TimeProvider } from '../../lib/time-provider.ts'
 
 /**
  * YDB PRECONDITION_FAILED status (issueCode 2012 «Conflict with existing key»).
@@ -578,7 +579,7 @@ type BookingCreateContext = {
  *   - Immutable fields preserved across all transitions: id, tenantId,
  *     propertyId, checkIn (PK), createdAt, createdBy, confirmedAt.
  */
-export function createBookingRepo(sql: SqlInstance) {
+export function createBookingRepo(sql: SqlInstance, clock: TimeProvider = realTimeProvider) {
 	return {
 		async getById(tenantId: string, id: string): Promise<Booking | null> {
 			const [rows = []] = await sql<BookingRow[]>`
@@ -614,11 +615,19 @@ export function createBookingRepo(sql: SqlInstance) {
 			// below) absorbs the extra scan rows.
 			const from = opts.from ? dateFromIso(opts.from) : dateFromIso('1970-01-01')
 			const to = opts.to ? dateFromIso(opts.to) : dateFromIso('2099-12-31')
+			// **`<=` for `to`** (inclusive window endpoint): operator selects
+			// «May 10 — May 20» expecting BOTH endpoint nights visible. With
+			// `checkIn < to`, booking starting on day `to` itself was silently
+			// dropped (caught 2026-05-18 via [L1,L2] db.test failure). Per
+			// `[[silent-clamp-anti-pattern]]` — operator-visible data corruption.
+			// Note: booking-to-booking overlap checks (assignRoom line ~1612,
+			// findOverlappingBookingsByRoom line ~1767) keep half-open `<` because
+			// `checkOut` is exclusive end-of-stay, NOT inclusive window boundary.
 			const [rows = []] = await sql<BookingRow[]>`
 				SELECT * FROM booking
 				WHERE tenantId = ${tenantId}
 					AND propertyId = ${propertyId}
-					AND checkIn < ${to}
+					AND checkIn <= ${to}
 					AND checkOut > ${from}
 				ORDER BY checkIn ASC, id ASC
 			`
@@ -640,7 +649,7 @@ export function createBookingRepo(sql: SqlInstance) {
 			ctx: BookingCreateContext,
 		): Promise<Booking> {
 			const id = newId('booking')
-			const now = new Date()
+			const now = clock.now()
 			const nowTs = toTs(now)
 			const nights = nightsBetween(input.checkIn, input.checkOut)
 			const nightsCount = nights.length
@@ -852,7 +861,7 @@ export function createBookingRepo(sql: SqlInstance) {
 						throw new InvalidBookingTransitionError(current.status, 'cancelled')
 					}
 
-					const now = new Date()
+					const now = clock.now()
 					const nowTs = toTs(now)
 					const nights = nightsBetween(current.checkIn, current.checkOut)
 
@@ -915,7 +924,7 @@ export function createBookingRepo(sql: SqlInstance) {
 					if (current.status !== 'confirmed') {
 						throw new InvalidBookingTransitionError(current.status, 'in_house')
 					}
-					const now = new Date()
+					const now = clock.now()
 					const nowTs = toTs(now)
 					const newPin =
 						'assignedRoomId' in opts ? (opts.assignedRoomId ?? null) : current.assignedRoomId
@@ -981,7 +990,7 @@ export function createBookingRepo(sql: SqlInstance) {
 					if (current.status !== 'in_house') {
 						throw new InvalidBookingTransitionError(current.status, 'checked_out')
 					}
-					const now = new Date()
+					const now = clock.now()
 					// Release per-night occupancy — guest is gone, room becomes available
 					// for future bookings. `sold` counter intentionally NOT decremented
 					// (revenue happened, audit retain). Occupancy is physical-state,
@@ -1030,7 +1039,7 @@ export function createBookingRepo(sql: SqlInstance) {
 					if (current.status !== 'confirmed') {
 						throw new InvalidBookingTransitionError(current.status, 'no_show')
 					}
-					const now = new Date()
+					const now = clock.now()
 					const next: TransitionOverride = {
 						status: 'no_show',
 						updatedAt: now,
@@ -1091,7 +1100,7 @@ export function createBookingRepo(sql: SqlInstance) {
 						throw new InvalidBookingAmendStateError(current.status, 'move-dates')
 					}
 
-					const now = new Date()
+					const now = clock.now()
 					const nowTs = toTs(now)
 					const oldNights = nightsBetween(current.checkIn, current.checkOut)
 					const newNights = nightsBetween(ctx.newCheckIn, ctx.newCheckOut)
@@ -1303,7 +1312,7 @@ export function createBookingRepo(sql: SqlInstance) {
 						)
 					}
 
-					const now = new Date()
+					const now = clock.now()
 					const totalMicros = ctx.timeSlices.reduce((acc, s) => acc + s.grossMicros, 0n)
 					await upsertAmendedBookingRow(tx, current, {
 						updatedAt: now,
@@ -1386,7 +1395,7 @@ export function createBookingRepo(sql: SqlInstance) {
 						)
 					}
 
-					const now = new Date()
+					const now = clock.now()
 					const nowTs = toTs(now)
 					const nights = nightsBetween(current.checkIn, current.checkOut)
 
@@ -1546,7 +1555,7 @@ export function createBookingRepo(sql: SqlInstance) {
 						throw new InvalidBookingAmendStateError(current.status, 'change-guests-count')
 					}
 
-					const now = new Date()
+					const now = clock.now()
 					await upsertAmendedBookingRow(tx, current, {
 						updatedAt: now,
 						updatedBy: ctx.actorUserId,
@@ -1617,7 +1626,7 @@ export function createBookingRepo(sql: SqlInstance) {
 						throw new RoomAssignmentConflictError('room_occupied', `bookingId=${overlapRows[0].id}`)
 					}
 
-					const now = new Date()
+					const now = clock.now()
 					const nowTs = toTs(now)
 					const nights = nightsBetween(current.checkIn, current.checkOut)
 
@@ -1791,13 +1800,15 @@ export function createBookingRepo(sql: SqlInstance) {
 		): Promise<Booking[]> {
 			const fromD = dateFromIso(from)
 			const toD = dateFromIso(to)
+			// `<=` for `toD` (inclusive window endpoint) — sibling fix к listByProperty.
+			// PropertyBlock + chessboard widget call this с inclusive `to` boundary.
 			const [rows = []] = await sql<BookingRow[]>`
 				SELECT * FROM booking
 				WHERE tenantId = ${tenantId}
 					AND propertyId = ${propertyId}
 					AND roomTypeId = ${roomTypeId}
 					AND status IN ('confirmed', 'in_house')
-					AND checkIn < ${toD}
+					AND checkIn <= ${toD}
 					AND checkOut > ${fromD}
 					AND assignedRoomId IS NOT NULL
 			`
