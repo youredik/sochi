@@ -1,0 +1,34 @@
+-- 0064_slot_reconciliation_consumer.sql — Variant 3 absolute strongest (2026-05-18)
+--
+-- Adds `slot_reconciliation_writer` consumer on `booking/booking_events` topic.
+-- This consumer reads booking INSERT events и ensures every active booking has
+-- corresponding `roomTypeNightSlot` rows.
+--
+-- Why this exists:
+--   Migration 0063 added the slot table с PK uniqueness, but app-level
+--   enforcement (via booking.repo.create) only fires when callers ACTUALLY
+--   go through the repo. Bypass paths (seed scripts, channel-manager push
+--   handlers, manual UPSERT INTO booking, future migrations) write booking
+--   rows directly без allocating slots → invariant dormant для those rows.
+--
+-- This CDC consumer closes that gap:
+--   - On every booking INSERT (CDC newImage без oldImage)
+--   - If status IN ('confirmed', 'in_house') AND idxSlotByBooking returns 0
+--     rows для this booking
+--   - Auto-allocate lowest-free slot per night per (roomType, date)
+--   - On PK collision (slot taken by concurrent winner): log warning, skip
+--   - Idempotent: re-delivery sees existing slots, returns без write
+--
+-- Result: «strongest possible» guarantee under ALL write paths — even raw
+-- UPSERT INTO booking. Within ~seconds of bypass-write, slot rows materialize
+-- and the invariant becomes active for the new booking too.
+--
+-- 10th consumer на booking_events (после: activity_writer, folio_balance_writer,
+-- notification_writer, folio_creator_writer, migration_registration_enqueuer,
+-- tourism_tax_writer, cancel_fee_writer, channel_broadcast_writer,
+-- sse_booking_writer). Per `[[backend-recon-end-to-end]]` G10 — каждый consumer
+-- maintains independent commit cursor.
+--
+-- Canon: `[[overbooking-prevention-canon-2026-05-18]]` Variant 3 absolute.
+
+ALTER TOPIC `booking/booking_events` ADD CONSUMER `slot_reconciliation_writer`;

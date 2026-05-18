@@ -96,6 +96,7 @@ import { createChannelBroadcastHandler } from './workers/handlers/channel-broadc
 import { createCheckoutFinalizerHandler } from './workers/handlers/checkout-finalizer.ts'
 import { createFolioBalanceHandler } from './workers/handlers/folio-balance.ts'
 import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
+import { createSlotReconciliationHandler } from './workers/handlers/slot-reconciliation.ts'
 import { createMigrationRegistrationEnqueuerHandler } from './workers/handlers/migration-registration-enqueuer.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
 import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
@@ -552,6 +553,18 @@ const sseBookingConsumer = startCdcConsumer(driver, sql, {
 	label: 'sse:booking',
 })
 
+// Variant 3 «absolute strongest» overbooking-prevention (2026-05-18) —
+// reconciles `roomTypeNightSlot` rows для booking INSERTs that bypassed
+// `booking.repo.create` (seed scripts, future channel-push handlers, raw
+// UPSERT). Within seconds of bypass-write, slot rows materialize и DB-level
+// PK invariant activates. Per migration 0064.
+const slotReconciliationConsumer = startCdcConsumer(driver, sql, {
+	topic: 'booking/booking_events',
+	consumer: 'slot_reconciliation_writer',
+	projection: createSlotReconciliationHandler(logger),
+	label: 'slot_reconciliation:booking',
+})
+
 // Night-audit cron — posts per-night accommodation lines on `in_house`
 // bookings at 03:00 Europe/Moscow. Boot catch-up handles restart-during-window
 // gaps. Idempotent via deterministic folioLine.id (PK collision = no-op).
@@ -610,6 +623,7 @@ const allCdcConsumers = [
 	cancelFeeConsumer,
 	channelBroadcastConsumer,
 	sseBookingConsumer,
+	slotReconciliationConsumer,
 ] as const
 
 // Graceful shutdown: SIGTERM (Serverless Container / K8s) drains the CDC

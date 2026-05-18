@@ -817,6 +817,17 @@ export function createBookingRepo(sql: SqlInstance) {
 				if (err instanceof Error && err.cause instanceof NoInventoryError) throw err.cause
 				if (err instanceof Error && err.cause instanceof BookingExternalIdTakenError)
 					throw err.cause
+				// PK conflict в slot allocation (migration 0063) → race lost к
+				// concurrent writer. Translate к NoInventoryError so operator sees
+				// canonical 409 «no inventory» instead of generic 500.
+				if (
+					isPkOrUniqueConflict(err) ||
+					(err instanceof Error && isPkOrUniqueConflict(err.cause))
+				) {
+					throw new NoInventoryError(
+						'concurrent booking claimed slot — effective allotment exhausted',
+					)
+				}
 				throw err
 			}
 		},

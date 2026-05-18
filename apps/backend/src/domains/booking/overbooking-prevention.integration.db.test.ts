@@ -713,4 +713,66 @@ describe('overbooking-prevention canon (db invariant)', () => {
 			.idempotent(true)
 		expect(Number(rows[0]?.slotNumber ?? -1)).toBe(0) // lowest-free reused
 	})
+
+	test('[SL6] markNoShow KEEPS slot rows (matches sold-retain canon — audit retain)', async () => {
+		const dates = ['2036-06-10']
+		const { prop, rt, rp } = await seedChain({ dates })
+		const b = await booking.create(
+			TENANT_A,
+			prop.id,
+			buildBookingInput(rt, rp, { checkIn: '2036-06-10', checkOut: '2036-06-11' }),
+			USER_A,
+		)
+		await trackBookingCleanup(b)
+		expect(await countSlotsForBooking(b.id)).toBe(1)
+
+		await booking.markNoShow(TENANT_A, b.id, { reason: 'late' }, USER_A)
+		// No-show retains slot — room is «committed» for audit + revenue.
+		// Symmetric to availability.sold retention.
+		expect(await countSlotsForBooking(b.id)).toBe(1)
+	})
+
+	test('[SL7] race: Promise.all 3 concurrent creates с allotment=1 → exactly 1 wins, 2 throw NoInventoryError', async () => {
+		const dates = ['2036-07-10']
+		const { prop, rt, rp } = await seedChain({ dates, allotment: 1 })
+		// 3 concurrent creates. Per YDB Serializable + range-locks: exactly one
+		// wins, two lose (TLI retry → fresh state → NoInventoryError, or PK
+		// conflict translated к NoInventoryError via outer catch).
+		const results = await Promise.allSettled([
+			booking.create(
+				TENANT_A,
+				prop.id,
+				buildBookingInput(rt, rp, { checkIn: '2036-07-10', checkOut: '2036-07-11' }),
+				USER_A,
+			),
+			booking.create(
+				TENANT_A,
+				prop.id,
+				buildBookingInput(rt, rp, { checkIn: '2036-07-10', checkOut: '2036-07-11' }),
+				USER_A,
+			),
+			booking.create(
+				TENANT_A,
+				prop.id,
+				buildBookingInput(rt, rp, { checkIn: '2036-07-10', checkOut: '2036-07-11' }),
+				USER_A,
+			),
+		])
+		const successes = results.filter((r) => r.status === 'fulfilled')
+		const failures = results.filter((r) => r.status === 'rejected')
+		expect(successes.length).toBe(1)
+		expect(failures.length).toBe(2)
+		// Track winner for cleanup
+		const winner = (successes[0] as PromiseFulfilledResult<Booking>).value
+		await trackBookingCleanup(winner)
+
+		// All failures should be NoInventoryError (canonical 409, NOT generic 500)
+		for (const f of failures) {
+			const reason = (f as PromiseRejectedResult).reason
+			expect(reason).toBeInstanceOf(NoInventoryError)
+		}
+
+		// Final state: 1 slot row total
+		expect(await countSlotsForNight(prop.id, rt.id, '2036-07-10')).toBe(1)
+	})
 })
