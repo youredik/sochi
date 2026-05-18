@@ -1,12 +1,13 @@
+import { computePosition, flip, offset, shift } from '@floating-ui/dom'
 import { useId } from 'react'
 import { createPortal } from 'react-dom'
 import { formatDayOnly } from '@/lib/format-ru'
 
 interface PopoverHandlers {
 	popoverId: string
-	onMouseEnter: () => void
+	onMouseEnter: (e: React.MouseEvent<HTMLElement>) => void
 	onMouseLeave: () => void
-	onFocus: () => void
+	onFocus: (e: React.FocusEvent<HTMLElement>) => void
 	onBlur: () => void
 }
 
@@ -72,15 +73,39 @@ export function BookingBandTooltip({
 }: Props) {
 	const popoverId = `band-tooltip-${useId().replace(/:/g, '-')}-${bookingId}`
 
-	const showPopover = () => {
+	// G11 v3.6 (2026-05-18) — Anchor tooltip к trigger via Floating UI.
+	// Pre-fix: native `[popover]` без anchor positioning defaults к top-left of
+	// viewport (HTML spec). Tooltip appeared в corner regardless of band
+	// location. Empirically caught когда user hovered band, saw text floating
+	// over sidebar.
+	//
+	// Floating UI canon 2026 (per @floating-ui/dom 1.7.x docs): computePosition
+	// returns x/y relative к offsetParent; combined with `position: fixed` +
+	// margin:0 reset, places popover correctly. middleware:
+	//   - offset(6): 6px gap from band
+	//   - flip(): switch к bottom если top runs out of viewport
+	//   - shift({padding:8}): keep within viewport edges
+	const showPopover = (trigger: HTMLElement | null) => {
 		const el = document.getElementById(popoverId) as HTMLElement | null
-		if (el && typeof el.showPopover === 'function') {
-			try {
-				el.showPopover()
-			} catch {
-				/* already-shown OR popover API unsupported */
-			}
+		if (!el || typeof el.showPopover !== 'function') return
+		// Show synchronously first (popover API needs to be шоw'n к compute
+		// dimensions для Floating UI). Position async after Promise resolves.
+		try {
+			el.showPopover()
+		} catch {
+			/* already-shown */
 		}
+		if (!trigger) return
+		void computePosition(trigger, el, {
+			placement: 'top',
+			middleware: [offset(6), flip(), shift({ padding: 8 })],
+			strategy: 'fixed',
+		}).then(({ x, y }) => {
+			el.style.position = 'fixed'
+			el.style.margin = '0'
+			el.style.left = `${x}px`
+			el.style.top = `${y}px`
+		})
 	}
 	const hidePopover = () => {
 		const el = document.getElementById(popoverId) as HTMLElement | null
@@ -134,9 +159,9 @@ export function BookingBandTooltip({
 		<>
 			{children({
 				popoverId,
-				onMouseEnter: showPopover,
+				onMouseEnter: (e) => showPopover(e.currentTarget),
 				onMouseLeave: hidePopover,
-				onFocus: showPopover,
+				onFocus: (e) => showPopover(e.currentTarget),
 				onBlur: hidePopover,
 			})}
 			{/* Portal к document.body — escapes role="row" parent so axe

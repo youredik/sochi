@@ -545,6 +545,13 @@ export function Chessboard() {
 							// `auto` → tall band content (truncated label wrapping) silently
 							// grows row, cascade-affecting all rows downstream via
 							// `display: contents` row wrappers.
+							//
+							// G11 v3.6 (2026-05-18 second fix) — Header row needs explicit
+							// 48px минимум (2-line «18\nпн» content + p-2 padding overflows
+							// 40px). Empirically caught когда text-xs line-height collapsed
+							// header content в lane 2 area covering bands. `gridTemplateRows`
+							// specifies row 1 = 48px; subsequent rows fall к gridAutoRows.
+							gridTemplateRows: '48px',
 							gridAutoRows: '40px',
 						}}
 					>
@@ -717,8 +724,8 @@ export function Chessboard() {
 														onMouseEnter={onMouseEnter}
 														onMouseLeave={onMouseLeave}
 														onBlur={onBlur}
-														onFocus={() => {
-															onFocus()
+														onFocus={(e) => {
+															onFocus(e)
 															setFocus({ rowIdx, colIdx: ariaColIdx })
 														}}
 													>

@@ -41,16 +41,16 @@ function renderTooltip(overrides?: Partial<React.ComponentProps<typeof BookingBa
 					<button
 						type="button"
 						aria-details={popoverId}
-						onMouseEnter={() => {
-							onMouseEnter()
+						onMouseEnter={(e) => {
+							onMouseEnter(e)
 							onMouseEnterSpy()
 						}}
 						onMouseLeave={() => {
 							onMouseLeave()
 							onMouseLeaveSpy()
 						}}
-						onFocus={() => {
-							onFocus()
+						onFocus={(e) => {
+							onFocus(e)
 							onFocusSpy()
 						}}
 						onBlur={() => {
