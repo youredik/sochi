@@ -26,6 +26,7 @@
  * Idempotent: deterministic IDs → safe re-run. Cron periodically refreshes.
  */
 
+import { newId } from '@horeca/shared'
 import { sql } from './index.ts'
 import { dateFromIso, NULL_INT32, NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from './ydb-helpers.ts'
 
@@ -712,7 +713,13 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	for (let i = 0; i < BOOKING_PLAN.length; i++) {
 		const b = BOOKING_PLAN[i]
 		if (!b) continue
-		const guestId = `demo-guest-${String(i).padStart(2, '0')}`
+		// Canonical typeid prefix `gst_<26-char-ulid>` per ID_PREFIXES canon.
+		// Pre-2026-05-18 used `demo-guest-NN` literal — route param Zod regex
+		// `^gst_[0-9a-hjkmnp-tv-z]{26}$` rejected → 400 on GET /guests/:id.
+		// `[[id-prefixes-check-before-test]]` canon caught this same class
+		// earlier для roomType. DELETE-before-UPSERT pattern (Step 9 start)
+		// keeps idempotency at semantic level (always N bookings post-seed).
+		const guestId = newId('guest')
 		const surname = SURNAMES[i % SURNAMES.length] ?? 'Иванов'
 		const isMale = i % 2 === 0
 		const firstName = (isMale ? FIRST_NAMES_M : FIRST_NAMES_F)[Math.floor(i / 2) % 5] ?? 'Алексей'
@@ -752,7 +759,9 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		const paidMicros = b.status === 'cancelled' ? 0n : totalMicros
 		const totalRub = (Number(totalMicros) / 1_000_000_000).toFixed(2)
 		const paidRub = (Number(paidMicros) / 1_000_000_000).toFixed(2)
-		const bookingId = `demo-booking-${String(i).padStart(2, '0')}`
+		// Canonical typeid prefix `book_<26-char-ulid>` per ID_PREFIXES.
+		// Same fix as guestId — see comment above.
+		const bookingId = newId('booking')
 		const roomTypeId = roomTypeIds[b.roomTypeIdx] ?? DEMO_ROOM_TYPE_DELUXE_ID
 		const ratePlanId =
 			ratePlanIds[b.roomTypeIdx]?.[b.ratePlanIdx] ?? 'demo-rateplan-deluxe-bar-flex'
