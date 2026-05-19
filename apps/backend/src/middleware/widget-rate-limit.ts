@@ -15,24 +15,35 @@
  * Storage: in-memory `MemoryStore` (default). Single-instance YC Serverless
  * Container OK; multi-instance requires Redis/Unstorage carry-forward.
  *
- * IP extraction: `X-Forwarded-For` leftmost (canonical YC ALB header), fallback
- * `X-Real-IP`, fallback literal `'anonymous'` (dev / direct hits). NEVER use
- * `c.req.header('host')` — same value across distinct clients.
+ * IP extraction (B7 fix 2026-05-19): right-most-trusted-proxy canon via shared
+ * `lib/net/client-ip.ts` `resolveClientIpSync`. Supersedes legacy leftmost-wins
+ * which admitted CVE-2025-68949-class XFF spoofing for rate-limit bypass. The
+ * sync variant skips `getConnInfo` TCP-peer lookup (hono-rate-limiter
+ * `keyGenerator` is sync) и right-walks XFF instead. Production deploys behind
+ * Yandex Cloud ALB get the full canon via TRUSTED_PROXY_CIDRS env.
  */
 import type { Context, MiddlewareHandler } from 'hono'
 import { rateLimiter } from 'hono-rate-limiter'
+import { env } from '../env.ts'
 import type { AppEnv } from '../factory.ts'
+import { resolveClientIpSync } from '../lib/net/client-ip.ts'
 
-/** Extract client IP с canonical fallback chain. */
+/**
+ * Extract client IP via right-most-trusted-proxy canon (sync variant —
+ * `keyGenerator` cannot await). Returns `'anonymous'` if no IP determinable.
+ *
+ * Constructs a `Headers` object from the two relevant fields the canon
+ * consumes (`x-forwarded-for` + `x-real-ip`) rather than relying на
+ * `c.req.raw.headers` — keeps the surface compatible с structural Hono
+ * Context mocks used в unit tests.
+ */
 export function extractClientIp(c: Context<AppEnv>): string {
-	const forwardedFor = c.req.header('x-forwarded-for')
-	if (forwardedFor) {
-		const first = forwardedFor.split(',')[0]?.trim()
-		if (first) return first
-	}
-	const realIp = c.req.header('x-real-ip')
-	if (realIp) return realIp.trim()
-	return 'anonymous'
+	const headers = new Headers()
+	const xff = c.req.header('x-forwarded-for')
+	if (xff) headers.set('x-forwarded-for', xff)
+	const xri = c.req.header('x-real-ip')
+	if (xri) headers.set('x-real-ip', xri)
+	return resolveClientIpSync(headers, env.TRUSTED_PROXY_CIDRS)
 }
 
 function widgetRateLimitKey(c: Context<AppEnv>): string {

@@ -27,7 +27,9 @@ import { zValidator } from '@hono/zod-validator'
 import { widgetBookingCommitWireInputSchema } from '@horeca/shared'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { env } from '../../env.ts'
 import type { AppEnv } from '../../factory.ts'
+import { extractClientIpFromContext } from '../../lib/net/client-ip.ts'
 import type { idempotencyMiddleware } from '../../middleware/idempotency.ts'
 import {
 	widgetBurstRateLimiter,
@@ -103,12 +105,9 @@ export function createWidgetBookingCreateRoutes(deps: WidgetBookingCreateRoutesD
 				const body = c.req.valid('json')
 
 				// Extract IP + UA для consentLog audit-trail (152-ФЗ ст. 22.1).
-				// Behind YC ALB: leftmost X-Forwarded-For = client; fallback chain.
-				const forwardedFor = c.req.header('x-forwarded-for')
-				const ipAddress =
-					(forwardedFor ? forwardedFor.split(',')[0]?.trim() : null) ??
-					c.req.header('x-real-ip') ??
-					'unknown'
+				// Right-most-trusted-proxy canon (B7 2026-05-19) — defends consent-log
+				// audit trail against XFF spoofing by direct attackers.
+				const ipAddress = extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)
 				const userAgent = c.req.header('user-agent') ?? null
 				const idempotencyKey = c.req.header('Idempotency-Key') ?? ''
 

@@ -83,6 +83,7 @@ import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
 import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
 import { createMagicLinkSecretResolver } from './lib/magic-link/secret.ts'
+import { evaluateReadiness } from './lib/readiness.ts'
 import { logger } from './logger.ts'
 import { loadTenantMode } from './middleware/demo-lock.ts'
 import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
@@ -921,54 +922,25 @@ const routes = app
 		),
 	)
 	.get('/health/ready', async (c) => {
-		// Composite readiness: YDB reachable + production-mode invariants hold.
-		// Fail-closed: ANY check fails → 503.
-		//
-		// Info-leak defense (2026-05-19): the public payload returns ONLY check
-		// names + ok/fail boolean. YDB stack traces, exception messages, и
-		// adapter names go к structured logger (operator-visible) — NOT в the
-		// response body (which ALB probes log к access logs, possibly attacker-
-		// observable via misconfigured CloudWatch / surfacing through forwarders).
-		// Mirrors OWASP API3:2023 «Excessive Data Exposure».
-		const checks: { name: string; ok: boolean }[] = []
-		// 1. YDB ping
-		try {
-			const result = await sql<[{ ok: number }]>`SELECT 1 AS ok`
-			const ydbOk = result[0]?.[0]?.ok === 1
-			checks.push({ name: 'ydb', ok: ydbOk })
-			if (!ydbOk) {
-				c.var.logger.error({ check: 'ydb' }, 'readiness: YDB probe returned unexpected shape')
-			}
-		} catch (err) {
-			c.var.logger.error({ err, check: 'ydb' }, 'readiness: YDB probe threw')
-			checks.push({ name: 'ydb', ok: false })
-		}
-		// 2. Adapter readiness per APP_MODE
-		const whitelist = new Set(env.APP_MODE_PERMITTED_MOCK_ADAPTERS)
-		const offenders = listAdapters().filter(
-			(a) => (a.mode === 'mock' || a.mode === 'sandbox') && !whitelist.has(a.name),
-		)
-		if (env.APP_MODE === 'production' && offenders.length > 0) {
-			c.var.logger.error(
-				{
-					check: 'adapters',
-					offenderCount: offenders.length,
-					offenderNames: offenders.map((o) => o.name),
-				},
-				'readiness: non-live adapters detected в production',
-			)
-			checks.push({ name: 'adapters', ok: false })
-		} else {
-			checks.push({ name: 'adapters', ok: true })
-		}
-		const allOk = checks.every((ck) => ck.ok)
+		// Composite readiness via pure evaluator (see lib/readiness.ts).
+		// Public payload contract pinned by lib/readiness.test.ts.
+		const result = await evaluateReadiness({
+			appMode: env.APP_MODE,
+			permittedMockAdapters: env.APP_MODE_PERMITTED_MOCK_ADAPTERS,
+			adapters: listAdapters(),
+			probeYdb: async () => {
+				const rows = await sql<[{ ok: number }]>`SELECT 1 AS ok`
+				return rows[0]?.[0]?.ok === 1
+			},
+			logger: c.var.logger,
+		})
 		return c.json(
 			{
-				status: allOk ? ('ok' as const) : ('degraded' as const),
-				checks,
+				status: result.status,
+				checks: result.checks,
 				time: new Date().toISOString(),
 			},
-			allOk ? 200 : 503,
+			result.statusCode,
 		)
 	})
 	.get('/health/db', async (c) => {

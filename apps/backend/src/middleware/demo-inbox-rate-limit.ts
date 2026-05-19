@@ -12,8 +12,9 @@
  * Container deployment OK; multi-replica = key federation via Unstorage carry-
  * forward (future).
  *
- * IP extraction: leftmost `X-Forwarded-For` per canonical YC ALB header,
- * fallback `X-Real-IP`, fallback `'anonymous'` (matches widget canon).
+ * IP extraction: right-most-trusted-proxy canon via shared
+ * `widget-rate-limit.extractClientIp` (B7 2026-05-19 — supersedes legacy
+ * leftmost-wins which admitted XFF spoofing for rate-limit bucket bypass).
  */
 import type { Context, MiddlewareHandler } from 'hono'
 import { rateLimiter } from 'hono-rate-limiter'

@@ -43,6 +43,10 @@ import type { PaymentService } from './payment.service.ts'
 import type { PaymentRepo } from './payment.repo.ts'
 import type { PaymentWebhookEventRepo } from './payment-webhook-event.repo.ts'
 import { isIpInCidr } from '../../lib/net/cidr.ts'
+import {
+	resolveClientIp as rightMostTrustedProxyResolveClientIpShared,
+	type ResolveClientIpInput as SharedResolveClientIpInput,
+} from '../../lib/net/client-ip.ts'
 
 export interface PaymentWebhookRoutesDeps {
 	readonly yookassaProvider: PaymentProvider
@@ -85,70 +89,18 @@ const PROVIDER_YOOKASSA: PaymentProviderCode = 'yookassa'
 const SYSTEM_ACTOR = 'payment-webhook'
 
 /**
- * Inputs for `resolveClientIp` — separated so route handler can call с either
- * actual Hono `c` (production) OR synthetic shape (tests, without TCP peer info).
+ * Inputs for `resolveClientIp` — re-export from canonical shared module so
+ * tests / downstream consumers can use either alias.
  */
-export interface ResolveClientIpInput {
-	readonly headers: Headers
-	/**
-	 * Actual TCP peer address (e.g. from `hono/bun` `getConnInfo(c).remote.address`).
-	 * `null` если runtime cannot expose (most tests). When `null`, function falls
-	 * back к XFF/x-real-ip parsing (test convenience) — production wires real value.
-	 */
-	readonly tcpRemoteAddress: string | null
-	readonly trustedProxyCidrs: readonly string[]
-}
+export type ResolveClientIpInput = SharedResolveClientIpInput
 
 /**
- * Right-most-trusted-proxy IP resolution canon (Q2 2026, supersedes legacy
- * "first IP wins" anti-pattern that admitted CVE-2025-68949-class spoofs).
- *
- * Decision tree:
- *
- *   1. tcpRemoteAddress set AND NOT in trustedProxyCidrs →
- *      Direct/untrusted hop. Ignore XFF entirely (attacker-controlled). Return TCP.
- *
- *   2. tcpRemoteAddress set AND IS in trustedProxyCidrs →
- *      We are behind own reverse proxy. Walk XFF right-to-left, skipping trusted
- *      hops; first non-trusted entry = real client. If all hops trusted (rare):
- *      fall back to chain[0] per MDN best-effort.
- *
- *   3. tcpRemoteAddress null (test harnesses) → best-effort XFF/x-real-ip parsing
- *      with same right-to-left walk.
+ * Right-most-trusted-proxy IP resolution canon (Q2 2026). Re-export of shared
+ * `apps/backend/src/lib/net/client-ip.ts` `resolveClientIp` для existing
+ * import sites; canon was unified 2026-05-19 B7 refactor (previously inline
+ * duplicate here + leftmost variants в widget-rate-limit / RUM).
  */
-export function rightMostTrustedProxyResolveClientIp(input: ResolveClientIpInput): string | null {
-	const { headers, tcpRemoteAddress, trustedProxyCidrs } = input
-	const isTrustedTcpPeer =
-		tcpRemoteAddress !== null && trustedProxyCidrs.some((c) => isIpInCidr(tcpRemoteAddress, c))
-
-	if (tcpRemoteAddress !== null && !isTrustedTcpPeer) {
-		// Direct TCP from untrusted source — XFF is fully attacker-controlled.
-		// Trust ONLY the TCP peer.
-		return tcpRemoteAddress
-	}
-
-	const xff = headers.get('x-forwarded-for')
-	if (xff !== null && xff.length > 0) {
-		const chain = xff
-			.split(',')
-			.map((s) => s.trim())
-			.filter((s) => s.length > 0)
-		// Walk right-to-left, skip trusted proxies; first non-trusted = real client.
-		for (let i = chain.length - 1; i >= 0; i--) {
-			const ip = chain[i]
-			if (ip === undefined) continue
-			const trusted = trustedProxyCidrs.some((c) => isIpInCidr(ip, c))
-			if (!trusted) return ip
-		}
-		// All hops trusted (edge case — chain ⊆ trustedProxyCidrs). Fall through
-		// к left-most entry (claimed originator per MDN canon — best effort).
-		const first = chain[0]
-		if (first !== undefined) return first
-	}
-	const xri = headers.get('x-real-ip')
-	if (xri !== null && xri.length > 0) return xri
-	return tcpRemoteAddress
-}
+export const rightMostTrustedProxyResolveClientIp = rightMostTrustedProxyResolveClientIpShared
 
 function isIpAllowed(ip: string, cidrs: readonly string[]): boolean {
 	for (const cidr of cidrs) {

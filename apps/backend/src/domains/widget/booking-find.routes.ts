@@ -33,6 +33,7 @@ import { cors } from 'hono/cors'
 import { z } from 'zod'
 import { env } from '../../env.ts'
 import type { AppEnv } from '../../factory.ts'
+import { extractClientIpFromContext } from '../../lib/net/client-ip.ts'
 import {
 	widgetBurstRateLimiter,
 	widgetSteadyRateLimiter,
@@ -186,10 +187,7 @@ export function createBookingFindRoutes(deps: BookingFindRoutesDeps) {
 		.post('/:tenantSlug/booking/find', zValidator('json', bookingFindRequestSchema), async (c) => {
 			const input = c.req.valid('json')
 			const tenantId = c.var.tenantId
-			const clientIp =
-				c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
-				c.req.header('x-real-ip') ??
-				'anonymous'
+			const clientIp = extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)
 			const tupleKey = makeTupleKey(input.email, input.reference)
 			const tupleResult = tupleStore.check(tupleKey, Date.now())
 

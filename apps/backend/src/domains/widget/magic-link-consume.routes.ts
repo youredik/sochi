@@ -25,8 +25,10 @@
 
 import { Hono } from 'hono'
 import { setSignedCookie } from 'hono/cookie'
+import { env } from '../../env.ts'
 import type { AppEnv } from '../../factory.ts'
 import { extractTenantIdFromJwtUnsafe } from '../../lib/magic-link/jwt.ts'
+import { extractClientIpFromContext } from '../../lib/net/client-ip.ts'
 import type { MagicLinkService } from './magic-link.service.ts'
 import { MagicLinkVerifyError } from './magic-link.service.ts'
 
@@ -170,7 +172,7 @@ export function createMagicLinkConsumeRoutes(deps: MagicLinkConsumeRoutesDeps) {
 				return c.json(body, status)
 			}
 
-			const fromIp = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'anonymous'
+			const fromIp = extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)
 			const fromUa = c.req.header('user-agent') ?? null
 
 			try {
