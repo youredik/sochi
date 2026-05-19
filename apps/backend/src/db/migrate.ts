@@ -288,9 +288,12 @@ export async function executeWithSchemeRetry(
  *   - Dedicated YDB users lose 48h replay window — acceptable for at-least-
  *     once consumer recovery (offset-based, not retention-based)
  *
- * Если в будущем Dedicated production требует full 72h replay, gate this
- * via env var `YDB_TIER=dedicated` (skip rewrite). Demo / Serverless stays
- * canon by default.
+ * **Code behavior** (immutable canon at this commit): rewrite is UNCONDITIONAL —
+ * applies на любом deployment (Serverless OR Dedicated). Trade-off: Dedicated
+ * users lose 48h replay window. Acceptable per stankoff canon (offset-based
+ * recovery via _migration_history, retention is не load-bearing for correctness).
+ * Если в будущем Dedicated production требует full 72h replay, add env gate
+ * `YDB_TIER=dedicated` here с corresponding skip — **NOT implemented сейчас**.
  */
 export function applyServerlessCompat(stmt: string): string {
 	// Match Interval("PT<N>H") where N > 24. YC Serverless Tier A hard cap is

@@ -1,5 +1,30 @@
 # =============================================================================
-# Sochi HoReCa — SourceCraft CI/CD (Q2 2026 canon, May 2026)
+# DRAFT — NOT YET WIRED (2026-05-19)
+# =============================================================================
+#
+# This file is .draft suffix INTENTIONALLY (renamed from ci.yaml) — SourceCraft
+# не picks up .draft extension. Reasons:
+#
+#   1. revision-deploy task uses `cube: yc-sls-container-deploy` syntax which
+#      research subagent 2026-05-19 EMPIRICALLY REFUTED. SourceCraft canon
+#      requires either:
+#        (a) native cube: `image: cr.yandex/sourcecraft/yc-iam:latest` + script:
+#        (b) GH-Actions bridge: `action: yc-actions/yc-sls-container-deploy@v4`
+#      (`uses:` syntax is GH Actions, NOT SourceCraft.)
+#
+#   2. Quality / infra-plan / infra-apply workflows NOT end-to-end verified.
+#      Current deploy was MANUAL via `yc serverless container revision deploy`
+#      + `aws s3 sync` (Day 0/1 manual deploy log in handover memo).
+#
+# DO NOT rename back к ci.yaml until BOTH:
+#   - Action-syntax replacement verified against current SourceCraft docs +
+#     successful run on test PR/branch
+#   - Empirical smoke: full deploy через CI produces working revision
+#
+# Rename trigger: Day 2 CI fix task per handover_2026_05_19.md
+#
+# =============================================================================
+# Sochi HoReCa — SourceCraft CI/CD (Q2 2026 canon — DRAFT pending verification)
 # =============================================================================
 #
 # Workflows:
