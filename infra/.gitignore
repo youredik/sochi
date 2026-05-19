@@ -1,0 +1,35 @@
+# OpenTofu / Terraform working directory
+.terraform/
+.terraform.lock.hcl.bak
+
+# Local state copies (state is в S3 backend; should never be local)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash logs
+crash.log
+crash.*.log
+
+# CLI plan output (don't commit plans — они expire)
+*.tfplan
+plan.out
+
+# Sensitive override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Lockfiles per-OS (commit .terraform.lock.hcl от Linux/CI)
+# Uncomment if multi-platform causes lockfile churn:
+# .terraform.lock.hcl
+
+# Env vars files (containing secrets — never commit)
+.env
+.env.local
+.envrc
+
+# Local config
+.terraformrc
+terraform.rc
