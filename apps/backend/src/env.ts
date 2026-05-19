@@ -89,6 +89,12 @@ export const envSchema = z.object({
 				.filter(Boolean),
 		),
 
+	// Override gate для APP_MODE=production + DEMO_DEPLOYMENT=true foot-shot
+	// combination (B1 hardening, 2026-05-19). DEFAULT FALSE — refuse to start.
+	// Operator must consciously opt-in. Only intended для V2 multi-mode
+	// architecture где demo + production tenants coexist в single deployment.
+	APP_MODE_PERMITTED_DEMO_OVERRIDE: booleanEnv(false),
+
 	// YDB
 	YDB_CONNECTION_STRING: z.string().min(1),
 

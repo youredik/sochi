@@ -896,6 +896,64 @@ const routes = app
 			200,
 		),
 	)
+	// B5 (2026-05-19): Bun production canon (Q2 2026) — liveness vs readiness
+	// split per Kubernetes / Yandex Cloud ALB health-check contract:
+	//
+	//   /health/live  — process pulse. ALB liveness probe binds here. Returns
+	//                   200 unconditionally если process is reachable. Fail =
+	//                   process restart (not just traffic-drain).
+	//   /health/ready — readiness probe. ALB traffic-routing binds here. 200
+	//                   only когда YDB reachable + all registered adapters
+	//                   are в expected state (per APP_MODE). 503 = drain.
+	//
+	// Legacy /health (above) retained для backwards compat (canon marker check
+	// per `feedback_no_disrupt_other_dev`). /health/db + /health/adapters
+	// remain как deep-diagnostic sub-endpoints.
+	.get('/health/live', (c) =>
+		c.json(
+			{
+				status: 'ok' as const,
+				time: new Date().toISOString(),
+			},
+			200,
+		),
+	)
+	.get('/health/ready', async (c) => {
+		// Composite readiness: YDB reachable + production-mode invariants hold.
+		// Fail-closed: ANY check fails → 503 with structured detail.
+		const checks: { name: string; ok: boolean; error?: string }[] = []
+		// 1. YDB ping
+		try {
+			const result = await sql<[{ ok: number }]>`SELECT 1 AS ok`
+			checks.push({ name: 'ydb', ok: result[0]?.[0]?.ok === 1 })
+		} catch (err) {
+			checks.push({ name: 'ydb', ok: false, error: String(err) })
+		}
+		// 2. Adapter readiness per APP_MODE
+		const whitelist = new Set(env.APP_MODE_PERMITTED_MOCK_ADAPTERS)
+		const offenders = listAdapters().filter(
+			(a) => (a.mode === 'mock' || a.mode === 'sandbox') && !whitelist.has(a.name),
+		)
+		if (env.APP_MODE === 'production' && offenders.length > 0) {
+			checks.push({
+				name: 'adapters',
+				ok: false,
+				error: `${offenders.length} non-live adapter(s): ${offenders.map((o) => o.name).join(', ')}`,
+			})
+		} else {
+			checks.push({ name: 'adapters', ok: true })
+		}
+		const allOk = checks.every((c) => c.ok)
+		return c.json(
+			{
+				status: allOk ? ('ok' as const) : ('degraded' as const),
+				appMode: env.APP_MODE,
+				checks,
+				time: new Date().toISOString(),
+			},
+			allOk ? 200 : 503,
+		)
+	})
 	.get('/health/db', async (c) => {
 		// Unified shape so the Hono RPC client sees a single response type,
 		// not a union. `error` is always present on the type (optional string).
