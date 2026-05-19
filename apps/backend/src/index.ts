@@ -1,6 +1,9 @@
 import { serve } from '@hono/node-server'
-import { app, stopApp } from './app.ts'
-import { closeDriver, readyDriver } from './db/index.ts'
+// `./app.ts` NOT statically imported here — its top-level side-effects (CDC
+// consumer start, demo seeding) would fire BEFORE applyMigrations(). Use
+// dynamic import after migration in main() to fix ordering.
+import { closeDriver, readyDriver, sql } from './db/index.ts'
+import { applyMigrations } from './db/migrate.ts'
 import { env } from './env.ts'
 import { assertProductionReady, listAdapters } from './lib/adapters/index.ts'
 import {
@@ -13,6 +16,27 @@ import { logger } from './logger.ts'
 async function main(): Promise<void> {
 	// Pre-warm YDB connection so /health/db is fast on first call.
 	await readyDriver()
+
+	// Apply YDB migrations as init step (Q2 2026 canon — см. db/migrate.ts).
+	// MUST run BEFORE app.ts dynamic import: app.ts side-effects (CDC consumers,
+	// demo seeding) hit YDB at module-load — would crash на empty schema.
+	const migrationResult = await applyMigrations({
+		sql,
+		log: (msg) => logger.info({ phase: 'migrate' }, msg),
+	})
+	logger.info(
+		{
+			phase: 'migrate',
+			total: migrationResult.totalMigrations,
+			newlyApplied: migrationResult.newlyApplied,
+			alreadyAtHead: migrationResult.alreadyAtHead,
+		},
+		'YDB migrations complete',
+	)
+
+	// Dynamic import AFTER migrations — fires app.ts side-effects with schema
+	// in place. Bypasses ES module static-import ordering trap.
+	const { app, stopApp } = await import('./app.ts')
 
 	// Sandbox / Production gate (see env.ts APP_MODE comment). Importing
 	// `app.ts` above triggered every adapter factory's `registerAdapter()`
@@ -83,6 +107,17 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-	logger.error({ err }, 'Fatal startup error')
+	// Canon Q2 2026 (2026-05-19): emit BOTH the structured pino record
+	// (JSON consumers see `err.message` + stack in payload) AND a raw stderr
+	// blob so YC Logging's text-format render preserves the actual failure
+	// detail. Pino's `msg` field is what surfaces в «text» view — a bare
+	// «Fatal startup error» там без err.message is operationally useless
+	// когда wrapped migrate.ts error carries statement-index + YDB issues.
+	const msg = err instanceof Error ? err.message : String(err)
+	logger.error({ err }, `Fatal startup error: ${msg.split('\n')[0]}`)
+	process.stderr.write(`\n=== FATAL STARTUP ERROR ===\n${msg}\n`)
+	if (err instanceof Error && err.stack) {
+		process.stderr.write(`=== STACK ===\n${err.stack}\n=== END ===\n`)
+	}
 	process.exit(1)
 })

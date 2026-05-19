@@ -40,6 +40,9 @@ ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable && corepack prepare pnpm@10.33.2 --activate \
  && pnpm config set store-dir /pnpm/store
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Patches required by lockfile (sharp@0.35.0-rc.5.patch). Without these
+# `pnpm fetch` fails with ERR_PNPM_PATCH_NOT_FOUND.
+COPY patches/ ./patches/
 COPY apps/backend/package.json ./apps/backend/
 COPY packages/shared/package.json ./packages/shared/
 # Two-step install with BuildKit cache-mount: `fetch` warms /pnpm/store

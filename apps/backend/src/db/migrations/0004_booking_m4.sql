@@ -32,9 +32,16 @@
 -- =============================================================================
 
 -- 1. Drop + rebuild booking with new shape.
-DROP TABLE booking;
+-- `IF EXISTS` is canonical defense against partial-apply trap (2026-05-19):
+-- YDB has no transactional DDL — DROP commits separately from later CREATE.
+-- If a subsequent statement в этой migration throws, the migration row is
+-- NOT inserted into `_migration_history`, но booking IS already dropped.
+-- Next cold-start re-applies and hits `Cannot find table booking` on plain
+-- DROP. `IF EXISTS` makes the step replayable (caught empirically on YC
+-- Serverless deploy May 19 2026; root-cause-fix вместо resurrecting state).
+DROP TABLE IF EXISTS booking;
 
-CREATE TABLE booking (
+CREATE TABLE IF NOT EXISTS booking (
     tenantId         Utf8 NOT NULL,
     propertyId       Utf8 NOT NULL,
     checkIn          Date NOT NULL,
@@ -115,7 +122,7 @@ ALTER TABLE booking ADD CHANGEFEED booking_events WITH (
 --    Populated by the CDC consumer when it sees field diffs on booking
 --    (and later: property, roomType, etc.). 2-year TTL aligns with 152-ФЗ
 --    audit retention expectations; tax records live in folio, not here.
-CREATE TABLE activity (
+CREATE TABLE IF NOT EXISTS activity (
     tenantId     Utf8 NOT NULL,
     objectType   Utf8 NOT NULL,
     recordId     Utf8 NOT NULL,
@@ -132,7 +139,7 @@ ALTER TABLE activity SET (AUTO_PARTITIONING_BY_LOAD = ENABLED);
 -- 4. Idempotency-Key storage (IETF draft-07 + Stripe default of 24h).
 --    Complementary to UNIQUE (externalId) — externalId handles OTA dedup,
 --    this handles direct-from-UI safety-net retries after network glitches.
-CREATE TABLE idempotencyKey (
+CREATE TABLE IF NOT EXISTS idempotencyKey (
     tenantId                 Utf8 NOT NULL,
     key                      Utf8 NOT NULL,
     requestFingerprintSha256 Utf8 NOT NULL,

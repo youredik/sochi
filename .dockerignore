@@ -1,0 +1,64 @@
+# =============================================================================
+# .dockerignore — exclude из build context
+# =============================================================================
+
+# Node ecosystem
+node_modules
+**/node_modules
+.pnpm-store
+.pnpm-state
+
+# IaC (separate management)
+infra
+.terraform
+**/.terraform
+*.tfstate
+*.tfstate.*
+
+# Git
+.git
+.gitignore
+
+# Build outputs
+dist
+**/dist
+build
+**/build
+coverage
+**/coverage
+.cache
+.parcel-cache
+.next
+.nuxt
+
+# Tests
+playwright-report
+test-results
+.stryker-tmp
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Logs / temp
+*.log
+.env
+.env.local
+.env.*.local
+tmp
+temp
+
+# Docs (not needed для backend image)
+docs
+*.md
+!apps/backend/README.md
+
+# Worktrees / Claude
+.claude
+.claude-config
+
+# Backups
+backups
+*.bak

@@ -1,4 +1,5 @@
 import { AnonymousCredentialsProvider } from '@ydbjs/auth/anonymous'
+import { MetadataCredentialsProvider } from '@ydbjs/auth/metadata'
 import { Driver } from '@ydbjs/core'
 import { env } from '../env.ts'
 import { logger } from '../logger.ts'
@@ -8,12 +9,20 @@ import { logger } from '../logger.ts'
  * can be a top-level const. The driver is not yet "ready" at import time;
  * call `readyDriver()` once during startup before serving traffic.
  *
- * In dev we connect with anonymous credentials to a local single-node YDB.
- * In prod on Yandex Cloud, credentials come from metadata service automatically
- * (set YDB_METADATA_CREDENTIALS=1 — the driver picks them up without code changes).
+ * Credentials selection (Q2 2026 canon):
+ *   - Local dev (`YDB_METADATA_CREDENTIALS` unset): AnonymousCredentialsProvider —
+ *     local single-node YDB Docker accepts unauthenticated traffic.
+ *   - YC Serverless Container (`YDB_METADATA_CREDENTIALS=1`):
+ *     MetadataCredentialsProvider polls 169.254.169.254 для IAM token —
+ *     canonical for in-cloud workloads, no SA key files.
  */
+const credentialsProvider =
+	env.YDB_METADATA_CREDENTIALS === '1' || env.YDB_METADATA_CREDENTIALS === 'true'
+		? new MetadataCredentialsProvider()
+		: new AnonymousCredentialsProvider()
+
 export const driver = new Driver(env.YDB_CONNECTION_STRING, {
-	credentialsProvider: new AnonymousCredentialsProvider(),
+	credentialsProvider,
 })
 
 export async function readyDriver(timeoutMs = 10_000): Promise<void> {

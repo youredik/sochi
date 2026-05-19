@@ -9,7 +9,8 @@
 		"axe-core",
 		"happy-dom",
 		"bun",
-		"@stryker-mutator/command-runner"
+		"@stryker-mutator/command-runner",
+		"amaro"
 	],
 	"ignoreExportsUsedInFile": true,
 	"workspaces": {

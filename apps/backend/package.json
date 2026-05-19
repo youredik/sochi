@@ -38,6 +38,7 @@
 		"@ydbjs/query": "6.1.0",
 		"@ydbjs/topic": "6.1.2",
 		"@ydbjs/value": "6.0.7",
+		"amaro": "^1.0.0",
 		"better-auth": "^1.6.11",
 		"cloudevents": "10.0.0",
 		"cockatiel": "^3.2.1",
@@ -50,7 +51,7 @@
 		"jose": "^6.2.3",
 		"lru-cache": "11.3.6",
 		"pino": "^10.3.1",
-		"sharp": "0.35.0-rc.5",
+		"sharp": "0.34.5",
 		"timezones-ical-library": "^2.2.0",
 		"write-excel-file": "^4.0.6",
 		"zod": "4.5.0-canary.20260504T180558"

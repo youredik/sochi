@@ -30,4 +30,5 @@
 --
 -- =============================================================================
 
-DROP TABLE cdcInbox;
+-- `IF EXISTS` — partial-apply defense (см. 0004 IF EXISTS commentary).
+DROP TABLE IF EXISTS cdcInbox;

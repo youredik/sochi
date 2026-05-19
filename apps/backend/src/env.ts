@@ -97,6 +97,13 @@ export const envSchema = z.object({
 
 	// YDB
 	YDB_CONNECTION_STRING: z.string().min(1),
+	/**
+	 * Credentials mode для YDB driver:
+	 *   - unset/empty/"0": AnonymousCredentialsProvider (local dev YDB Docker)
+	 *   - "1"/"true": MetadataCredentialsProvider (YC Serverless Container —
+	 *     IAM token from metadata service 169.254.169.254). Q2 2026 canon.
+	 */
+	YDB_METADATA_CREDENTIALS: z.string().optional(),
 
 	// Better Auth
 	BETTER_AUTH_SECRET: z.string().min(32, 'BETTER_AUTH_SECRET must be at least 32 chars'),
