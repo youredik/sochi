@@ -28,7 +28,7 @@ import { createMigrationRegistrationFactory } from './domains/epgu/registration/
 import { createMigrationRegistrationRoutes } from './domains/epgu/registration/registration.routes.ts'
 import { createMockRklCheck } from './domains/epgu/rkl/mock-rkl.ts'
 import { createMockEpguTransport } from './domains/epgu/transport/mock-epgu.ts'
-import { createMockVisionOcr } from './domains/epgu/vision/mock-vision.ts'
+import { createVisionAdapterFromEnv } from './domains/epgu/vision/vision.factory.ts'
 import { createVisionRoutes } from './domains/epgu/vision/vision.routes.ts'
 import { createFolioFactory } from './domains/folio/folio.factory.ts'
 import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
@@ -173,19 +173,20 @@ registerAdapter({
 		'In-process Контур.ФМС simulator (99/0.5/0.5 distribution clean/match/inconclusive, ' +
 		'50-300ms latency, daily registry revision). Replace with HTTP client in M8.A.live.',
 })
-// M8.A.6 — Yandex Vision passport OCR adapter (Mock сейчас, Live при
-// empirical-verification per scripts/verify-vision-empirical.ts +
-// feedback_empirical_mock_verification.md).
-const visionOcrAdapter = createMockVisionOcr()
-registerAdapter({
-	name: 'vision.mock',
-	category: 'vision',
-	mode: 'mock',
-	description:
-		'Behaviour-faithful Yandex Vision passport OCR (9 entities, 20-country whitelist, ' +
-		'computeHeuristicConfidence ввиду apiConfidenceRaw broken upstream). Real Yandex AI Studio ' +
-		'integration после empirical-verify (M8.A.6.empirical script ready).',
+// P2 (2026-05-19) — env-driven Vision adapter: mock | yandex.
+// mock      → `vision.mock`   mode='mock'   (default dev/test)
+// yandex    → `vision.yandex` mode='sandbox' (APP_MODE=sandbox)
+//                              mode='live'    (APP_MODE=production)
+// Endpoint canon: https://ocr.api.cloud.yandex.net/ocr/v1/recognizeText
+// (Vision passport-model migrated к OCR namespace Q1 2026).
+const visionResult = createVisionAdapterFromEnv({
+	visionProvider: env.VISION_PROVIDER,
+	appMode: env.APP_MODE,
+	ycVisionApiKey: env.YC_VISION_API_KEY,
+	ycVisionFolderId: env.YC_VISION_FOLDER_ID,
 })
+const visionOcrAdapter = visionResult.adapter
+registerAdapter(visionResult.metadata)
 // DaData identity-lookup adapter — auto-fills ИНН → org name/address/tax regime
 // в 2-step onboarding wizard. Mock-вариант возвращает canonical demo dataset
 // (Сочи/Сириус/Красная Поляна) для demo тенантов per [[demo_strategy]];

@@ -183,6 +183,27 @@ export const envSchema = z.object({
 	YOOKASSA_SHOP_ID: z.string().optional(),
 	YOOKASSA_SECRET_KEY: z.string().optional(),
 	YOOKASSA_API_BASE: z.url().default('https://api.yookassa.ru/v3'),
+
+	// Vision OCR provider selection (P2, 2026-05-19).
+	//
+	//   VISION_PROVIDER=mock    — behaviour-faithful in-process simulator
+	//                             (default dev/test). Registered `vision.mock`
+	//                             mode=`mock`.
+	//   VISION_PROVIDER=yandex  — live Yandex Cloud OCR (passport model).
+	//                             Requires YC_VISION_API_KEY + YC_VISION_FOLDER_ID.
+	//                             Registered `vision.yandex` mode=`sandbox`
+	//                             (APP_MODE=sandbox) или `live` (APP_MODE=production).
+	//
+	// Endpoint: единственный — https://ocr.api.cloud.yandex.net/ocr/v1/recognizeText
+	// (Vision migrated к OCR namespace Q1 2026, empirical-verified). Auth via
+	// `Api-Key <key>` + `x-folder-id` header (Api-Key carries no folder context).
+	// Idempotency header: `Idempotency-Key` (Yandex Cloud canon — IETF spelling,
+	// differs от ЮKassa `Idempotence-Key`).
+	//
+	// Cost: free 4 000 ₽ signup grant ≈ 30 000 passport scans (≈0.13 ₽/scan, Q2 2026).
+	VISION_PROVIDER: z.enum(['mock', 'yandex']).default('mock'),
+	YC_VISION_API_KEY: z.string().optional(),
+	YC_VISION_FOLDER_ID: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -190,6 +211,20 @@ const parsed = envSchema.safeParse(process.env)
 if (!parsed.success) {
 	console.error('❌ Invalid environment variables:')
 	console.error(z.prettifyError(parsed.error))
+	process.exit(1)
+}
+
+// Cross-field invariant: VISION_PROVIDER=yandex requires both YC creds.
+// Symmetric с PAYMENT_PROVIDER=yookassa invariant.
+if (
+	parsed.data.VISION_PROVIDER === 'yandex' &&
+	(!parsed.data.YC_VISION_API_KEY || !parsed.data.YC_VISION_FOLDER_ID)
+) {
+	console.error(
+		'❌ VISION_PROVIDER=yandex requires both YC_VISION_API_KEY and YC_VISION_FOLDER_ID. ' +
+			'Get free signup grant (4 000 ₽ / 60 days) at https://yandex.cloud/ — service account ' +
+			'needs role `ai.vision.user`.',
+	)
 	process.exit(1)
 }
 
