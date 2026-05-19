@@ -33,6 +33,8 @@ import { createVisionRoutes } from './domains/epgu/vision/vision.routes.ts'
 import { createFolioFactory } from './domains/folio/folio.factory.ts'
 import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
 import { createDemoInboxRoutes } from './domains/demo/inbox.routes.ts'
+import { createDemoSmsInboxRoutes } from './domains/demo/sms-inbox.routes.ts'
+import { initDemoInboxSms } from './workers/lib/demo-inbox-sms-adapter.ts'
 import { createIdentityRoutes } from './domains/identity/identity.routes.ts'
 import { createOnboardingFactory } from './domains/onboarding/onboarding.factory.ts'
 import { createOnboardingRoutes } from './domains/onboarding/onboarding.routes.ts'
@@ -208,6 +210,20 @@ if (env.DEMO_DEPLOYMENT) {
 			'In-process Demo Inbox — captures magic-link emails per recipient for the public demo flow ' +
 			'per [[demo_strategy]] + [[behaviour_faithful_mock_canon]]. ' +
 			'Activated by DEMO_DEPLOYMENT=true env var; paired с frontend VITE_DEMO_DEPLOYMENT=true.',
+	})
+	// P3 (2026-05-19): SMS demo inbox singleton init — symmetric к email canon.
+	// SMS adapter is capture-only; production SMS provider (Yandex Cloud
+	// Notification Service) lands в P3.live с opt-in verified-destination
+	// flow per AWS End User Messaging Sandbox pattern (research 2026-05-19).
+	initDemoInboxSms()
+	registerAdapter({
+		name: 'sms.demo-inbox',
+		category: 'sms',
+		mode: 'mock',
+		description:
+			'In-process Demo SMS Inbox — captures booking confirmations / OTPs per E.164 phone ' +
+			'for the public demo flow. Production = Yandex Cloud Notification Service (SNS-compat) ' +
+			'in P3.live. Activated by DEMO_DEPLOYMENT=true; paired с frontend VITE_DEMO_DEPLOYMENT=true.',
 	})
 }
 // Bulk-inventory onboarding factory — single-tx property + roomType + N rooms
@@ -852,6 +868,7 @@ const routes = app
 	// the email-factory env-gating per [[demo_strategy]]: production deployments
 	// can't accidentally leak captures because the singleton is never created.
 	.route('/api/public/demo', createDemoInboxRoutes({ enabled: env.DEMO_DEPLOYMENT }))
+	.route('/api/public/demo', createDemoSmsInboxRoutes({ enabled: env.DEMO_DEPLOYMENT }))
 	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
 	.route('/api/admin', createAdminNotificationsRoutes(notificationFactory.service))
 	// M10 / A7.5.fix — admin channel-status overlay backing endpoint.
