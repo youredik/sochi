@@ -1,0 +1,160 @@
+# =============================================================================
+# Sochi HoReCa — SourceCraft CI/CD (Q2 2026 canon, May 2026)
+# =============================================================================
+#
+# Workflows:
+#   - `quality`  — tests + typecheck on PR/push
+#   - `infra-plan` — `tofu plan` on PR с infra/ changes (review-friendly diff)
+#   - `infra-apply` — `tofu apply` on main merge с infra/ changes
+#   - `deploy` — build + push backend image + revision deploy on main
+#
+# Auth: Service Connection (OIDC) → ephemeral IAM token per job. No SA keys
+# в SourceCraft secrets — native YC integration ([Q2 2026 canon](https://yandex.cloud/en/docs/tutorials/serverless/ci-cd-sourcecraft-functions)).
+#
+# Service connection name: `deploy-connection` (create в SourceCraft UI →
+# Настройки → Сервисные подключения → bind to YC folders infra + demo).
+
+env:
+  REGISTRY: 'cr.yandex/crprdhmq3p9f9a5j5ck6'
+  IMAGE_NAME: 'backend'
+  YDB_CONNECTION_STRING: 'grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g444ngoknombq45l4t/etn2aoiar0iqened9e5a'
+
+tokens:
+  yc:
+    service_connection: deploy-connection
+    scope: org
+
+# =============================================================================
+# Triggers
+# =============================================================================
+
+on:
+  push:
+    - workflows: [quality, deploy]
+      filter:
+        branches: ['main']
+        # Skip CI on docs-only changes — saves Free tier CI minutes
+        paths: ['**', '!docs/**', '!**/*.md', '!.claude/**', '!CHANGELOG.md']
+    - workflows: [infra-apply]
+      filter:
+        branches: ['main']
+        paths: ['infra/**']
+
+  pull_request:
+    - workflows: [quality]
+    - workflows: [infra-plan]
+      filter:
+        paths: ['infra/**']
+
+# =============================================================================
+# Workflows
+# =============================================================================
+
+workflows:
+  # ---------------------------------------------------------------------------
+  # QUALITY (PR + push) — typecheck + tests
+  # ---------------------------------------------------------------------------
+  quality:
+    settings:
+      timeout: 15m
+    tasks:
+      - name: install
+        cube: docker
+        image: node:24-alpine
+        run:
+          - corepack enable && corepack prepare pnpm@10.33.2 --activate
+          - pnpm install --frozen-lockfile
+
+      - name: typecheck
+        cube: docker
+        image: node:24-alpine
+        needs: [install]
+        run:
+          - corepack enable && pnpm typecheck
+
+      - name: test-fast
+        cube: docker
+        image: oven/bun:1.3.14-alpine
+        needs: [install]
+        run:
+          - pnpm install --frozen-lockfile --prefer-offline
+          - pnpm test:fast
+
+      - name: lint
+        cube: docker
+        image: node:24-alpine
+        needs: [install]
+        run:
+          - pnpm lint
+          - pnpm format:check
+
+  # ---------------------------------------------------------------------------
+  # INFRA PLAN (PR with infra/ changes) — review-friendly tofu plan
+  # ---------------------------------------------------------------------------
+  infra-plan:
+    settings:
+      timeout: 10m
+    tasks:
+      - name: tofu-plan
+        cube: docker
+        image: ghcr.io/opentofu/opentofu:1.12.0
+        env:
+          YC_TOKEN: ${{ tokens.yc.iam_token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_BOT_S3_SECRET_ACCESS_KEY }}
+        run:
+          - cd infra
+          - tofu init
+          - tofu plan -no-color | tee plan.txt
+          - echo "Plan saved to plan.txt — review in PR comments"
+
+  # ---------------------------------------------------------------------------
+  # INFRA APPLY (main merge with infra/) — apply tofu changes
+  # ---------------------------------------------------------------------------
+  infra-apply:
+    settings:
+      timeout: 20m
+    tasks:
+      - name: tofu-apply
+        cube: docker
+        image: ghcr.io/opentofu/opentofu:1.12.0
+        env:
+          YC_TOKEN: ${{ tokens.yc.iam_token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_BOT_S3_SECRET_ACCESS_KEY }}
+        run:
+          - cd infra
+          - tofu init
+          - tofu apply -auto-approve
+
+  # ---------------------------------------------------------------------------
+  # DEPLOY (main merge) — build + push backend image + revision deploy
+  # ---------------------------------------------------------------------------
+  deploy:
+    settings:
+      timeout: 30m
+    tasks:
+      - name: build-push
+        cube: docker
+        image: docker:27-cli
+        env:
+          YC_TOKEN: ${{ tokens.yc.iam_token }}
+        run:
+          - SHA=$(git rev-parse --short HEAD)
+          - echo "${YC_TOKEN}" | docker login --username iam --password-stdin cr.yandex
+          - >
+            docker buildx build
+            --platform linux/amd64
+            -f apps/backend/Dockerfile
+            -t ${REGISTRY}/${IMAGE_NAME}:${SHA}
+            -t ${REGISTRY}/${IMAGE_NAME}:latest
+            --push
+            .
+
+      - name: revision-deploy
+        cube: yc-sls-container-deploy
+        needs: [build-push]
+        with:
+          container-name: sochi-backend-demo
+          folder-id: b1gcqa89an0n32mqpuvo
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}

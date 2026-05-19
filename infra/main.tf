@@ -2,8 +2,16 @@
 # Sepshn IaC — root module (Q2 2026 canon, May 2026)
 # =============================================================================
 #
-# Tool: OpenTofu 1.10+ (license-clean MPL-2.0 fork of Terraform)
-# Provider: yandex-cloud/yandex ~> 0.204 (May 2026)
+# Tool: OpenTofu 1.10+ (license-clean MPL-2.0 fork of Terraform 1.5.x)
+# Provider: yandex-cloud/yandex ~> 0.204 (May 2026, MPL-2.0)
+#
+# OpenTofu + YC empirical status (May 2026):
+#   - Provider live в OpenTofu registry namespace `opentofu/yandex` (community
+#     fork, до v0.127). Empirical 2026-05-19: 13 imports applied successfully.
+#   - Latest 0.204 via Hashicorp registry URL ниже (`source = "registry.terraform.io/..."`)
+#     OR через YC mirror `terraform-mirror.yandexcloud.net` в `~/.tofurc`.
+#   - OpenTofu canon Q2 2026 для license-clean stack. Stankoff на Terraform —
+#     inertia с April 2026, не technical блокер.
 #
 # State backend:
 #   - YC Object Storage `sepshn-tfstate` (S3-compatible)
@@ -24,9 +32,9 @@ terraform {
 
   required_providers {
     yandex = {
-      # Explicit Hashicorp registry URL — OpenTofu's own registry lags
-      # (0.127 vs Hashicorp 0.204 as of May 2026). Provider source code
-      # at github.com/yandex-cloud/terraform-provider-yandex (MPL-2.0, license-clean).
+      # Hashicorp registry URL — latest 0.204 (vs 0.127 в opentofu/yandex fork).
+      # Empirically works with OpenTofu 1.12 (verified 2026-05-19 — 13 imports).
+      # Alternative: `~/.tofurc` mirror к `terraform-mirror.yandexcloud.net`.
       source  = "registry.terraform.io/yandex-cloud/yandex"
       version = "~> 0.204"
     }
@@ -42,6 +50,12 @@ terraform {
     time = {
       source  = "hashicorp/time"
       version = "~> 0.13"
+    }
+    # `random_password` для secrets generation (BETTER_AUTH_SECRET etc).
+    # Hash через state — plaintext encrypted в S3+KMS state bucket.
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
     }
   }
 

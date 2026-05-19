@@ -1,0 +1,102 @@
+openapi: 3.0.0
+info:
+  title: Sochi HoReCa Demo Gateway
+  description: |
+    Public edge для demo.sepshn.ru (Track A always-on demo).
+    Three-tier routing: backend `/api/*` → Serverless Container,
+    frontend SPA root + assets → Object Storage с SPA fallback.
+
+    Route priority canon (yandex.cloud/en/docs/api-gateway/concepts/extensions/):
+      fixed > parametric > greedy; longer wins ties.
+    So `/api/{proxy+}` always wins over `/{file+}` для `/api/*` traffic.
+
+    SPA fallback canon (Q2 2026, verified 2026-05-19): object_storage integration
+    supports `error_object: { object: index.html, statusCode: 200 }` — non-existent
+    keys return `index.html` с overridden 200 status. Client-side router (TanStack
+    Router HTML5 history mode) takes over from there.
+
+    Cache-Control headers set on UPLOAD via `aws s3 cp --cache-control` (Vite-
+    hashed `/assets/*.{js,css}` → `immutable max-age=31536000`; `index.html` +
+    SW → `no-cache, must-revalidate`). YDB `yandex_storage_object` Terraform
+    resource lacks `cache_control` field — use aws CLI.
+
+    CORS: SPA + API are same-origin (`demo.sepshn.ru`) → no preflight needed для
+    main app. Hono backend handles cross-origin widget embeds via `cors()`
+    middleware (single source of truth).
+  version: 1.0.0
+
+paths:
+  # 1. Backend API — fixed-prefix `/api` beats greedy `/{file+}` per route priority.
+  /api/{proxy+}:
+    x-yc-apigateway-any-method:
+      operationId: backendProxy
+      summary: Proxy всего /api/* traffic к Hono backend
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          schema:
+            type: string
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: ${container_id}
+        service_account_id: ${runtime_service_account}
+
+  # 2. Health-check endpoints на корневом уровне (kubelet / load balancer canon).
+  #    Hono exposes /health, /health/live, /health/ready, /health/db, /health/adapters
+  #    при app.fetch — routing к backend container.
+  /health:
+    get:
+      operationId: healthRoot
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: ${container_id}
+        service_account_id: ${runtime_service_account}
+
+  /health/{path}:
+    get:
+      operationId: healthSubpath
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: ${container_id}
+        service_account_id: ${runtime_service_account}
+
+  # 3. SPA root — fixed path beats greedy parametric.
+  /:
+    get:
+      operationId: spaRoot
+      summary: Serve Vite SPA index.html
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: ${frontend_bucket}
+        object: index.html
+        service_account_id: ${runtime_service_account}
+
+  # 4. SPA static assets + client-side router fallback.
+  #    Greedy `{file+}` matches multi-segment paths (e.g. `/booking/abc-123`).
+  #    `error_object` canon: any missing key (or 4xx from S3) falls back к
+  #    `index.html` с statusCode override 200 → client-side router resolves.
+  /{file+}:
+    get:
+      operationId: spaAsset
+      summary: Serve SPA assets с SPA-fallback на missing keys
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: ${frontend_bucket}
+        object: '{file}'
+        error_object:
+          object: index.html
+          statusCode: 200
+        service_account_id: ${runtime_service_account}

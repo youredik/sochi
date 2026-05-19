@@ -65,3 +65,15 @@ resource "yandex_dns_recordset" "acme_challenge" {
   ttl     = 300
   data    = ["${yandex_cm_certificate.sepshn_wildcard.id}.cm.yandexcloud.net."]
 }
+
+# ---------------------------------------------------------------------------
+# Demo public endpoint — demo.sepshn.ru → API Gateway
+# ---------------------------------------------------------------------------
+
+resource "yandex_dns_recordset" "demo_cname" {
+  zone_id = yandex_dns_zone.sepshn_ru.id
+  name    = "${var.demo_subdomain}."
+  type    = "CNAME"
+  ttl     = 600
+  data    = ["${yandex_api_gateway.demo.domain}."]
+}

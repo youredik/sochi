@@ -9,6 +9,14 @@ provider "registry.opentofu.org/hashicorp/aws" {
   ]
 }
 
+provider "registry.opentofu.org/hashicorp/random" {
+  version     = "3.9.0"
+  constraints = "~> 3.6"
+  hashes = [
+    "h1:U8KXqGCoNI9/guYbTvzgdtVk3fRthoG0UXwm1JoEpIs=",
+  ]
+}
+
 provider "registry.opentofu.org/hashicorp/time" {
   version     = "0.14.0"
   constraints = "~> 0.13"
