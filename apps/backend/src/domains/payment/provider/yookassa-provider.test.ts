@@ -219,17 +219,83 @@ describe('initiate', () => {
 		)
 	})
 
-	test('returnUrl override via metadata.returnUrl', async () => {
+	test('SECURITY: returnUrl override via metadata IGNORED (P2.5 OWASP A10 hardening)', async () => {
+		// Per-request `req.metadata.returnUrl` override was a phishing vector
+		// (open-redirect class). Adapter MUST always use `opts.returnUrl`.
 		const fetchMock = mock<ProviderFetch>(async () => jsonResponse(200, PAYMENT_OBJECT_SUCCEEDED))
 		const p = createYooKassaPaymentProvider(baseOpts({ fetch: fetchMock }))
 		await p.initiate({
 			...INITIATE_REQ,
-			metadata: { returnUrl: 'https://custom.example/back' },
+			metadata: { returnUrl: 'https://attacker.example/phish' },
 		})
 		const body = firstCallBodyJson(fetchMock) as {
 			confirmation: { return_url: string }
 		}
-		expect(body.confirmation.return_url).toBe('https://custom.example/back')
+		// Override attempted but ignored — adapter uses opts.returnUrl only.
+		expect(body.confirmation.return_url).toBe(
+			`${RETURN_URL}?paymentId=${INITIATE_REQ.localPaymentId}`,
+		)
+		expect(body.confirmation.return_url).not.toContain('attacker.example')
+	})
+
+	test('SECURITY: Idempotency-Key invalid format rejected (CRLF inject defense)', async () => {
+		const fetchMock = mock<ProviderFetch>(async () => jsonResponse(200, PAYMENT_OBJECT_SUCCEEDED))
+		const p = createYooKassaPaymentProvider(baseOpts({ fetch: fetchMock }))
+		// CRLF + control chars must be rejected pre-send.
+		await expect(
+			p.initiate({
+				...INITIATE_REQ,
+				providerIdempotencyKey: 'evil\r\nX-Injected: foo',
+			}),
+		).rejects.toThrow(/Idempotency-Key/i)
+		// Bytes / colons / spaces also rejected.
+		await expect(
+			p.initiate({ ...INITIATE_REQ, providerIdempotencyKey: 'key with spaces' }),
+		).rejects.toThrow(/Idempotency-Key/i)
+		// Over-length (>64) rejected.
+		await expect(
+			p.initiate({ ...INITIATE_REQ, providerIdempotencyKey: 'a'.repeat(65) }),
+		).rejects.toThrow(/Idempotency-Key/i)
+		// Empty rejected.
+		await expect(p.initiate({ ...INITIATE_REQ, providerIdempotencyKey: '' })).rejects.toThrow(
+			/Idempotency-Key/i,
+		)
+		// fetch NEVER called.
+		expect(fetchMock.mock.calls.length).toBe(0)
+	})
+
+	test('SECURITY: malicious confirmation_url host filtered (supply-chain defense)', async () => {
+		// Simulate ЮKassa SDK chain compromise returning attacker-controlled URL.
+		const fetchMock = mock<ProviderFetch>(async () =>
+			jsonResponse(200, {
+				...PAYMENT_OBJECT_SUCCEEDED,
+				confirmation: {
+					type: 'redirect',
+					return_url: RETURN_URL,
+					confirmation_url: 'https://phisher.example/steal-pan?token=XYZ',
+				},
+			}),
+		)
+		const p = createYooKassaPaymentProvider(baseOpts({ fetch: fetchMock }))
+		const snap = await p.initiate(INITIATE_REQ)
+		// Bad host filtered → confirmationUrl null (caller treats as "no redirect")
+		expect(snap.confirmationUrl).toBeNull()
+	})
+
+	test('confirmation_url with allowed yookassa.ru host passed through', async () => {
+		const fetchMock = mock<ProviderFetch>(async () =>
+			jsonResponse(200, {
+				...PAYMENT_OBJECT_SUCCEEDED,
+				confirmation: {
+					type: 'redirect',
+					return_url: RETURN_URL,
+					confirmation_url: 'https://yookassa.ru/v3/redirect/abc',
+				},
+			}),
+		)
+		const p = createYooKassaPaymentProvider(baseOpts({ fetch: fetchMock }))
+		const snap = await p.initiate(INITIATE_REQ)
+		expect(snap.confirmationUrl).toBe('https://yookassa.ru/v3/redirect/abc')
 	})
 
 	test('amount formatted as "<int>.<2 digits>"', async () => {

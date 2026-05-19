@@ -838,6 +838,7 @@ const routes = app
 			paymentService: paymentFactory.service,
 			webhookEventRepo: paymentWebhookEventRepo,
 			logger,
+			trustedProxyCidrs: env.TRUSTED_PROXY_CIDRS,
 		}),
 	)
 	.route('/api/v1', createRefundRoutes(refundFactory, idempotency))

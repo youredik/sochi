@@ -143,6 +143,23 @@ const DESCRIPTION_MAX_LEN = 128
 /** Refund description max length (ЮKassa spec — 250 char hard limit). */
 const REFUND_DESCRIPTION_MAX_LEN = 250
 
+/**
+ * Idempotency-Key format validation (P2.5 security hardening, 2026-05-19).
+ *
+ * Defense against CRLF injection (Node ≥19 blocks at runtime, но defense-in-depth
+ * canon mandates pre-send validation). 64 chars max per ЮKassa spec; UUIDv4 fits
+ * (36 chars). Allow A-Z/a-z/0-9/_/- only — rejects any control characters.
+ */
+const IDEMPOTENCE_KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * Allowed hosts для ЮKassa-returned `confirmation_url` (P2.5 supply-chain defense).
+ * If response contains URL pointing к unexpected host → reject (would otherwise
+ * become attacker-controlled redirect in case ЮKassa SDK chain compromise like
+ * Axios npm precedent Apr 2026).
+ */
+const ALLOWED_CONFIRMATION_HOSTS: ReadonlySet<string> = new Set(['yoomoney.ru', 'yookassa.ru'])
+
 // -----------------------------------------------------------------------------
 // Public configuration
 // -----------------------------------------------------------------------------
@@ -376,12 +393,30 @@ function paymentObjectToSnapshot(obj: YookassaPaymentObject): PaymentProviderSna
 	const authorizedKopecks = amountValueToKopecks(obj.amount.value)
 	// `paid: true` означает что списание прошло; до этого authorized=0
 	const capturedKopecks = obj.paid ? authorizedKopecks : 0n
+	// P2.5 supply-chain defense: validate confirmation_url host BEFORE returning к
+	// caller (who may 302 redirect к it). Catches scenario where ЮKassa SDK chain
+	// compromise returns attacker-controlled URL — host allowlist blocks redirect.
+	let confirmationUrl: string | null = null
+	const rawConfirmationUrl = obj.confirmation?.confirmation_url ?? null
+	if (rawConfirmationUrl !== null) {
+		try {
+			const parsed = new URL(rawConfirmationUrl)
+			if (ALLOWED_CONFIRMATION_HOSTS.has(parsed.host)) {
+				confirmationUrl = rawConfirmationUrl
+			}
+			// Malicious-host → keep null. Caller treats as "no redirect available";
+			// payment status set, но UX shows error (defense-in-depth — better than
+			// 302 к phisher).
+		} catch {
+			confirmationUrl = null // malformed URL → ignore
+		}
+	}
 	return {
 		providerPaymentId: obj.id,
 		status: mapPaymentStatus(obj.status),
 		authorizedMinor: authorizedKopecks,
 		capturedMinor: capturedKopecks,
-		confirmationUrl: obj.confirmation?.confirmation_url ?? null,
+		confirmationUrl,
 		holdExpiresAt: obj.expires_at ?? null,
 		failureReason: obj.cancellation_details
 			? `${obj.cancellation_details.party}:${obj.cancellation_details.reason}`
@@ -469,12 +504,25 @@ export function createYooKassaPaymentProvider(opts: YookassaProviderOptions): Pa
 		capabilities: YOOKASSA_CAPABILITIES,
 
 		async initiate(req: PaymentInitiateRequest): Promise<PaymentProviderSnapshot> {
+			// P2.5: validate Idempotency-Key format (CRLF inject defense-in-depth)
+			if (!IDEMPOTENCE_KEY_PATTERN.test(req.providerIdempotencyKey)) {
+				throw new YookassaBadRequestError(
+					`Invalid Idempotency-Key format: must match ${IDEMPOTENCE_KEY_PATTERN.source}`,
+					null,
+				)
+			}
+
 			// sber_bnpl 50 000 ₽ clamp (changelog 2026-04-23)
 			const ybMethodHint = req.metadata?.yookassaPaymentMethodType
 			if (ybMethodHint === 'sber_bnpl' && req.amountMinor > YOOKASSA_SBER_BNPL_MAX_RUB_KOPECKS) {
 				throw new YookassaSberBnplLimitError(req.amountMinor)
 			}
 
+			// P2.5 open-redirect defense: `req.metadata.returnUrl` override REMOVED.
+			// Per-request URL override admitted phishing redirects (OWASP A10).
+			// Operators must configure adapter `opts.returnUrl` per environment
+			// (test/prod) — per-tenant override path = future multi-tenant phase
+			// с explicit allowlist canon.
 			const body = {
 				amount: {
 					value: kopecksToAmountValue(req.amountMinor),
@@ -483,8 +531,7 @@ export function createYooKassaPaymentProvider(opts: YookassaProviderOptions): Pa
 				capture: true, // single-stage capture; explicit two-stage NOT в V1
 				confirmation: {
 					type: 'redirect' as const,
-					return_url:
-						req.metadata?.returnUrl ?? `${opts.returnUrl}?paymentId=${req.localPaymentId}`,
+					return_url: `${opts.returnUrl}?paymentId=${req.localPaymentId}`,
 				},
 				...(ybMethodHint ? { payment_method_data: { type: ybMethodHint } } : {}),
 				description: req.metadata?.description?.slice(0, DESCRIPTION_MAX_LEN),
@@ -570,6 +617,13 @@ export function createYooKassaPaymentProvider(opts: YookassaProviderOptions): Pa
 		async refund(req: PaymentRefundRequest): Promise<RefundProviderSnapshot> {
 			if (req.amountMinor < 0n) {
 				throw new RangeError(`refund amount must be >= 0, got ${req.amountMinor}`)
+			}
+			// P2.5: validate Idempotency-Key format (CRLF inject defense-in-depth)
+			if (!IDEMPOTENCE_KEY_PATTERN.test(req.providerIdempotencyKey)) {
+				throw new YookassaBadRequestError(
+					`Invalid Idempotency-Key format: must match ${IDEMPOTENCE_KEY_PATTERN.source}`,
+					null,
+				)
 			}
 			const body = {
 				payment_id: req.providerPaymentId,

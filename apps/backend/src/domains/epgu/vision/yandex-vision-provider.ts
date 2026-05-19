@@ -418,6 +418,15 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 
 	return {
 		source: 'yandex_vision',
+		/**
+		 * 152-ФЗ canon (P2.5): adapter does NOT retain `req.bytes` beyond this
+		 * function scope. Bytes are base64-encoded into the request body for
+		 * ONE fetch call, then eligible для GC. Caller MUST zero-out their own
+		 * `bytes` Uint8Array после receiving the response (defense-in-depth для
+		 * passport biometric-class data per Roskomnadzor 2026 clarifications —
+		 * delete within 5 min of processing). No persistent caching, no logging
+		 * of raw bytes (Pino redact paths `*.bytes` / `*.content`).
+		 */
 		async recognizePassport(req: RecognizePassportRequest): Promise<RecognizePassportResponse> {
 			const t0 = now()
 

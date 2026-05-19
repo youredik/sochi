@@ -1,24 +1,37 @@
 /**
- * Inbound payment webhook routes (P1, 2026-05).
+ * Inbound payment webhook routes (P1, 2026-05; P2.5 hardening 2026-05-19).
  *
  * Mounted PUBLIC (no auth — sender is the provider, not an authenticated user).
  *
  * Pipeline:
- *   1. Raw body capture (`c.req.raw.arrayBuffer()`) — verify on opaque bytes.
+ *   1. IP resolve via `rightMostTrustedProxyResolveClientIp` (P2.5: defense
+ *      against CVE-2025-68949-class XFF spoofing — TCP peer + trusted-proxy
+ *      walking canon Q2 2026).
  *   2. IP allowlist check against `YOOKASSA_WEBHOOK_IP_CIDRS` (ЮKassa NO HMAC
  *      canon 2026-05-19 — IP allowlist + GET round-trip ONLY).
- *   3. Provider `verifyWebhook` — parses + validates Zod + synthesizes dedupKey.
- *   4. Global lookup `findTenantByProviderPaymentId` — derive tenantId without
+ *   3. Raw body capture (`c.req.raw.arrayBuffer()`) — verify on opaque bytes.
+ *   4. Provider `verifyWebhook` — parses + validates Zod + synthesizes dedupKey
+ *      + filters malicious `confirmation_url` host (P2.5 supply-chain defense).
+ *   5. Global lookup `findTenantByProviderPaymentId` — derive tenantId without
  *      auth. Returns 200 on miss (event for unknown payment — log + ack).
- *   5. INSERT into `paymentWebhookEvent` — UNIQUE PK conflict → return 200
- *      immediately (replay-safe).
- *   6. `service.applyWebhookEvent` — apply state transition (payment subject)
+ *   6. INSERT into `paymentWebhookEvent` — UNIQUE PK conflict → 200 ack
+ *      (replay-safe). Race-safety: cross-event concurrent processing на same
+ *      payment.id uses version-CAS в applyTransition (loser retries/logs).
+ *   7. `service.applyWebhookEvent` — apply state transition (payment subject)
  *      OR record-only (refund subject).
- *   7. `markProcessed` for audit.
+ *   8. `markProcessed` for audit.
  *
  * Returns: HTTP 200 ALWAYS on accepted/duplicate (idempotent ack). 4xx only
  * on truly malformed input or IP-allowlist failure. 5xx on unexpected errors
  * (provider will retry per 24h SLA).
+ *
+ * ## Multi-tenant V1 scope (P2.5)
+ *
+ * Currently single global ЮKassa shopId. Per-tenant shopId routing = future
+ * phase (canon C2 finding from P2.5 audit). Webhook handler derives tenantId
+ * via cross-tenant `findTenantByProviderPaymentId` (UNIQUE constraint guarantees
+ * ≤1 row). Cockatiel circuit-breaker also global per-provider — DoS amplification
+ * surface; multi-tenant phase = per-tenant bulkhead isolation.
  */
 
 import type { PaymentProviderCode } from '@horeca/shared'
@@ -49,24 +62,92 @@ export interface PaymentWebhookRoutesDeps {
 		error(obj: Record<string, unknown>, msg?: string): void
 	}
 	/**
-	 * Resolve client IP from request. Default reads `x-forwarded-for` (trust
-	 * proxy) then `x-real-ip`. Override for tests OR alternate deployment.
+	 * CIDR list of TRUSTED reverse proxies (own infra). Only when the actual
+	 * TCP peer matches a CIDR in this list, X-Forwarded-For is parsed; otherwise
+	 * XFF is IGNORED and the TCP peer address itself is used. Defense against
+	 * IP spoofing where an attacker connects directly to the backend and forges
+	 * `X-Forwarded-For: 185.71.76.5` к bypass the ЮKassa allowlist (CVE-2025-68949
+	 * n8n precedent).
+	 *
+	 * Production: configure to actual deployment proxy CIDRs (Yandex Cloud ALB).
+	 * Dev/empty array: only direct TCP peers accepted (no XFF trust).
 	 */
-	readonly resolveClientIp?: (headers: Headers) => string | null
+	readonly trustedProxyCidrs: readonly string[]
+	/**
+	 * Resolve client IP from request. Default implements right-most-trusted-proxy
+	 * walking canon (MDN / OneUptime 2026 / OWASP A10 / CVE-2025-68949 lessons).
+	 * Override only для tests.
+	 */
+	readonly resolveClientIp?: (input: ResolveClientIpInput) => string | null
 }
 
 const PROVIDER_YOOKASSA: PaymentProviderCode = 'yookassa'
 const SYSTEM_ACTOR = 'payment-webhook'
 
-function defaultResolveClientIp(headers: Headers): string | null {
+/**
+ * Inputs for `resolveClientIp` — separated so route handler can call с either
+ * actual Hono `c` (production) OR synthetic shape (tests, without TCP peer info).
+ */
+export interface ResolveClientIpInput {
+	readonly headers: Headers
+	/**
+	 * Actual TCP peer address (e.g. from `hono/bun` `getConnInfo(c).remote.address`).
+	 * `null` если runtime cannot expose (most tests). When `null`, function falls
+	 * back к XFF/x-real-ip parsing (test convenience) — production wires real value.
+	 */
+	readonly tcpRemoteAddress: string | null
+	readonly trustedProxyCidrs: readonly string[]
+}
+
+/**
+ * Right-most-trusted-proxy IP resolution canon (Q2 2026, supersedes legacy
+ * "first IP wins" anti-pattern that admitted CVE-2025-68949-class spoofs).
+ *
+ * Decision tree:
+ *
+ *   1. tcpRemoteAddress set AND NOT in trustedProxyCidrs →
+ *      Direct/untrusted hop. Ignore XFF entirely (attacker-controlled). Return TCP.
+ *
+ *   2. tcpRemoteAddress set AND IS in trustedProxyCidrs →
+ *      We are behind own reverse proxy. Walk XFF right-to-left, skipping trusted
+ *      hops; first non-trusted entry = real client. If all hops trusted (rare):
+ *      fall back to chain[0] per MDN best-effort.
+ *
+ *   3. tcpRemoteAddress null (test harnesses) → best-effort XFF/x-real-ip parsing
+ *      with same right-to-left walk.
+ */
+export function rightMostTrustedProxyResolveClientIp(input: ResolveClientIpInput): string | null {
+	const { headers, tcpRemoteAddress, trustedProxyCidrs } = input
+	const isTrustedTcpPeer =
+		tcpRemoteAddress !== null && trustedProxyCidrs.some((c) => isIpInCidr(tcpRemoteAddress, c))
+
+	if (tcpRemoteAddress !== null && !isTrustedTcpPeer) {
+		// Direct TCP from untrusted source — XFF is fully attacker-controlled.
+		// Trust ONLY the TCP peer.
+		return tcpRemoteAddress
+	}
+
 	const xff = headers.get('x-forwarded-for')
-	if (xff !== null) {
-		const first = xff.split(',')[0]?.trim()
-		if (first !== undefined && first.length > 0) return first
+	if (xff !== null && xff.length > 0) {
+		const chain = xff
+			.split(',')
+			.map((s) => s.trim())
+			.filter((s) => s.length > 0)
+		// Walk right-to-left, skip trusted proxies; first non-trusted = real client.
+		for (let i = chain.length - 1; i >= 0; i--) {
+			const ip = chain[i]
+			if (ip === undefined) continue
+			const trusted = trustedProxyCidrs.some((c) => isIpInCidr(ip, c))
+			if (!trusted) return ip
+		}
+		// All hops trusted (edge case — chain ⊆ trustedProxyCidrs). Fall through
+		// к left-most entry (claimed originator per MDN canon — best effort).
+		const first = chain[0]
+		if (first !== undefined) return first
 	}
 	const xri = headers.get('x-real-ip')
 	if (xri !== null && xri.length > 0) return xri
-	return null
+	return tcpRemoteAddress
 }
 
 function isIpAllowed(ip: string, cidrs: readonly string[]): boolean {
@@ -78,11 +159,26 @@ function isIpAllowed(ip: string, cidrs: readonly string[]): boolean {
 
 export function createPaymentWebhookRoutes(deps: PaymentWebhookRoutesDeps) {
 	const app = new Hono<AppEnv>()
-	const resolveClientIp = deps.resolveClientIp ?? defaultResolveClientIp
+	const resolveClientIp = deps.resolveClientIp ?? rightMostTrustedProxyResolveClientIp
 
 	// POST /api/v1/payments/webhook/yookassa
 	app.post('/yookassa', async (c) => {
-		const sourceIp = resolveClientIp(new Headers(c.req.raw.headers))
+		// Bun/Node runtime: `c.req.raw` request has no standard `client.address`
+		// surface — Hono's `getConnInfo(c)` from `hono/bun` exposes it. Import
+		// is dynamic к keep route file framework-portable (тесты mount без бан).
+		let tcpRemoteAddress: string | null = null
+		try {
+			const { getConnInfo } = await import('hono/bun')
+			tcpRemoteAddress = getConnInfo(c).remote.address ?? null
+		} catch {
+			// Test environment без hono/bun runtime — fall back к XFF-only resolution.
+			tcpRemoteAddress = null
+		}
+		const sourceIp = resolveClientIp({
+			headers: new Headers(c.req.raw.headers),
+			tcpRemoteAddress,
+			trustedProxyCidrs: deps.trustedProxyCidrs,
+		})
 
 		// Step 1: IP allowlist gate (ЮKassa NO HMAC — IP is sole authenticator).
 		if (sourceIp === null) {

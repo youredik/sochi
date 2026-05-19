@@ -204,6 +204,29 @@ export const envSchema = z.object({
 	VISION_PROVIDER: z.enum(['mock', 'yandex']).default('mock'),
 	YC_VISION_API_KEY: z.string().optional(),
 	YC_VISION_FOLDER_ID: z.string().optional(),
+
+	// Right-most-trusted-proxy canon (P2.5 hardening, 2026-05-19).
+	//
+	// CSV list of CIDRs corresponding to OWN reverse-proxy infrastructure
+	// (Yandex Cloud ALB, nginx ingress, etc). Only когда actual TCP peer falls
+	// in this list, `X-Forwarded-For` header is parsed; otherwise XFF is IGNORED
+	// (attacker-controlled) и TCP peer address is used directly.
+	//
+	// Defense against CVE-2025-68949-class spoofs: attacker connects directly,
+	// forges `X-Forwarded-For: 185.71.76.5` (ЮKassa CIDR) → bypasses naive IP
+	// allowlist. With this gate, XFF is parsed ONLY от trusted infra.
+	//
+	// Dev default: localhost + RFC1918 private ranges + Yandex Cloud internal
+	// load balancer ranges (overrideable in deploy env per actual ALB CIDRs).
+	TRUSTED_PROXY_CIDRS: z
+		.string()
+		.default('127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128')
+		.transform((s) =>
+			s
+				.split(',')
+				.map((v) => v.trim())
+				.filter(Boolean),
+		),
 })
 
 const parsed = envSchema.safeParse(process.env)

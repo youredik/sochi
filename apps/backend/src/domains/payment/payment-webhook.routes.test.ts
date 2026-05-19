@@ -189,6 +189,9 @@ function buildHarness(
 			warn: () => {},
 			error: () => {},
 		},
+		// Test trusted-proxy CIDRs — assume tests run без real TCP peer info;
+		// resolver fall through к XFF parsing (test convenience).
+		trustedProxyCidrs: ['127.0.0.0/8', '10.0.0.0/8'],
 	}
 
 	return {
@@ -343,14 +346,28 @@ describe('createPaymentWebhookRoutes — POST /yookassa', () => {
 		expect(failCall[3]).toContain('SM transition rejected')
 	})
 
-	test('X-Forwarded-For multi-hop — first IP wins (RFC 7239)', async () => {
+	test('X-Forwarded-For multi-hop с trusted proxies → right-most non-trusted IP (canon Q2 2026)', async () => {
 		const h = buildHarness()
 		const app = createPaymentWebhookRoutes(h.deps)
-		// First IP (closest to client) — ALLOWED. Subsequent hops irrelevant.
+		// trustedProxyCidrs = ['127.0.0.0/8', '10.0.0.0/8'] (from buildHarness).
+		// XFF chain: client(ALLOWED) → trusted-proxy-1(10.0.0.1) → trusted-proxy-2(10.0.0.2).
+		// Walk right-to-left: 10.0.0.2 trusted, skip → 10.0.0.1 trusted, skip → ALLOWED_IP non-trusted, return.
 		const res = await post(app, VALID_BODY, {
-			'x-forwarded-for': `${ALLOWED_IP}, 10.0.0.1, 192.168.0.1`,
+			'x-forwarded-for': `${ALLOWED_IP}, 10.0.0.1, 10.0.0.2`,
 		})
 		expect(res.status).toBe(200)
+	})
+
+	test('SECURITY: spoofed XFF rejected when chain contains non-trusted IPs (CVE-2025-68949 class)', async () => {
+		// Attacker scenario: chain has fake-CIDR-IP first, then random untrusted hop.
+		// Walk right-to-left: random untrusted IP (e.g. 1.2.3.4) returned FIRST →
+		// IP allowlist check fails → 403. Defense holds.
+		const h = buildHarness()
+		const app = createPaymentWebhookRoutes(h.deps)
+		const res = await post(app, VALID_BODY, {
+			'x-forwarded-for': `${ALLOWED_IP}, 1.2.3.4`,
+		})
+		expect(res.status).toBe(403) // attacker's hop (1.2.3.4) not in ЮKassa allowlist
 	})
 
 	test('X-Real-IP fallback when X-Forwarded-For missing', async () => {
