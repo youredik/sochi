@@ -1,6 +1,8 @@
 import { z } from 'zod'
+import { env } from '../../env.ts'
 import { logger } from '../../logger.ts'
 import { type CaptchaValidationResult, validateCaptcha } from '../captcha/validate.ts'
+import { resolveClientIpSync } from '../net/client-ip.ts'
 
 /**
  * Captcha gate for Better Auth endpoints — canonical 2026 pattern.
@@ -120,13 +122,17 @@ export async function evaluateCaptchaGate(
 
 /**
  * Pick the best-effort client IP from request headers for SmartCaptcha
- * fidelity. Yandex's bot scoring uses this signal — when absent the
- * widget still works but accuracy drops.
+ * fidelity. Yandex's bot scoring uses this signal — when absent the widget
+ * still works but accuracy drops.
+ *
+ * B11 (2026-05-19): unified с right-most-trusted-proxy canon — supersedes
+ * the legacy leftmost-wins helper. Even though SmartCaptcha API treats
+ * `clientIp` as informational signal (signature is the real authenticator),
+ * keeping a separate leftmost reader contradicts repo-wide canon + invites
+ * dev confusion. Same `resolveClientIpSync` underlies widget-rate-limit /
+ * demo-inbox-rate-limit / RUM / consent log.
  */
 export function extractClientIp(headers: Headers): string | undefined {
-	const xff = headers.get('x-forwarded-for') ?? ''
-	const leftmost = xff.split(',')[0]?.trim()
-	if (leftmost) return leftmost
-	const xri = headers.get('x-real-ip')
-	return xri ?? undefined
+	const ip = resolveClientIpSync(headers, env.TRUSTED_PROXY_CIDRS)
+	return ip === 'anonymous' ? undefined : ip
 }

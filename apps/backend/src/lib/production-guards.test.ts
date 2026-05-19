@@ -11,7 +11,6 @@
  */
 
 import { describe, expect, mock, test } from 'bun:test'
-import { logger } from '../logger.ts'
 import { assertNoDemoInProduction, assertProductionCaptchaConfigured } from './production-guards.ts'
 
 type EnvShape = {
@@ -58,30 +57,41 @@ describe('assertNoDemoInProduction', () => {
 		).toThrow(/APP_MODE=production with DEMO_DEPLOYMENT=true/)
 	})
 
-	test('APP_MODE=production + DEMO=true + override=true → pass с structured logger.warn (NOT console.warn)', () => {
-		// Logger canon: structured pino.warn with `reason` field — NOT console.warn
-		// (which bypasses pino routing). M2 (2026-05-19) fix.
-		const warnSpy = mock<typeof logger.warn>(() => undefined as never)
-		const originalWarn = logger.warn
-		logger.warn = warnSpy as unknown as typeof logger.warn
-		try {
-			expect(() =>
-				assertNoDemoInProduction(
-					asEnv({
-						...PRODUCTION_BASE,
-						DEMO_DEPLOYMENT: true,
-						APP_MODE_PERMITTED_DEMO_OVERRIDE: true,
-					}),
-				),
-			).not.toThrow()
-			expect(warnSpy).toHaveBeenCalledTimes(1)
-			const [bindings, msg] = warnSpy.mock.calls[0] ?? []
-			expect((bindings as { reason?: string })?.reason).toBe('app_mode_permitted_demo_override')
-			expect((bindings as { appMode?: string })?.appMode).toBe('production')
-			expect(String(msg)).toContain('APP_MODE=production with DEMO_DEPLOYMENT=true permitted')
-		} finally {
-			logger.warn = originalWarn
-		}
+	test('APP_MODE=production + DEMO=true + override=true → pass с structured logger.warn (DI seam)', () => {
+		// DI logger canon (B11 fix 2026-05-19): function accepts `{ logger? }` opts;
+		// tests inject mock без touching module-level singleton. Previously this
+		// test mutated `logger.warn = warnSpy` which leaked between tests и failed
+		// the canon `[[di-logger-optional]]`.
+		const warnSpy = mock<(obj: Record<string, unknown>, msg?: string) => void>(() => undefined)
+		expect(() =>
+			assertNoDemoInProduction(
+				asEnv({
+					...PRODUCTION_BASE,
+					DEMO_DEPLOYMENT: true,
+					APP_MODE_PERMITTED_DEMO_OVERRIDE: true,
+				}),
+				{ logger: { warn: warnSpy } },
+			),
+		).not.toThrow()
+		expect(warnSpy).toHaveBeenCalledTimes(1)
+		const [bindings, msg] = warnSpy.mock.calls[0] ?? []
+		expect((bindings as { reason?: string })?.reason).toBe('app_mode_permitted_demo_override')
+		expect((bindings as { appMode?: string })?.appMode).toBe('production')
+		expect(String(msg)).toContain('APP_MODE=production with DEMO_DEPLOYMENT=true permitted')
+	})
+
+	test('default logger used when no DI override (production path)', () => {
+		// Without injecting a logger, function must still pass — uses module default.
+		// Asserts contract: opts.logger optional, not required.
+		expect(() =>
+			assertNoDemoInProduction(
+				asEnv({
+					...PRODUCTION_BASE,
+					DEMO_DEPLOYMENT: true,
+					APP_MODE_PERMITTED_DEMO_OVERRIDE: true,
+				}),
+			),
+		).not.toThrow()
 	})
 
 	test('error message contains actionable hint (fix vector)', () => {

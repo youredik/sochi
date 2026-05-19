@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test } from 'bun:test'
-import { resolveClientIp, resolveClientIpSync } from './client-ip.ts'
+import { extractClientIpFromContext, resolveClientIp, resolveClientIpSync } from './client-ip.ts'
 
 const TRUSTED = ['10.0.0.0/8', '127.0.0.0/8', '::1/128'] as const
 
@@ -215,5 +215,67 @@ describe('resolveClientIpSync — sync variant', () => {
 		)
 		// Right-walk: 203.0.113.50 is rightmost-untrusted → returned.
 		expect(ip).toBe('203.0.113.50')
+	})
+})
+
+describe('extractClientIpFromContext — Hono Context wrapper', () => {
+	function makeCtx(headers: Record<string, string>) {
+		const lower: Record<string, string> = {}
+		for (const [k, v] of Object.entries(headers)) lower[k.toLowerCase()] = v
+		return {
+			req: {
+				header: (name: string) => lower[name.toLowerCase()],
+			},
+		}
+	}
+
+	test('reads x-forwarded-for + x-real-ip via Hono Context API (not raw.headers)', () => {
+		const ctx = makeCtx({ 'x-forwarded-for': '203.0.113.7, 10.0.0.1' })
+		const ip = extractClientIpFromContext(ctx, TRUSTED)
+		expect(ip).toBe('203.0.113.7')
+	})
+
+	test('returns anonymous literal когда no IP headers (NEVER null/undefined)', () => {
+		const ctx = makeCtx({})
+		const ip = extractClientIpFromContext(ctx, TRUSTED)
+		expect(ip).toBe('anonymous')
+	})
+
+	test('x-real-ip fallback when XFF absent', () => {
+		const ctx = makeCtx({ 'x-real-ip': '203.0.113.99' })
+		const ip = extractClientIpFromContext(ctx, TRUSTED)
+		expect(ip).toBe('203.0.113.99')
+	})
+
+	test('adversarial XFF spoof — rightmost-untrusted wins via Context wrapper', () => {
+		const ctx = makeCtx({
+			'x-forwarded-for': '1.1.1.1, 2.2.2.2, 203.0.113.50, 10.0.0.1',
+		})
+		// 10.0.0.1 trusted → skip; 203.0.113.50 not trusted → return.
+		const ip = extractClientIpFromContext(ctx, TRUSTED)
+		expect(ip).toBe('203.0.113.50')
+	})
+
+	test('header name case-insensitivity via Hono Context API', () => {
+		// Hono Context.req.header is case-insensitive per Fetch standard.
+		const ctx = {
+			req: {
+				header: (name: string) =>
+					name.toLowerCase() === 'x-forwarded-for' ? '203.0.113.7' : undefined,
+			},
+		}
+		const ip = extractClientIpFromContext(ctx, TRUSTED)
+		expect(ip).toBe('203.0.113.7')
+	})
+
+	test('per-request unique XFF spoof — empty trusted list → rightmost wins (not leftmost)', () => {
+		// Adversarial: empty TRUSTED list, attacker rotates leftmost.
+		const ctx1 = makeCtx({ 'x-forwarded-for': 'A, 203.0.113.1' })
+		const ctx2 = makeCtx({ 'x-forwarded-for': 'B, 203.0.113.1' })
+		const ctx3 = makeCtx({ 'x-forwarded-for': 'C, 203.0.113.1' })
+		// Same right-most → same bucket key.
+		expect(extractClientIpFromContext(ctx1, [])).toBe('203.0.113.1')
+		expect(extractClientIpFromContext(ctx2, [])).toBe('203.0.113.1')
+		expect(extractClientIpFromContext(ctx3, [])).toBe('203.0.113.1')
 	})
 })

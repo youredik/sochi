@@ -4,7 +4,7 @@
  * Mounted PUBLIC (no auth — sender is the provider, not an authenticated user).
  *
  * Pipeline:
- *   1. IP resolve via `rightMostTrustedProxyResolveClientIp` (P2.5: defense
+ *   1. IP resolve via `resolveClientIp` (B7 canon — right-most-trusted-proxy;
  *      against CVE-2025-68949-class XFF spoofing — TCP peer + trusted-proxy
  *      walking canon Q2 2026).
  *   2. IP allowlist check against `YOOKASSA_WEBHOOK_IP_CIDRS` (ЮKassa NO HMAC
@@ -43,10 +43,7 @@ import type { PaymentService } from './payment.service.ts'
 import type { PaymentRepo } from './payment.repo.ts'
 import type { PaymentWebhookEventRepo } from './payment-webhook-event.repo.ts'
 import { isIpInCidr } from '../../lib/net/cidr.ts'
-import {
-	resolveClientIp as rightMostTrustedProxyResolveClientIpShared,
-	type ResolveClientIpInput as SharedResolveClientIpInput,
-} from '../../lib/net/client-ip.ts'
+import { resolveClientIp, type ResolveClientIpInput } from '../../lib/net/client-ip.ts'
 
 export interface PaymentWebhookRoutesDeps {
 	readonly yookassaProvider: PaymentProvider
@@ -88,20 +85,6 @@ export interface PaymentWebhookRoutesDeps {
 const PROVIDER_YOOKASSA: PaymentProviderCode = 'yookassa'
 const SYSTEM_ACTOR = 'payment-webhook'
 
-/**
- * Inputs for `resolveClientIp` — re-export from canonical shared module so
- * tests / downstream consumers can use either alias.
- */
-export type ResolveClientIpInput = SharedResolveClientIpInput
-
-/**
- * Right-most-trusted-proxy IP resolution canon (Q2 2026). Re-export of shared
- * `apps/backend/src/lib/net/client-ip.ts` `resolveClientIp` для existing
- * import sites; canon was unified 2026-05-19 B7 refactor (previously inline
- * duplicate here + leftmost variants в widget-rate-limit / RUM).
- */
-export const rightMostTrustedProxyResolveClientIp = rightMostTrustedProxyResolveClientIpShared
-
 function isIpAllowed(ip: string, cidrs: readonly string[]): boolean {
 	for (const cidr of cidrs) {
 		if (isIpInCidr(ip, cidr)) return true
@@ -111,7 +94,7 @@ function isIpAllowed(ip: string, cidrs: readonly string[]): boolean {
 
 export function createPaymentWebhookRoutes(deps: PaymentWebhookRoutesDeps) {
 	const app = new Hono<AppEnv>()
-	const resolveClientIp = deps.resolveClientIp ?? rightMostTrustedProxyResolveClientIp
+	const resolveIp = deps.resolveClientIp ?? resolveClientIp
 
 	// POST /api/v1/payments/webhook/yookassa
 	app.post('/yookassa', async (c) => {
@@ -126,7 +109,7 @@ export function createPaymentWebhookRoutes(deps: PaymentWebhookRoutesDeps) {
 			// Test environment без hono/bun runtime — fall back к XFF-only resolution.
 			tcpRemoteAddress = null
 		}
-		const sourceIp = resolveClientIp({
+		const sourceIp = resolveIp({
 			headers: new Headers(c.req.raw.headers),
 			tcpRemoteAddress,
 			trustedProxyCidrs: deps.trustedProxyCidrs,

@@ -83,7 +83,7 @@ import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
 import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
 import { createMagicLinkSecretResolver } from './lib/magic-link/secret.ts'
-import { evaluateReadiness } from './lib/readiness.ts'
+import { createReadinessEvaluator } from './lib/readiness.ts'
 import { logger } from './logger.ts'
 import { loadTenantMode } from './middleware/demo-lock.ts'
 import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
@@ -742,6 +742,36 @@ app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
 const otelIngest = createOtelIngest()
 
+// B11 (2026-05-19): cached readiness evaluator — one instance per process,
+// 2s TTL + AbortSignal-bounded YDB probe. Survives across requests so k8s/ALB
+// probe-storms drop к single YDB roundtrip per cache window. See lib/readiness.ts.
+const readinessEvaluator = createReadinessEvaluator({
+	appMode: env.APP_MODE,
+	permittedMockAdapters: env.APP_MODE_PERMITTED_MOCK_ADAPTERS,
+	get adapters() {
+		// Live-evaluate adapters list — registry mutates during boot before
+		// первый probe arrives; static snapshot would miss late registrations.
+		return listAdapters()
+	},
+	probeYdb: async (signal) => {
+		// AbortSignal not directly threaded к porsager-style template tag —
+		// race wrapper aborts the await regardless if YDB driver hangs.
+		const probe = sql<[{ ok: number }]>`SELECT 1 AS ok`
+		const result = await Promise.race([
+			probe,
+			new Promise<never>((_, reject) => {
+				signal.addEventListener(
+					'abort',
+					() => reject(new Error('readiness: YDB probe aborted by AbortSignal')),
+					{ once: true },
+				)
+			}),
+		])
+		return result[0]?.[0]?.ok === 1
+	},
+	logger,
+})
+
 const routes = app
 	.route('/api/otel', otelIngest)
 	// M9.widget.7 / A5.2 — RUM ingest. Public, anonymous, CORS *. Mounted
@@ -922,18 +952,10 @@ const routes = app
 		),
 	)
 	.get('/health/ready', async (c) => {
-		// Composite readiness via pure evaluator (see lib/readiness.ts).
-		// Public payload contract pinned by lib/readiness.test.ts.
-		const result = await evaluateReadiness({
-			appMode: env.APP_MODE,
-			permittedMockAdapters: env.APP_MODE_PERMITTED_MOCK_ADAPTERS,
-			adapters: listAdapters(),
-			probeYdb: async () => {
-				const rows = await sql<[{ ok: number }]>`SELECT 1 AS ok`
-				return rows[0]?.[0]?.ok === 1
-			},
-			logger: c.var.logger,
-		})
+		// Composite readiness via cached evaluator (see lib/readiness.ts).
+		// Public payload contract pinned by lib/readiness.test.ts. Cache TTL +
+		// AbortSignal timeout protect YDB от probe-storm and probe-hang both.
+		const result = await readinessEvaluator()
 		return c.json(
 			{
 				status: result.status,

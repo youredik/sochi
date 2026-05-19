@@ -248,13 +248,32 @@ describe('evaluateCaptchaGate', () => {
 	})
 })
 
-describe('extractClientIp', () => {
-	test('[I1] leftmost X-Forwarded-For wins over X-Real-IP', () => {
+describe('extractClientIp — right-most-trusted-proxy canon (B11)', () => {
+	// Default test env TRUSTED_PROXY_CIDRS includes 10.0.0.0/8 + 127.0.0.0/8 +
+	// RFC1918 ranges (see env.ts default). Tests below exercise canon under
+	// that default — attacker-spoofed leftmost entries get discarded в favor
+	// of the rightmost-untrusted hop visible from our trusted ALB.
+
+	test('[I1] real ALB pattern (client → trusted ALB) returns client IP', () => {
+		// XFF: «203.0.113.1 (client), 10.0.0.5 (ALB)»
+		// Right-walk: 10.0.0.5 trusted, skip → 203.0.113.1 not trusted, return.
+		const h = new Headers({
+			'x-forwarded-for': '203.0.113.1, 10.0.0.5',
+			'x-real-ip': '10.0.0.99',
+		})
+		expect(extractClientIp(h)).toBe('203.0.113.1')
+	})
+
+	test('[I1.spoof] attacker-prepended fake IPs discarded — rightmost-untrusted wins', () => {
+		// Attacker forges leftmost; trusted ALB appends real client just before us.
+		// Chain (in arrival order): «forged, real_client, alb»
+		// Right-walk: alb trusted (10.0.0.1), skip → real_client (192.0.2.50)
+		// returned. Forged 203.0.113.1 ignored entirely.
 		const h = new Headers({
 			'x-forwarded-for': '203.0.113.1, 192.0.2.50, 10.0.0.1',
 			'x-real-ip': '10.0.0.99',
 		})
-		expect(extractClientIp(h)).toBe('203.0.113.1')
+		expect(extractClientIp(h)).toBe('192.0.2.50')
 	})
 
 	test('[I2] X-Real-IP fallback when XFF absent', () => {
@@ -262,13 +281,14 @@ describe('extractClientIp', () => {
 		expect(extractClientIp(h)).toBe('203.0.113.2')
 	})
 
-	test('[I3] both absent → undefined', () => {
+	test('[I3] both absent → undefined (anonymous coerced)', () => {
 		const h = new Headers()
 		expect(extractClientIp(h)).toBeUndefined()
 	})
 
-	test('[I4] XFF whitespace trimmed per segment', () => {
+	test('[I4] XFF whitespace trimmed per segment + right-walk applied', () => {
 		const h = new Headers({ 'x-forwarded-for': '   203.0.113.3   , 10.0.0.1' })
+		// 10.0.0.1 trusted → skip → 203.0.113.3 returned.
 		expect(extractClientIp(h)).toBe('203.0.113.3')
 	})
 

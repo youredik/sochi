@@ -23,9 +23,18 @@
  */
 
 import type { env as envType } from '../env.ts'
-import { logger } from '../logger.ts'
+import { logger as defaultLogger } from '../logger.ts'
 
 type EnvShape = typeof envType
+
+/**
+ * Minimal logger surface consumed by the guards. Accepts pino logger OR any
+ * structural mock (test injection). Optional — defaults к module logger when
+ * caller doesn't supply one (production / index.ts path).
+ */
+export interface GuardLogger {
+	warn: (obj: Record<string, unknown>, msg?: string) => void
+}
 
 /**
  * Fail-closed на foot-shot combination `APP_MODE=production` +
@@ -36,14 +45,15 @@ type EnvShape = typeof envType
  * = «production flags require operator-consciousness», not «cleverly inferred
  * from other flags».
  */
-export function assertNoDemoInProduction(env: EnvShape): void {
+export function assertNoDemoInProduction(env: EnvShape, opts: { logger?: GuardLogger } = {}): void {
 	if (env.APP_MODE !== 'production') return
 	if (!env.DEMO_DEPLOYMENT) return
 	if (env.APP_MODE_PERMITTED_DEMO_OVERRIDE) {
 		// Explicit operator opt-in — emit structured warning. Audit trail goes к
 		// log pipeline (NOT console.warn — that bypasses pino's request-context +
 		// log-aggregator routing, и dev-tools strip it from prod console output).
-		logger.warn(
+		const log = opts.logger ?? defaultLogger
+		log.warn(
 			{
 				reason: 'app_mode_permitted_demo_override',
 				appMode: env.APP_MODE,

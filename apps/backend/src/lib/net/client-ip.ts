@@ -6,9 +6,11 @@
  * anti-pattern that admitted XFF spoofing for rate-limiting + bot-scoring
  * signals.
  *
- * Single source of truth for both:
- *   - Webhook IP allowlists (ЮKassa et al.) — `resolveClientIp`
- *   - Rate-limit bucket keys — `resolveClientIpFromHonoContext`
+ * Single source of truth for:
+ *   - Webhook IP allowlists (ЮKassa et al.) — `resolveClientIp` (pure)
+ *   - Rate-limit bucket keys + consent-log audit — `extractClientIpFromContext`
+ *     (Hono Context wrapper, sync — `keyGenerator` cannot await)
+ *   - Direct sync callsites с pre-extracted `Headers` — `resolveClientIpSync`
  *
  * Why right-most-trusted-proxy:
  *   Direct attacker → forge XFF header → backend reads leftmost → infinite
