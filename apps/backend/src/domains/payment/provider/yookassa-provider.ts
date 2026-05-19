@@ -167,6 +167,17 @@ const ALLOWED_CONFIRMATION_HOSTS: ReadonlySet<string> = new Set(['yoomoney.ru', 
 export type YookassaProviderOptions = {
 	shopId: string
 	secretKey: string
+	/**
+	 * Previous `secretKey` value (B2, 2026-05-19). When provided, requests
+	 * receiving 401 are retried ONCE with this previous key. Defense against
+	 * ЮKassa's 48-hour sliding rotation window (their canon — single-active
+	 * secret + 48h grace). Operator rotates: set previous = current, current =
+	 * new, deploy. After 48h, unset previous. Optional — adapter no-ops if absent.
+	 *
+	 * Anti-pattern: previous-key usage triggers `logger.warn` для observability —
+	 * if seen frequently, rotation procedure has gap.
+	 */
+	secretKeyPrevious?: string
 	apiBase: string
 	/**
 	 * Default return_url passed в `confirmation`. Caller can override per-request
@@ -481,6 +492,14 @@ export function createYooKassaPaymentProvider(opts: YookassaProviderOptions): Pa
 	}
 
 	const authHeader = basicAuthHeader(opts.shopId, opts.secretKey)
+	// B2 (2026-05-19): ЮKassa 48h sliding-window dual-secret fallback.
+	// On 401 against current secret, retry ONCE с previous secret (если provided).
+	// Operator rotation flow: set previous=current + current=new + deploy, wait
+	// 48h, unset previous.
+	const authHeaderPrevious =
+		opts.secretKeyPrevious && opts.secretKeyPrevious.length > 0
+			? basicAuthHeader(opts.shopId, opts.secretKeyPrevious)
+			: null
 	const uuid = opts.uuid ?? (() => crypto.randomUUID())
 	const fetcher: ProviderFetch = opts.fetch ?? ((input, init) => globalThis.fetch(input, init))
 	const logger = opts.logger
@@ -488,15 +507,37 @@ export function createYooKassaPaymentProvider(opts: YookassaProviderOptions): Pa
 	const apiBase = opts.apiBase.replace(/\/$/, '')
 
 	async function callWithResilience(input: FetchInput): Promise<unknown> {
-		// `policy.execute(ctx)` provides AbortSignal which honors timeout.
-		return policy.execute(({ signal }) =>
-			callYookassa({
-				authHeader,
-				fetcher,
-				input,
-				abortSignal: signal,
-			}),
-		)
+		try {
+			// `policy.execute(ctx)` provides AbortSignal which honors timeout.
+			return await policy.execute(({ signal }) =>
+				callYookassa({
+					authHeader,
+					fetcher,
+					input,
+					abortSignal: signal,
+				}),
+			)
+		} catch (err) {
+			// B2: fall back к previous-key on 401, log warn (audit trail).
+			if (err instanceof YookassaAuthError && authHeaderPrevious !== null) {
+				logger?.warn(
+					{
+						provider: 'yookassa',
+						reason: 'auth_retry_with_previous_secret',
+					},
+					'yookassa: 401 on current secret — retrying с previous (rotation grace)',
+				)
+				return await policy.execute(({ signal }) =>
+					callYookassa({
+						authHeader: authHeaderPrevious,
+						fetcher,
+						input,
+						abortSignal: signal,
+					}),
+				)
+			}
+			throw err
+		}
 	}
 
 	return {

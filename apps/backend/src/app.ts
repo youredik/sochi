@@ -261,6 +261,7 @@ const paymentProviderResult = createPaymentProviderFromEnv({
 	appMode: env.APP_MODE,
 	yookassaShopId: env.YOOKASSA_SHOP_ID,
 	yookassaSecretKey: env.YOOKASSA_SECRET_KEY,
+	yookassaSecretKeyPrevious: env.YOOKASSA_SECRET_KEY_PREVIOUS,
 	yookassaApiBase: env.YOOKASSA_API_BASE,
 	// `return_url` для confirmation redirect — derive от PUBLIC_BASE_URL.
 	// PCI SAQ-A path: HTTPS-only в production (Yandex Cloud сертификаты).

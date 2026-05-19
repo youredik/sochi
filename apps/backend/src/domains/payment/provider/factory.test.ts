@@ -20,10 +20,15 @@ import { createPaymentProviderFromEnv, type PaymentProviderEnv } from './factory
 
 const VALID_YK: Pick<
 	PaymentProviderEnv,
-	'yookassaShopId' | 'yookassaSecretKey' | 'yookassaApiBase' | 'yookassaReturnUrl'
+	| 'yookassaShopId'
+	| 'yookassaSecretKey'
+	| 'yookassaSecretKeyPrevious'
+	| 'yookassaApiBase'
+	| 'yookassaReturnUrl'
 > = {
 	yookassaShopId: 'test_shop_123',
 	yookassaSecretKey: 'test_secret_abc',
+	yookassaSecretKeyPrevious: undefined,
 	yookassaApiBase: 'https://api.yookassa.ru/v3',
 	yookassaReturnUrl: 'https://example.com/booking/payment-return',
 }
@@ -31,6 +36,7 @@ const VALID_YK: Pick<
 const STUB_BASELINE: Omit<PaymentProviderEnv, 'paymentProvider' | 'appMode'> = {
 	yookassaShopId: undefined,
 	yookassaSecretKey: undefined,
+	yookassaSecretKeyPrevious: undefined,
 	yookassaApiBase: 'https://api.yookassa.ru/v3',
 	yookassaReturnUrl: 'https://example.com/booking/payment-return',
 }
@@ -112,6 +118,7 @@ describe('createPaymentProviderFromEnv', () => {
 					appMode: 'sandbox',
 					yookassaShopId: undefined,
 					yookassaSecretKey: 'test_secret_abc',
+					yookassaSecretKeyPrevious: undefined,
 					yookassaApiBase: 'https://api.yookassa.ru/v3',
 					yookassaReturnUrl: 'https://example.com/return',
 				}),
@@ -125,6 +132,7 @@ describe('createPaymentProviderFromEnv', () => {
 					appMode: 'sandbox',
 					yookassaShopId: 'test_shop_123',
 					yookassaSecretKey: undefined,
+					yookassaSecretKeyPrevious: undefined,
 					yookassaApiBase: 'https://api.yookassa.ru/v3',
 					yookassaReturnUrl: 'https://example.com/return',
 				}),
@@ -138,6 +146,7 @@ describe('createPaymentProviderFromEnv', () => {
 					appMode: 'sandbox',
 					yookassaShopId: '',
 					yookassaSecretKey: 'test_secret_abc',
+					yookassaSecretKeyPrevious: undefined,
 					yookassaApiBase: 'https://api.yookassa.ru/v3',
 					yookassaReturnUrl: 'https://example.com/return',
 				}),

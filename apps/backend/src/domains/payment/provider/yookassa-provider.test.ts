@@ -530,6 +530,83 @@ describe('refund', () => {
 })
 
 // -----------------------------------------------------------------------------
+// B2 dual-secret 48h fallback (2026-05-19)
+// -----------------------------------------------------------------------------
+
+describe('B2 dual-secret 48h fallback', () => {
+	test('401 + secretKeyPrevious set → retries with previous, returns success', async () => {
+		let n = 0
+		const fetchMock = mock<ProviderFetch>(async (_input, init) => {
+			n++
+			const auth = new Headers(init?.headers).get('Authorization')
+			// First call uses current key → 401. Second call uses previous → success.
+			if (n === 1) {
+				expect(auth).toContain(Buffer.from('test_shop_999:test_secret_abc').toString('base64'))
+				return jsonResponse(401, {})
+			}
+			expect(auth).toContain(Buffer.from('test_shop_999:previous_secret_xyz').toString('base64'))
+			return jsonResponse(200, PAYMENT_OBJECT_SUCCEEDED)
+		})
+		const p = createYooKassaPaymentProvider(
+			baseOpts({ fetch: fetchMock, secretKeyPrevious: 'previous_secret_xyz' }),
+		)
+		const snap = await p.initiate(INITIATE_REQ)
+		expect(snap.status).toBe('succeeded')
+		expect(fetchMock.mock.calls.length).toBe(2) // current + previous fallback
+	})
+
+	test('401 + NO secretKeyPrevious → throws YookassaAuthError (existing behavior preserved)', async () => {
+		const fetchMock = mock<ProviderFetch>(async () => jsonResponse(401, {}))
+		const p = createYooKassaPaymentProvider(baseOpts({ fetch: fetchMock }))
+		await expect(p.initiate(INITIATE_REQ)).rejects.toBeInstanceOf(YookassaAuthError)
+		expect(fetchMock.mock.calls.length).toBe(1) // NO retry without previous
+	})
+
+	test('401 on current + 401 on previous → throws YookassaAuthError after both tried', async () => {
+		const fetchMock = mock<ProviderFetch>(async () => jsonResponse(401, {}))
+		const p = createYooKassaPaymentProvider(
+			baseOpts({ fetch: fetchMock, secretKeyPrevious: 'previous_secret_xyz' }),
+		)
+		await expect(p.initiate(INITIATE_REQ)).rejects.toBeInstanceOf(YookassaAuthError)
+		expect(fetchMock.mock.calls.length).toBe(2) // both keys attempted
+	})
+
+	test('logger.warn fires when previous key used (audit signal)', async () => {
+		let n = 0
+		const fetchMock = mock<ProviderFetch>(async () => {
+			n++
+			return n === 1 ? jsonResponse(401, {}) : jsonResponse(200, PAYMENT_OBJECT_SUCCEEDED)
+		})
+		const warnCalls: Array<{ obj: Record<string, unknown>; msg: string | undefined }> = []
+		const p = createYooKassaPaymentProvider(
+			baseOpts({
+				fetch: fetchMock,
+				secretKeyPrevious: 'previous_secret_xyz',
+				logger: {
+					debug: () => {},
+					info: () => {},
+					warn: (obj, msg) => warnCalls.push({ obj, msg }),
+					error: () => {},
+				},
+			}),
+		)
+		await p.initiate(INITIATE_REQ)
+		expect(warnCalls.length).toBeGreaterThan(0)
+		const audit = warnCalls.find((c) => c.obj.reason === 'auth_retry_with_previous_secret')
+		// Exact-value assertion (canon: NO toBeDefined per weak_assertions=0).
+		expect(audit?.obj.reason).toBe('auth_retry_with_previous_secret')
+		expect(audit?.obj.provider).toBe('yookassa')
+	})
+
+	test('empty-string secretKeyPrevious treated as not-provided (defensive)', async () => {
+		const fetchMock = mock<ProviderFetch>(async () => jsonResponse(401, {}))
+		const p = createYooKassaPaymentProvider(baseOpts({ fetch: fetchMock, secretKeyPrevious: '' }))
+		await expect(p.initiate(INITIATE_REQ)).rejects.toBeInstanceOf(YookassaAuthError)
+		expect(fetchMock.mock.calls.length).toBe(1) // empty string → no fallback
+	})
+})
+
+// -----------------------------------------------------------------------------
 // verifyWebhook
 // -----------------------------------------------------------------------------
 

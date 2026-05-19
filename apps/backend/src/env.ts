@@ -188,6 +188,10 @@ export const envSchema = z.object({
 	PAYMENT_PROVIDER: z.enum(['stub', 'yookassa']).default('stub'),
 	YOOKASSA_SHOP_ID: z.string().optional(),
 	YOOKASSA_SECRET_KEY: z.string().optional(),
+	// B2 (2026-05-19): previous secret для 48h rotation grace. Operator flow:
+	// set previous=current + current=new + deploy, wait 48h, unset previous.
+	// Adapter retries 401s on current key с this previous one (logs warn).
+	YOOKASSA_SECRET_KEY_PREVIOUS: z.string().optional(),
 	YOOKASSA_API_BASE: z.url().default('https://api.yookassa.ru/v3'),
 
 	// Vision OCR provider selection (P2, 2026-05-19).

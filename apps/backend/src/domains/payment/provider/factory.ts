@@ -29,6 +29,11 @@ export type PaymentProviderEnv = {
 	appMode: 'sandbox' | 'production'
 	yookassaShopId: string | undefined
 	yookassaSecretKey: string | undefined
+	/**
+	 * Previous `secretKey` value для ЮKassa 48h rotation grace (B2, 2026-05-19).
+	 * Adapter retries 401s with this previous secret. Optional.
+	 */
+	yookassaSecretKeyPrevious: string | undefined
 	yookassaApiBase: string
 	/**
 	 * Default `return_url` для ЮKassa confirmation redirect. Caller can override
@@ -70,6 +75,9 @@ export function createPaymentProviderFromEnv(env: PaymentProviderEnv): CreatePay
 		const provider = createYooKassaPaymentProvider({
 			shopId: env.yookassaShopId,
 			secretKey: env.yookassaSecretKey,
+			...(env.yookassaSecretKeyPrevious
+				? { secretKeyPrevious: env.yookassaSecretKeyPrevious }
+				: {}),
 			apiBase: env.yookassaApiBase,
 			returnUrl: env.yookassaReturnUrl,
 		})
