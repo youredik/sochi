@@ -34,6 +34,7 @@ import { createFolioFactory } from './domains/folio/folio.factory.ts'
 import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
 import { createDemoInboxRoutes } from './domains/demo/inbox.routes.ts'
 import { createDemoSmsInboxRoutes } from './domains/demo/sms-inbox.routes.ts'
+import { demoInboxRateLimiter } from './middleware/demo-inbox-rate-limit.ts'
 import { initDemoInboxSms } from './workers/lib/demo-inbox-sms-adapter.ts'
 import { createIdentityRoutes } from './domains/identity/identity.routes.ts'
 import { createOnboardingFactory } from './domains/onboarding/onboarding.factory.ts'
@@ -656,14 +657,19 @@ const allCdcConsumers = [
 	slotReconciliationConsumer,
 ] as const
 
-// Graceful shutdown: SIGTERM (Serverless Container / K8s) drains the CDC
-// loop before the process exits so in-flight activity INSERTs commit and
-// the topic cursor advances cleanly (no message replay on restart).
 /**
  * Graceful shutdown — drains in-flight CDC consumers so activity INSERTs
  * commit cleanly and the topic cursor advances before the process exits
- * (no message replay on restart). Exported for smoke/E2E harnesses that
- * need programmatic teardown in addition to SIGTERM/SIGINT delivery.
+ * (no message replay on restart). Exported for smoke/E2E harnesses AND
+ * the production entrypoint (`index.ts main()`), which is the SINGLE owner
+ * of SIGTERM/SIGINT handlers. Module import is side-effect-free — registering
+ * signal handlers here previously raced с `index.ts` `shutdown()` (fire-and-
+ * forget vs await), corrupting in-flight CDC writes during k8s drain.
+ *
+ * Drain order matters: SSE shutdown event FIRST (clients begin reconnecting
+ * к other replicas), then CDC consumers, then crons / dispatchers. YDB driver
+ * close is the caller's responsibility — it must happen AFTER stopApp() так
+ * the consumers can finalize their writes.
  */
 export async function stopApp(): Promise<void> {
 	// G10 (2026-05-16) graceful shutdown canon (R2 ≥ 2026-05-16 + sse-starlette
@@ -684,12 +690,6 @@ export async function stopApp(): Promise<void> {
 	if (notificationCron) await notificationCron.stop()
 	await channelFactory.stopDispatcher()
 }
-process.once('SIGTERM', () => {
-	void stopApp()
-})
-process.once('SIGINT', () => {
-	void stopApp()
-})
 
 const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
 	.map((o) => o.trim())
@@ -868,6 +868,7 @@ const routes = app
 	// 404 (route literally has no inbox to surface). Belt-and-braces поверх
 	// the email-factory env-gating per [[demo_strategy]]: production deployments
 	// can't accidentally leak captures because the singleton is never created.
+	.use('/api/public/demo/*', demoInboxRateLimiter)
 	.route('/api/public/demo', createDemoInboxRoutes({ enabled: env.DEMO_DEPLOYMENT }))
 	.route('/api/public/demo', createDemoSmsInboxRoutes({ enabled: env.DEMO_DEPLOYMENT }))
 	.route('/api/admin', createAdminTaxRoutes(bookingFactory))
@@ -921,14 +922,26 @@ const routes = app
 	)
 	.get('/health/ready', async (c) => {
 		// Composite readiness: YDB reachable + production-mode invariants hold.
-		// Fail-closed: ANY check fails → 503 with structured detail.
-		const checks: { name: string; ok: boolean; error?: string }[] = []
+		// Fail-closed: ANY check fails → 503.
+		//
+		// Info-leak defense (2026-05-19): the public payload returns ONLY check
+		// names + ok/fail boolean. YDB stack traces, exception messages, и
+		// adapter names go к structured logger (operator-visible) — NOT в the
+		// response body (which ALB probes log к access logs, possibly attacker-
+		// observable via misconfigured CloudWatch / surfacing through forwarders).
+		// Mirrors OWASP API3:2023 «Excessive Data Exposure».
+		const checks: { name: string; ok: boolean }[] = []
 		// 1. YDB ping
 		try {
 			const result = await sql<[{ ok: number }]>`SELECT 1 AS ok`
-			checks.push({ name: 'ydb', ok: result[0]?.[0]?.ok === 1 })
+			const ydbOk = result[0]?.[0]?.ok === 1
+			checks.push({ name: 'ydb', ok: ydbOk })
+			if (!ydbOk) {
+				c.var.logger.error({ check: 'ydb' }, 'readiness: YDB probe returned unexpected shape')
+			}
 		} catch (err) {
-			checks.push({ name: 'ydb', ok: false, error: String(err) })
+			c.var.logger.error({ err, check: 'ydb' }, 'readiness: YDB probe threw')
+			checks.push({ name: 'ydb', ok: false })
 		}
 		// 2. Adapter readiness per APP_MODE
 		const whitelist = new Set(env.APP_MODE_PERMITTED_MOCK_ADAPTERS)
@@ -936,19 +949,22 @@ const routes = app
 			(a) => (a.mode === 'mock' || a.mode === 'sandbox') && !whitelist.has(a.name),
 		)
 		if (env.APP_MODE === 'production' && offenders.length > 0) {
-			checks.push({
-				name: 'adapters',
-				ok: false,
-				error: `${offenders.length} non-live adapter(s): ${offenders.map((o) => o.name).join(', ')}`,
-			})
+			c.var.logger.error(
+				{
+					check: 'adapters',
+					offenderCount: offenders.length,
+					offenderNames: offenders.map((o) => o.name),
+				},
+				'readiness: non-live adapters detected в production',
+			)
+			checks.push({ name: 'adapters', ok: false })
 		} else {
 			checks.push({ name: 'adapters', ok: true })
 		}
-		const allOk = checks.every((c) => c.ok)
+		const allOk = checks.every((ck) => ck.ok)
 		return c.json(
 			{
 				status: allOk ? ('ok' as const) : ('degraded' as const),
-				appMode: env.APP_MODE,
 				checks,
 				time: new Date().toISOString(),
 			},

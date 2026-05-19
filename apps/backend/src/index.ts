@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server'
-import { app } from './app.ts'
+import { app, stopApp } from './app.ts'
 import { closeDriver, readyDriver } from './db/index.ts'
 import { env } from './env.ts'
 import { assertProductionReady, listAdapters } from './lib/adapters/index.ts'
@@ -58,20 +58,37 @@ async function main(): Promise<void> {
 		},
 	)
 
+	// SIGTERM canon (k8s / Yandex Serverless Container drain):
+	//   1. stopApp() — drain CDC consumers, broadcast SSE shutdown, stop crons
+	//   2. server.close() — refuse new connections, complete in-flight requests
+	//   3. closeDriver() — release YDB session pool only after writes flushed
+	//   4. process.exit(0) — clean exit
+	// Each step awaited sequentially: order matters because consumers may still
+	// be writing during shutdown signal arrival. Race condition fixed 2026-05-19
+	// (previous codepath had a fire-and-forget `void stopApp()` в app.ts AND
+	// a parallel `process.exit(0)` here, corrupting in-flight CDC writes).
+	let shuttingDown = false
 	const shutdown = async (signal: string): Promise<void> => {
+		if (shuttingDown) return
+		shuttingDown = true
 		logger.info({ signal }, 'Shutting down')
+		try {
+			await stopApp()
+		} catch (err) {
+			logger.error({ err }, 'stopApp failed during shutdown')
+		}
 		server.close()
 		await closeDriver()
 		process.exit(0)
 	}
 
-	process.on('SIGINT', () => {
+	process.once('SIGINT', () => {
 		shutdown('SIGINT').catch((err) => {
 			logger.error({ err }, 'Shutdown error')
 			process.exit(1)
 		})
 	})
-	process.on('SIGTERM', () => {
+	process.once('SIGTERM', () => {
 		shutdown('SIGTERM').catch((err) => {
 			logger.error({ err }, 'Shutdown error')
 			process.exit(1)

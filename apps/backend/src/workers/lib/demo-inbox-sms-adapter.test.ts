@@ -17,6 +17,7 @@ import { describe, expect, test } from 'bun:test'
 import {
 	DemoInboxSmsAdapter,
 	DEFAULT_TTL_MS,
+	MAX_BODY_LENGTH,
 	MAX_PER_RECIPIENT,
 	MAX_TOTAL_RECIPIENTS,
 } from './demo-inbox-sms-adapter.ts'
@@ -85,6 +86,36 @@ describe('DemoInboxSmsAdapter — send', () => {
 		const adapter = new DemoInboxSmsAdapter()
 		const result = await adapter.send({ to: '+79991234567', body: '' })
 		expect(result.kind).toBe('permanent')
+		if (result.kind === 'permanent') {
+			expect(result.reason).toMatch(/empty/i)
+		}
+	})
+
+	test('whitespace-only body rejected (M3 fix — provider-symmetric)', async () => {
+		const adapter = new DemoInboxSmsAdapter()
+		const spaces = await adapter.send({ to: '+79991234567', body: '   ' })
+		expect(spaces.kind).toBe('permanent')
+		const tabsNewlines = await adapter.send({ to: '+79991234567', body: '\t\n\r ' })
+		expect(tabsNewlines.kind).toBe('permanent')
+		// Should NOT have captured anything (both rejected).
+		expect(adapter.recipientCount()).toBe(0)
+	})
+
+	test('body at MAX_BODY_LENGTH accepted; over → permanent', async () => {
+		const adapter = new DemoInboxSmsAdapter()
+		const atCap = 'a'.repeat(MAX_BODY_LENGTH)
+		const overCap = 'a'.repeat(MAX_BODY_LENGTH + 1)
+		const r1 = await adapter.send({ to: '+79991234567', body: atCap })
+		expect(r1.kind).toBe('sent')
+		const r2 = await adapter.send({ to: '+79991234567', body: overCap })
+		expect(r2.kind).toBe('permanent')
+		if (r2.kind === 'permanent') {
+			expect(r2.reason).toMatch(/exceeds.*cap/i)
+		}
+	})
+
+	test('MAX_BODY_LENGTH constant = 1530 (10 GSM-7 parts × 153)', () => {
+		expect(MAX_BODY_LENGTH).toBe(1530)
 	})
 })
 

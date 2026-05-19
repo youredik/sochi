@@ -23,6 +23,7 @@
  */
 
 import type { env as envType } from '../env.ts'
+import { logger } from '../logger.ts'
 
 type EnvShape = typeof envType
 
@@ -39,10 +40,16 @@ export function assertNoDemoInProduction(env: EnvShape): void {
 	if (env.APP_MODE !== 'production') return
 	if (!env.DEMO_DEPLOYMENT) return
 	if (env.APP_MODE_PERMITTED_DEMO_OVERRIDE) {
-		// Explicit operator opt-in — log warning but allow.
-		// eslint-disable-next-line no-console
-		console.warn(
-			'⚠ APP_MODE=production with DEMO_DEPLOYMENT=true permitted via ' +
+		// Explicit operator opt-in — emit structured warning. Audit trail goes к
+		// log pipeline (NOT console.warn — that bypasses pino's request-context +
+		// log-aggregator routing, и dev-tools strip it from prod console output).
+		logger.warn(
+			{
+				reason: 'app_mode_permitted_demo_override',
+				appMode: env.APP_MODE,
+				demoDeployment: env.DEMO_DEPLOYMENT,
+			},
+			'APP_MODE=production with DEMO_DEPLOYMENT=true permitted via ' +
 				'APP_MODE_PERMITTED_DEMO_OVERRIDE=true. Demo features visible in production — ' +
 				'verify per-tenant mode is correctly partitioning users.',
 		)
@@ -63,15 +70,20 @@ export function assertNoDemoInProduction(env: EnvShape): void {
  * gate falls through к `reason: 'disabled'` и every magic-link request goes
  * ungated. Demo deployments (`DEMO_DEPLOYMENT=true`) are exempt — they're
  * publicly friction-free by design per `[[demo_strategy]]`.
+ *
+ * Whitespace-only defence: a deploy environment where the secret manager
+ * substituted an unset variable as `"   "` (newline / tab from CI YAML
+ * heredoc trim issues) would otherwise pass `.length > 0` while still
+ * being a non-key. `.trim()` closes that gap.
  */
 export function assertProductionCaptchaConfigured(env: EnvShape): void {
 	// Guard is self-contained — sandbox skip (consistent с assertNoDemoInProduction).
 	// Caller can call regardless of APP_MODE; function no-ops outside production.
 	if (env.APP_MODE !== 'production') return
 	if (env.DEMO_DEPLOYMENT) return
-	if (env.SMARTCAPTCHA_SERVER_KEY && env.SMARTCAPTCHA_SERVER_KEY.length > 0) return
+	if (env.SMARTCAPTCHA_SERVER_KEY && env.SMARTCAPTCHA_SERVER_KEY.trim().length > 0) return
 	throw new Error(
-		'Refusing to start in APP_MODE=production: SMARTCAPTCHA_SERVER_KEY is unset and ' +
+		'Refusing to start in APP_MODE=production: SMARTCAPTCHA_SERVER_KEY is unset/blank and ' +
 			'DEMO_DEPLOYMENT=false. Either configure SmartCaptcha (see env.ts ' +
 			'SMARTCAPTCHA_SERVER_KEY) or flip DEMO_DEPLOYMENT=true для public demo builds.',
 	)

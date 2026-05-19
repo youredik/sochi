@@ -32,6 +32,13 @@ export const MAX_PER_RECIPIENT = 20
 export const MAX_TOTAL_RECIPIENTS = 500
 /** SMS lifetime — typical OTP / booking confirmation expires in 5 min. */
 export const DEFAULT_TTL_MS = 5 * 60 * 1000
+/**
+ * Hard cap на body length — Yandex Cloud CNS / production SMS providers reject
+ * payloads beyond ~1530 chars (10 concatenated parts at 153 each для GSM-7,
+ * 9 parts at 67 для UCS-2). Even в demo this caps memory footprint: max
+ * (500 recipients × 20 captures × 1530 bytes) ≈ 15 MB worst-case.
+ */
+export const MAX_BODY_LENGTH = 1530
 
 export interface CapturedSms {
 	readonly to: string
@@ -72,10 +79,20 @@ export class DemoInboxSmsAdapter implements SmsAdapter {
 				reason: 'phone is not valid E.164 format',
 			}
 		}
-		if (input.body.length === 0) {
+		// Empty / whitespace-only body — symmetric к email canon (no «blank text»
+		// captures allowed). Mirrors production provider rejection (Yandex Cloud
+		// CNS rejects on `body.trim().length === 0`).
+		if (input.body.trim().length === 0) {
 			return {
 				kind: 'permanent',
-				reason: 'sms body cannot be empty',
+				reason: 'sms body cannot be empty or whitespace-only',
+			}
+		}
+		// Cap длина — protects in-process memory + matches production carrier limit.
+		if (input.body.length > MAX_BODY_LENGTH) {
+			return {
+				kind: 'permanent',
+				reason: `sms body exceeds ${MAX_BODY_LENGTH}-char cap (got ${input.body.length})`,
 			}
 		}
 

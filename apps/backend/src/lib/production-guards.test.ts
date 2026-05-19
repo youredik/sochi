@@ -10,7 +10,8 @@
  *   - error messages contain actionable hints
  */
 
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, mock, test } from 'bun:test'
+import { logger } from '../logger.ts'
 import { assertNoDemoInProduction, assertProductionCaptchaConfigured } from './production-guards.ts'
 
 type EnvShape = {
@@ -57,14 +58,12 @@ describe('assertNoDemoInProduction', () => {
 		).toThrow(/APP_MODE=production with DEMO_DEPLOYMENT=true/)
 	})
 
-	test('APP_MODE=production + DEMO=true + override=true → pass с console.warn', () => {
-		const originalWarn = console.warn
-		let warnCalled = false
-		let warnMsg = ''
-		console.warn = (msg: unknown) => {
-			warnCalled = true
-			warnMsg = String(msg)
-		}
+	test('APP_MODE=production + DEMO=true + override=true → pass с structured logger.warn (NOT console.warn)', () => {
+		// Logger canon: structured pino.warn with `reason` field — NOT console.warn
+		// (which bypasses pino routing). M2 (2026-05-19) fix.
+		const warnSpy = mock<typeof logger.warn>(() => undefined as never)
+		const originalWarn = logger.warn
+		logger.warn = warnSpy as unknown as typeof logger.warn
 		try {
 			expect(() =>
 				assertNoDemoInProduction(
@@ -75,10 +74,13 @@ describe('assertNoDemoInProduction', () => {
 					}),
 				),
 			).not.toThrow()
-			expect(warnCalled).toBe(true)
-			expect(warnMsg).toContain('APP_MODE=production with DEMO_DEPLOYMENT=true permitted')
+			expect(warnSpy).toHaveBeenCalledTimes(1)
+			const [bindings, msg] = warnSpy.mock.calls[0] ?? []
+			expect((bindings as { reason?: string })?.reason).toBe('app_mode_permitted_demo_override')
+			expect((bindings as { appMode?: string })?.appMode).toBe('production')
+			expect(String(msg)).toContain('APP_MODE=production with DEMO_DEPLOYMENT=true permitted')
 		} finally {
-			console.warn = originalWarn
+			logger.warn = originalWarn
 		}
 	})
 
@@ -124,13 +126,38 @@ describe('assertProductionCaptchaConfigured', () => {
 			assertProductionCaptchaConfigured(
 				asEnv({ ...PRODUCTION_BASE, SMARTCAPTCHA_SERVER_KEY: undefined }),
 			),
-		).toThrow(/SMARTCAPTCHA_SERVER_KEY is unset/)
+		).toThrow(/SMARTCAPTCHA_SERVER_KEY is unset\/blank/)
 	})
 
-	test('Production + DEMO=false + captcha EMPTY STRING → throw (defense vs whitespace)', () => {
+	test('Production + DEMO=false + captcha EMPTY STRING → throw', () => {
 		expect(() =>
 			assertProductionCaptchaConfigured(asEnv({ ...PRODUCTION_BASE, SMARTCAPTCHA_SERVER_KEY: '' })),
-		).toThrow(/SMARTCAPTCHA_SERVER_KEY is unset/)
+		).toThrow(/SMARTCAPTCHA_SERVER_KEY is unset\/blank/)
+	})
+
+	test('Production + DEMO=false + captcha WHITESPACE-ONLY → throw (M1 fix — secret-manager substitution defense)', () => {
+		// CI YAML heredoc trim issues can substitute "\n" / "\t" / "   " into a
+		// secret env var; `.length > 0` previously passed но such "key" is unusable.
+		expect(() =>
+			assertProductionCaptchaConfigured(
+				asEnv({ ...PRODUCTION_BASE, SMARTCAPTCHA_SERVER_KEY: '   ' }),
+			),
+		).toThrow(/SMARTCAPTCHA_SERVER_KEY is unset\/blank/)
+		expect(() =>
+			assertProductionCaptchaConfigured(
+				asEnv({ ...PRODUCTION_BASE, SMARTCAPTCHA_SERVER_KEY: '\n\t ' }),
+			),
+		).toThrow(/SMARTCAPTCHA_SERVER_KEY is unset\/blank/)
+	})
+
+	test('Production + DEMO=false + captcha key с trailing whitespace → PASS (real key с newline trim)', () => {
+		// Valid key с trailing newline (common in CI heredoc) should still pass —
+		// `.trim().length > 0` accepts because real chars present.
+		expect(() =>
+			assertProductionCaptchaConfigured(
+				asEnv({ ...PRODUCTION_BASE, SMARTCAPTCHA_SERVER_KEY: 'ysc2_real_key\n' }),
+			),
+		).not.toThrow()
 	})
 
 	test('error message provides fix hints (both vectors)', () => {
