@@ -1,13 +1,18 @@
 # =============================================================================
-# Serverless Container — backend (Hono + Bun --compile, distroless)
+# Serverless Container — backend (Node 24 Alpine + pnpm deploy --legacy)
 # =============================================================================
 #
-# Canon Q2 2026:
-#   - Image от Container Registry (с SHA pin OR :latest для first-deploy)
+# Canon Q2 2026 (verified empirically 2026-05-19):
+#   - Image от Container Registry с SHA pin (current: cf4bc2c-flatten — see
+#     handover_2026_05_19 в memory for revision lineage)
+#   - Runtime: Node 24 Alpine + `node --import=amaro/strip src/index.ts`
+#     (Bun --compile abandoned — bundler не copies .node native deps; see
+#     Dockerfile commentary). 6 CVEs vs Debian slim 27.
 #   - PORT env auto-injected by YC — backend reads via process.env.PORT
 #   - Secrets через `secrets {}` block с Lockbox secret_ref (НЕ env value)
 #   - Runtime SA с container-registry.images.puller (см. registry.tf) +
-#     lockbox.payloadViewer (см. lockbox.tf) + ydb.editor (см. iam.tf)
+#     lockbox.payloadViewer (см. lockbox.tf) + ydb.editor (см. iam.tf) +
+#     storage.viewer/editor на frontend bucket (для API Gateway integration)
 #   - provisioned_instances=2 (mirror stankoff canon) для warm path
 #   - concurrency=4 per Stankoff post-OOM tune (M8.B research)
 
@@ -38,7 +43,7 @@ variable "container_provisioned" {
 resource "yandex_serverless_container" "backend" {
   folder_id          = var.demo_folder_id
   name               = "sochi-backend-demo"
-  description        = "Demo backend (Hono + Bun --compile, distroless): demo.sepshn.ru/api/*"
+  description        = "Demo backend (Node 24 Alpine + Hono): demo.sepshn.ru/api/*"
   memory             = var.container_memory_mb
   cores              = 1
   core_fraction      = 100
@@ -113,10 +118,12 @@ resource "yandex_serverless_container" "backend" {
     environment = "demo"
   }
 
-  # CI manages image revisions via `yc-actions/yc-sls-container-deploy@v4` —
-  # TF ignores image[0].url drift к не revert revisions при routine `tofu apply`.
-  # env vars / secrets / resources stay под TF management (image block is the
-  # only CI-mutable surface). Q2 2026 canon (verified empirically May 19).
+  # Image revisions managed OUT-OF-BAND of TF: currently manual via `yc
+  # serverless container revision deploy ...` (Day 0/1 deploy log). Future:
+  # `.sourcecraft/ci.yaml` deploy workflow (currently .draft pending syntax
+  # verify, see handover_2026_05_19). TF ignores image[0].url drift к не
+  # revert revision pin при routine `tofu apply`. Env vars / secrets /
+  # resources stay под TF management. Q2 2026 canon — stankoff-v2 mirror.
   lifecycle {
     ignore_changes = [image[0].url]
   }

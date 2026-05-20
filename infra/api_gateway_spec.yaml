@@ -77,6 +77,14 @@ paths:
         bucket: ${frontend_bucket}
         object: index.html
         service_account_id: ${runtime_service_account}
+    head:
+      operationId: spaRootHead
+      summary: HEAD support — service workers + monitoring tools rely on HEAD for cache freshness checks
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: ${frontend_bucket}
+        object: index.html
+        service_account_id: ${runtime_service_account}
 
   # 4. SPA static assets + client-side router fallback.
   #    Greedy `{file+}` matches multi-segment paths (e.g. `/booking/abc-123`).
@@ -86,6 +94,23 @@ paths:
     get:
       operationId: spaAsset
       summary: Serve SPA assets с SPA-fallback на missing keys
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: ${frontend_bucket}
+        object: '{file}'
+        error_object:
+          object: index.html
+          statusCode: 200
+        service_account_id: ${runtime_service_account}
+    head:
+      operationId: spaAssetHead
+      summary: HEAD for asset cache validation (browsers + SW workbox)
       parameters:
         - name: file
           in: path

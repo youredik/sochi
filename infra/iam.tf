@@ -40,11 +40,20 @@ resource "yandex_iam_service_account_static_access_key" "backend_s3" {
   description        = "S3 static key для backend → demo_backend_files bucket"
 }
 
-# Runtime SA needs viewer-level access to frontend bucket so API Gateway
-# object_storage integration can serve SPA assets (Q2 2026 canon — gateway
-# acts on behalf of SA whose id is referenced in `x-yc-apigateway-integration`).
-# The bucket itself is anonymous-read для browsers, но the gateway integration
-# call uses SA identity (not anonymous) per YC documented contract.
+# Frontend bucket bindings: viewer (READ для API Gateway integration) +
+# editor (WRITE для deploy script via aws s3 sync). Both explicit:
+#
+#   - viewer: API Gateway `x-yc-apigateway-integration: object_storage` acts
+#     on behalf of this SA (Q2 2026 canon — gateway issues signed requests
+#     к S3 endpoint via SA identity, не anonymous, даже когда bucket has
+#     anonymous_access_flags.read=true в storage.tf)
+#
+#   - editor: deploy script (sync dist/ → bucket с Cache-Control headers
+#     via `aws s3 cp --cache-control`). One SA serves both read+write paths.
+#
+# YC IAM canon: editor IS NOT а superset of viewer at API Gateway level —
+# объект_storage integration ONLY accepts viewer-class roles for read path.
+# Hence both bindings explicit (defense-in-depth + future role-narrowing OK).
 resource "yandex_storage_bucket_iam_binding" "frontend_runtime_viewer" {
   bucket = yandex_storage_bucket.demo_frontend.bucket
   role   = "storage.viewer"
@@ -53,9 +62,6 @@ resource "yandex_storage_bucket_iam_binding" "frontend_runtime_viewer" {
   ]
 }
 
-# Editor binding для same SA — нужен для CI/script upload via `aws s3 sync`
-# с two-pass cache-control. Сегодня одноразовый manual deploy, завтра CI
-# использует тот же static_access_key.backend_s3 → can write к frontend bucket.
 resource "yandex_storage_bucket_iam_binding" "frontend_runtime_editor" {
   bucket = yandex_storage_bucket.demo_frontend.bucket
   role   = "storage.editor"
