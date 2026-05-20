@@ -14,7 +14,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
-import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as WidgetTenantSlugRouteImport } from './routes/widget.$tenantSlug'
 import { Route as BookingJwtRouteImport } from './routes/booking.$jwt'
 import { Route as AppOSelectRouteImport } from './routes/_app.o-select'
@@ -63,10 +63,10 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppIndexRoute = AppIndexRouteImport.update({
+const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
 const WidgetTenantSlugRoute = WidgetTenantSlugRouteImport.update({
   id: '/widget/$tenantSlug',
@@ -199,7 +199,7 @@ const AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppIndexRoute
+  '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
@@ -229,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/o/$orgSlug/properties/$propertyId/inventory/rooms': typeof AppOOrgSlugPropertiesPropertyIdInventoryRoomsRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
@@ -236,7 +237,6 @@ export interface FileRoutesByTo {
   '/o-select': typeof AppOSelectRoute
   '/booking/$jwt': typeof BookingJwtRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
-  '/': typeof AppIndexRoute
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
@@ -259,6 +259,7 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
@@ -267,7 +268,6 @@ export interface FileRoutesById {
   '/_app/o-select': typeof AppOSelectRoute
   '/booking/$jwt': typeof BookingJwtRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
-  '/_app/': typeof AppIndexRoute
   '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug_/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
@@ -322,6 +322,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/properties/$propertyId/inventory/rooms'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/login'
     | '/privacy'
     | '/signup'
@@ -329,7 +330,6 @@ export interface FileRouteTypes {
     | '/o-select'
     | '/booking/$jwt'
     | '/widget/$tenantSlug'
-    | '/'
     | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug/$propertyId'
     | '/o/$orgSlug/grid'
@@ -351,6 +351,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/properties/$propertyId/inventory/rooms'
   id:
     | '__root__'
+    | '/'
     | '/_app'
     | '/login'
     | '/privacy'
@@ -359,7 +360,6 @@ export interface FileRouteTypes {
     | '/_app/o-select'
     | '/booking/$jwt'
     | '/widget/$tenantSlug'
-    | '/_app/'
     | '/_app/o/$orgSlug'
     | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug_/$propertyId'
@@ -383,6 +383,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -433,12 +434,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/': {
-      id: '/_app/'
+    '/': {
+      id: '/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/widget/$tenantSlug': {
       id: '/widget/$tenantSlug'
@@ -665,19 +666,18 @@ const AppOOrgSlugRouteWithChildren = AppOOrgSlugRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppOSelectRoute: typeof AppOSelectRoute
-  AppIndexRoute: typeof AppIndexRoute
   AppOOrgSlugRoute: typeof AppOOrgSlugRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppOSelectRoute: AppOSelectRoute,
-  AppIndexRoute: AppIndexRoute,
   AppOOrgSlugRoute: AppOOrgSlugRouteWithChildren,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
