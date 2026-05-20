@@ -23,26 +23,39 @@ resource "yandex_container_repository" "backend" {
   name = "${yandex_container_registry.sepshn_cr.id}/backend"
 }
 
-# Lifecycle policy — keep last 10 tagged images, delete untagged older 7 days.
-# Защищает от unbounded storage cost (Container Registry billed по GB-month).
+# Lifecycle policy — stankoff-v2 production canon (Apr-May 2026, tightened
+# from 10/720h на 2026-04-24 после cost audit). Settings:
+#
+#   - Tagged: keep 5 newest + 7-day expire — matches 4-5 deploys/day cadence
+#     с 1-2 day rollback window. Beyond 5, anything older 7d is pruned даже
+#     if newer than top-5 list (defense against rapid-debug iteration trains
+#     like cf4bc2c-* on 2026-05-19 — 9 debug tags shipped in 3 hours).
+#   - Untagged: 48h prune — sha256-only refs (artifacts от docker buildx
+#     provenance / multi-arch manifest stubs) are short-lived debug artifacts.
+#
+# Defense against unbounded storage cost (cr.yandex billed per GB-month).
+# Policy runs nightly via YC scheduler — declarative canon (no imperative
+# `yc image delete` loops, which safety classifier blocks anyway).
+#
 # TODO (prod): enable vulnerability scanner via console UI (Q2 2026 — нет TF
 # resource yet, see github.com/yandex-cloud/terraform-provider-yandex issue).
 resource "yandex_container_repository_lifecycle_policy" "backend_retention" {
-  name          = "backend-keep-last-10"
+  name          = "backend-stankoff-canon"
   status        = "active"
   repository_id = yandex_container_repository.backend.id
 
   rule {
-    description  = "Keep last 10 tagged images (any tag pattern), delete older"
-    untagged     = false
-    tag_regexp   = ".*"
-    retained_top = 10
+    description   = "Keep 5 newest tagged + prune older 7d"
+    untagged      = false
+    tag_regexp    = ".*"
+    retained_top  = 5
+    expire_period = "168h" # 7 days
   }
 
   rule {
-    description   = "Delete untagged > 7 days"
+    description   = "Prune untagged (sha256-only stubs) > 48h"
     untagged      = true
-    expire_period = "168h" # 7 days
+    expire_period = "48h"
   }
 }
 
