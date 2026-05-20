@@ -17,7 +17,7 @@ resource "yandex_container_registry" "sepshn_cr" {
 #
 # Каноничный pattern Q2 2026: один repository per image type.
 # Image URL: `cr.yandex/<registry_id>/<repo_name>:<tag>`
-# Example: cr.yandex/crprdhmq3p9f9a5j5ck6/backend:v1.0.0
+# Example: cr.yandex/crp4um8fg84qoro1voi6/backend:v1.0.0
 
 resource "yandex_container_repository" "backend" {
   name = "${yandex_container_registry.sepshn_cr.id}/backend"

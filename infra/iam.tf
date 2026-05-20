@@ -2,9 +2,9 @@
 # IAM — service accounts + role bindings
 # =============================================================================
 #
-# Bootstrap SAs (managed via _bootstrap/bootstrap.sh, NOT here):
-#   - `tf-bot` (ajeh7mk9muf6gbsee66l) — state backend ownership
-#   - `claude` (aje8q3kjgtmh2a09fckk) — bootstrap cloud-admin
+# Bootstrap SAs (managed via _bootstrap/bootstrap.sh + console UI, NOT here):
+#   - `tf-bot` (ajer6tlq2rcccuuln5vq) — state backend ownership
+#   - `claude` (ajel5mli0hshm053amt8) — bootstrap cloud-admin (var.bootstrap_claude_sa_id)
 #
 # tofu-managed SAs ниже — declarative product runtime accounts.
 
