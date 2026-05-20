@@ -7,7 +7,7 @@
 # не tofu-imported.
 
 resource "yandex_dns_zone" "sepshn_ru" {
-  folder_id         = var.infra_folder_id
+  folder_id         = yandex_resourcemanager_folder.infra.id
   name              = "sepshn-ru"
   description       = "Public DNS zone for sepshn.ru (registered at reg.ru, delegated to YC NS)"
   zone              = "${var.domain}."

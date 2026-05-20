@@ -9,7 +9,7 @@
 # YC handles ACME on its side → no manual TXT updates на renewals.
 
 resource "yandex_cm_certificate" "sepshn_wildcard" {
-  folder_id   = var.infra_folder_id
+  folder_id   = yandex_resourcemanager_folder.infra.id
   name        = "sepshn-wildcard"
   description = "Wildcard managed cert for *.sepshn.ru + apex sepshn.ru (Let's Encrypt DNS-01, auto-renew)"
 

@@ -3,7 +3,7 @@
 # =============================================================================
 
 resource "yandex_container_registry" "sepshn_cr" {
-  folder_id = var.infra_folder_id
+  folder_id = yandex_resourcemanager_folder.infra.id
   name      = "sepshn-cr"
 
   labels = {
@@ -65,4 +65,14 @@ resource "yandex_container_registry_iam_binding" "runtime_puller" {
   registry_id = yandex_container_registry.sepshn_cr.id
   role        = "container-registry.images.puller"
   members     = ["serviceAccount:${yandex_iam_service_account.sochi_backend_runtime.id}"]
+}
+
+# Bootstrap claude SA — explicit pusher role на registry для CI/manual deploy.
+# Canon: TF-managed binding (cleaner audit than ad-hoc `yc add-access-binding`).
+# `claude` SA was created manually via console (one-time bootstrap), но IAM
+# bindings — TF.
+resource "yandex_container_registry_iam_binding" "claude_pusher" {
+  registry_id = yandex_container_registry.sepshn_cr.id
+  role        = "container-registry.images.pusher"
+  members     = ["serviceAccount:ajel5mli0hshm053amt8"]
 }

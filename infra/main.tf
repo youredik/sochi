@@ -66,7 +66,7 @@ terraform {
     endpoints = {
       s3 = "https://storage.yandexcloud.net"
     }
-    bucket = "sepshn-tfstate"
+    bucket = "sepshn-tfstate-v2"
     key    = "infra/terraform.tfstate"
     region = "ru-central1"
 

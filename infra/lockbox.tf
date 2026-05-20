@@ -20,7 +20,7 @@
 
 # KMS key для Lockbox SSE — separate от state encryption blast radius
 resource "yandex_kms_symmetric_key" "lockbox_encryption" {
-  folder_id         = var.infra_folder_id
+  folder_id         = yandex_resourcemanager_folder.infra.id
   name              = "lockbox-encryption"
   description       = "KMS key для encryption Lockbox secrets (sochi-backend-* family)"
   default_algorithm = "AES_256"
@@ -41,7 +41,7 @@ resource "yandex_kms_symmetric_key_iam_binding" "lockbox_encrypter" {
 
 # Runtime SA нуждается lockbox.payloadViewer для чтения secret values
 resource "yandex_resourcemanager_folder_iam_member" "runtime_lockbox_viewer" {
-  folder_id = var.demo_folder_id
+  folder_id = yandex_resourcemanager_folder.demo.id
   role      = "lockbox.payloadViewer"
   member    = "serviceAccount:${yandex_iam_service_account.sochi_backend_runtime.id}"
 }
@@ -51,7 +51,7 @@ resource "yandex_resourcemanager_folder_iam_member" "runtime_lockbox_viewer" {
 # ---------------------------------------------------------------------------
 
 resource "yandex_lockbox_secret" "backend" {
-  folder_id   = var.demo_folder_id
+  folder_id   = yandex_resourcemanager_folder.demo.id
   name        = "sochi-backend-secrets"
   description = "Demo backend secrets (BETTER_AUTH_SECRET; больше — в prod phase)"
   kms_key_id  = yandex_kms_symmetric_key.lockbox_encryption.id

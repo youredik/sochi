@@ -13,7 +13,7 @@
 # Reference: yandex.cloud/en/docs/api-gateway/operations/api-gw-domains
 
 resource "yandex_api_gateway" "demo" {
-  folder_id   = var.demo_folder_id
+  folder_id   = yandex_resourcemanager_folder.demo.id
   name        = "sochi-gateway-demo"
   description = "Edge API Gateway для demo.sepshn.ru (Track A)"
 

@@ -6,7 +6,7 @@
 # OR via direct public ACL — production: API Gateway path, demo: direct OK)
 resource "yandex_storage_bucket" "demo_frontend" {
   bucket    = "sepshn-demo-frontend"
-  folder_id = var.demo_folder_id
+  folder_id = yandex_resourcemanager_folder.demo.id
 
   # SPA assets are public — index.html, JS bundles, CSS
   anonymous_access_flags {
@@ -24,7 +24,7 @@ resource "yandex_storage_bucket" "demo_frontend" {
 # Even demo (Mock vision) requires bucket existence для backend env startup.
 resource "yandex_storage_bucket" "demo_backend_files" {
   bucket    = "sepshn-demo-backend-files"
-  folder_id = var.demo_folder_id
+  folder_id = yandex_resourcemanager_folder.demo.id
 
   # Private — backend reads/writes via static access key (см. iam.tf)
   default_storage_class = "STANDARD"

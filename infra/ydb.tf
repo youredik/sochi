@@ -9,7 +9,7 @@
 # No VPC subnet required — public gRPCs endpoint с IAM.
 
 resource "yandex_ydb_database_serverless" "demo" {
-  folder_id   = var.demo_folder_id
+  folder_id   = yandex_resourcemanager_folder.demo.id
   name        = "demo"
   description = "Demo deployment YDB Serverless — Track A (DEMO_DEPLOYMENT=true)"
 

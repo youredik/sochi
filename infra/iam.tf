@@ -10,7 +10,7 @@
 
 # Demo backend runtime SA (used by Serverless Container)
 resource "yandex_iam_service_account" "sochi_backend_runtime" {
-  folder_id   = var.demo_folder_id
+  folder_id   = yandex_resourcemanager_folder.demo.id
   name        = "sochi-backend-runtime"
   description = "Demo backend runtime SA: YDB editor + Object Storage viewer + Container invoker"
 }

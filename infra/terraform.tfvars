@@ -1,13 +1,19 @@
 # =============================================================================
 # Sepshn IaC — environment values (committed — все public IDs, no secrets)
 # =============================================================================
+#
+# Migration к новый cloud 2026-05-20:
+#   Old: youredik org / sepshn cloud b1g444ngoknombq45l4t (deleted by user)
+#   New: Сэпшн org bpfar26apvm2ljel57ta / sepshn cloud b1gisf466novulsg0a0n
+#
+# Структура упрощена: 1 folder `infra` для всего (раньше было infra + demo).
 
-yc_cloud_id        = "b1g444ngoknombq45l4t"   # cloud sepshn
-yc_organization_id = "bpfvruf04ttdp3gmpj8h"
-infra_folder_id    = "b1g6abh503j0dvitdccg"   # folder infra (renamed from default)
-demo_folder_id     = "b1gcqa89an0n32mqpuvo"   # folder demo
+yc_cloud_id        = "b1gisf466novulsg0a0n"   # cloud sepshn (новое)
+yc_organization_id = "bpfar26apvm2ljel57ta"   # org Сэпшн (новое)
+infra_folder_id    = "b1gp4bo808jr6qvrnltu"   # folder infra (единственный)
+demo_folder_id     = "b1gp4bo808jr6qvrnltu"   # demo resources в том же folder
 
 # Bootstrap-created resources (см. _bootstrap/bootstrap.sh):
-tf_bot_sa_id        = "ajeh7mk9muf6gbsee66l"
-tf_state_kms_key_id = "abj7p3c9pbdmko5jsrtb"
-tf_state_bucket     = "sepshn-tfstate"
+tf_bot_sa_id        = "ajer6tlq2rcccuuln5vq"
+tf_state_kms_key_id = "abjrq8h1v9o6tam8ml8n"
+tf_state_bucket     = "sepshn-tfstate-v2"

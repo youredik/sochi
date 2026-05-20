@@ -41,7 +41,7 @@ variable "container_provisioned" {
 }
 
 resource "yandex_serverless_container" "backend" {
-  folder_id          = var.demo_folder_id
+  folder_id          = yandex_resourcemanager_folder.demo.id
   name               = "sochi-backend-demo"
   description        = "Demo backend (Node 24 Alpine + Hono): demo.sepshn.ru/api/*"
   memory             = var.container_memory_mb
