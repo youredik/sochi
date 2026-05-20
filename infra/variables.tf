@@ -12,13 +12,24 @@ variable "yc_organization_id" {
   type        = string
 }
 
+# DEPRECATED 2026-05-20: folders теперь managed via folders.tf TF resources.
+# All references use `yandex_resourcemanager_folder.{infra,demo}.id` directly.
+# Vars retained for compat (terraform.tfvars references) — can drop в future cleanup.
 variable "infra_folder_id" {
-  description = "Infra folder ID (shared resources: DNS zone, Container Registry, KMS, Cert Manager)"
+  description = "DEPRECATED — see folders.tf. Retained для terraform.tfvars compat."
   type        = string
+  default     = ""
 }
 
 variable "demo_folder_id" {
-  description = "Demo folder ID (Track A always-on demo: YDB, S3, Serverless Container, API Gateway)"
+  description = "DEPRECATED — see folders.tf. Retained для terraform.tfvars compat."
+  type        = string
+  default     = ""
+}
+
+# Bootstrap service accounts — claude (owner-created, admin) + tf-bot (state backend)
+variable "bootstrap_claude_sa_id" {
+  description = "Bootstrap admin SA (`claude`) — created manually via console during cloud bootstrap. Used для CI/manual image push to Container Registry."
   type        = string
 }
 

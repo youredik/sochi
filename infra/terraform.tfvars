@@ -14,6 +14,7 @@ infra_folder_id    = "b1gp4bo808jr6qvrnltu"   # folder infra (единствен
 demo_folder_id     = "b1gp4bo808jr6qvrnltu"   # demo resources в том же folder
 
 # Bootstrap-created resources (см. _bootstrap/bootstrap.sh):
-tf_bot_sa_id        = "ajer6tlq2rcccuuln5vq"
-tf_state_kms_key_id = "abjrq8h1v9o6tam8ml8n"
-tf_state_bucket     = "sepshn-tfstate-v2"
+tf_bot_sa_id           = "ajer6tlq2rcccuuln5vq"
+tf_state_kms_key_id    = "abjrq8h1v9o6tam8ml8n"
+tf_state_bucket        = "sepshn-tfstate-v2"
+bootstrap_claude_sa_id = "ajel5mli0hshm053amt8"

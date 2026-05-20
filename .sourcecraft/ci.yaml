@@ -23,8 +23,8 @@
 # =============================================================================
 
 env:
-  REGISTRY: "cr.yandex/crprdhmq3p9f9a5j5ck6"
-  IMAGE_NAME: "backend"
+  REGISTRY: 'cr.yandex/crp4um8fg84qoro1voi6'
+  IMAGE_NAME: 'backend'
 
 tokens:
   yc:
@@ -39,18 +39,18 @@ on:
   push:
     - workflows: [quality, deploy-backend, deploy-frontend]
       filter:
-        branches: ["main"]
-        paths: ["**", "!docs/**", "!**/*.md", "!.claude/**", "!CHANGELOG.md"]
+        branches: ['main']
+        paths: ['**', '!docs/**', '!**/*.md', '!.claude/**', '!CHANGELOG.md']
     - workflows: [infra-apply]
       filter:
-        branches: ["main"]
-        paths: ["infra/**"]
+        branches: ['main']
+        paths: ['infra/**']
 
   pull_request:
     - workflows: [quality]
     - workflows: [infra-plan]
       filter:
-        paths: ["infra/**"]
+        paths: ['infra/**']
 
 # =============================================================================
 # Workflows
@@ -67,7 +67,7 @@ workflows:
       - name: install
         image:
           name: node:24-alpine
-          entrypoint: ""
+          entrypoint: ''
         script:
           - corepack enable && corepack prepare pnpm@10.33.2 --activate
           - pnpm install --frozen-lockfile
@@ -76,7 +76,7 @@ workflows:
         needs: [install]
         image:
           name: node:24-alpine
-          entrypoint: ""
+          entrypoint: ''
         script:
           - corepack enable && pnpm typecheck
 
@@ -84,7 +84,7 @@ workflows:
         needs: [install]
         image:
           name: oven/bun:1.3.14-alpine
-          entrypoint: ""
+          entrypoint: ''
         script:
           - pnpm install --frozen-lockfile --prefer-offline
           - pnpm test:fast
@@ -93,7 +93,7 @@ workflows:
         needs: [install]
         image:
           name: node:24-alpine
-          entrypoint: ""
+          entrypoint: ''
         script:
           - pnpm lint
           - pnpm format:check
@@ -108,7 +108,7 @@ workflows:
       - name: get-iam-token
         image:
           name: cr.yandex/sourcecraft/yc-iam:latest
-          entrypoint: ""
+          entrypoint: ''
         env:
           YC_ID_TOKEN: ${{ tokens.yc.id_token }}
         outputs:
@@ -118,7 +118,7 @@ workflows:
         needs: [get-iam-token]
         image:
           name: ghcr.io/opentofu/opentofu:1.12.0
-          entrypoint: ""
+          entrypoint: ''
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
@@ -138,7 +138,7 @@ workflows:
       - name: get-iam-token
         image:
           name: cr.yandex/sourcecraft/yc-iam:latest
-          entrypoint: ""
+          entrypoint: ''
         env:
           YC_ID_TOKEN: ${{ tokens.yc.id_token }}
         outputs:
@@ -148,7 +148,7 @@ workflows:
         needs: [get-iam-token]
         image:
           name: ghcr.io/opentofu/opentofu:1.12.0
-          entrypoint: ""
+          entrypoint: ''
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
@@ -168,7 +168,7 @@ workflows:
       - name: get-iam-token
         image:
           name: cr.yandex/sourcecraft/yc-iam:latest
-          entrypoint: ""
+          entrypoint: ''
         env:
           YC_ID_TOKEN: ${{ tokens.yc.id_token }}
         outputs:
@@ -178,7 +178,7 @@ workflows:
         needs: [get-iam-token]
         image:
           name: docker:27-cli
-          entrypoint: ""
+          entrypoint: ''
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
         script:
@@ -194,7 +194,7 @@ workflows:
         needs: [build-push]
         image:
           name: cr.yandex/sourcecraft/yc-cli:latest
-          entrypoint: ""
+          entrypoint: ''
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           YC_CONTAINER_NAME: ${{ secrets.YC_CONTAINER_NAME }}
@@ -246,7 +246,7 @@ workflows:
       - name: get-iam-token
         image:
           name: cr.yandex/sourcecraft/yc-iam:latest
-          entrypoint: ""
+          entrypoint: ''
         env:
           YC_ID_TOKEN: ${{ tokens.yc.id_token }}
         outputs:
@@ -255,7 +255,7 @@ workflows:
       - name: build
         image:
           name: node:24-alpine
-          entrypoint: ""
+          entrypoint: ''
         script:
           - corepack enable && corepack prepare pnpm@10.33.2 --activate
           - pnpm install --frozen-lockfile
@@ -265,7 +265,7 @@ workflows:
         needs: [build]
         image:
           name: amazon/aws-cli:latest
-          entrypoint: ""
+          entrypoint: ''
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.FRONTEND_S3_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.FRONTEND_S3_SECRET_ACCESS_KEY }}

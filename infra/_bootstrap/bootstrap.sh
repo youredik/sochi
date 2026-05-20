@@ -32,13 +32,17 @@
 set -euo pipefail
 
 # Config (hardcoded — single-cloud bootstrap)
-CLOUD_ID="b1g444ngoknombq45l4t"
-INFRA_FOLDER_ID="b1g6abh503j0dvitdccg"
+# Updated 2026-05-20: migration к new cloud (Сэпшн org) после удаления старого
+# (youredik org). Original cloud b1g444ngoknombq45l4t / folder b1g6abh503j0dvitdccg
+# deleted via console UI. Bucket name `sepshn-tfstate` глобально занято старым
+# (S3 namespace global) — используем `-v2` suffix.
+CLOUD_ID="b1gisf466novulsg0a0n"
+INFRA_FOLDER_ID="b1gp4bo808jr6qvrnltu"
 SA_NAME="tf-bot"
 SA_DESCRIPTION="OpenTofu state-backend + IaC bootstrap operator (Q2 2026 canon)"
 KMS_KEY_NAME="tfstate-encryption"
-KMS_KEY_DESCRIPTION="KMS key для SSE-KMS state bucket sepshn-tfstate"
-BUCKET_NAME="sepshn-tfstate"
+KMS_KEY_DESCRIPTION="KMS key для SSE-KMS state bucket sepshn-tfstate-v2"
+BUCKET_NAME="sepshn-tfstate-v2"
 KEYS_DIR="${HOME}/.yc-keys"
 ACCESS_KEY_FILE="${KEYS_DIR}/tf-bot-s3-access.json"
 
