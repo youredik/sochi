@@ -1,3 +1,31 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+# Supply-chain hardening (pnpm 10.16+ canon — settings живут здесь, не в .npmrc).
+# Защита против zero-day npm attacks (Axios март 2026, node-ipc 14 мая 2026,
+# Shai-Hulud campaign). Research 2026-05-20 — pnpm 11 ships эти defaults,
+# на 10.x нужно явное opt-in.
+
+# 24-часовой cooldown между npm publish и установкой — block-window для атак
+# через compromised maintainer account → publish → vendor разработчик install.
+minimumReleaseAge: 1440
+
+# Запретить exotic subdeps (git:/tarball: URL в transitive deps) — vector для
+# typosquat-attacks через compromised package.json subdeps.
+blockExoticSubdeps: true
+
+# Phase out unrestricted postinstall execution. allowBuilds = explicit allowlist
+# для пакетов которым ДЕЙСТВИТЕЛЬНО нужны build scripts (native binaries,
+# tooling postinstalls). Все остальные = ignored.
+strictDepBuilds: true
+allowBuilds:
+  '@ydbjs/core': true
+  bun: true
+  esbuild: true
+  lefthook: true
+  msw: true
+  protobufjs: true
+  sharp: true
+  '@biomejs/biome': true
+  '@typescript/native-preview': true

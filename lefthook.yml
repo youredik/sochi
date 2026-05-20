@@ -19,6 +19,15 @@
 pre-commit:
   parallel: true
   jobs:
+    - name: gitleaks
+      # Secret scanning gate (canon 2026-05-20 research). gitleaks v8.30.1+
+      # canonical command per official .pre-commit-hooks.yaml — `git
+      # --pre-commit --redact --staged --verbose`. Deprecated `protect`/
+      # `detect` подкоманды NOT использовать. Sub-second на staged diff,
+      # не съедает pre-commit budget. Защита от accidental key/token
+      # commits (например PAT в README).
+      run: gitleaks git --pre-commit --redact --staged --verbose
+
     - name: oxfmt
       glob: '*.{ts,tsx,js,jsx,json,css,md,html,yml,yaml}'
       # Phase 12 (2026-05-12): oxfmt replaces biome formatter — 3× faster,

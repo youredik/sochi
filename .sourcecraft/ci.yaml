@@ -130,6 +130,29 @@ tasks:
           - 'echo "=== run pnpm test:fast ==="'
           - pnpm test:fast
 
+      # Supply-chain audit — canon 2026-05-20 research:
+      #   1) pnpm audit для known CVE (npm advisory DB)
+      #   2) OSV-Scanner V2 (Google) — broader DB чем npm-only, scans
+      #      pnpm-lock.yaml против OSV.dev. Параллельно с pnpm audit.
+      # Запускаются в одном cube (oба cheap, ~10-15s total). Параллелизация
+      # cubes не даёт выигрыша при таком объёме — упускает re-install cost.
+      - name: supply-chain-audit
+        needs: [install]
+        image: node:24-slim
+        script:
+          - set -e
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - pnpm install --frozen-lockfile --prefer-offline
+          - 'echo "=== pnpm audit (high+critical gate) ==="'
+          - 'pnpm audit --audit-level=high --json > /tmp/audit.json || { echo "FAIL: pnpm audit reports high/critical vulnerabilities"; cat /tmp/audit.json; exit 1; }'
+          - 'echo "=== OSV-Scanner V2 (lockfile vs OSV.dev) ==="'
+          - apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
+          # Pinned version (canonical 2026-05) — v2.x stable line.
+          - curl -fsSL -o /usr/local/bin/osv-scanner
+            https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64
+          - chmod +x /usr/local/bin/osv-scanner
+          - osv-scanner --lockfile=pnpm-lock.yaml --format=table
+
   # ---------------------------------------------------------------------------
   # INFRA — tofu plan/apply (auth via get-iam-token cube → IAM_TOKEN)
   # ---------------------------------------------------------------------------
@@ -315,16 +338,21 @@ tasks:
       - name: http-smoke
         image: alpine/curl:latest
         script:
-          - sleep 20 # cold-start budget после revision deploy
-          - curl -sf https://demo.sepshn.ru/health | grep -q '"status":"ok"' && echo "✓ /health"
-          - curl -sf https://demo.sepshn.ru/health/live | grep -q '"status":"ok"' && echo "✓ /health/live"
-          - curl -sf https://demo.sepshn.ru/health/ready | grep -q '"status":"ok"' && echo "✓ /health/ready"
-          - curl -sf https://demo.sepshn.ru/health/db | grep -q '"status":"ok"' && echo "✓ /health/db"
+          # `curl --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10`
+          # canon 2026-05-20 для serverless cold-start. curl auto-удваивает delay
+          # между попытками (built-in exponential backoff). --retry-all-errors =
+          # retry на HTTP 5xx тоже (не только network). Заменяет хрупкий `sleep 20`
+          # — cold-start под нагрузкой может превысить 20s.
+          - 'CURL="curl -sf --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10"'
+          - '$CURL https://demo.sepshn.ru/health | grep -q ''"status":"ok"'' && echo "ok /health"'
+          - '$CURL https://demo.sepshn.ru/health/live | grep -q ''"status":"ok"'' && echo "ok /health/live"'
+          - '$CURL https://demo.sepshn.ru/health/ready | grep -q ''"status":"ok"'' && echo "ok /health/ready"'
+          - '$CURL https://demo.sepshn.ru/health/db | grep -q ''"status":"ok"'' && echo "ok /health/db"'
           # SPA root + fallback
-          - curl -sf -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/ | grep -q "200" && echo "✓ SPA root"
-          - curl -sf -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/booking/fake-id | grep -q "200" && echo "✓ SPA fallback"
-          # Auth-gated API
-          - curl -sf -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/api/v1/properties | grep -q "401" && echo "✓ Auth-gated 401"
+          - '$CURL -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/ | grep -q "200" && echo "ok SPA root"'
+          - '$CURL -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/booking/fake-id | grep -q "200" && echo "ok SPA fallback"'
+          # Auth-gated API — special-case: 401 = success criteria, no retry needed
+          - 'curl -sf -o /dev/null -w "%{http_code}" --connect-timeout 10 https://demo.sepshn.ru/api/v1/properties | grep -q "401" && echo "ok Auth-gated 401"'
 
       # Playwright image MUST match @playwright/test version в package.json
       # (stankoff canon: «mismatch browsers + OS deps → no apt-get / `playwright

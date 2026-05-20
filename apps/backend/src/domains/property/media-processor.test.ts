@@ -214,56 +214,75 @@ describe('processMediaUpload — adversarial', () => {
 	})
 })
 
-describe('processMediaUpload — JPEG source path', () => {
-	it('image/jpeg source: original variant is JPEG (FFD8 magic)', async () => {
-		const jpeg = await makeTestJpegWithExif(2000, 1500)
-		const result = await processMediaUpload({
-			tenantId: 'org_a',
-			propertyId: 'prop_x',
-			mediaId: 'med_jpeg',
-			originalBytes: jpeg,
-			sourceMimeType: 'image/jpeg',
-		})
-		const orig = result.variants.find((v) => v.variant === 'original')
-		expect(orig?.format).toBe('jpeg')
-		// JPEG SOI marker FFD8FF
-		expect(orig?.bytes.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
-	})
+// Sharp 0.34.5 prebuilt linux-x64 binary uses libvips v8 single-threaded
+// pipelines; на CI runners (x64 microarch v2) processing 2000x1500 JPEG ~5-8s,
+// vs ~3s на macOS M-series arm64. Default bun:test timeout 5s слишком жёсткий.
+// Canon 2026-05-20 research: per-test timeout 20_000ms — не global, чтобы
+// сохранить fast suite. Третий аргумент `it()` — numeric timeout (verified API).
+const SHARP_PIPELINE_TIMEOUT_MS = 20_000
 
-	it('image/heic source: original variant transcodes to JPEG (research §5.2)', async () => {
-		// We can't synthesize HEIC easily without libheif — use a JPEG buffer
-		// but pass `image/heic` mime to drive the format-mapping logic.
-		// The test verifies our `originalFormatFor('image/heic') === 'jpeg'`.
-		const fakeHeic = await makeTestJpegWithExif(1600, 1200)
-		const result = await processMediaUpload({
-			tenantId: 'org_a',
-			propertyId: 'prop_x',
-			mediaId: 'med_heic',
-			originalBytes: fakeHeic,
-			sourceMimeType: 'image/heic',
-		})
-		const orig = result.variants.find((v) => v.variant === 'original')
-		expect(orig?.format).toBe('jpeg')
-	})
+describe('processMediaUpload — JPEG source path', () => {
+	it(
+		'image/jpeg source: original variant is JPEG (FFD8 magic)',
+		async () => {
+			const jpeg = await makeTestJpegWithExif(2000, 1500)
+			const result = await processMediaUpload({
+				tenantId: 'org_a',
+				propertyId: 'prop_x',
+				mediaId: 'med_jpeg',
+				originalBytes: jpeg,
+				sourceMimeType: 'image/jpeg',
+			})
+			const orig = result.variants.find((v) => v.variant === 'original')
+			expect(orig?.format).toBe('jpeg')
+			// JPEG SOI marker FFD8FF
+			expect(orig?.bytes.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
+		},
+		SHARP_PIPELINE_TIMEOUT_MS,
+	)
+
+	it(
+		'image/heic source: original variant transcodes to JPEG (research §5.2)',
+		async () => {
+			// We can't synthesize HEIC easily without libheif — use a JPEG buffer
+			// but pass `image/heic` mime to drive the format-mapping logic.
+			// The test verifies our `originalFormatFor('image/heic') === 'jpeg'`.
+			const fakeHeic = await makeTestJpegWithExif(1600, 1200)
+			const result = await processMediaUpload({
+				tenantId: 'org_a',
+				propertyId: 'prop_x',
+				mediaId: 'med_heic',
+				originalBytes: fakeHeic,
+				sourceMimeType: 'image/heic',
+			})
+			const orig = result.variants.find((v) => v.variant === 'original')
+			expect(orig?.format).toBe('jpeg')
+		},
+		SHARP_PIPELINE_TIMEOUT_MS,
+	)
 })
 
 describe('processMediaUpload — output ordering invariant', () => {
-	it('every (variant, format) pair appears exactly once across all outputs', async () => {
-		const png = await makeTestPng(2000, 1500)
-		const result = await processMediaUpload({
-			tenantId: 'org_a',
-			propertyId: 'prop_x',
-			mediaId: 'med_dedup',
-			originalBytes: png,
-			sourceMimeType: 'image/png',
-		})
-		const seen = new Set<string>()
-		for (const v of result.variants) {
-			const key = `${v.variant}.${v.format}`
-			expect(seen.has(key)).toBe(false)
-			seen.add(key)
-		}
-	})
+	it(
+		'every (variant, format) pair appears exactly once across all outputs',
+		async () => {
+			const png = await makeTestPng(2000, 1500)
+			const result = await processMediaUpload({
+				tenantId: 'org_a',
+				propertyId: 'prop_x',
+				mediaId: 'med_dedup',
+				originalBytes: png,
+				sourceMimeType: 'image/png',
+			})
+			const seen = new Set<string>()
+			for (const v of result.variants) {
+				const key = `${v.variant}.${v.format}`
+				expect(seen.has(key)).toBe(false)
+				seen.add(key)
+			}
+		},
+		SHARP_PIPELINE_TIMEOUT_MS,
+	)
 })
 
 afterAll(() => {

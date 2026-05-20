@@ -147,7 +147,13 @@
 			}
 		},
 		{
-			"includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.db.test.ts", "**/*.db.test.tsx"],
+			"includes": [
+				"**/*.test.ts",
+				"**/*.test.tsx",
+				"**/*.db.test.ts",
+				"**/*.db.test.tsx",
+				"apps/backend/src/tests/preload-*.ts"
+			],
 			"linter": {
 				"rules": {
 					"style": {
