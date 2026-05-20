@@ -6,13 +6,14 @@
 # stankoff-v2 aligned (multi-cube-per-task с `needs:`, не отдельные tasks).
 #
 # Image versions (research'd 2026-05-20):
-#   node:24-slim      — Node 24 LTS (active until April 2028)
-#   oven/bun:1.3.14-alpine — current latest (released 2026-05-13)
-#   docker:29-cli     — Engine 29 + Buildx 0.25 (latest, was docker:27)
+#   node:24-slim      — Node 24 LTS (active until April 2028) — все quality cubes
+#   docker:29-cli     — Engine 29 + Buildx 0.25 (latest, был docker:27)
 #   amazon/aws-cli:2.34.50 — pinned (NOT :latest — anti-pattern per AWS)
 #   opentofu/opentofu:1.12.0 — current tip
-#   pnpm@10.33.4 via corepack (latest 10.x patch, planned 11 migration separate)
-#   YC sourcecraft images :latest — internal Yandex registry, trusted (stankoff pattern)
+#   pnpm@10.33.4 via corepack (latest 10.x patch, 11 migration отдельной фазой)
+#   bun 1.3.14 — устанавливается внутри test-fast cube через curl|bash
+#                (sochi-specific; stankoff не имеет bun)
+#   YC sourcecraft images :latest — internal Yandex registry, trusted (stankoff)
 #
 # Service Connection `deploy-connection` (OIDC) — created в SourceCraft UI
 # 2026-05-20, scope: org, bound к Сэпшн org / sepshn cloud b1gisf466novulsg0a0n.
@@ -104,13 +105,26 @@ tasks:
           - pnpm lint
           - pnpm format:check
 
+      # test-fast — sochi uses bun:test для 3 из 4 sub-tests (backend/frontend/
+      # shared). Stankoff не имеет bun в стеке (gitlab_workflow для quality-test),
+      # поэтому канон для bun-в-SourceCraft-cube собран эмпирически:
+      #   - node:24-slim даёт Node 24 + corepack (для pnpm)
+      #   - bun устанавливается через официальный curl-installer в $HOME/.bun
+      #   - export PATH=$HOME/.bun/bin:$PATH ДО pnpm test:fast — иначе run-p
+      #     subprocess не находит bun (даже если node_modules/.bin/bun есть,
+      #     optionalDep @oven/bun-linux-x64 на pnpm install может молчаливо
+      #     не сработать в slim env).
       - name: test-fast
         needs: [install]
         image: node:24-slim
         script:
+          - apt-get update -qq && apt-get install -y -qq curl unzip ca-certificates >/dev/null
+          - curl -fsSL https://bun.sh/install | bash
+          - export PATH="$HOME/.bun/bin:$PATH"
+          - bun --version
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm install --frozen-lockfile --prefer-offline
-          - pnpm test:fast
+          - PATH="$HOME/.bun/bin:$PATH" pnpm test:fast
 
   # ---------------------------------------------------------------------------
   # INFRA — tofu plan/apply (auth via get-iam-token cube → IAM_TOKEN)
@@ -186,7 +200,10 @@ tasks:
           name: cr.yandex/sourcecraft/yc-cli:latest
           entrypoint: ''
         env:
-          YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
+          # yc-cli:latest image reads YC_IAM_TOKEN (stankoff canon line 139).
+          # YC_TOKEN namespace зарезервирован для OAuth-токенов (interactive yc init).
+          # Run #7 + #8 показали: YC_TOKEN с IAM-токеном = «Failed to get credentials».
+          YC_IAM_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           YC_CONTAINER_NAME: ${{ secrets.YC_CONTAINER_NAME }}
           YC_FOLDER_ID: ${{ tokens.yc.folder_id }}
           YC_RUNTIME_SA_ID: ${{ secrets.YC_RUNTIME_SA_ID }}
