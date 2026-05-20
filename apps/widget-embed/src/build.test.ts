@@ -38,23 +38,38 @@ const FLOW_LIMIT = 80 * 1024
 
 beforeAll(async () => {
 	if (existsSync(facadePath) && existsSync(flowPath)) return
+	// CRITICAL: Lit ships dev-mode vs prod-mode via package.json `exports`
+	// conditions. Vite resolves `production` condition только когда NODE_ENV
+	// = 'production'. Vitest задаёт NODE_ENV='test' → Lit dev-mode попадает в
+	// bundle (16 KB gzip > 15 KB budget + <slot> template strings ломают
+	// BLD1+BLD-LF2). Принудительно set NODE_ENV='production' перед build().
+	// Verified 2026-05-20 — без этого in-test build даёт 16.85 KB gzip,
+	// canonical CLI build даёт 12.84 KB.
+	const oldNodeEnv = process.env.NODE_ENV
+	process.env.NODE_ENV = 'production'
 	const { build } = await import('vite')
-	// First entry — facade.
-	await build({
-		root: pkgRoot,
-		configFile: path.join(pkgRoot, 'vite.config.ts'),
-		logLevel: 'error',
-	})
-	// Second entry — lazy flow. Vite reads `EMBED_ENTRY` env var.
-	process.env.EMBED_ENTRY = 'flow'
 	try {
+		// First entry — facade.
 		await build({
 			root: pkgRoot,
 			configFile: path.join(pkgRoot, 'vite.config.ts'),
 			logLevel: 'error',
+			mode: 'production',
 		})
+		// Second entry — lazy flow. Vite reads `EMBED_ENTRY` env var.
+		process.env.EMBED_ENTRY = 'flow'
+		try {
+			await build({
+				root: pkgRoot,
+				configFile: path.join(pkgRoot, 'vite.config.ts'),
+				logLevel: 'error',
+				mode: 'production',
+			})
+		} finally {
+			process.env.EMBED_ENTRY = ''
+		}
 	} finally {
-		process.env.EMBED_ENTRY = ''
+		process.env.NODE_ENV = oldNodeEnv
 	}
 }, 90_000)
 

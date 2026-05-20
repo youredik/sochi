@@ -212,7 +212,11 @@ tasks:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           YC_IAM_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           YC_CONTAINER_NAME: ${{ secrets.YC_CONTAINER_NAME }}
-          YC_FOLDER_ID: ${{ tokens.yc.folder_id }}
+          # Container живёт в demo-folder, не в infra-folder.
+          # tokens.yc.folder_id указывает на SC connection default (infra).
+          # Run #11 показал «container with name "***" not found» — секрет
+          # YC_DEMO_FOLDER_ID точно содержит правильный demo-folder ID.
+          YC_FOLDER_ID: ${{ secrets.YC_DEMO_FOLDER_ID }}
           YC_RUNTIME_SA_ID: ${{ secrets.YC_RUNTIME_SA_ID }}
           YC_LOCKBOX_ID: ${{ secrets.YC_LOCKBOX_SECRET_ID }}
           YC_LOCKBOX_VERSION_ID: ${{ secrets.YC_LOCKBOX_VERSION_ID }}
