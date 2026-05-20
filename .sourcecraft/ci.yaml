@@ -263,6 +263,9 @@ tasks:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.FRONTEND_S3_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.FRONTEND_S3_SECRET_ACCESS_KEY }}
+          # SourceCraft inject «AWS_DEFAULT_REGION=ru-central1-» с лишним дефисом
+          # (наблюдаем в run #9 log). Explicit override фиксит до фикса SC side.
+          AWS_DEFAULT_REGION: ru-central1
           S3_BUCKET: ${{ secrets.FRONTEND_S3_BUCKET }}
         script:
           # Pass 1: hashed assets — immutable, max-age=1 year
@@ -307,9 +310,14 @@ tasks:
           # Auth-gated API
           - curl -sf -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/api/v1/properties | grep -q "401" && echo "✓ Auth-gated 401"
 
+      # Playwright image MUST match @playwright/test version в package.json
+      # (stankoff canon: «mismatch browsers + OS deps → no apt-get / `playwright
+      # install` needed»). MCR не публикует alpha pre-release images — только
+      # stable. Canon: latest STABLE, downgrade с 1.61.0-alpha (image отсутствует
+      # в MCR) → 1.60.0 stable.
       - name: playwright-smoke
         needs: [http-smoke]
-        image: mcr.microsoft.com/playwright:v1.61.0-noble
+        image: mcr.microsoft.com/playwright:v1.60.0-noble
         env:
           PLAYWRIGHT_BASE_URL: 'https://demo.sepshn.ru'
           PLAYWRIGHT_API_URL: 'https://demo.sepshn.ru'
