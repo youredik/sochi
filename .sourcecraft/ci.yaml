@@ -2,24 +2,20 @@
 # Sochi HoReCa — SourceCraft CI/CD (Q2 2026 canon, 2026-05-20)
 # =============================================================================
 #
-# Stankoff-v2 production-verified syntax (Apr-May 2026, ru-central1):
-#   - `cubes:` plural list (NOT `cube:` singular)
-#   - Native cube format: `image: + script:` (NOT GitHub Actions `uses:`/
-#     `run:` — those mean different things в SourceCraft. Bridge form is
-#     `action: yc-actions/<name>@vN` если nuжен GH-action.)
-#   - YC auth via cube `get-iam-token` whose output `IAM_TOKEN` is
-#     consumed downstream via `${{ cubes.get-iam-token.outputs.IAM_TOKEN }}`
-#   - Service Connection name `deploy-connection` (create в SourceCraft UI
-#     → Настройки → Сервисные подключения → bind to YC folders infra + demo)
+# Stankoff-v2 production-verified structure (Apr-May 2026, ru-central1):
+#   - `workflows.X.tasks: [name1, name2]` — task NAME references только
+#   - `workflows.X.settings.max_cube_duration: 15m` (NOT `timeout:`)
+#   - Top-level `tasks:` section с definitions
+#   - `cubes:` plural list INSIDE каждый task
+#   - Native cube format: `image: + script:` (NOT GitHub Actions `uses:`/`run:`)
+#   - YC auth: cube `get-iam-token` outputs IAM_TOKEN consumed via
+#     `${{ cubes.get-iam-token.outputs.IAM_TOKEN }}` downstream
 #
-# DRAFT status (2026-05-20): syntax canon-aligned vs stankoff but NOT
-# end-to-end verified against THIS repo's SourceCraft project yet. Rename
-# back к ci.yaml when:
-#   - Service Connection `deploy-connection` created в SourceCraft UI
-#   - Secrets configured: YC_CONTAINER_ID, YC_RUNTIME_SA_ID,
-#     YC_LOCKBOX_SECRET_VERSION_ID
-#   - Test PR runs `quality` workflow end-to-end green
+# Auth: Service Connection `deploy-connection` (OIDC) — created в SC UI
+# 2026-05-20, bound к Сэпшн org / sepshn cloud (b1gisf466novulsg0a0n).
 #
+# 12 secrets seeded via SourceCraft API 2026-05-20 (см. handover_2026_05_20.md
+# + reference_sourcecraft_secrets_api.md canon в memory).
 # =============================================================================
 
 env:
@@ -53,72 +49,92 @@ on:
         paths: ['infra/**']
 
 # =============================================================================
-# Workflows
+# Workflows — reference task NAMES (defined в top-level `tasks:` ниже)
 # =============================================================================
 
 workflows:
-  # ---------------------------------------------------------------------------
-  # QUALITY (PR + push) — typecheck + tests + lint
-  # ---------------------------------------------------------------------------
   quality:
     settings:
-      timeout: 15m
+      max_cube_duration: 15m
+    tasks:
+      - quality-typecheck
+      - quality-test-fast
+      - quality-lint
+
+  infra-plan:
+    settings:
+      max_cube_duration: 10m
+    tasks:
+      - tofu-plan
+
+  infra-apply:
+    settings:
+      max_cube_duration: 20m
+    tasks:
+      - tofu-apply
+
+  deploy-backend:
+    settings:
+      max_cube_duration: 30m
+    tasks:
+      - deploy-backend
+
+  deploy-frontend:
+    settings:
+      max_cube_duration: 15m
+    tasks:
+      - deploy-frontend
+
+# =============================================================================
+# Task definitions (top-level — referenced by workflows above)
+# =============================================================================
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # QUALITY tasks
+  # ---------------------------------------------------------------------------
+  - name: quality-typecheck
     cubes:
-      - name: install
-        image:
-          name: node:24-alpine
-          entrypoint: ''
+      - name: run
+        image: node:24-alpine
         script:
           - corepack enable && corepack prepare pnpm@10.33.2 --activate
           - pnpm install --frozen-lockfile
+          - pnpm typecheck
 
-      - name: typecheck
-        needs: [install]
-        image:
-          name: node:24-alpine
-          entrypoint: ''
+  - name: quality-test-fast
+    cubes:
+      - name: run
+        image: oven/bun:1.3.14-alpine
         script:
-          - corepack enable && pnpm typecheck
-
-      - name: test-fast
-        needs: [install]
-        image:
-          name: oven/bun:1.3.14-alpine
-          entrypoint: ''
-        script:
-          - pnpm install --frozen-lockfile --prefer-offline
+          - apk add --no-cache nodejs npm
+          - corepack enable && corepack prepare pnpm@10.33.2 --activate
+          - pnpm install --frozen-lockfile
           - pnpm test:fast
 
-      - name: lint
-        needs: [install]
-        image:
-          name: node:24-alpine
-          entrypoint: ''
+  - name: quality-lint
+    cubes:
+      - name: run
+        image: node:24-alpine
         script:
+          - corepack enable && corepack prepare pnpm@10.33.2 --activate
+          - pnpm install --frozen-lockfile
           - pnpm lint
           - pnpm format:check
 
   # ---------------------------------------------------------------------------
-  # INFRA PLAN (PR with infra/ changes)
+  # INFRA tasks
   # ---------------------------------------------------------------------------
-  infra-plan:
-    settings:
-      timeout: 10m
+  - name: tofu-plan
     cubes:
       - name: get-iam-token
-        image:
-          name: cr.yandex/sourcecraft/yc-iam:latest
-          entrypoint: ''
+        image: cr.yandex/sourcecraft/yc-iam:latest
         env:
           YC_ID_TOKEN: ${{ tokens.yc.id_token }}
         outputs:
           - IAM_TOKEN
-
-      - name: tofu-plan
-        needs: [get-iam-token]
-        image:
-          name: ghcr.io/opentofu/opentofu:1.12.0
-          entrypoint: ''
+      - name: plan
+        image: ghcr.io/opentofu/opentofu:1.12.0
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
@@ -128,27 +144,16 @@ workflows:
           - tofu init -input=false
           - tofu plan -no-color -input=false | tee plan.txt
 
-  # ---------------------------------------------------------------------------
-  # INFRA APPLY (main merge with infra/ changes)
-  # ---------------------------------------------------------------------------
-  infra-apply:
-    settings:
-      timeout: 20m
+  - name: tofu-apply
     cubes:
       - name: get-iam-token
-        image:
-          name: cr.yandex/sourcecraft/yc-iam:latest
-          entrypoint: ''
+        image: cr.yandex/sourcecraft/yc-iam:latest
         env:
           YC_ID_TOKEN: ${{ tokens.yc.id_token }}
         outputs:
           - IAM_TOKEN
-
-      - name: tofu-apply
-        needs: [get-iam-token]
-        image:
-          name: ghcr.io/opentofu/opentofu:1.12.0
-          entrypoint: ''
+      - name: apply
+        image: ghcr.io/opentofu/opentofu:1.12.0
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
@@ -159,26 +164,19 @@ workflows:
           - tofu apply -auto-approve -input=false
 
   # ---------------------------------------------------------------------------
-  # DEPLOY BACKEND — build + push backend image + revision deploy
+  # DEPLOY backend — build + push image + revision deploy
   # ---------------------------------------------------------------------------
-  deploy-backend:
-    settings:
-      timeout: 30m
+  - name: deploy-backend
     cubes:
       - name: get-iam-token
-        image:
-          name: cr.yandex/sourcecraft/yc-iam:latest
-          entrypoint: ''
+        image: cr.yandex/sourcecraft/yc-iam:latest
         env:
           YC_ID_TOKEN: ${{ tokens.yc.id_token }}
         outputs:
           - IAM_TOKEN
 
       - name: build-push
-        needs: [get-iam-token]
-        image:
-          name: docker:27-cli
-          entrypoint: ''
+        image: docker:27-cli
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
         script:
@@ -191,10 +189,7 @@ workflows:
             --push .
 
       - name: revision-deploy
-        needs: [build-push]
-        image:
-          name: cr.yandex/sourcecraft/yc-cli:latest
-          entrypoint: ''
+        image: cr.yandex/sourcecraft/yc-cli:latest
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           YC_CONTAINER_NAME: ${{ secrets.YC_CONTAINER_NAME }}
@@ -237,35 +232,19 @@ workflows:
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=S3_SECRET_ACCESS_KEY,environment-variable=S3_SECRET_ACCESS_KEY
 
   # ---------------------------------------------------------------------------
-  # DEPLOY FRONTEND — Vite build + aws s3 sync с two-pass Cache-Control canon
+  # DEPLOY frontend — Vite build + aws s3 sync с two-pass Cache-Control canon
   # ---------------------------------------------------------------------------
-  deploy-frontend:
-    settings:
-      timeout: 15m
+  - name: deploy-frontend
     cubes:
-      - name: get-iam-token
-        image:
-          name: cr.yandex/sourcecraft/yc-iam:latest
-          entrypoint: ''
-        env:
-          YC_ID_TOKEN: ${{ tokens.yc.id_token }}
-        outputs:
-          - IAM_TOKEN
-
       - name: build
-        image:
-          name: node:24-alpine
-          entrypoint: ''
+        image: node:24-alpine
         script:
           - corepack enable && corepack prepare pnpm@10.33.2 --activate
           - pnpm install --frozen-lockfile
           - pnpm --filter @horeca/frontend build
 
       - name: upload
-        needs: [build]
-        image:
-          name: amazon/aws-cli:latest
-          entrypoint: ''
+        image: amazon/aws-cli:latest
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.FRONTEND_S3_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.FRONTEND_S3_SECRET_ACCESS_KEY }}
@@ -283,7 +262,7 @@ workflows:
             --exclude "*"
             --include "*.png" --include "*.svg" --include "*.ico"
             --cache-control "public, max-age=86400"
-          # Pass 3: index.html + service worker + manifest — no-cache (always revalidate)
+          # Pass 3: index.html + service worker + manifest — no-cache
           - aws --endpoint-url=https://storage.yandexcloud.net s3 sync
             apps/frontend/dist/ s3://${S3_BUCKET}/
             --exclude "*"
