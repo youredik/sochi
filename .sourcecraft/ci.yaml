@@ -30,10 +30,24 @@ tokens:
 
 on:
   push:
-    - workflows: [quality, deploy]
+    # Quality всегда (исключаем только docs/markdown — они не влияют на code).
+    - workflows: [quality]
       filter:
         branches: ['main']
         paths: ['**', '!docs/**', '!**/*.md', '!.claude/**', '!CHANGELOG.md']
+    # Deploy ТОЛЬКО если есть code changes в backend/frontend/widget/shared/infra.
+    # Skip на docs-only / scripts-only / lefthook config / sourcecraft yaml-only.
+    # Empirical: deploy chain = 273s. Skip-fast pattern canon 2026 (dorny/paths-filter).
+    - workflows: [deploy]
+      filter:
+        branches: ['main']
+        paths:
+          - 'apps/**'
+          - 'packages/**'
+          - 'pnpm-lock.yaml'
+          - 'pnpm-workspace.yaml'
+          - 'package.json'
+          - '.sourcecraft/ci.yaml'
     - workflows: [infra-apply]
       filter:
         branches: ['main']
@@ -212,9 +226,14 @@ tasks:
           #     zstd image layers с «invalid docker image url» (empirical run #17:
           #     `rpc error: code = InvalidArgument`). Use gzip для image.
           # `image-manifest=true,oci-mediatypes=true` нужны для cr.yandex OCI v1.
+          # OCI annotations canon 2026 (docs.docker.com/build/metadata/annotations)
+          # — supply-chain hygiene, traceability в YCR. revision + source = standard.
           - docker buildx build --platform linux/amd64 --provenance=false
             --cache-from type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache
             --cache-to type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache,mode=max,compression=zstd,oci-mediatypes=true,image-manifest=true
+            --annotation "org.opencontainers.image.revision=${SHA}"
+            --annotation "org.opencontainers.image.source=https://sourcecraft.dev/sepshn/sepshn"
+            --annotation "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             -f apps/backend/Dockerfile
             -t ${REGISTRY}/${IMAGE_NAME}:${SHA}
             -t ${REGISTRY}/${IMAGE_NAME}:latest
@@ -357,7 +376,9 @@ tasks:
           - '$CURL -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/booking/fake-id | grep -q "200" && echo "ok SPA fallback"'
           - 'curl -sf -o /dev/null -w "%{http_code}" --connect-timeout 10 https://demo.sepshn.ru/api/v1/properties | grep -q "401" && echo "ok Auth-gated 401"'
 
-      # Playwright image MUST match @playwright/test version (stankoff canon).
+      # Playwright image — MCR прямой pull (271s в run #17). Pending mirror
+      # в cr.yandex (через scripts/mirror-playwright-image.sh + crane copy)
+      # для ускорения до ~50s. Отдельный коммит после verify mirror в YCR.
       - name: playwright-smoke
         needs: [http-smoke]
         image: mcr.microsoft.com/playwright:v1.60.0-noble
