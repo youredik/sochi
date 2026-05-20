@@ -52,6 +52,15 @@ on:
       filter:
         branches: ['main']
         paths: ['infra/**']
+    # Mirror внешних base images в cr.yandex (intra-DC fast pull в CI).
+    # Trigger: bump в lockfile (Playwright @ts version) или manual.
+    # Idempotent — crane copy skips если src/dst digests match.
+    - workflows: [mirror-images]
+      filter:
+        branches: ['main']
+        paths:
+          - 'pnpm-lock.yaml'
+          - '.sourcecraft/ci.yaml'
 
   pull_request:
     - workflows: [quality]
@@ -77,6 +86,14 @@ workflows:
       max_cube_duration: 20m
     tasks:
       - tofu-apply
+
+  # Mirror внешних base images в cr.yandex — fast intra-DC pull в main CI.
+  # Idempotent (crane copy skips если digests match) → ОК на каждый push.
+  mirror-images:
+    settings:
+      max_cube_duration: 10m
+    tasks:
+      - mirror-playwright
 
   deploy:
     settings:
@@ -199,6 +216,45 @@ tasks:
           - cd infra
           - tofu init -input=false
           - tofu apply -auto-approve -input=false -parallelism=1
+
+  # ---------------------------------------------------------------------------
+  # MIRROR PLAYWRIGHT — crane copy MCR → cr.yandex (intra-DC fast pull).
+  # Canon 2026 (Google go-containerregistry / Depot mainstream):
+  #   crane copy registry-to-registry, NO local layer storage
+  #   Idempotent — skips если src digest == dst digest
+  # Empirical run #20: prepare-image-for-playwright-smoke = 203s (MCR
+  # cross-border variable). Expected after mirror: 30-50s (cr.yandex intra-DC).
+  # ---------------------------------------------------------------------------
+  - name: mirror-playwright
+    cubes:
+      - name: get-iam-token
+        env:
+          ID_TOKEN: ${{ tokens.yc.id_token }}
+          YC_SA_ID: ${{ tokens.yc.service_account_id }}
+        image: cr.yandex/sourcecraft/yc-iam:latest
+
+      - name: mirror
+        needs: [get-iam-token]
+        image:
+          name: gcr.io/go-containerregistry/crane:debug
+          entrypoint: ''
+        env:
+          YC_IAM_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
+          PW_VERSION: 'v1.60.0-noble'
+          DST_REGISTRY: 'cr.yandex/crp4um8fg84qoro1voi6'
+        script:
+          - set -e
+          - 'SRC=mcr.microsoft.com/playwright:${PW_VERSION}'
+          - 'DST=${DST_REGISTRY}/playwright:${PW_VERSION}'
+          # Auth to cr.yandex (crane reads ~/.docker/config.json)
+          - mkdir -p ~/.docker
+          - 'AUTH=$(printf "iam:%s" "$YC_IAM_TOKEN" | base64 -w 0)'
+          - 'echo "{\"auths\":{\"cr.yandex\":{\"auth\":\"${AUTH}\"}}}" > ~/.docker/config.json'
+          # Idempotent — skip если digests match
+          - 'SRC_DIGEST=$(/ko-app/crane digest "$SRC" 2>/dev/null || echo "NONE")'
+          - 'DST_DIGEST=$(/ko-app/crane digest "$DST" 2>/dev/null || echo "MISSING")'
+          - 'echo "src=$SRC_DIGEST dst=$DST_DIGEST"'
+          - 'if [ "$SRC_DIGEST" = "$DST_DIGEST" ] && [ "$DST_DIGEST" != "MISSING" ]; then echo "mirror up-to-date, skip"; else echo "mirroring $SRC -> $DST"; /ko-app/crane copy --platform linux/amd64 "$SRC" "$DST"; fi'
 
   # ---------------------------------------------------------------------------
   # DEPLOY BACKEND — get-iam-token → build-push → revision-deploy
