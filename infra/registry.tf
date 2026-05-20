@@ -76,3 +76,54 @@ resource "yandex_container_registry_iam_binding" "claude_pusher" {
   role        = "container-registry.images.pusher"
   members     = ["serviceAccount:${var.bootstrap_claude_sa_id}"]
 }
+
+# =============================================================================
+# Playwright mirror repo — anonymous pull для SC CI prepare-image phase
+# =============================================================================
+#
+# Empirical 2026-05-20 (run #22): SC builder pulls image в prepare-image phase
+# ДО любого `script:` где можно docker login. Поэтому private cr.yandex pull
+# fails 401 Unauthorized. Workaround per канон 2026:
+#
+# Image mirror MCR Playwright (public upstream) — корректно разрешить anonymous
+# pull on this specific repo. Mainstream pattern verified Yandex docs:
+# `system:allUsers` member = unauthenticated access (yandex_container_repository
+# _iam_binding upstream docs, TF provider v0.204.0 2026-05-18).
+#
+# Sources verified 2026-05-20:
+# - github.com/yandex-cloud/terraform-provider-yandex/blob/master/docs/resources/
+#   container_repository_iam_binding.md
+# - yandex.cloud/en/docs/container-registry/cli-ref/repository/add-access-binding
+#
+# Least-privilege: repository-level binding (NOT registry-level) — backend repo
+# остаётся private.
+resource "yandex_container_repository" "playwright" {
+  name = "${yandex_container_registry.sepshn_cr.id}/playwright"
+}
+
+resource "yandex_container_repository_iam_binding" "playwright_anon_pull" {
+  repository_id = yandex_container_repository.playwright.id
+  role          = "container-registry.images.puller"
+  members       = ["system:allUsers"]
+}
+
+# Lifecycle для playwright — keep last 3 tagged (rare bumps, no need for many).
+resource "yandex_container_repository_lifecycle_policy" "playwright_retention" {
+  name          = "playwright-mirror-retention"
+  status        = "active"
+  repository_id = yandex_container_repository.playwright.id
+
+  rule {
+    description   = "Keep 3 newest mirror tags + 30-day expire (rare bumps)"
+    untagged      = false
+    tag_regexp    = ".*"
+    retained_top  = 3
+    expire_period = "720h" # 30 days
+  }
+
+  rule {
+    description   = "Prune untagged stubs > 48h"
+    untagged      = true
+    expire_period = "48h"
+  }
+}
