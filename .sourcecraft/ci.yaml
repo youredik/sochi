@@ -205,19 +205,20 @@ tasks:
         script:
           - SHA=$(git rev-parse --short HEAD)
           - echo "${YC_TOKEN}" | docker login --username iam --password-stdin cr.yandex
-          # Canon 2026-05-20 (Depot benchmark, crazymax.dev/buildkit/usage/output):
-          #   --cache-to mode=max,compression=zstd — -60% cold build, 2× faster transfer
-          #   --output ...,compression=zstd,force-compression=true — image layers zstd
-          #     (additional -30-60s push time). force-compression обязателен —
-          #     иначе buildkit reuse существующих gzip layers.
+          # Canon 2026-05-20:
+          #   --cache-to mode=max,compression=zstd — -60% cache transfer (Depot benchmark)
+          #     YC CR принимает zstd cache layers ✓ verified run #17.
+          #   Image layers — gzip default. YC Serverless Container REJECTS
+          #     zstd image layers с «invalid docker image url» (empirical run #17:
+          #     `rpc error: code = InvalidArgument`). Use gzip для image.
           # `image-manifest=true,oci-mediatypes=true` нужны для cr.yandex OCI v1.
           - docker buildx build --platform linux/amd64 --provenance=false
             --cache-from type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache
             --cache-to type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache,mode=max,compression=zstd,oci-mediatypes=true,image-manifest=true
-            --output type=image,name=${REGISTRY}/${IMAGE_NAME}:${SHA},compression=zstd,force-compression=true,oci-mediatypes=true,push=true
             -f apps/backend/Dockerfile
+            -t ${REGISTRY}/${IMAGE_NAME}:${SHA}
             -t ${REGISTRY}/${IMAGE_NAME}:latest
-            .
+            --push .
 
       - name: revision-deploy
         needs: [build-push]

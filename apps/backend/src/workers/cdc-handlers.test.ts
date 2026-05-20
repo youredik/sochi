@@ -299,13 +299,14 @@ describe('buildActivitiesFromEvent (pure)', () => {
 // Property-based fuzz — cover the input space beyond hand-rolled examples.
 // ---------------------------------------------------------------------------
 
-const jsonValueArb = fc.oneof(
-	fc.string(),
-	fc.integer(),
-	fc.boolean(),
-	fc.constant(null),
-	fc.constant(undefined),
-)
+// NOTE: `undefined` IS NOT a JSON value per RFC 8259 — `JSON.stringify`
+// strips object entries whose value is undefined ({a: undefined} → {}).
+// Если включить undefined здесь, [DP2] clone-via-JSON-roundtrip ломается:
+// original {a: undefined, b: 1} → cloned {b: 1} → diffFields эмитит {a: undef→removed}.
+// Это false-positive flaky test (failed in run #17 на CI seed, pass локально).
+// Canon: arbitrary must match value domain of code under test (CDC images
+// приходят из YDB которая null/string/int/bool — undefined невозможен в wire).
+const jsonValueArb = fc.oneof(fc.string(), fc.integer(), fc.boolean(), fc.constant(null))
 
 const imageArb = fc.dictionary(fc.string({ minLength: 1, maxLength: 20 }), jsonValueArb, {
 	minKeys: 0,
