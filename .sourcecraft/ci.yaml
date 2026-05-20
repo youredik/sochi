@@ -130,9 +130,8 @@ tasks:
       - name: get-iam-token
         image: cr.yandex/sourcecraft/yc-iam:latest
         env:
-          YC_ID_TOKEN: ${{ tokens.yc.id_token }}
-        outputs:
-          - IAM_TOKEN
+          ID_TOKEN: ${{ tokens.yc.id_token }}
+          YC_SA_ID: ${{ tokens.yc.service_account_id }}
       - name: plan
         image: ghcr.io/opentofu/opentofu:1.12.0
         env:
@@ -149,9 +148,8 @@ tasks:
       - name: get-iam-token
         image: cr.yandex/sourcecraft/yc-iam:latest
         env:
-          YC_ID_TOKEN: ${{ tokens.yc.id_token }}
-        outputs:
-          - IAM_TOKEN
+          ID_TOKEN: ${{ tokens.yc.id_token }}
+          YC_SA_ID: ${{ tokens.yc.service_account_id }}
       - name: apply
         image: ghcr.io/opentofu/opentofu:1.12.0
         env:
@@ -171,9 +169,8 @@ tasks:
       - name: get-iam-token
         image: cr.yandex/sourcecraft/yc-iam:latest
         env:
-          YC_ID_TOKEN: ${{ tokens.yc.id_token }}
-        outputs:
-          - IAM_TOKEN
+          ID_TOKEN: ${{ tokens.yc.id_token }}
+          YC_SA_ID: ${{ tokens.yc.service_account_id }}
 
       - name: build-push
         image: docker:27-cli
