@@ -83,12 +83,6 @@
 	},
 	"packageManager": "pnpm@10.33.4",
 	"pnpm": {
-		"onlyBuiltDependencies": [
-			"bun",
-			"esbuild",
-			"lefthook",
-			"sharp"
-		],
 		"overrides": {
 			"serialize-javascript": "^7.0.5",
 			"protobufjs@<8.0.2": "^8.2.0",

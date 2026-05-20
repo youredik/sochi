@@ -5,7 +5,4 @@
 # `feedback_bun_preload_race_2026_05_13.md`). Bun loads them sequentially
 # в order; sharing modules between entries безопасно.
 [test]
-preload = [
-  "./src/tests/env-defaults.ts",
-  "./src/tests/preload-driver-mock.ts",
-]
+preload = ["./src/tests/env-defaults.ts", "./src/tests/preload-driver-mock.ts"]

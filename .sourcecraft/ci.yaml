@@ -78,7 +78,16 @@ workflows:
 
 tasks:
   # ---------------------------------------------------------------------------
-  # QUALITY — typecheck + test + lint sequential, shared install cube
+  # QUALITY — `install` once, dependent cubes используют SHARED WORKSPACE.
+  #
+  # Canon 2026-05-20 (Yandex SC docs):
+  #   «If a Docker cube changes the environment, such environment will be
+  #    available to other cubes within the task only in case the changes were
+  #    made within the /sourcecraft directory.»
+  #   → `/sourcecraft/workspace` persists между cubes одной task. node_modules
+  #     заполненный install cube'ом ВИДЕН всем cubes с `needs: [install]`.
+  #   → DROP redundant `pnpm install` из dependent cubes (saves 60s × 4 = 240s
+  #     cube-seconds; wall-time ~−60s в parallel-DAG).
   # ---------------------------------------------------------------------------
   - name: quality
     cubes:
@@ -93,7 +102,6 @@ tasks:
         image: node:24-slim
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
-          - pnpm install --frozen-lockfile --prefer-offline
           - pnpm typecheck
 
       - name: lint
@@ -101,18 +109,11 @@ tasks:
         image: node:24-slim
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
-          - pnpm install --frozen-lockfile --prefer-offline
           - pnpm lint
           - pnpm format:check
 
-      # test-fast — sochi uses bun:test для 3 из 4 sub-tests (backend/frontend/
-      # shared). Stankoff не имеет bun (gitlab_workflow для quality-test).
-      # Canon для bun-в-SourceCraft (эмпирический):
-      #   - npm install -g bun@N — npm выкачивает OS-specific binary postinstall,
-      #     кладёт в /usr/local/bin/bun (system PATH). Канонично для CI: один
-      #     путь, доступен subprocess'ам run-p без PATH хаков.
-      #   - diagnostic prints (PATH/which/bun --version) — для следующей
-      #     итерации если что-то всё-ещё сломано, log даёт root cause.
+      # test-fast — bun:test для 3 из 4 sub-tests. node:24-slim не имеет bun;
+      # ставим через npm install -g bun → /usr/local/bin/bun (system PATH).
       - name: test-fast
         needs: [install]
         image: node:24-slim
@@ -120,34 +121,20 @@ tasks:
           - set -e
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - npm install -g bun@1.3.14
-          - 'echo "=== bun installation check ==="'
-          - which bun
           - bun --version
-          - 'echo "=== pnpm install ==="'
-          - pnpm install --frozen-lockfile --prefer-offline
-          - 'echo "=== PATH dump ==="'
-          - 'echo "PATH=$PATH"'
-          - 'echo "=== run pnpm test:fast ==="'
           - pnpm test:fast
 
-      # Supply-chain audit — canon 2026-05-20 research:
-      #   1) pnpm audit для known CVE (npm advisory DB)
-      #   2) OSV-Scanner V2 (Google) — broader DB чем npm-only, scans
-      #      pnpm-lock.yaml против OSV.dev. Параллельно с pnpm audit.
-      # Запускаются в одном cube (oба cheap, ~10-15s total). Параллелизация
-      # cubes не даёт выигрыша при таком объёме — упускает re-install cost.
+      # Supply-chain audit — 2026-05-20 canon:
+      #   1) pnpm audit (npm advisory DB)
+      #   2) OSV-Scanner V2 (Google, broader DB чем npm-only) via official image
       - name: supply-chain-audit
         needs: [install]
         image: node:24-slim
         script:
           - set -e
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
-          - pnpm install --frozen-lockfile --prefer-offline
-          - 'echo "=== pnpm audit (high+critical gate) ==="'
-          - 'pnpm audit --audit-level=high --json > /tmp/audit.json || { echo "FAIL: pnpm audit reports high/critical vulnerabilities"; cat /tmp/audit.json; exit 1; }'
-          - 'echo "=== OSV-Scanner V2 (lockfile vs OSV.dev) ==="'
+          - 'pnpm audit --audit-level=high --json > /tmp/audit.json || { echo "FAIL: pnpm audit high/critical vulnerabilities"; cat /tmp/audit.json; exit 1; }'
           - apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
-          # Pinned version (canonical 2026-05) — v2.x stable line.
           - curl -fsSL -o /usr/local/bin/osv-scanner
             https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64
           - chmod +x /usr/local/bin/osv-scanner
@@ -213,9 +200,12 @@ tasks:
         script:
           - SHA=$(git rev-parse --short HEAD)
           - echo "${YC_TOKEN}" | docker login --username iam --password-stdin cr.yandex
+          # Canon 2026-05-20: `compression=zstd,oci-mediatypes=true,image-manifest=true`
+          # на --cache-to → -60% cold build per Depot benchmark (13min→5min).
+          # `image-manifest=true` нужен чтобы cr.yandex (OCI v1) принял manifest.
           - docker buildx build --platform linux/amd64 --provenance=false
             --cache-from type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache
-            --cache-to type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache,mode=max
+            --cache-to type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache,mode=max,compression=zstd,oci-mediatypes=true,image-manifest=true
             -f apps/backend/Dockerfile
             -t ${REGISTRY}/${IMAGE_NAME}:${SHA}
             -t ${REGISTRY}/${IMAGE_NAME}:latest
@@ -287,11 +277,17 @@ tasks:
   # ---------------------------------------------------------------------------
   - name: deploy-frontend
     cubes:
-      - name: build
+      - name: install
         image: node:24-slim
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm install --frozen-lockfile
+
+      - name: build
+        needs: [install]
+        image: node:24-slim
+        script:
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm --filter @horeca/frontend build
 
       - name: upload
@@ -335,37 +331,41 @@ tasks:
   # ---------------------------------------------------------------------------
   - name: deploy-verify
     cubes:
+      # Install cube — заполняет /sourcecraft/workspace node_modules для
+      # playwright-smoke. Save 60s в playwright-smoke (skip redundant install).
+      - name: install
+        image: node:24-slim
+        script:
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - pnpm install --frozen-lockfile
+
       - name: http-smoke
         image: alpine/curl:latest
         script:
           # `curl --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10`
           # canon 2026-05-20 для serverless cold-start. curl auto-удваивает delay
           # между попытками (built-in exponential backoff). --retry-all-errors =
-          # retry на HTTP 5xx тоже (не только network). Заменяет хрупкий `sleep 20`
-          # — cold-start под нагрузкой может превысить 20s.
+          # retry на HTTP 5xx тоже. Заменяет хрупкий `sleep 20` — cold-start под
+          # нагрузкой может превысить 20s.
           - 'CURL="curl -sf --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10"'
           - '$CURL https://demo.sepshn.ru/health | grep -q ''"status":"ok"'' && echo "ok /health"'
           - '$CURL https://demo.sepshn.ru/health/live | grep -q ''"status":"ok"'' && echo "ok /health/live"'
           - '$CURL https://demo.sepshn.ru/health/ready | grep -q ''"status":"ok"'' && echo "ok /health/ready"'
           - '$CURL https://demo.sepshn.ru/health/db | grep -q ''"status":"ok"'' && echo "ok /health/db"'
-          # SPA root + fallback
           - '$CURL -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/ | grep -q "200" && echo "ok SPA root"'
           - '$CURL -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/booking/fake-id | grep -q "200" && echo "ok SPA fallback"'
-          # Auth-gated API — special-case: 401 = success criteria, no retry needed
           - 'curl -sf -o /dev/null -w "%{http_code}" --connect-timeout 10 https://demo.sepshn.ru/api/v1/properties | grep -q "401" && echo "ok Auth-gated 401"'
 
-      # Playwright image MUST match @playwright/test version в package.json
-      # (stankoff canon: «mismatch browsers + OS deps → no apt-get / `playwright
-      # install` needed»). MCR не публикует alpha pre-release images — только
-      # stable. Canon: latest STABLE, downgrade с 1.61.0-alpha (image отсутствует
-      # в MCR) → 1.60.0 stable.
+      # Playwright image MUST match @playwright/test version (stankoff canon).
+      # node_modules уже заполнен install cube (shared workspace) — НЕ
+      # переустанавливаем (canon 2026-05-20: «/sourcecraft persists between
+      # cubes within one task»).
       - name: playwright-smoke
-        needs: [http-smoke]
+        needs: [install, http-smoke]
         image: mcr.microsoft.com/playwright:v1.60.0-noble
         env:
           PLAYWRIGHT_BASE_URL: 'https://demo.sepshn.ru'
           PLAYWRIGHT_API_URL: 'https://demo.sepshn.ru'
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
-          - pnpm install --frozen-lockfile
           - pnpm exec playwright test smoke.spec.ts --project smoke --reporter=line
