@@ -15,17 +15,19 @@ minimumReleaseAge: 1440
 # typosquat-attacks через compromised package.json subdeps.
 blockExoticSubdeps: true
 
-# Phase out unrestricted postinstall execution. allowBuilds = explicit allowlist
-# для пакетов которым ДЕЙСТВИТЕЛЬНО нужны build scripts (native binaries,
-# tooling postinstalls). Все остальные = ignored.
-strictDepBuilds: true
-allowBuilds:
-  '@ydbjs/core': true
-  bun: true
-  esbuild: true
-  lefthook: true
-  msw: true
-  protobufjs: true
-  sharp: true
-  '@biomejs/biome': true
-  '@typescript/native-preview': true
+# Phase out unrestricted postinstall execution. `onlyBuiltDependencies`
+# (array form) — canonical key для pnpm 10.x. Object form `allowBuilds: {...}`
+# в pnpm 10.33.4 НЕ работает корректно с `strictDepBuilds: true` (run #13
+# regression: install fails «ERR_PNPM_IGNORED_BUILDS msw, protobufjs» даже
+# когда они в allowBuilds). Array form проверена `pnpm config get
+# only-built-dependencies`.
+onlyBuiltDependencies:
+  - '@ydbjs/core'
+  - '@biomejs/biome'
+  - '@typescript/native-preview'
+  - bun
+  - esbuild
+  - lefthook
+  - msw
+  - protobufjs
+  - sharp

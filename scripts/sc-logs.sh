@@ -34,9 +34,10 @@ curl_sc() {
 PY_STATUS='import sys, json
 data = json.load(sys.stdin)
 for run in data["runs"]:
-    print("Run #{:>4}  {:>10}  started {}".format(run["slug"], run["status"], run["dates"]["started_at"]))
+    # Pad with NUL-replacement: pipe-separator keeps single-line awk parseable
+    print("Run #{}|{}|started {}".format(run["slug"], run["status"], run["dates"]["started_at"]))
     for wf in run.get("workflows", []):
-        print("   {:>22}  {}".format(wf["slug"], wf["status"]))
+        print("  {}|{}".format(wf["slug"], wf["status"]))
 '
 
 PY_TREE='import sys, json
