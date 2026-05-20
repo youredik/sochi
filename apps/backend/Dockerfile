@@ -16,7 +16,7 @@
 # --- Stage 1: Workspace + deps ---
 FROM node:24-alpine AS base
 ENV PNPM_HOME="/pnpm" PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+RUN corepack enable && corepack prepare pnpm@10.33.4 --activate
 
 COPY . /app
 WORKDIR /app

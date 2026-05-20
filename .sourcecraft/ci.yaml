@@ -2,20 +2,20 @@
 # Sochi HoReCa — SourceCraft CI/CD (Q2 2026 canon, 2026-05-20)
 # =============================================================================
 #
-# Stankoff-v2 production-verified structure (Apr-May 2026, ru-central1):
-#   - `workflows.X.tasks: [name1, name2]` — task NAME references только
-#   - `workflows.X.settings.max_cube_duration: 15m` (NOT `timeout:`)
-#   - Top-level `tasks:` section с definitions
-#   - `cubes:` plural list INSIDE каждый task
-#   - Native cube format: `image: + script:` (NOT GitHub Actions `uses:`/`run:`)
-#   - YC auth: cube `get-iam-token` outputs IAM_TOKEN consumed via
-#     `${{ cubes.get-iam-token.outputs.IAM_TOKEN }}` downstream
+# Empirical canon refresh 2026-05-20 — all images pinned, structural pattern
+# stankoff-v2 aligned (multi-cube-per-task с `needs:`, не отдельные tasks).
 #
-# Auth: Service Connection `deploy-connection` (OIDC) — created в SC UI
-# 2026-05-20, bound к Сэпшн org / sepshn cloud (b1gisf466novulsg0a0n).
+# Image versions (research'd 2026-05-20):
+#   node:24-slim      — Node 24 LTS (active until April 2028)
+#   oven/bun:1.3.14-alpine — current latest (released 2026-05-13)
+#   docker:29-cli     — Engine 29 + Buildx 0.25 (latest, was docker:27)
+#   amazon/aws-cli:2.34.50 — pinned (NOT :latest — anti-pattern per AWS)
+#   opentofu/opentofu:1.12.0 — current tip
+#   pnpm@10.33.4 via corepack (latest 10.x patch, planned 11 migration separate)
+#   YC sourcecraft images :latest — internal Yandex registry, trusted (stankoff pattern)
 #
-# 12 secrets seeded via SourceCraft API 2026-05-20 (см. handover_2026_05_20.md
-# + reference_sourcecraft_secrets_api.md canon в memory).
+# Service Connection `deploy-connection` (OIDC) — created в SourceCraft UI
+# 2026-05-20, scope: org, bound к Сэпшн org / sepshn cloud b1gisf466novulsg0a0n.
 # =============================================================================
 
 env:
@@ -27,13 +27,9 @@ tokens:
     service_connection: deploy-connection
     scope: org
 
-# =============================================================================
-# Triggers
-# =============================================================================
-
 on:
   push:
-    - workflows: [quality, deploy-backend, deploy-frontend]
+    - workflows: [quality, deploy]
       filter:
         branches: ['main']
         paths: ['**', '!docs/**', '!**/*.md', '!.claude/**', '!CHANGELOG.md']
@@ -48,18 +44,12 @@ on:
       filter:
         paths: ['infra/**']
 
-# =============================================================================
-# Workflows — reference task NAMES (defined в top-level `tasks:` ниже)
-# =============================================================================
-
 workflows:
   quality:
     settings:
       max_cube_duration: 15m
     tasks:
-      - quality-typecheck
-      - quality-test-fast
-      - quality-lint
+      - quality
 
   infra-plan:
     settings:
@@ -73,57 +63,58 @@ workflows:
     tasks:
       - tofu-apply
 
-  deploy-backend:
+  deploy:
     settings:
       max_cube_duration: 30m
     tasks:
       - deploy-backend
-
-  deploy-frontend:
-    settings:
-      max_cube_duration: 15m
-    tasks:
       - deploy-frontend
+      - deploy-verify
 
 # =============================================================================
-# Task definitions (top-level — referenced by workflows above)
+# Task definitions — stankoff canon: multi-cube-per-task с `needs:` dependencies
 # =============================================================================
 
 tasks:
   # ---------------------------------------------------------------------------
-  # QUALITY tasks
+  # QUALITY — typecheck + test + lint sequential, shared install cube
   # ---------------------------------------------------------------------------
-  - name: quality-typecheck
+  - name: quality
     cubes:
-      - name: run
-        image: node:24-alpine
+      - name: install
+        image: node:24-slim
         script:
-          - corepack enable && corepack prepare pnpm@10.33.2 --activate
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm install --frozen-lockfile
+
+      - name: typecheck
+        needs: [install]
+        image: node:24-slim
+        script:
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - pnpm install --frozen-lockfile --prefer-offline
           - pnpm typecheck
 
-  - name: quality-test-fast
-    cubes:
-      - name: run
-        image: oven/bun:1.3.14-alpine
+      - name: lint
+        needs: [install]
+        image: node:24-slim
         script:
-          - apk add --no-cache nodejs npm
-          - corepack enable && corepack prepare pnpm@10.33.2 --activate
-          - pnpm install --frozen-lockfile
-          - pnpm test:fast
-
-  - name: quality-lint
-    cubes:
-      - name: run
-        image: node:24-alpine
-        script:
-          - corepack enable && corepack prepare pnpm@10.33.2 --activate
-          - pnpm install --frozen-lockfile
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - pnpm install --frozen-lockfile --prefer-offline
           - pnpm lint
           - pnpm format:check
 
+      - name: test-fast
+        needs: [install]
+        image: oven/bun:1.3.14-alpine
+        script:
+          - apk add --no-cache nodejs npm
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - pnpm install --frozen-lockfile --prefer-offline
+          - pnpm test:fast
+
   # ---------------------------------------------------------------------------
-  # INFRA tasks
+  # INFRA — tofu plan/apply (auth via get-iam-token cube → IAM_TOKEN)
   # ---------------------------------------------------------------------------
   - name: tofu-plan
     cubes:
@@ -133,6 +124,7 @@ tasks:
           ID_TOKEN: ${{ tokens.yc.id_token }}
           YC_SA_ID: ${{ tokens.yc.service_account_id }}
       - name: plan
+        needs: [get-iam-token]
         image: ghcr.io/opentofu/opentofu:1.12.0
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
@@ -151,6 +143,7 @@ tasks:
           ID_TOKEN: ${{ tokens.yc.id_token }}
           YC_SA_ID: ${{ tokens.yc.service_account_id }}
       - name: apply
+        needs: [get-iam-token]
         image: ghcr.io/opentofu/opentofu:1.12.0
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
@@ -159,10 +152,10 @@ tasks:
         script:
           - cd infra
           - tofu init -input=false
-          - tofu apply -auto-approve -input=false
+          - tofu apply -auto-approve -input=false -parallelism=1
 
   # ---------------------------------------------------------------------------
-  # DEPLOY backend — build + push image + revision deploy
+  # DEPLOY BACKEND — get-iam-token → build-push → revision-deploy
   # ---------------------------------------------------------------------------
   - name: deploy-backend
     cubes:
@@ -173,19 +166,23 @@ tasks:
           YC_SA_ID: ${{ tokens.yc.service_account_id }}
 
       - name: build-push
-        image: docker:27-cli
+        needs: [get-iam-token]
+        image: docker:29-cli
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
         script:
           - SHA=$(git rev-parse --short HEAD)
           - echo "${YC_TOKEN}" | docker login --username iam --password-stdin cr.yandex
           - docker buildx build --platform linux/amd64 --provenance=false
+            --cache-from type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache
+            --cache-to type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache,mode=max
             -f apps/backend/Dockerfile
             -t ${REGISTRY}/${IMAGE_NAME}:${SHA}
             -t ${REGISTRY}/${IMAGE_NAME}:latest
             --push .
 
       - name: revision-deploy
+        needs: [build-push]
         image: cr.yandex/sourcecraft/yc-cli:latest
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
@@ -229,19 +226,20 @@ tasks:
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=S3_SECRET_ACCESS_KEY,environment-variable=S3_SECRET_ACCESS_KEY
 
   # ---------------------------------------------------------------------------
-  # DEPLOY frontend — Vite build + aws s3 sync с two-pass Cache-Control canon
+  # DEPLOY FRONTEND — build (node:24-slim) + upload (aws-cli pinned)
   # ---------------------------------------------------------------------------
   - name: deploy-frontend
     cubes:
       - name: build
-        image: node:24-alpine
+        image: node:24-slim
         script:
-          - corepack enable && corepack prepare pnpm@10.33.2 --activate
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm install --frozen-lockfile
           - pnpm --filter @horeca/frontend build
 
       - name: upload
-        image: amazon/aws-cli:latest
+        needs: [build]
+        image: amazon/aws-cli:2.34.50
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.FRONTEND_S3_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.FRONTEND_S3_SECRET_ACCESS_KEY }}
@@ -269,3 +267,33 @@ tasks:
             --include "manifest.webmanifest"
             --include "registerSW.js"
             --cache-control "no-cache, must-revalidate"
+
+  # ---------------------------------------------------------------------------
+  # DEPLOY-VERIFY — post-deploy 3-layer gate (stankoff canon, lines 124-288)
+  # ---------------------------------------------------------------------------
+  - name: deploy-verify
+    cubes:
+      - name: http-smoke
+        image: alpine/curl:latest
+        script:
+          - sleep 20 # cold-start budget после revision deploy
+          - curl -sf https://demo.sepshn.ru/health | grep -q '"status":"ok"' && echo "✓ /health"
+          - curl -sf https://demo.sepshn.ru/health/live | grep -q '"status":"ok"' && echo "✓ /health/live"
+          - curl -sf https://demo.sepshn.ru/health/ready | grep -q '"status":"ok"' && echo "✓ /health/ready"
+          - curl -sf https://demo.sepshn.ru/health/db | grep -q '"status":"ok"' && echo "✓ /health/db"
+          # SPA root + fallback
+          - curl -sf -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/ | grep -q "200" && echo "✓ SPA root"
+          - curl -sf -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/booking/fake-id | grep -q "200" && echo "✓ SPA fallback"
+          # Auth-gated API
+          - curl -sf -o /dev/null -w "%{http_code}" https://demo.sepshn.ru/api/v1/properties | grep -q "401" && echo "✓ Auth-gated 401"
+
+      - name: playwright-smoke
+        needs: [http-smoke]
+        image: mcr.microsoft.com/playwright:v1.59.1-noble
+        env:
+          PLAYWRIGHT_BASE_URL: 'https://demo.sepshn.ru'
+          PLAYWRIGHT_API_URL: 'https://demo.sepshn.ru'
+        script:
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - pnpm install --frozen-lockfile
+          - pnpm exec playwright test smoke.spec.ts --project smoke --reporter=line
