@@ -1,106 +1,184 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Day 2 — SourceCraft CI secrets bootstrap (canon Q2 2026, stankoff-aligned)
+# Day 2 — SourceCraft CI secrets seeding via API (canon Q2 2026)
 # =============================================================================
 #
-# Stankoff canon (per docs/plans/sourcecraft-migration.md:225-229): 30-минутный
-# manual UI seeding step (Phase 0.4/0.5). No public CLI / API for SourceCraft
-# secrets — UI-only confirmed empirically 2026-05-20.
+# Programmatic seeding of 12 SourceCraft secrets via REST API. Stankoff canon
+# (see memory `reference_sourcecraft_secrets_api.md` — empirically verified
+# 2026-04-22 + senior rule re: base64-encoding from 2026-04-29 forget-cost
+# episode).
 #
-# This script PRINTS the yc/tofu commands you run locally к extract each
-# secret value. It deliberately DOES NOT print values into the shell history.
-# Each command reads ONE value к stdout — copy-paste прямо в SourceCraft UI.
+# API: PUT https://api.sourcecraft.tech/repos/{org}/{repo}/secrets/{KEY}
+#      Body: {"value": "<base64-encoded>"}
+#      Auth: Bearer PAT
 #
 # Usage:
-#   bash scripts/day-2-sourcecraft-secrets.sh    # prints commands к screen
+#   export SOURCECRAFT_PAT='your-personal-access-token'  # get from UI:
+#     # https://sourcecraft.dev/-/profile/tokens/new
+#     # → name=sochi-bootstrap, scope=admin:secrets, expires=24h
+#   bash scripts/day-2-sourcecraft-secrets.sh
 #
-# Pre-req:
-#   - `yc` CLI authenticated к sepshn cloud
-#   - tofu state accessible (tf-bot S3 creds в ~/.yc-keys/)
-#   - Browser open: https://sourcecraft.dev/sepshn/sepshn/-/settings/secrets
+# Note: SSH remote (sochi default) does NOT embed PAT в git URL. PAT must be
+# obtained explicitly from UI Profile → Personal Access Tokens (one-time, ~30s).
+#
+# Idempotent: PUT is upsert (creates OR updates). Safe re-run после rotation.
 # =============================================================================
 
-cat <<'SETUP'
-==============================================================================
-SourceCraft CI bootstrap — 2 phases
-==============================================================================
+set -euo pipefail
 
-Phase 1 (manual UI, ~5 min):
-  https://sourcecraft.dev/sepshn/sepshn/-/settings/service-connections
-  → New service connection → name=`deploy-connection`
-  → Type: Yandex Cloud OIDC
-  → Scope: this repo + branch=main
-  → Folder ID: b1gcqa89an0n32mqpuvo (demo folder)
-  → Service Account: <run command #5 below for ID>
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+INFRA_DIR="$REPO_ROOT/infra"
+ORG="sepshn"
+REPO="sepshn"
+API_BASE="https://api.sourcecraft.tech"
 
-Phase 2 (~10 min):
-  https://sourcecraft.dev/sepshn/sepshn/-/settings/secrets
-  → New secret × 12 (one per command below)
-  → Run each command locally, paste output as value, name as shown.
+if [[ -z "${SOURCECRAFT_PAT:-}" ]]; then
+    cat <<HELP
+ERROR: SOURCECRAFT_PAT env var required.
 
-==============================================================================
-Static values (no command needed — paste literally):
-==============================================================================
+Get a Personal Access Token (one-time, ~30s):
+  1. Open https://sourcecraft.dev/-/profile/tokens/new
+  2. Name: 'sochi-bootstrap', scope: 'admin:secrets' or 'all', expiry: 24h
+  3. Copy generated token
 
-  REGISTRY                   = cr.yandex/crprdhmq3p9f9a5j5ck6
-  YC_CONTAINER_NAME          = sochi-backend-demo
-  YC_DEMO_FOLDER_ID          = b1gcqa89an0n32mqpuvo
-  S3_BACKEND_FILES_BUCKET    = sepshn-demo-backend-files
-  FRONTEND_S3_BUCKET         = sepshn-demo-frontend
+Then:
+  export SOURCECRAFT_PAT='paste_pat_here'
+  bash scripts/day-2-sourcecraft-secrets.sh
+HELP
+    exit 1
+fi
 
-==============================================================================
-Dynamic values — run command, copy output к SourceCraft secret of same name:
-==============================================================================
+if [[ ! -f /Users/ed/.yc-keys/tf-bot-s3-access.json ]]; then
+    echo "ERROR: tf-bot S3 key not found at ~/.yc-keys/tf-bot-s3-access.json"
+    exit 1
+fi
 
-# tf-bot creds setup (one-time)
+# tf-bot creds for tofu state read.
 export AWS_ACCESS_KEY_ID=$(python3 -c "import json; print(json.load(open('/Users/ed/.yc-keys/tf-bot-s3-access.json'))['access_key']['key_id'])")
 export AWS_SECRET_ACCESS_KEY=$(python3 -c "import json; print(json.load(open('/Users/ed/.yc-keys/tf-bot-s3-access.json'))['secret'])")
 export YC_TOKEN="$(yc iam create-token)"
-cd infra
 
-# 1. YC_RUNTIME_SA_ID
-tofu state show yandex_iam_service_account.sochi_backend_runtime | grep '^[[:space:]]*id ' | awk -F'"' '{print $2}'
+cd "$INFRA_DIR"
 
-# 2. YC_LOCKBOX_SECRET_ID
-tofu state show yandex_lockbox_secret.backend | grep '^[[:space:]]*id ' | awk -F'"' '{print $2}'
+echo "[1/3] Pulling tofu state (read-only)..."
+STATE_JSON=$(tofu state pull 2>/dev/null)
 
-# 3. YC_LOCKBOX_VERSION_ID
-tofu state show yandex_lockbox_secret_version_hashed.backend | grep '^[[:space:]]*id ' | awk -F'"' '{print $2}'
-
-# 4. YDB_CONNECTION_STRING
-tofu state show yandex_ydb_database_serverless.demo | grep ydb_full_endpoint | awk -F'"' '{print $2}'
-
-# 5. FRONTEND_S3_ACCESS_KEY_ID  (also use this SA для service-connection in Phase 1)
-tofu state pull | python3 -c "
+extract_attr() {
+    local type=$1 name=$2 attr=$3
+    echo "$STATE_JSON" | python3 -c "
 import json, sys
-for r in json.load(sys.stdin).get('resources', []):
-    if r['type'] == 'yandex_iam_service_account_static_access_key' and r['name'] == 'backend_s3':
-        print(r['instances'][0]['attributes']['access_key'])
+state = json.load(sys.stdin)
+for r in state.get('resources', []):
+    if r['type'] == '$type' and r['name'] == '$name':
+        v = r['instances'][0]['attributes'].get('$attr', '')
+        if v: print(v)
+        break
 "
+}
 
-# 6. FRONTEND_S3_SECRET_ACCESS_KEY  ⚠️ sensitive — paste, не commit
-tofu state pull | python3 -c "
+RUNTIME_SA_ID=$(extract_attr yandex_iam_service_account sochi_backend_runtime id)
+LOCKBOX_ID=$(extract_attr yandex_lockbox_secret backend id)
+LOCKBOX_VERSION_ID=$(extract_attr yandex_lockbox_secret_version_hashed backend id)
+YDB_ENDPOINT=$(extract_attr yandex_ydb_database_serverless demo ydb_full_endpoint)
+S3_AK=$(extract_attr yandex_iam_service_account_static_access_key backend_s3 access_key)
+S3_SK=$(extract_attr yandex_iam_service_account_static_access_key backend_s3 secret_key)
+
+# Validate all critical values present
+for var in RUNTIME_SA_ID LOCKBOX_ID LOCKBOX_VERSION_ID YDB_ENDPOINT S3_AK S3_SK; do
+    if [[ -z "${!var}" ]]; then
+        echo "ERROR: $var empty (tofu state extraction failed)"
+        exit 1
+    fi
+done
+
+echo "[2/3] Seeding 12 secrets via SourceCraft API..."
+
+put_secret() {
+    local key=$1 value=$2
+    local b64=$(printf "%s" "$value" | base64)
+    local response=$(curl -sS -w "\n%{http_code}" -X PUT \
+        -H "Authorization: Bearer $SOURCECRAFT_PAT" \
+        -H "Content-Type: application/json" \
+        "$API_BASE/repos/$ORG/$REPO/secrets/$key" \
+        -d "{\"value\":\"$b64\"}")
+    local http_code=$(echo "$response" | tail -1)
+    local body=$(echo "$response" | sed '$d')
+    if [[ "$http_code" =~ ^2 ]]; then
+        echo "  ✓ $key"
+    else
+        echo "  ✗ $key — HTTP $http_code: $body"
+        return 1
+    fi
+}
+
+put_secret YC_CONTAINER_NAME          "sochi-backend-demo"
+put_secret YC_DEMO_FOLDER_ID          "b1gcqa89an0n32mqpuvo"
+put_secret YC_RUNTIME_SA_ID           "$RUNTIME_SA_ID"
+put_secret YC_LOCKBOX_SECRET_ID       "$LOCKBOX_ID"
+put_secret YC_LOCKBOX_VERSION_ID      "$LOCKBOX_VERSION_ID"
+put_secret YDB_CONNECTION_STRING      "$YDB_ENDPOINT"
+put_secret S3_BACKEND_FILES_BUCKET    "sepshn-demo-backend-files"
+put_secret FRONTEND_S3_BUCKET         "sepshn-demo-frontend"
+put_secret FRONTEND_S3_ACCESS_KEY_ID  "$S3_AK"
+put_secret FRONTEND_S3_SECRET_ACCESS_KEY "$S3_SK"
+put_secret TF_BOT_S3_ACCESS_KEY_ID    "$AWS_ACCESS_KEY_ID"
+put_secret TF_BOT_S3_SECRET_ACCESS_KEY "$AWS_SECRET_ACCESS_KEY"
+
+echo ""
+echo "[3/3] Verifying via list endpoint..."
+LIST_RESPONSE=$(curl -sS \
+    -H "Authorization: Bearer $SOURCECRAFT_PAT" \
+    "$API_BASE/repos/$ORG/$REPO/secrets")
+
+EXPECTED_COUNT=12
+ACTUAL_COUNT=$(echo "$LIST_RESPONSE" | python3 -c "
 import json, sys
-for r in json.load(sys.stdin).get('resources', []):
-    if r['type'] == 'yandex_iam_service_account_static_access_key' and r['name'] == 'backend_s3':
-        print(r['instances'][0]['attributes']['secret_key'])
-"
+try:
+    data = json.load(sys.stdin)
+    secrets = data.get('secrets', [])
+    expected = {
+        'YC_CONTAINER_NAME','YC_DEMO_FOLDER_ID','YC_RUNTIME_SA_ID',
+        'YC_LOCKBOX_SECRET_ID','YC_LOCKBOX_VERSION_ID','YDB_CONNECTION_STRING',
+        'S3_BACKEND_FILES_BUCKET','FRONTEND_S3_BUCKET',
+        'FRONTEND_S3_ACCESS_KEY_ID','FRONTEND_S3_SECRET_ACCESS_KEY',
+        'TF_BOT_S3_ACCESS_KEY_ID','TF_BOT_S3_SECRET_ACCESS_KEY'
+    }
+    present = {s['key'] for s in secrets}
+    missing = expected - present
+    if missing:
+        print(f'MISSING: {missing}', file=sys.stderr)
+    print(len(expected & present))
+except Exception as e:
+    print(f'PARSE ERR: {e}', file=sys.stderr)
+    print(0)
+")
 
-# 7. TF_BOT_S3_ACCESS_KEY_ID
-python3 -c "import json; print(json.load(open('/Users/ed/.yc-keys/tf-bot-s3-access.json'))['access_key']['key_id'])"
+cd "$REPO_ROOT"
 
-# 8. TF_BOT_S3_SECRET_ACCESS_KEY  ⚠️ sensitive
-python3 -c "import json; print(json.load(open('/Users/ed/.yc-keys/tf-bot-s3-access.json'))['secret'])"
+if [[ "$ACTUAL_COUNT" -eq "$EXPECTED_COUNT" ]]; then
+    echo "  ✓ All 12 secrets verified в API list"
+else
+    echo "  ⚠ Only $ACTUAL_COUNT/$EXPECTED_COUNT secrets verified"
+    exit 1
+fi
+
+cat <<DONE
 
 ==============================================================================
-Phase 3 (commit + verify, ~2 min):
-==============================================================================
+Done. Next steps:
 
-  cd /Users/ed/dev/sochi
-  git mv .sourcecraft/ci.yaml.draft .sourcecraft/ci.yaml
-  git commit -m "feat(ci): activate SourceCraft workflows — secrets seeded"
-  git push origin main
-  # Watch first run: https://sourcecraft.dev/sepshn/sepshn/-/pipelines
+1. Service Connection (~2 min UI only — no API):
+   https://sourcecraft.dev/$ORG/$REPO/-/settings/service-connections
+   → New → name=deploy-connection, type=Yandex Cloud OIDC,
+     scope=org, folder=b1gcqa89an0n32mqpuvo, SA=$RUNTIME_SA_ID
 
+2. Activate workflows:
+   cd $REPO_ROOT
+   git mv .sourcecraft/ci.yaml.draft .sourcecraft/ci.yaml
+   git commit -m "feat(ci): activate SourceCraft workflows — secrets seeded via API"
+   git push origin main
+
+3. Watch first run:
+   https://sourcecraft.dev/$ORG/$REPO/-/pipelines
 ==============================================================================
-SETUP
+DONE
