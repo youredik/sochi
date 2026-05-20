@@ -219,18 +219,17 @@ tasks:
         script:
           - SHA=$(git rev-parse --short HEAD)
           - echo "${YC_TOKEN}" | docker login --username iam --password-stdin cr.yandex
-          # Canon 2026-05-20:
-          #   --cache-to mode=max,compression=zstd — -60% cache transfer (Depot benchmark)
-          #     YC CR принимает zstd cache layers ✓ verified run #17.
-          #   Image layers — gzip default. YC Serverless Container REJECTS
-          #     zstd image layers с «invalid docker image url» (empirical run #17:
-          #     `rpc error: code = InvalidArgument`). Use gzip для image.
-          # `image-manifest=true,oci-mediatypes=true` нужны для cr.yandex OCI v1.
-          # OCI annotations canon 2026 (docs.docker.com/build/metadata/annotations)
-          # — supply-chain hygiene, traceability в YCR. revision + source = standard.
+          # Conditional cache mode — canon 2026-05-20 (freecodecamp + Depot):
+          #   mode=max ТОЛЬКО когда lockfile/Dockerfile изменились (cache export 53s).
+          #   mode=min на остальных commits (cache export ~5s).
+          # Empirical run #19: 53s cache export → потенциально -48s avg на 80% pushes.
+          - 'if git diff --name-only HEAD~1 HEAD -- apps/backend/Dockerfile pnpm-lock.yaml pnpm-workspace.yaml package.json 2>/dev/null | grep -q .; then CACHE_MODE=max; echo "lockfile/Dockerfile changed → mode=max"; else CACHE_MODE=min; echo "no lockfile change → mode=min (skip intermediate cache export)"; fi'
+          # YC cr.yandex принимает zstd cache layers (verified run #17).
+          # Image layers — gzip default (YC Serverless REJECTS zstd image, run #17).
+          # OCI annotations — supply-chain hygiene (docs.docker.com/build/metadata/annotations).
           - docker buildx build --platform linux/amd64 --provenance=false
             --cache-from type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache
-            --cache-to type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache,mode=max,compression=zstd,oci-mediatypes=true,image-manifest=true
+            --cache-to type=registry,ref=${REGISTRY}/${IMAGE_NAME}:buildcache,mode=$CACHE_MODE,compression=zstd,oci-mediatypes=true,image-manifest=true
             --annotation "org.opencontainers.image.revision=${SHA}"
             --annotation "org.opencontainers.image.source=https://sourcecraft.dev/sepshn/sepshn"
             --annotation "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

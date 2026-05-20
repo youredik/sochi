@@ -62,3 +62,12 @@ docs
 # Backups
 backups
 *.bak
+
+# Build-context bloat — empirical 2026-05-20 (research §4):
+# .artifacts (22MB), reports (972K), plans (1.6MB), .lighthouseci (5.3MB)
+# не нужны в backend image. ratchet sandbox + monorepo planning artifacts.
+.artifacts
+.lighthouseci
+reports
+.ratchet
+plans
