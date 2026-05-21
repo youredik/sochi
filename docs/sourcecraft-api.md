@@ -138,6 +138,30 @@ curl -X POST -H "Authorization: Bearer $SC_PAT" -H "Content-Type: application/js
 10. **Pre-commit/pre-push lefthook** — `pnpm-lock.yaml` после редкого
     `pnpm install --lockfile-only` может изменяться по hash-only причинам; пуш
     с ratchet=0 проходит.
+11. **SC limit: max 3 workflows per push event** (run #24 «workflows found - 4,
+    3 allowed»). Path filters планируй так чтобы единичный push trigger'ил ≤3
+    workflows. `mirror-images` paths = только `pnpm-lock.yaml`, не `ci.yaml`.
+12. **«Cubes within task run one by one by default»** — parallelism ТОЛЬКО
+    через `needs:` DAG. И `allow_failure: true` нужен на non-critical cubes
+    (e.g. supply-chain-audit), иначе sibling cubes с тем же `needs: [...]`
+    не стартуют после первой fail.
+13. **SC prepare-image phase БЕЗ docker login** — image pulls в prepare-image
+    cube runs ДО любого `script:` step. Private cr.yandex repos → 401. Mirror
+    MCR images требует `yandex_container_repository_iam_binding` с members
+    `["system:allUsers"]` для anonymous pull.
+14. **YC Serverless Container REJECTS zstd image layers** (run #17 empirical):
+    `--output type=image,compression=zstd,force-compression=true` → rpc
+    InvalidArgument fail. Canon: gzip image, zstd cache.
+15. **Buildx `docker` driver не поддерживает cache export** (run #26): нужен
+    `docker buildx create --name builder --driver docker-container --use
+--bootstrap` перед `docker buildx build`.
+16. **Mirror MCR images** через `crane copy` в SC cube (gcr.io/go-containerregistry/
+    crane:debug image). Idempotent через digest comparison. SC intra-DC network
+    1Gbps vs home network 100Mbps cross-border. См. `scripts/mirror-playwright-image.sh`.
+17. **OpenTofu vs Terraform для YC stack**: stankoff canon `hashicorp/terraform:1.10`.
+    `terraform-mirror.yandexcloud.net` populates только `registry.terraform.io/*`
+    namespace; opentofu.org/yandex-cloud/yandex EMPTY. State migration script
+    нужен при switch OpenTofu→Terraform.
 
 ## Helper script
 
