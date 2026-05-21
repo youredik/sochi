@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, test } from 'bun:test'
-import { getApiBaseUrl } from './api-base-url.ts'
+import { getApiBaseUrl, getApiTracePropagationPatterns } from './api-base-url.ts'
 
 describe('getApiBaseUrl (same-origin canon)', () => {
 	test('[BU1] returns string (not undefined / null)', () => {
@@ -40,5 +40,42 @@ describe('getApiBaseUrl (same-origin canon)', () => {
 		// Per bun-preload.ts, happy-dom registers с url: 'http://localhost/'
 		// → origin = 'http://localhost'.
 		expect(getApiBaseUrl()).toBe('http://localhost')
+	})
+})
+
+describe('getApiTracePropagationPatterns (OTel trace-propagation canon)', () => {
+	test('[TP1] returns array of RegExp (not undefined / non-empty for valid base)', () => {
+		const patterns = getApiTracePropagationPatterns()
+		expect(Array.isArray(patterns)).toBe(true)
+		expect(patterns.length).toBe(1)
+		expect(patterns[0]).toBeInstanceOf(RegExp)
+	})
+
+	test('[TP2] regex matches API base URL — propagation will fire для same-origin fetches', () => {
+		// happy-dom origin: http://localhost → host = 'localhost'. The pattern
+		// must match URLs containing that host (substring, not anchored — old
+		// `$`-anchored canon was silently broken для URLs с path).
+		const [pattern] = getApiTracePropagationPatterns()
+		expect(pattern?.test('http://localhost/api/v1/properties')).toBe(true)
+		expect(pattern?.test('http://localhost:5273/welcome')).toBe(true)
+	})
+
+	test('[TP3] regex does NOT match unrelated hosts (no false-positive propagation)', () => {
+		const [pattern] = getApiTracePropagationPatterns()
+		// Yandex.Metrika, third-party CDNs, etc. must NOT receive traceparent —
+		// it leaks internal trace IDs к non-trusted hosts.
+		expect(pattern?.test('https://mc.yandex.ru/metrika/tag.js')).toBe(false)
+		expect(pattern?.test('https://example.com/path')).toBe(false)
+	})
+
+	test('[TP4] host extraction уважает regex special-chars — dots не treated как wildcard', () => {
+		// Verify the escape: `.sepshn.ru` would match `xsepshnxru` если dots
+		// были unescaped. Regression guard для `escapeForRegExp` correctness.
+		const [pattern] = getApiTracePropagationPatterns()
+		// happy-dom host = 'localhost' (no dots), но проверяем что regex
+		// source действительно escapes — substring match без `\.` would
+		// allow 'l0calhost' и т.п. Здесь нет dots в host, поэтому direct
+		// check на source structure: literal not pattern.
+		expect(pattern?.source).toBe('localhost')
 	})
 })

@@ -26,6 +26,8 @@
  *     требует absolute URL)
  *   - `features/admin-tax/.../use-tourism-tax-report.ts` (XLSX download href)
  *   - `features/content-wizard/.../use-media.ts` (file upload fetch)
+ *   - `features/observability/setup-otel.ts` через `getApiTracePropagationPatterns()`
+ *     — OTel `propagateTraceHeaderCorsUrls` derives регекс из same base
  *
  * Sibling sweep canon per `feedback_self_review_finds_halfmeasure` — все
  * baseURL fallback sites должны использовать этот helper, не duplicate
@@ -36,4 +38,40 @@ export function getApiBaseUrl(): string {
 	if (explicit) return explicit
 	if (typeof window !== 'undefined') return window.location.origin
 	return 'http://localhost:8787'
+}
+
+/**
+ * Escape `s` for safe inclusion в a RegExp literal. Stand-alone copy
+ * (no `escape-string-regexp` dep — single use-site, 5-line implementation
+ * not worth +pkg footprint).
+ */
+function escapeForRegExp(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * OTel trace-propagation regex list — controls which fetch URLs get the
+ * `traceparent` W3C header attached by `FetchInstrumentation`. Used by
+ * `setup-otel.ts` so trace propagation auto-adapts к the SAME base as
+ * actual API fetches — single source of truth, не hand-maintained
+ * `[/localhost:8787/, /\.horeca\.ru$/]` array (which silently broke after
+ * brand rename Сэпшн в мае 2026 — `\.horeca\.ru$` had `$` anchor что
+ * никогда не matched real URLs с path).
+ *
+ * Matches by HOST substring (not anchored) — covers both same-origin
+ * relative-resolved URLs (`https://demo.sepshn.ru/api/...`) и explicit
+ * VITE_API_URL cross-origin (`http://localhost:8787/api/...`).
+ *
+ * Returns `[]` если base не parseable как URL (degenerate dev config) —
+ * propagation просто off, fetches still work, just no distributed-trace
+ * stitching. Better fail-soft than crash on tracer init.
+ */
+export function getApiTracePropagationPatterns(): readonly RegExp[] {
+	const base = getApiBaseUrl()
+	try {
+		const host = new URL(base).host
+		return [new RegExp(escapeForRegExp(host))]
+	} catch {
+		return []
+	}
 }

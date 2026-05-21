@@ -11,6 +11,7 @@ import {
 	ATTR_SERVICE_NAME,
 	ATTR_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions/incubating'
+import { getApiTracePropagationPatterns } from '../../lib/api-base-url.ts'
 
 /**
  * OpenTelemetry Web Tracer bootstrap — production path to Yandex Monium.
@@ -75,7 +76,13 @@ export function setupOtel(): void {
 			new FetchInstrumentation({
 				// Propagate W3C `traceparent` on every fetch to our own backend.
 				// Skip OTLP export calls to avoid tracing the tracer.
-				propagateTraceHeaderCorsUrls: [/localhost:8787/, /\.horeca\.ru$/],
+				//
+				// 2026-05-21 brand-rename canon: pattern list derived from
+				// `getApiBaseUrl()` host so propagation auto-tracks the actual
+				// API target. Previous hard-coded `/\.horeca\.ru$/` silently
+				// broke after Сэпшн rename (anchor `$` never matched real
+				// URLs с path anyway). Per `[[api_base_url_helper_canon]]`.
+				propagateTraceHeaderCorsUrls: [...getApiTracePropagationPatterns()],
 				ignoreUrls: [/\/api\/otel\//],
 			}),
 		],
