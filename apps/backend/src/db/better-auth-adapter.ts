@@ -183,9 +183,36 @@ function buildWhere(wheres: CleanedWhere[]): { clause: string; params: unknown[]
 // ---------------------------------------------------------------------------
 
 /**
+ * Decide idempotent flag for `@ydbjs/query`'s retry layer.
+ *
+ * **Canonical 2026 default: TRUE.** Per `@ydbjs/retry` 6.x `isRetryableError(err, idempotent)`,
+ * gRPC UNAVAILABLE (code 14, e.g. ECONNRESET к YDB Serverless после idle) retries
+ * ONLY when `idempotent=true`. Default false → no retry → 500 для real users.
+ *
+ * BA's writes are UPSERT-by-primary-key (deterministic) и DELETE WHERE id=? —
+ * server-side idempotent by construction (re-run = same row). Safe to retry.
+ *
+ * Production bug 2026-05-21: magic-link signin returned 500 ~2/3 attempts because
+ * UPSERT verification table hit dead gRPC connection → no retry → propagated.
+ * Empirical fix verified live.
+ *
+ * Caller can override (e.g. for non-idempotent diagnostic queries):
+ *   execQuery(sql, q, p, { idempotent: false })
+ */
+export function decideIdempotent(
+	options: { idempotent?: boolean | undefined } | undefined,
+): boolean {
+	return options?.idempotent ?? true
+}
+
+/**
  * Execute dynamic SQL. queryStr contains $p0, $p1, … placeholders.
  * Calls sql(templateStrings, ...values) via tagged-template call convention.
  * @ydbjs/query auto-generates DECLARE statements from value types.
+ *
+ * Idempotent flag ALWAYS chained (default `true` per `decideIdempotent`) —
+ * enables @ydbjs/query's built-in UNAVAILABLE retry loop, prevents ECONNRESET
+ * 500s for BA's writes на YDB Serverless idle-reconnect.
  */
 async function execQuery(
 	sql: SqlOrTx,
@@ -193,15 +220,14 @@ async function execQuery(
 	params: unknown[],
 	options?: { isolation?: 'snapshotReadOnly' | 'onlineReadOnly'; idempotent?: boolean },
 ): Promise<[Record<string, unknown>[], ...Record<string, unknown>[][]]> {
+	const idempotent = decideIdempotent(options)
 	if (params.length === 0) {
 		const q = sql`${unsafe(queryStr)}`
-		if (options?.isolation) {
-			return (await q.isolation(options.isolation).idempotent(options.idempotent ?? false)) as [
-				Record<string, unknown>[],
-				...Record<string, unknown>[][],
-			]
-		}
-		return (await q) as [Record<string, unknown>[], ...Record<string, unknown>[][]]
+		const withIso = options?.isolation ? q.isolation(options.isolation) : q
+		return (await withIso.idempotent(idempotent)) as [
+			Record<string, unknown>[],
+			...Record<string, unknown>[][],
+		]
 	}
 
 	// Split on $pN placeholders, interleave with actual values
@@ -219,15 +245,11 @@ async function execQuery(
 	// sql(strings, ...values) — tagged template call convention
 	const templateStrings = Object.assign(strings, { raw: strings })
 	const q = sql(templateStrings as TemplateStringsArray, ...values)
-
-	if (options?.isolation) {
-		return (await q.isolation(options.isolation).idempotent(options.idempotent ?? false)) as [
-			Record<string, unknown>[],
-			...Record<string, unknown>[][],
-		]
-	}
-	// biome-ignore lint/nursery/useAwaitThenable: @ydbjs/query Query<T> is thenable (its .then() dispatches exec); biome nursery doesn't see through SqlOrTx union.
-	return (await q) as [Record<string, unknown>[], ...Record<string, unknown>[][]]
+	const withIso = options?.isolation ? q.isolation(options.isolation) : q
+	return (await withIso.idempotent(idempotent)) as [
+		Record<string, unknown>[],
+		...Record<string, unknown>[][],
+	]
 }
 
 // ---------------------------------------------------------------------------
