@@ -219,4 +219,86 @@ test.describe('Demo funnel — empirical против prod', () => {
 			'Return-visit landed в DIFFERENT tenant (duplicate created instead of setActive)',
 		).toBe(orgSlug1)
 	})
+
+	/**
+	 * [E3] **Meta-invariant — zero localhost fetches in prod bundle**.
+	 *
+	 * Locks down sibling-sweep canon (commits c6b1f0f + fcf7aeb + c0f4d90,
+	 * 2026-05-21). Five hooks/clients had a `?? 'http://localhost:8787'`
+	 * fallback trap that baked the literal into prod bundle при
+	 * `VITE_API_URL` unset at build:
+	 *   - `lib/api.ts` (Hono RPC)
+	 *   - `lib/auth-client.ts` (BA React client)
+	 *   - `features/admin-tax/hooks/use-tourism-tax-report.ts` (XLSX URL)
+	 *   - `features/chessboard/hooks/use-booking-events-stream.ts` (SSE)
+	 *   - `features/content-wizard/hooks/use-media.ts` (multipart + sign)
+	 *
+	 * All five now route через shared `getApiBaseUrl()` helper → same-origin
+	 * `window.location.origin` in browser. This test exercises the full
+	 * auth flow (landing → /welcome → /setup → /o/{slug}/grid) и asserts
+	 * **NO network request had host = `localhost:8787` или contained that
+	 * literal in URL/body**. Per `feedback_self_review_finds_halfmeasure`
+	 * — sibling-class regression guard.
+	 *
+	 * What this proves vs. [E1]:
+	 *   - [E1] verifies the SIGNUP funnel works end-to-end (DaData mock,
+	 *     no 403 console noise, tenant created)
+	 *   - [E3] verifies the BUNDLE NEVER references localhost (which would
+	 *     manifest как net::ERR_CONNECTION_REFUSED in production for the
+	 *     5 sibling code paths even when [E1] funnel passes — different
+	 *     surface)
+	 */
+	test('[E3] meta-invariant — zero localhost fetches from prod bundle', async ({
+		page,
+		request,
+	}) => {
+		const ts = Date.now()
+		const email = `e2e-localhost-${ts}@example.invalid`
+		const orgName = `Локхост-страж ${ts}`
+
+		// Listener — captures ANY request whose URL contains localhost,
+		// regardless of port. Storing rather than failing on-event keeps
+		// diagnostics readable (final assertion shows all offenders).
+		const localhostFetches: string[] = []
+		page.on('request', (req) => {
+			const url = req.url()
+			if (url.includes('localhost')) localhostFetches.push(`${req.method()} ${url}`)
+		})
+
+		// Magic-link signup
+		const callbackURL = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName)}`
+		let signupRes: import('@playwright/test').APIResponse | undefined
+		for (let attempt = 0; attempt < 5; attempt++) {
+			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
+				data: { email, callbackURL },
+			})
+			if (signupRes.status() === 200) break
+			await new Promise((r) => setTimeout(r, 3000))
+		}
+		expect(signupRes?.status()).toBe(200)
+
+		const magicLink = await fetchMagicLink(request, email)
+		expect(magicLink, 'Magic-link не captured').toBeTruthy()
+		await page.goto(magicLink as string)
+
+		// /welcome — fires WelcomeForm защитный orgList query (BA, не /api/v1)
+		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })
+		await page.waitForLoadState('networkidle', { timeout: 5_000 })
+
+		// /setup — fires content-wizard hooks (media/amenities), а на /grid
+		// загружается chessboard SSE EventSource — все 5 sibling targets
+		// touched by walking through this flow.
+		await page.getByRole('button', { name: /Создать гостиницу/ }).click()
+		await page.waitForURL(/\/o\/[^/]+\/setup/, { timeout: 30_000 })
+		await page.waitForLoadState('networkidle', { timeout: 10_000 })
+
+		// FINAL ASSERTION — zero localhost. If anything fired against
+		// localhost:8787 (или any other localhost port) during this whole
+		// flow, the bundle has a stale URL fallback и users в prod will hit
+		// net::ERR_CONNECTION_REFUSED. Show every offender для diagnostics.
+		expect(
+			localhostFetches,
+			`Prod bundle leaked localhost requests:\n${localhostFetches.join('\n')}`,
+		).toEqual([])
+	})
 })
