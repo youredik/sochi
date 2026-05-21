@@ -249,6 +249,18 @@ tasks:
             }
             EOF
           - cd infra
+          # State migration — run #28 empirical: OpenTofu runs left state с
+          # registry.opentofu.org/* provider refs. Terraform CLI validates ALL
+          # state providers против registries → 403 RU geoblock на opentofu.org.
+          # Canon: `state replace-provider` migration commands (one-time, idempotent
+          # с `|| true` fallback на repeat runs).
+          # Source: developer.hashicorp.com/terraform/cli/commands/state/replace-provider
+          - terraform init -input=false -backend=true -get=false || true
+          - |
+            for prov in hashicorp/random hashicorp/aws hashicorp/time yandex-cloud/yandex; do
+              terraform state replace-provider -auto-approve \
+                "registry.opentofu.org/$prov" "registry.terraform.io/$prov" 2>/dev/null || true
+            done
           - terraform init -input=false
           - terraform apply -auto-approve -input=false -parallelism=1
 
