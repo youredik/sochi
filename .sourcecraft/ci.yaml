@@ -53,14 +53,15 @@ on:
         branches: ['main']
         paths: ['infra/**']
     # Mirror внешних base images в cr.yandex (intra-DC fast pull в CI).
-    # Trigger: bump в lockfile (Playwright @ts version) или manual.
+    # Trigger ТОЛЬКО на lockfile change (playwright bump → pnpm-lock.yaml updates).
+    # SC limit: 3 workflows per push event. ci.yaml исключён чтобы не вытеснять
+    # deploy/infra-apply workflows когда меняется только pipeline config.
     # Idempotent — crane copy skips если src/dst digests match.
     - workflows: [mirror-images]
       filter:
         branches: ['main']
         paths:
           - 'pnpm-lock.yaml'
-          - '.sourcecraft/ci.yaml'
 
   pull_request:
     - workflows: [quality]
