@@ -134,26 +134,23 @@ test.describe('Demo funnel — empirical против prod', () => {
 
 		await page.goto(magicLink2 as string)
 
-		// КРИТИЧЕСКАЯ ASSERTION: should NOT land на /welcome (rendered form
-		// would let user create duplicate org). Acceptable destinations:
-		//   - /o/{orgSlug1}/* — perfect (return-visit canon правильный)
-		//   - /o-select — sub-optimal но не создаёт duplicate (user picks)
-		//   - НЕ /welcome — это bug
-		await page.waitForURL(/\/(welcome|o\/[^/]+|o-select)/, { timeout: 10_000 })
+		// **Wait для FINAL settled URL** — `/o/{slug}/`. Race vector: BA verify
+		// делает server 302 → /welcome callback, потом TanStack Router
+		// client-side beforeLoad guard срабатывает + redirects к /o/{slug}/.
+		// Старый pattern `waitForURL(/(welcome|o\/...)/)` matches intermediate
+		// /welcome state → false-positive fail (URL captured ДО client-redirect).
+		//
+		// Direct wait для `/o/{slug}/` finals — это собственно return-visit
+		// canon. Если guard сломан и юзер застрянет на /welcome → timeout →
+		// test fails (correct fail mode, точная diagnostics).
+		await page.waitForURL(/\/o\/[^/]+/, { timeout: 15_000 })
 		const finalUrl = page.url()
 
-		// Anti-regression: /welcome rendered means duplicate org will be created
-		// when user clicks submit. Per user product canon «return-visit → данные
-		// на месте», this is unacceptable.
-		expect(finalUrl, 'Return-visit landed на /welcome — duplicate org bug').not.toMatch(
-			/\/welcome(\?|$)/,
-		)
-
-		// Strong assertion: if в /o/{slug}/, должен быть SAME slug как первый visit.
-		if (/\/o\/[^/]+/.test(finalUrl)) {
-			const orgSlug2 = finalUrl.match(/\/o\/([^/]+)/)?.[1]
-			expect(orgSlug2, 'Return-visit landed в DIFFERENT tenant (duplicate created)').toBe(orgSlug1)
-		}
-		// /o-select acceptable (user clicks but не создаёт duplicate)
+		// SAME tenant assertion — orgSlug2 === orgSlug1 (no duplicate)
+		const orgSlug2 = finalUrl.match(/\/o\/([^/]+)/)?.[1]
+		expect(
+			orgSlug2,
+			'Return-visit landed в DIFFERENT tenant (duplicate created instead of setActive)',
+		).toBe(orgSlug1)
 	})
 })
