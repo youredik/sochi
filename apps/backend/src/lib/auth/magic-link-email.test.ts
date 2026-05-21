@@ -21,7 +21,7 @@ describe('magicLinkEmail', () => {
 			signInUrl: 'https://example.com/magic-link/verify?token=abc',
 			expiryMinutes: 5,
 		})
-		expect(subject).toBe('Вход в HoReCa — ваша одноразовая ссылка')
+		expect(subject).toBe('Вход в Сэпшн — ваша одноразовая ссылка')
 	})
 
 	test('[U1] signInUrl appears in <a href=""> AND in text/plain', () => {

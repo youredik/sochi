@@ -55,7 +55,7 @@ describe('ics-generator', () => {
 
 	test('[ICS3] PRODID set к identifiable product', () => {
 		const ics = generateBookingIcs(STANDARD_INPUT)
-		expect(ics.content).toMatch(/PRODID:.*Sochi HoReCa.*booking-widget/i)
+		expect(ics.content).toMatch(/PRODID:.*Сэпшн.*booking-widget/i)
 	})
 
 	test('[ICS4] VTIMEZONE block для Europe/Moscow embedded', () => {

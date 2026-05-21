@@ -23,10 +23,18 @@ const EMAIL = import.meta.env.VITE_CONTACT_EMAIL ?? 'hi@sepshn.ru'
 export function LandingPage() {
 	return (
 		<main className="flex min-h-svh flex-col">
+			<header className="mx-auto flex w-full max-w-2xl items-center justify-between px-6 pt-6">
+				<span className="text-2xl font-semibold tracking-tight">Сэпшн</span>
+				<a
+					href="/login"
+					onClick={() => reachGoal('login_click')}
+					className="text-muted-foreground hover:text-foreground text-sm transition"
+				>
+					Войти →
+				</a>
+			</header>
 			<div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-16">
-				<div className="text-2xl font-semibold tracking-tight">Сэпшн</div>
-
-				<h1 className="mt-16 text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
+				<h1 className="text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
 					Программа для управления гостевым домом или мини-отелем.
 				</h1>
 

@@ -116,6 +116,19 @@ describe('<LandingPage>', () => {
 		expect(reachGoalMock.mock.calls.length).toBe(1)
 	})
 
+	test('[L1] «Войти» link → /login (signup-entry от curious self-discovery)', () => {
+		render(<LandingPage />)
+		const login = screen.getByRole('link', { name: /Войти/ })
+		expect(login.getAttribute('href')).toBe('/login')
+	})
+
+	test('[L2] «Войти» click → reachGoal("login_click")', () => {
+		render(<LandingPage />)
+		fireEvent.click(screen.getByRole('link', { name: /Войти/ }))
+		expect(reachGoalMock.mock.calls.length).toBe(1)
+		expect(reachGoalMock.mock.calls[0]).toEqual(['login_click'])
+	})
+
 	test('[F1] footer copyright «© 2026 Сэпшн»', () => {
 		render(<LandingPage />)
 		const footer = screen.getByText(/© 2026 Сэпшн/)

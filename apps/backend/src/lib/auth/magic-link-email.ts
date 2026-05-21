@@ -25,12 +25,12 @@ export interface RenderedEmail {
 }
 
 export function magicLinkEmail({ signInUrl, expiryMinutes }: MagicLinkEmailInput): RenderedEmail {
-	const subject = 'Вход в HoReCa — ваша одноразовая ссылка'
+	const subject = 'Вход в Сэпшн — ваша одноразовая ссылка'
 
 	const html = `<!doctype html>
 <html lang="ru"><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f6f7f9;margin:0;padding:24px;">
 <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px 28px;">
-<h1 style="margin:0 0 12px;font-size:20px;color:#0a0a0a;">Вход в HoReCa-портал</h1>
+<h1 style="margin:0 0 12px;font-size:20px;color:#0a0a0a;">Вход в Сэпшн</h1>
 <p style="margin:0 0 20px;color:#4a4a4a;line-height:1.55;">Нажмите кнопку ниже, чтобы войти. Ссылка одноразовая и действует <strong>${expiryMinutes} минут</strong>.</p>
 <p style="margin:0 0 24px;"><a href="${signInUrl}" style="display:inline-block;padding:12px 24px;background:#006bbd;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">Войти в кабинет</a></p>
 <p style="margin:0 0 8px;color:#737373;font-size:13px;">Если кнопка не работает, скопируйте ссылку в адресную строку браузера:</p>
@@ -40,7 +40,7 @@ export function magicLinkEmail({ signInUrl, expiryMinutes }: MagicLinkEmailInput
 </div></body></html>`
 
 	const text = [
-		'Вход в HoReCa-портал',
+		'Вход в Сэпшн',
 		'',
 		`Перейдите по одноразовой ссылке (действует ${expiryMinutes} минут):`,
 		signInUrl,

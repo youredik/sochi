@@ -50,7 +50,7 @@ export function generateBookingIcs(input: BookingIcsInput): IcsAttachment {
 	const cal = ical({
 		name: `Бронь №${input.bookingReference}`,
 		method: ICalCalendarMethod.PUBLISH,
-		prodId: { company: 'Sochi HoReCa', product: 'booking-widget' },
+		prodId: { company: 'Сэпшн', product: 'booking-widget' },
 		timezone: {
 			name: HOTEL_TIMEZONE,
 			generator: (tz: string) => {

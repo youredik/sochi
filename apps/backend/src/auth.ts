@@ -213,7 +213,7 @@ export const auth = betterAuth({
 		 * public key + counter. iCloud Keychain / Google PM sync — client-side.
 		 */
 		passkey({
-			rpName: 'HoReCa Sochi',
+			rpName: 'Сэпшн',
 			rpID: env.HOST,
 			origin: env.PUBLIC_BASE_URL,
 			// 2026/2027 modern hardening per WebAuthn L3 + 152-ФЗ canon:
