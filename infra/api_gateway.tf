@@ -23,11 +23,20 @@ resource "yandex_api_gateway" "demo" {
     frontend_bucket         = yandex_storage_bucket.demo_frontend.bucket
   })
 
-  # Custom domain attached via nested block (Q2 2026 canon — separate resource
+  # Custom domains via nested blocks (Q2 2026 canon — separate resource
   # `yandex_api_gateway_custom_domain` НЕ существует в provider v0.204).
-  # Cert sepshn-wildcard уже ISSUED (verified 2026-05-19).
+  # Cert sepshn-wildcard уже ISSUED (verified 2026-05-19) и покрывает
+  # `sepshn.ru` apex + `*.sepshn.ru` wildcard.
   custom_domains {
     fqdn           = var.demo_subdomain
+    certificate_id = yandex_cm_certificate.sepshn_wildcard.id
+  }
+  # Apex `sepshn.ru` (landing surface — discovery-first credibility page).
+  # Same gateway + same SPA build serves both — landing route на `/` авто-
+  # rendering для anon, redirect к /o/{slug} для authed (via fail-open
+  # `resolveLandingRedirect`). См. plans/customer-discovery-plan.md §10.
+  custom_domains {
+    fqdn           = var.domain
     certificate_id = yandex_cm_certificate.sepshn_wildcard.id
   }
 

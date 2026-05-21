@@ -77,3 +77,33 @@ resource "yandex_dns_recordset" "demo_cname" {
   ttl     = 600
   data    = ["${yandex_api_gateway.demo.domain}."]
 }
+
+# ---------------------------------------------------------------------------
+# Apex endpoint — sepshn.ru → API Gateway (landing surface)
+# ---------------------------------------------------------------------------
+#
+# Apex routing via Yandex Cloud DNS **ANAME** record (YC-native apex-
+# flattening, equivalent Route53 ALIAS). RFC 1034 forbids CNAME at apex,
+# поэтому стандартный CNAME здесь нельзя. ANAME — YC-proprietary record
+# type, YC resolves server-side: external resolvers получают A answers
+# (flattening behavior). Coexists с apex MX/TXT/SPF/DKIM records — это
+# главный win ANAME over CNAME (CNAME blocked бы все siblings).
+#
+# Prerequisite: zone delegated к YC NS (verified 2026-05-19 via reg.ru).
+# Если zone мигрирует к 3rd-party DNS — ANAME сломается, нужен IP A-record
+# (но gateway IP может мутироваться).
+#
+# Empirical canon (research 2026-05-21):
+# - yandex.cloud/en/docs/dns/concepts/resource-record («ANAME similar to
+#   CNAME but can be used в same domain с other records»)
+# - yandex.cloud/en/docs/api-gateway/operations/api-gw-domains («delegate
+#   to YC DNS + create ANAME» — canonical apex procedure)
+# - yandex.cloud/en/docs/storage/operations/hosting/own-domain (concrete
+#   ANAME example: TTL 600, name="${domain}.", value="*.yandexcloud.net.")
+resource "yandex_dns_recordset" "apex_aname" {
+  zone_id = yandex_dns_zone.sepshn_ru.id
+  name    = "${var.domain}."
+  type    = "ANAME"
+  ttl     = 600
+  data    = ["${yandex_api_gateway.demo.domain}."]
+}
