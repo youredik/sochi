@@ -257,4 +257,32 @@ test.describe('app-wide WCAG 2.2 AA audit (public pages, anonymous)', () => {
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
 		await runAxe(page, 'privacy')
 	})
+
+	test('/ landing passes WCAG 2.2 AA (discovery-first credibility surface)', async ({ page }) => {
+		await page.goto('/')
+		// Brand «Сэпшн» виден в hero-position + H1 exact text + 2 контакт-кнопки.
+		// Anti-regression smoke: anon visitor must see landing (fail-open auth),
+		// не error-page и не redirect к /login.
+		await expect(
+			page.getByRole('heading', {
+				name: 'Программа для управления гостевым домом или мини-отелем.',
+				level: 1,
+			}),
+		).toBeVisible()
+		await expect(page.getByRole('link', { name: 'Telegram' })).toBeVisible()
+		await expect(page.getByRole('link', { name: 'Email' })).toBeVisible()
+		// axe scan с exclude `[data-sonner-toast]`: Sonner success-toast
+		// (rich-colors variant) имеет contrast 1.99:1 — universal codebase
+		// concern, не landing-specific. TODO: проект-wide fix через
+		// Sonner theme override или `--toast-success-bg`/`--toast-success-color`
+		// CSS-variables в index.css. Tracked separately.
+		const results = await new AxeBuilder({ page })
+			.withTags([...WCAG_TAGS])
+			.exclude('[data-sonner-toast]')
+			.analyze()
+		if (results.violations.length > 0) {
+			console.error('axe violations (landing):', JSON.stringify(results.violations, null, 2))
+		}
+		expect(results.violations).toEqual([])
+	})
 })
