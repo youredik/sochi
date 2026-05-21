@@ -196,7 +196,24 @@ tasks:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_BOT_S3_SECRET_ACCESS_KEY }}
+          TF_CLI_CONFIG_FILE: /tmp/.terraformrc
         script:
+          # registry.opentofu.org blocked from RU IPs (Hashicorp inherited
+          # geoblock). Yandex mirror serves OpenTofu provider protocol.
+          # Canon 2026-05 (opentofu.org/docs/internals/provider-network-mirror-protocol):
+          # mirror serves identifier-only host лookups — exclude по opentofu.org
+          # (НЕ terraform.io, как у stankoff с hashicorp/terraform image).
+          - |
+            cat > /tmp/.terraformrc <<'EOF'
+            provider_installation {
+              network_mirror {
+                url = "https://terraform-mirror.yandexcloud.net/"
+              }
+              direct {
+                exclude = ["registry.opentofu.org/*/*"]
+              }
+            }
+            EOF
           - cd infra
           - tofu init -input=false
           - tofu plan -no-color -input=false | tee plan.txt
@@ -217,7 +234,21 @@ tasks:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_BOT_S3_SECRET_ACCESS_KEY }}
+          TF_CLI_CONFIG_FILE: /tmp/.terraformrc
         script:
+          # Same mirror config как tofu-plan — registry.opentofu.org blocked
+          # from RU. Canon 2026-05.
+          - |
+            cat > /tmp/.terraformrc <<'EOF'
+            provider_installation {
+              network_mirror {
+                url = "https://terraform-mirror.yandexcloud.net/"
+              }
+              direct {
+                exclude = ["registry.opentofu.org/*/*"]
+              }
+            }
+            EOF
           - cd infra
           - tofu init -input=false
           - tofu apply -auto-approve -input=false -parallelism=1
