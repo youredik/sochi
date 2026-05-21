@@ -70,7 +70,7 @@ export function InstallPrompt() {
 		>
 			<div className="flex items-start justify-between gap-2">
 				<div className="flex-1">
-					<p className="text-sm font-semibold">Установить HoReCa</p>
+					<p className="text-sm font-semibold">Установить Сэпшн</p>
 					{installEvent ? (
 						<p className="text-muted-foreground mt-1 text-xs">
 							Запускайте без браузерной строки одним нажатием с экрана «Домой».

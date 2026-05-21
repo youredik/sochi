@@ -21,13 +21,18 @@ const EMAIL = import.meta.env.VITE_CONTACT_EMAIL ?? 'hi@sepshn.ru'
  */
 export const Route = createFileRoute('/')({
 	beforeLoad: async ({ context }) => {
-		const session = await context.queryClient.ensureQueryData(sessionQueryOptions)
+		// Public landing — fail-open semantics. Landing — static credibility
+		// page; не должна падать от 502/500 backend. Auth-aware redirect ниже
+		// — best-effort optimization для залогиненных, не critical path.
+		// Если backend down или session-fetch throws — рендерим landing.
+		const session = await context.queryClient.ensureQueryData(sessionQueryOptions).catch(() => null)
 		if (!session?.session) return
 		const activeId = session.session.activeOrganizationId
 		if (!activeId) {
 			throw redirect({ to: '/o-select' })
 		}
-		const orgs = await context.queryClient.ensureQueryData(orgListQueryOptions)
+		const orgs = await context.queryClient.ensureQueryData(orgListQueryOptions).catch(() => null)
+		if (!orgs) return
 		const org = orgs.find((o) => o.id === activeId)
 		if (!org) {
 			throw redirect({ to: '/o-select' })

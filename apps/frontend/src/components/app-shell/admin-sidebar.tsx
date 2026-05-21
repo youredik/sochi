@@ -72,7 +72,7 @@ export function AdminSidebar({ orgSlug }: AdminSidebarProps) {
 			<Sidebar collapsible="offcanvas">
 				<SidebarHeader>
 					<div className="flex items-center justify-between gap-2">
-						<span className="text-sm font-semibold tracking-tight">HoReCa</span>
+						<span className="text-sm font-semibold tracking-tight">Сэпшн</span>
 						<OrgSwitcher />
 					</div>
 				</SidebarHeader>

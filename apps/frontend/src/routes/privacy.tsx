@@ -29,8 +29,8 @@ function PrivacyPage() {
 				<h2 className="text-lg font-semibold text-foreground">1. Оператор</h2>
 				<p>
 					Настоящая Политика действует в отношении персональных данных, которые Оператор (далее —{' '}
-					<em>«Портал»</em>) может получить от пользователя при регистрации, создании организации и
-					использовании сервиса HoReCa для управления гостиничным бизнесом в регионе Большого Сочи.
+					<em>«Сэпшн»</em>) может получить от пользователя при регистрации, создании организации и
+					использовании сервиса для управления гостиничным бизнесом в регионе Большого Сочи.
 				</p>
 
 				<h2 className="text-lg font-semibold text-foreground">2. Состав обрабатываемых данных</h2>
@@ -82,11 +82,8 @@ function PrivacyPage() {
 				<h2 className="text-lg font-semibold text-foreground">8. Контакты</h2>
 				<p>
 					По вопросам обработки персональных данных:{' '}
-					<a
-						className="text-primary underline underline-offset-2"
-						href="mailto:privacy@horeca.local"
-					>
-						privacy@horeca.local
+					<a className="text-primary underline underline-offset-2" href="mailto:hi@sepshn.ru">
+						hi@sepshn.ru
 					</a>
 					. Уведомление об обработке зарегистрировано в реестре Роскомнадзора (сведения появятся
 					после публичного запуска сервиса).

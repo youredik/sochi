@@ -193,7 +193,7 @@ export function WidgetPage({ tenantSlug, onNotFound }: WidgetPageProps) {
 
 				<footer className="mt-8 flex flex-col gap-2 border-t pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
 					<span>Прямое бронирование · экономия до 17% против OTA</span>
-					<span className="text-[10px] uppercase tracking-wider">Powered by Сочи HoReCa</span>
+					<span className="text-[10px] uppercase tracking-wider">Powered by Сэпшн</span>
 				</footer>
 			</main>
 		</div>

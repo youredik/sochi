@@ -129,7 +129,7 @@ function AppLayout() {
 				{orgSlug ? (
 					<header className="border-border bg-background/80 pt-safe-top sticky top-0 z-40 flex items-center justify-between border-b px-4 py-3 backdrop-blur md:hidden">
 						<SidebarTrigger aria-label="Открыть меню" />
-						<span className="text-sm font-semibold tracking-tight">HoReCa</span>
+						<span className="text-sm font-semibold tracking-tight">Сэпшн</span>
 					</header>
 				) : null}
 				<Outlet />
