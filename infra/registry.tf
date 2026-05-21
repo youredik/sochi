@@ -97,6 +97,15 @@ resource "yandex_container_registry_iam_binding" "claude_pusher" {
 #
 # Least-privilege: repository-level binding (NOT registry-level) — backend repo
 # остаётся private.
+# Auto-import — repo создан crane copy в run #21 ДО появления TF resource.
+# OpenTofu 1.5+ canon 2026: declarative `import` block, runs автоматически
+# на `tofu plan/apply` (vs imperative `tofu import` CLI command).
+# Source: opentofu.org/docs/language/import/ (verified 2026-05)
+import {
+  to = yandex_container_repository.playwright
+  id = "crpg9ndtebgb4u6t47l0"
+}
+
 resource "yandex_container_repository" "playwright" {
   name = "${yandex_container_registry.sepshn_cr.id}/playwright"
 }

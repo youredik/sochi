@@ -188,7 +188,9 @@ tasks:
         image: cr.yandex/sourcecraft/yc-iam:latest
       - name: plan
         needs: [get-iam-token]
-        image: ghcr.io/opentofu/opentofu:1.12.0
+        image:
+          name: ghcr.io/opentofu/opentofu:1.12.0
+          entrypoint: ''
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
@@ -207,7 +209,9 @@ tasks:
         image: cr.yandex/sourcecraft/yc-iam:latest
       - name: apply
         needs: [get-iam-token]
-        image: ghcr.io/opentofu/opentofu:1.12.0
+        image:
+          name: ghcr.io/opentofu/opentofu:1.12.0
+          entrypoint: ''
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_BOT_S3_ACCESS_KEY_ID }}
