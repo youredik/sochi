@@ -421,6 +421,14 @@ tasks:
       # in one cube короче total wall.
       - name: build
         image: node:24-slim
+        # Build-time Vite env vars — `import.meta.env.VITE_*` is inlined по
+        # bundle constants. `VITE_DEMO_DEPLOYMENT=true` makes the demo-inbox
+        # panel render after «Письмо отправлено» so visitors кликом получают
+        # captured magic-link без нужды реального email delivery (per
+        # `[[demo_inbox_canon]]`). Paired с backend `DEMO_DEPLOYMENT=true`
+        # в `infra/container.tf:68` — without ОБЕИХ flags пара ломается.
+        env:
+          VITE_DEMO_DEPLOYMENT: 'true'
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm install --frozen-lockfile
