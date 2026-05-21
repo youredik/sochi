@@ -20,13 +20,21 @@ import { reachGoal } from '../../lib/yandex-metrika.ts'
 const TG_URL = import.meta.env.VITE_CONTACT_TG_URL ?? 'https://t.me/sepshn'
 const EMAIL = import.meta.env.VITE_CONTACT_EMAIL ?? 'hi@sepshn.ru'
 
+/**
+ * App login URL — absolute cross-origin link к demo.sepshn.ru where auth
+ * lives (per apex-redirect canon 2026-05-21). Relative `/login` would
+ * stay на apex and hit BA «Invalid callbackURL» since trustedOrigins
+ * restricts auth к the app subdomain.
+ */
+const LOGIN_URL = 'https://demo.sepshn.ru/login'
+
 export function LandingPage() {
 	return (
 		<main className="flex min-h-svh flex-col">
 			<header className="mx-auto flex w-full max-w-2xl items-center justify-between px-6 pt-6">
 				<span className="text-2xl font-semibold tracking-tight">Сэпшн</span>
 				<a
-					href="/login"
+					href={LOGIN_URL}
 					onClick={() => reachGoal('login_click')}
 					className="text-muted-foreground hover:text-foreground text-sm transition"
 				>

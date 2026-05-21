@@ -116,10 +116,14 @@ describe('<LandingPage>', () => {
 		expect(reachGoalMock.mock.calls.length).toBe(1)
 	})
 
-	test('[L1] «Войти» link → /login (signup-entry от curious self-discovery)', () => {
+	test('[L1] «Войти» link → absolute https://demo.sepshn.ru/login (apex-redirect canon)', () => {
+		// Per 2026-05-21 apex-redirect canon: apex `sepshn.ru` = landing only,
+		// app lives on `demo.sepshn.ru`. Login link MUST be absolute cross-
+		// origin (relative `/login` would stay on apex → BA «Invalid
+		// callbackURL» since trustedOrigins restricts auth к app subdomain).
 		render(<LandingPage />)
 		const login = screen.getByRole('link', { name: /Войти/ })
-		expect(login.getAttribute('href')).toBe('/login')
+		expect(login.getAttribute('href')).toBe('https://demo.sepshn.ru/login')
 	})
 
 	test('[L2] «Войти» click → reachGoal("login_click")', () => {

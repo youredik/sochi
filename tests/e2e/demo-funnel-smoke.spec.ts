@@ -301,4 +301,44 @@ test.describe('Demo funnel — empirical против prod', () => {
 			`Prod bundle leaked localhost requests:\n${localhostFetches.join('\n')}`,
 		).toEqual([])
 	})
+
+	/**
+	 * [E4] **Apex → app redirect — empirical canon**.
+	 *
+	 * 2026-05-21 critical user-facing bug: navigating directly к
+	 * `sepshn.ru/login` (apex) loaded the same SPA as `demo.sepshn.ru`, но
+	 * BA `trustedOrigins` only included demo subdomain — POST /sign-in/
+	 * magic-link returned «Доступ запрещён — Invalid callbackURL».
+	 *
+	 * Fix (`__root.tsx` beforeLoad + `lib/apex-redirect.ts`): apex requests
+	 * к any non-marketing path hard-redirect к demo.sepshn.ru. Marketing
+	 * paths (`/`, `/privacy`, `/legal/*`) stay на apex.
+	 *
+	 * Tested live (anonymous, no signup necessary):
+	 *   1. GET https://sepshn.ru/login → expect redirect (hostname change)
+	 *   2. Final landing URL host = `demo.sepshn.ru`
+	 *   3. Page loads без CORS / 403 errors
+	 */
+	test('[E4] apex sepshn.ru/login → redirects к demo subdomain', async ({ page }) => {
+		// Disable Playwright's default test isolation — нам нужен full hard nav.
+		await page.goto('https://sepshn.ru/login', { waitUntil: 'networkidle' })
+
+		// After redirect, hostname must equal app subdomain.
+		const finalHost = new URL(page.url()).hostname
+		expect(finalHost, `Expected demo.sepshn.ru, got ${page.url()}`).toBe('demo.sepshn.ru')
+
+		// Login form must render (no «Invalid callbackURL» banner)
+		await expect(page.getByRole('heading', { name: /Вход/ })).toBeVisible({ timeout: 10_000 })
+		await expect(page.getByText('Invalid callbackURL')).toBeHidden()
+	})
+
+	test('[E5] apex sepshn.ru/ (root) → stays on apex (marketing landing)', async ({ page }) => {
+		// Landing page MUST NOT redirect — apex `/` IS the marketing surface.
+		await page.goto('https://sepshn.ru/', { waitUntil: 'networkidle' })
+		expect(new URL(page.url()).hostname).toBe('sepshn.ru')
+		// Landing heading sanity check
+		await expect(page.getByRole('heading', { name: /Программа для управления/ })).toBeVisible({
+			timeout: 10_000,
+		})
+	})
 })
