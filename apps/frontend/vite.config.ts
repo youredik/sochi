@@ -55,9 +55,9 @@ export default defineConfig({
 				navigateFallbackDenylist: [/^\/api/, /^\/health/],
 			},
 			manifest: {
-				name: 'HoReCa Sochi',
-				short_name: 'HoReCa',
-				description: 'Облачная PMS для малых отелей и гостевых домов Большого Сочи',
+				name: 'Сэпшн — программа для гостевых домов и мини-отелей',
+				short_name: 'Сэпшн',
+				description: 'Программа для управления гостевым домом или мини-отелем. Сделано в Сочи.',
 				theme_color: '#0a0a0a',
 				background_color: '#ffffff',
 				display: 'standalone',

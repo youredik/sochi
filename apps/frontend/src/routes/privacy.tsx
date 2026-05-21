@@ -23,7 +23,7 @@ function PrivacyPage() {
 				← На главную
 			</Link>
 			<h1 className="mt-4 text-2xl font-semibold tracking-tight">Политика конфиденциальности</h1>
-			<p className="mt-1 text-xs text-muted-foreground">Редакция: 23 апреля 2026 г.</p>
+			<p className="mt-1 text-xs text-muted-foreground">Редакция: 21 мая 2026 г.</p>
 
 			<div className="prose mt-8 space-y-4 text-sm text-foreground">
 				<h2 className="text-lg font-semibold text-foreground">1. Оператор</h2>

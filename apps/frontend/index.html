@@ -32,6 +32,31 @@
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 		<title>Сэпшн — программа для гостевых домов и мини-отелей</title>
+		<meta
+			name="description"
+			content="Программа для управления гостевым домом или мини-отелем. Сделано в Сочи."
+		/>
+		<!-- Open Graph (для preview в Telegram / WhatsApp / соцсетях) -->
+		<meta property="og:title" content="Сэпшн" />
+		<meta
+			property="og:description"
+			content="Программа для управления гостевым домом или мини-отелем. Сделано в Сочи."
+		/>
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content="https://sepshn.ru/" />
+		<meta property="og:locale" content="ru_RU" />
+		<!-- og:image — fallback на PWA-иконку 512×512. TODO: заменить на dedicated 1200×630 OG image -->
+		<meta property="og:image" content="/pwa-512x512.png" />
+		<meta property="og:image:width" content="512" />
+		<meta property="og:image:height" content="512" />
+		<!-- Twitter Card (LinkedIn также читает) -->
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content="Сэпшн" />
+		<meta
+			name="twitter:description"
+			content="Программа для управления гостевым домом или мини-отелем. Сделано в Сочи."
+		/>
+		<meta name="twitter:image" content="/pwa-512x512.png" />
 		<!--
 			FOUC-prevention script (M9.1):
 			Apply'ит .dark класс ПЕРЕД React mount чтобы избежать flash при reload
