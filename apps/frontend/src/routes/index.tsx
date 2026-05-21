@@ -2,39 +2,37 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { LandingPage } from '../features/landing/landing-page.tsx'
 import { orgListQueryOptions } from '../features/tenancy/hooks/use-active-org.ts'
 import { sessionQueryOptions } from '../lib/auth-client.ts'
+import { resolveLandingRedirect } from '../lib/landing-redirect.ts'
 
 /**
- * / — public landing route. Replaces the prior `_app.index.tsx`
- * redirect-helper. Auth-aware beforeLoad:
- *   • no session → render LandingPage component (public)
- *   • session + active org → redirect к /o/{slug} (preserves существующее
- *     поведение `to: '/'` redirects из signup.tsx / welcome.tsx /
- *     _app.o.$orgSlug.tsx — залогиненные пользователи продолжают попадать
- *     домой, не на landing)
- *   • session + no active org → /o-select (там _app.tsx подхватит и
- *     обработает edge-cases: zero orgs → /welcome, single org → setActive)
+ * `/` — public landing route. Replaces the prior `_app.index.tsx`
+ * redirect-helper. Logic split:
  *
- * Компонент `LandingPage` живёт в `features/landing/` (testable seam).
+ *   - **Этот файл** = route binding + I/O orchestration (fetch session/orgs,
+ *     issue redirect throw).
+ *   - **`lib/landing-redirect.ts`** = pure decision function (testable seam
+ *     per `feedback_critical_fix_test_coverage_canon`).
+ *
+ * Fail-open semantics: landing — static credibility page; не должна падать
+ * от backend 5xx. Both fetches `.catch(() => null)` — pure function
+ * расценивает `null` как «render landing». См. `lib/landing-redirect.ts`
+ * docstring для полного set of ветвей.
+ *
+ * Анонимы skip orgs-fetch — экономит 1 HTTP roundtrip (orgs query был
+ * бы 401 anyway).
  */
 export const Route = createFileRoute('/')({
 	beforeLoad: async ({ context }) => {
-		// Public landing — fail-open semantics. Landing — static credibility
-		// page; не должна падать от 502/500 backend. Auth-aware redirect ниже
-		// — best-effort optimization для залогиненных, не critical path.
-		// Если backend down или session-fetch throws — рендерим landing.
 		const session = await context.queryClient.ensureQueryData(sessionQueryOptions).catch(() => null)
-		if (!session?.session) return
-		const activeId = session.session.activeOrganizationId
-		if (!activeId) {
-			throw redirect({ to: '/o-select' })
+		// Skip orgs fetch для анонимов — pure function ниже всё равно
+		// вернёт null (no session → no redirect).
+		const orgs = session?.session?.activeOrganizationId
+			? await context.queryClient.ensureQueryData(orgListQueryOptions).catch(() => null)
+			: null
+		const target = resolveLandingRedirect({ session, orgs })
+		if (target) {
+			throw redirect(target)
 		}
-		const orgs = await context.queryClient.ensureQueryData(orgListQueryOptions).catch(() => null)
-		if (!orgs) return
-		const org = orgs.find((o) => o.id === activeId)
-		if (!org) {
-			throw redirect({ to: '/o-select' })
-		}
-		throw redirect({ to: '/o/$orgSlug', params: { orgSlug: org.slug } })
 	},
 	component: LandingPage,
 })

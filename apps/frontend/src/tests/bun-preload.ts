@@ -11,5 +11,18 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 
 if (typeof globalThis.document === 'undefined') {
-	GlobalRegistrator.register({ url: 'http://localhost/' })
+	GlobalRegistrator.register({
+		url: 'http://localhost/',
+		// Disable real script-tag loading per `feedback_bun_test_canons_2026_05_13`
+		// §7 «tests must NOT issue real network calls». Without this happy-dom
+		// fetches any `<script src="https://...">` appended via DOM, which
+		// (a) fails в bun:test (NotSupportedError), (b) pollutes stderr, (c)
+		// could hit real CDN under different runner config.
+		// `handleDisabledFileLoadingAsSuccess: true` makes happy-dom dispatch
+		// 'load' event silently instead of throwing.
+		settings: {
+			disableJavaScriptFileLoading: true,
+			handleDisabledFileLoadingAsSuccess: true,
+		},
+	})
 }

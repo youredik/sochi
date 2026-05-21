@@ -259,6 +259,15 @@ test.describe('app-wide WCAG 2.2 AA audit (public pages, anonymous)', () => {
 	})
 
 	test('/ landing passes WCAG 2.2 AA (discovery-first credibility surface)', async ({ page }) => {
+		// Mock external Yandex.Metrika tag-script — never hit real CDN из e2e
+		// (canon: no real network calls + не пачкать real counter test-traffic'ом).
+		await page.route('**/mc.yandex.ru/metrika/**', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/javascript',
+				body: '/* mocked */',
+			}),
+		)
 		await page.goto('/')
 		// Brand «Сэпшн» виден в hero-position + H1 exact text + 2 контакт-кнопки.
 		// Anti-regression smoke: anon visitor must see landing (fail-open auth),
@@ -282,6 +291,66 @@ test.describe('app-wide WCAG 2.2 AA audit (public pages, anonymous)', () => {
 			.analyze()
 		if (results.violations.length > 0) {
 			console.error('axe violations (landing):', JSON.stringify(results.violations, null, 2))
+		}
+		expect(results.violations).toEqual([])
+	})
+
+	test('/ Yandex.Metrika integration smoke (deferred init wiring)', async ({ page }) => {
+		// Mock external tag-script — никогда не hit'ить реальный CDN/counter
+		// из e2e (test traffic пачкал бы real analytics + offline-CI flake).
+		await page.route('**/mc.yandex.ru/metrika/**', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/javascript',
+				body: '/* mocked Yandex.Metrika tag */',
+			}),
+		)
+		await page.goto('/')
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+		// Метрика deferred — listeners attached, init не fires immediately.
+		// Click (на main) → first-interaction trigger → initYandexMetrika
+		// внутри lib → window.ym становится function.
+		await page.locator('main').click({ position: { x: 10, y: 10 } })
+		await page.waitForFunction(() => typeof (globalThis as { ym?: unknown }).ym === 'function', {
+			timeout: 5000,
+		})
+	})
+
+	test('/ landing passes WCAG 2.2 AA на 360px mobile viewport', async ({ page }) => {
+		await page.route('**/mc.yandex.ru/metrika/**', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/javascript',
+				body: '/* mocked */',
+			}),
+		)
+		// 360×640 — baseline modern mobile (iPhone SE-class).
+		// Anti-regression: H1 не должен overflow, кнопки tap-target ≥44×44px,
+		// axe должен pass на той же странице.
+		// Per `feedback_layer_4_5_mandatory_per_subphase` — каждая UI-surface
+		// нужна mobile-viewport axe pass до commit'а.
+		await page.setViewportSize({ width: 360, height: 640 })
+		await page.goto('/')
+		await expect(
+			page.getByRole('heading', {
+				name: 'Программа для управления гостевым домом или мини-отелем.',
+				level: 1,
+			}),
+		).toBeVisible()
+		await expect(page.getByRole('link', { name: 'Telegram' })).toBeVisible()
+		await expect(page.getByRole('link', { name: 'Email' })).toBeVisible()
+		// Tap-target size — explicit assertion (h-11 = 44px Tailwind). WCAG 2.2
+		// SC 2.5.8 Level AA минимум 24×24, AAA 44×44; мы целимся в AAA.
+		const tgBox = await page.getByRole('link', { name: 'Telegram' }).boundingBox()
+		const emailBox = await page.getByRole('link', { name: 'Email' }).boundingBox()
+		expect(tgBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+		expect(emailBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+		const results = await new AxeBuilder({ page })
+			.withTags([...WCAG_TAGS])
+			.exclude('[data-sonner-toast]')
+			.analyze()
+		if (results.violations.length > 0) {
+			console.error('axe violations (landing-mobile):', JSON.stringify(results.violations, null, 2))
 		}
 		expect(results.violations).toEqual([])
 	})

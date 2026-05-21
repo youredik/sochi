@@ -111,6 +111,27 @@ declare module '@tanstack/react-router' {
 	}
 }
 
+// Yandex.Metrika analytics — counter 109307396 (created 2026-05-19).
+// Conditional на `VITE_YANDEX_METRIKA_ID` — no-op в dev/test где env не set.
+// Deferred init за `requestIdleCallback` + first-interaction trigger
+// (scroll/click/keydown) — LCP optimization per
+// `project_landing_research_2026_05_19`. SPA navigation hits через
+// router.subscribe('onResolved') — tracking каждой client-side
+// route-change (initial pageview fires автоматически тегом-script'ом).
+// Code-split via dynamic import keeps initial SPA bundle clean.
+void import('./lib/yandex-metrika.ts').then(({ initYandexMetrikaDeferred, trackPageView }) => {
+	const rawId = import.meta.env.VITE_YANDEX_METRIKA_ID
+	const counterId = rawId ? Number(rawId) : undefined
+	initYandexMetrikaDeferred(counterId)
+	router.subscribe('onResolved', ({ toLocation }) => {
+		// `toLocation.search` это parsed object (зorm-shape), НЕ string. Concat
+		// с pathname приводит к `TypeError: Cannot convert object to primitive value`.
+		// `.href` — full URL string (pathname + searchStr + hash), что и нужно
+		// для Я.Метрики 'hit' canonical signature.
+		trackPageView(toLocation.href)
+	})
+})
+
 const rootEl = document.getElementById('root')
 if (!rootEl) throw new Error('Root element #root not found')
 

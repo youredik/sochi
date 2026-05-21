@@ -9,7 +9,13 @@
  * НЕ добавлять без явного customer-research сигнала: pricing-таблицу,
  * сравнение с конкурентами (38-ФЗ риск), live-калькулятор, multi-section,
  * скриншоты demo, видео. Lock per plan §S1-S12 DEFERRED.
+ *
+ * Analytics: CTA-кнопки fire Y.Metrika goal'ы ('tg_click', 'email_click').
+ * `trackLinks: true` auto-tracking покрывает только outbound HTTP(S) —
+ * mailto: не входит, поэтому explicit reachGoal обязателен.
  */
+
+import { reachGoal } from '../../lib/yandex-metrika.ts'
 
 const TG_URL = import.meta.env.VITE_CONTACT_TG_URL ?? 'https://t.me/sepshn'
 const EMAIL = import.meta.env.VITE_CONTACT_EMAIL ?? 'hi@sepshn.ru'
@@ -33,12 +39,14 @@ export function LandingPage() {
 						href={TG_URL}
 						target="_blank"
 						rel="noopener noreferrer"
+						onClick={() => reachGoal('tg_click')}
 						className="bg-primary text-primary-foreground inline-flex h-11 items-center justify-center rounded-lg px-6 text-base font-medium transition hover:opacity-90"
 					>
 						Telegram
 					</a>
 					<a
 						href={`mailto:${EMAIL}`}
+						onClick={() => reachGoal('email_click')}
 						className="border-border inline-flex h-11 items-center justify-center rounded-lg border px-6 text-base font-medium transition hover:bg-muted"
 					>
 						Email

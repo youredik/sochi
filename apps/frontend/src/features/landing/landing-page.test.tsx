@@ -2,44 +2,61 @@
  * `<LandingPage>` — strict tests per `feedback_strict_tests.md`.
  *
  * Test matrix:
- *   ─── Brand + heading ───────────────────────────────────────────
- *     [B1] brand «Сэпшн» rendered (visible)
+ *   ─── Brand + heading + sub + CTA prompt ────────────────────────
+ *     [B1] brand «Сэпшн» rendered
  *     [H1] h1 exact text «Программа для управления гостевым домом
  *          или мини-отелем.»
  *     [S1] sub «Сделано в Сочи.» rendered
  *     [A1] CTA prompt «Свяжитесь любым удобным способом:» rendered
  *
- *   ─── Contact channels (key product surface) ────────────────────
+ *   ─── Contact channels — key product surface ────────────────────
  *     [C1] Telegram link — href === https://t.me/sepshn (env fallback)
  *          + target="_blank" + rel="noopener noreferrer"
  *     [C2] Email link — href === mailto:hi@sepshn.ru (env fallback)
  *
- *   ─── Footer (152-ФЗ minimal compliance surface) ────────────────
+ *   ─── Analytics — CTA goals (mailto: не покрывается trackLinks) ──
+ *     [CTA1] Telegram click → reachGoal('tg_click')
+ *     [CTA2] Email click → reachGoal('email_click')
+ *     [CTA3] single click → single reachGoal call (no double-fire)
+ *
+ *   ─── Footer — 152-ФЗ minimal compliance ────────────────────────
  *     [F1] footer contains «© 2026 Сэпшн»
  *     [F2] footer contains canonical email format @sepshn.ru
  *
  *   ─── Anti-regression: no premature features ───────────────────
  *     [N1] NO «Попробовать демо» CTA (discovery-first canon — demo
  *          в звонке, не на лендинге)
- *     [N2] NO «1%» / pricing text (validated через пилоты, не лендинг)
- *     [N3] NO comparison-table (38-ФЗ юр.риск)
+ *     [N2] NO «1%» / pricing text (валидируется через пилоты, не лендинг)
+ *     [N3] NO Bnovo/TravelLine comparison (38-ФЗ юр.риск)
  *     [N4] exactly one h1 (heading hierarchy)
  *
- * Per `project_pivot_to_discovery_2026_05_19` — анти-pattern tests
- * locking «минимальную» суть лендинга. Если будущий refactor добавит
- * pricing/comparison/demo CTA — тесты упадут, заставив re-validate
- * с pilot-данными.
+ * mock.module pattern: bun:test requires mock REGISTRATION перед import
+ * mock'нутого модуля (`feedback_bun_test_canons_2026_05_13` §6). Здесь
+ * `reachGoal` mocked — мы тестируем что click-handler вызывает функцию,
+ * а не интеграцию с Y.Metrika (это покрыто yandex-metrika.test.ts).
  */
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test } from 'bun:test'
+
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+
+const reachGoalMock = mock()
+mock.module('../../lib/yandex-metrika.ts', () => ({
+	reachGoal: reachGoalMock,
+}))
+
 import { LandingPage } from './landing-page.tsx'
 
-afterEach(cleanup)
+beforeEach(() => {
+	reachGoalMock.mockClear()
+})
+
+afterEach(() => {
+	cleanup()
+})
 
 describe('<LandingPage>', () => {
 	test('[B1] renders brand «Сэпшн»', () => {
 		render(<LandingPage />)
-		// brand appears once в header position; footer mention separately
 		const matches = screen.getAllByText(/Сэпшн/)
 		expect(matches.length).toBeGreaterThanOrEqual(1)
 	})
@@ -75,6 +92,28 @@ describe('<LandingPage>', () => {
 		render(<LandingPage />)
 		const email = screen.getByRole('link', { name: 'Email' })
 		expect(email.getAttribute('href')).toBe('mailto:hi@sepshn.ru')
+	})
+
+	test('[CTA1] Telegram click → reachGoal("tg_click")', () => {
+		render(<LandingPage />)
+		fireEvent.click(screen.getByRole('link', { name: 'Telegram' }))
+		expect(reachGoalMock.mock.calls.length).toBe(1)
+		expect(reachGoalMock.mock.calls[0]).toEqual(['tg_click'])
+	})
+
+	test('[CTA2] Email click → reachGoal("email_click")', () => {
+		render(<LandingPage />)
+		fireEvent.click(screen.getByRole('link', { name: 'Email' }))
+		expect(reachGoalMock.mock.calls.length).toBe(1)
+		expect(reachGoalMock.mock.calls[0]).toEqual(['email_click'])
+	})
+
+	test('[CTA3] single click → single reachGoal call (no double-fire)', () => {
+		render(<LandingPage />)
+		fireEvent.click(screen.getByRole('link', { name: 'Telegram' }))
+		// одна click → один reachGoal — anti-pattern «двойного fire'а»
+		// from re-render / event bubbling.
+		expect(reachGoalMock.mock.calls.length).toBe(1)
 	})
 
 	test('[F1] footer copyright «© 2026 Сэпшн»', () => {
