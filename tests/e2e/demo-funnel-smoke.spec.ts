@@ -97,11 +97,37 @@ test.describe('Demo funnel — empirical против prod', () => {
 		expect(magicLink, 'Magic-link не captured в DemoInbox в timeout').toBeTruthy()
 
 		// Visit verify URL — sets session cookie + redirects к callbackURL
+		// === Regression guard: NO org-scoped /api/v1/* calls на /welcome ===
+		// canonical fix 34adc1e 2026-05-21 — `tenantMiddleware` requires
+		// `session.activeOrganizationId`, которое null для fresh-signup.
+		// Любой `/api/v1/*` fetch на /welcome → 403 console-noise + wasted
+		// round-trip. WelcomeForm must use BA-level `authClient.organization
+		// .list()` для membership questions, NOT `/api/v1/properties`.
+		const tenantScopedCalls: string[] = []
+		const tenantScopedListener = (response: import('@playwright/test').Response) => {
+			const url = response.url()
+			if (url.includes('/api/v1/') && new URL(page.url()).pathname === '/welcome') {
+				tenantScopedCalls.push(`${response.status()} ${url}`)
+			}
+		}
+		page.on('response', tenantScopedListener)
+
 		await page.goto(magicLink as string)
 
 		// Should land на /welcome (fresh-signup, no existing orgs)
 		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })
 		await expect(page.getByRole('heading', { name: /Почти готово/ })).toBeVisible()
+
+		// Settle — defensive queries fire on mount, give them chance to land.
+		await page.waitForLoadState('networkidle', { timeout: 5_000 })
+
+		// Assert NO /api/v1/* calls happened while on /welcome. If this fails,
+		// some new component sneaked in an org-scoped fetch on a pre-org route.
+		expect(
+			tenantScopedCalls,
+			'/welcome must not call any org-scoped /api/v1/* endpoint — session.activeOrganizationId is null',
+		).toEqual([])
+		page.off('response', tenantScopedListener)
 
 		// Submit form (orgName prefilled from query)
 		await page.getByRole('button', { name: /Создать гостиницу/ }).click()
