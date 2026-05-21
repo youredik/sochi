@@ -41,6 +41,11 @@ test.describe('Demo funnel — empirical против prod', () => {
 				body: '/* mocked */',
 			}),
 		)
+		// Capture browser console errors → exposed в test output для diagnostics.
+		page.on('console', (msg) => {
+			if (msg.type() === 'error') console.error(`[browser] ${msg.text().slice(0, 500)}`)
+		})
+		page.on('pageerror', (err) => console.error(`[pageerror] ${err.message}`))
 	})
 
 	/**
@@ -64,7 +69,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		return undefined
 	}
 
-	test('[E1] fresh signup → magic-link → /welcome → org create → /o/{slug}', async ({
+	test('[E1] fresh signup → magic-link → /welcome → org create → /setup → DaData lookup', async ({
 		page,
 		request,
 	}) => {
@@ -74,10 +79,18 @@ test.describe('Demo funnel — empirical против prod', () => {
 
 		// POST magic-link signin с callbackURL → /welcome?n=<orgName>
 		const callbackURL = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName)}`
-		const signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
-			data: { email, callbackURL },
-		})
-		expect(signupRes.status()).toBe(200)
+		// Retry magic-link POST до 5 раз с 3s backoff — backend бывает
+		// intermittently 5xx (rate-limit demo-inbox MAX_TOTAL_RECIPIENTS=500
+		// ИЛИ cold-start serverless container ~5s).
+		let signupRes: import('@playwright/test').APIResponse | undefined
+		for (let attempt = 0; attempt < 5; attempt++) {
+			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
+				data: { email, callbackURL },
+			})
+			if (signupRes.status() === 200) break
+			await new Promise((r) => setTimeout(r, 3000))
+		}
+		expect(signupRes?.status(), `Final attempt body: ${await signupRes?.text()}`).toBe(200)
 
 		// Poll DemoInbox для captured URL
 		const magicLink = await fetchMagicLink(request, email)
@@ -86,15 +99,42 @@ test.describe('Demo funnel — empirical против prod', () => {
 		// Visit verify URL — sets session cookie + redirects к callbackURL
 		await page.goto(magicLink as string)
 
-		// Should land на /welcome
+		// Should land на /welcome (fresh-signup, no existing orgs)
 		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })
 		await expect(page.getByRole('heading', { name: /Почти готово/ })).toBeVisible()
 
 		// Submit form (orgName prefilled from query)
 		await page.getByRole('button', { name: /Создать гостиницу/ }).click()
 
-		// Should land в /o/{slug}/ ИЛИ /o/{slug}/setup
-		await expect(page).toHaveURL(/\/o\/[^/]+/, { timeout: 15_000 })
+		// Wait для FINAL /setup URL. Full chain: BA create-org → reload →
+		// `_app.o.$orgSlug` setActive + invalidate session → /o/{slug}/ index
+		// guard checks properties.list (idempotent retry on YDB hiccup) → если
+		// empty → redirect /setup. Timing варьируется от 1s (warm cache) до
+		// ~10s (cold YDB reconnect + retry). 30s safe ceiling.
+		await page.waitForURL(/\/o\/[^/]+\/setup/, { timeout: 30_000 })
+		await page.waitForLoadState('networkidle', { timeout: 10_000 })
+
+		// === SETUP WIZARD — ИНН step empirical verify (closes Task #32 DaData) ===
+		// Wizard Step 1 — IdentifyStep с ИНН input
+		await expect(page.getByLabel('ИНН гостиницы')).toBeVisible({ timeout: 10_000 })
+
+		// Canonical Сочи ИНН 2320000001 (mock-dadata.ts dataset).
+		// Works в обоих режимах: mock fallback (если DADATA_API_KEY не set)
+		// + real DaData (валидный Сочи ИНН в real database).
+		await page.getByLabel('ИНН гостиницы').fill('2320000001')
+		await page.getByRole('button', { name: 'Найти' }).click()
+
+		// DaData response → party preview card rendered с aria-label
+		await expect(page.getByRole('complementary', { name: 'Найденная организация' })).toBeVisible({
+			timeout: 10_000,
+		})
+
+		// Party.name displayed внутри preview card. Mock canonical Сочи set
+		// content varies, но org name MUST appear в card (not empty).
+		const preview = page.getByRole('complementary', { name: 'Найденная организация' })
+		const previewText = await preview.textContent()
+		expect(previewText, 'Party preview card should contain org details').toBeTruthy()
+		expect(previewText, 'ИНН should be displayed в card').toContain('2320000001')
 	})
 
 	test('[E2] return-visit — same email → SAME tenant (не duplicate)', async ({ page, request }) => {

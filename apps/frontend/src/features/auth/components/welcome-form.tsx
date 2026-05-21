@@ -1,9 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
 import { type FormEvent, useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { api } from '@/lib/api'
+import { useOrgList } from '../../tenancy/hooks/use-active-org.ts'
 import { useCreateOrganization } from '../hooks/use-auth-mutations.ts'
 import { slugify } from '../lib/slugify.ts'
 
@@ -26,11 +25,18 @@ interface WelcomeFormProps {
  *     afterCreateOrganization hook → navigation `/o/$slug` (handled inside
  *     the hook's onSuccess).
  *
- * Belt-and-braces existing-org guard: `propertiesQueryOptions` query runs
- * на mount. Если list.length > 0 (user landed here с already-having-an-org
- * — race condition from beforeLoad not refreshing), a destructive banner
- * surfaces explicit warning. The route's `beforeLoad` is the primary gate;
- * this is the defense-in-depth.
+ * Belt-and-braces existing-org guard: `useOrgList()` query runs на mount.
+ * Если list.length > 0 (user landed here с already-having-an-org — race
+ * condition from beforeLoad not refreshing), a destructive banner surfaces
+ * explicit warning. The route's `beforeLoad` is the primary gate; this is
+ * defense-in-depth.
+ *
+ * **Why BA org-list, not `/api/v1/properties`** (2026-05-21 fix): the
+ * properties endpoint requires `session.activeOrganizationId`, which is
+ * **null** for fresh signup landing на /welcome → backend returns 403 →
+ * console noise + wasted round-trip. BA `organization.list()` queries
+ * user→org memberships directly (no active-org dependency) — correct
+ * semantic для «does this user already have any orgs».
  */
 export function WelcomeForm({ prefillOrgName }: WelcomeFormProps) {
 	const orgNameId = useId()
@@ -39,16 +45,7 @@ export function WelcomeForm({ prefillOrgName }: WelcomeFormProps) {
 	const [orgName, setOrgName] = useState((prefillOrgName ?? '').trim())
 	const create = useCreateOrganization()
 
-	const propertiesQuery = useQuery({
-		queryKey: ['properties'] as const,
-		queryFn: async () => {
-			const res = await api.api.v1.properties.$get({ query: {} })
-			if (!res.ok) return []
-			const body = (await res.json()) as { data: Array<{ id: string }> }
-			return body.data
-		},
-		staleTime: 30_000,
-	})
+	const orgListQuery = useOrgList()
 
 	const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
 		e.preventDefault()
@@ -57,7 +54,7 @@ export function WelcomeForm({ prefillOrgName }: WelcomeFormProps) {
 
 	const error = create.error
 	const slugPreview = slugify(orgName)
-	const hasExistingOrg = propertiesQuery.data ? propertiesQuery.data.length > 0 : false
+	const hasExistingOrg = orgListQuery.data ? orgListQuery.data.length > 0 : false
 
 	return (
 		<>

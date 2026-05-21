@@ -13,17 +13,20 @@
  *        Cyrillic-only that slugify can't transliterate cleanly)
  *   [P3] organization.create error → localized banner + submit re-enables
  *        (user can fix + retry)
- *   [E1] propertiesQuery returns non-empty list → destructive existing-org
+ *   [E1] orgListQuery returns non-empty list → destructive existing-org
  *        warning banner rendered (defense-in-depth, beforeLoad-guard is
  *        primary)
- *   [E2] propertiesQuery returns empty list → no warning
+ *   [E2] orgListQuery returns empty list → no warning
  *
  * Mocking strategy:
- *   - `@/lib/auth-client` → mock authClient.organization.create
- *   - `@/lib/api` → mock the typed api proxy для `properties.$get`
+ *   - `@/lib/auth-client` → mock authClient.organization.{create,list}
  *   - `@tanstack/react-router` → stub useNavigate (used by useCreateOrganization
  *     onSuccess)
  *   - sonner toast → noop (success/error toasts irrelevant к unit assertions)
+ *
+ * Why mock `organization.list` not `/api/v1/properties` (2026-05-21):
+ * `WelcomeForm` switched к BA-level org-membership lookup because the
+ * properties endpoint 403s without active-org (which is null at /welcome).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -32,22 +35,12 @@ import { afterEach, describe, expect, it, mock } from 'bun:test'
 import * as React from 'react'
 
 const organizationCreateMock = mock()
+const organizationListMock = mock()
 mock.module('@/lib/auth-client', () => ({
-	authClient: { organization: { create: organizationCreateMock } },
-	sessionQueryOptions: { queryKey: ['auth', 'session'] as const },
-}))
-
-const propertiesGetMock = mock()
-mock.module('@/lib/api', () => ({
-	api: {
-		api: {
-			v1: {
-				properties: {
-					$get: propertiesGetMock,
-				},
-			},
-		},
+	authClient: {
+		organization: { create: organizationCreateMock, list: organizationListMock },
 	},
+	sessionQueryOptions: { queryKey: ['auth', 'session'] as const },
 }))
 
 const navigateMock = mock()
@@ -71,9 +64,10 @@ function renderWithQuery(ui: React.ReactElement) {
 afterEach(() => {
 	cleanup()
 	mock.clearAllMocks()
-	// Default: properties endpoint returns empty list (typical first-time
-	// magic-link arrival). Individual tests override before render.
-	propertiesGetMock.mockReturnValue(Promise.resolve({ ok: true, json: async () => ({ data: [] }) }))
+	// Default: BA `organization.list()` returns empty array (typical
+	// first-time magic-link arrival — user has no orgs yet). Individual
+	// tests override before render.
+	organizationListMock.mockReturnValue(Promise.resolve({ data: [], error: null }))
 })
 
 describe('WelcomeForm — initial render', () => {
@@ -148,9 +142,12 @@ describe('WelcomeForm — error path', () => {
 })
 
 describe('WelcomeForm — existing-org defence', () => {
-	it('[E1] propertiesQuery returns non-empty → destructive banner shown', async () => {
-		propertiesGetMock.mockReturnValueOnce(
-			Promise.resolve({ ok: true, json: async () => ({ data: [{ id: 'prop-1' }] }) }),
+	it('[E1] orgListQuery returns non-empty → destructive banner shown', async () => {
+		organizationListMock.mockReturnValueOnce(
+			Promise.resolve({
+				data: [{ id: 'org-existing', name: 'Существующая', slug: 'existing' }],
+				error: null,
+			}),
 		)
 		renderWithQuery(<WelcomeForm prefillOrgName="Гостиница Ромашка" />)
 
@@ -159,12 +156,10 @@ describe('WelcomeForm — existing-org defence', () => {
 		})
 	})
 
-	it('[E2] propertiesQuery empty → no warning banner', async () => {
+	it('[E2] orgListQuery empty → no warning banner', async () => {
 		// Default mock from afterEach already returns empty list, но повторяю
 		// явно так что this case стоит self-contained.
-		propertiesGetMock.mockReturnValueOnce(
-			Promise.resolve({ ok: true, json: async () => ({ data: [] }) }),
-		)
+		organizationListMock.mockReturnValueOnce(Promise.resolve({ data: [], error: null }))
 		renderWithQuery(<WelcomeForm prefillOrgName="Гостиница Ромашка" />)
 		// Give the query a tick to settle.
 		await new Promise((r) => setTimeout(r, 50))
