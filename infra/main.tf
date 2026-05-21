@@ -32,13 +32,12 @@ terraform {
 
   required_providers {
     yandex = {
-      # OpenTofu canon 2026-05: shorthand source (без hostname prefix).
-      # OpenTofu rejects `registry.terraform.io/...` explicit form — error
-      # «host does not offer OpenTofu provider registry» fires до network_mirror
-      # lookup. Shorthand `yandex-cloud/yandex` → OpenTofu default namespace
-      # `registry.opentofu.org/...` → Yandex mirror перехватывает.
-      # Source: opentofu.org/docs/internals/provider-network-mirror-protocol
-      source  = "yandex-cloud/yandex"
+      # Terraform CLI canon (stankoff 2 years empirical): explicit hostname
+      # `registry.terraform.io/yandex-cloud/yandex`. Yandex mirror serves этот
+      # namespace до v0.204 (verified empirically 2026-05-21 via index.json).
+      # OpenTofu path failed: `registry.opentofu.org/yandex-cloud/yandex` empty
+      # on mirror → reverted к Terraform image + Hashicorp namespace.
+      source  = "registry.terraform.io/yandex-cloud/yandex"
       version = "~> 0.204"
     }
     # Yandex Cloud Postbox = SESv2 API-compatible. AWS provider используется

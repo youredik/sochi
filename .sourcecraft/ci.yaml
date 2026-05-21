@@ -190,7 +190,7 @@ tasks:
       - name: plan
         needs: [get-iam-token]
         image:
-          name: ghcr.io/opentofu/opentofu:1.12.0
+          name: hashicorp/terraform:1.10
           entrypoint: ''
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
@@ -198,11 +198,10 @@ tasks:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_BOT_S3_SECRET_ACCESS_KEY }}
           TF_CLI_CONFIG_FILE: /tmp/.terraformrc
         script:
-          # registry.opentofu.org blocked from RU IPs (Hashicorp inherited
-          # geoblock). Yandex mirror serves OpenTofu provider protocol.
-          # Canon 2026-05 (opentofu.org/docs/internals/provider-network-mirror-protocol):
-          # mirror serves identifier-only host лookups — exclude по opentofu.org
-          # (НЕ terraform.io, как у stankoff с hashicorp/terraform image).
+          - apk add --no-cache git bash
+          # registry.terraform.io blocked from RU IPs (Hashicorp geoblock).
+          # Yandex mirror serves canonical TF provider protocol.
+          # Stankoff canon 2026-04-25 verified empirically — 2 years stable.
           - |
             cat > /tmp/.terraformrc <<'EOF'
             provider_installation {
@@ -210,13 +209,13 @@ tasks:
                 url = "https://terraform-mirror.yandexcloud.net/"
               }
               direct {
-                exclude = ["registry.opentofu.org/*/*"]
+                exclude = ["registry.terraform.io/*/*"]
               }
             }
             EOF
           - cd infra
-          - tofu init -input=false
-          - tofu plan -no-color -input=false | tee plan.txt
+          - terraform init -input=false
+          - terraform plan -no-color -input=false | tee plan.txt
 
   - name: tofu-apply
     cubes:
@@ -228,7 +227,7 @@ tasks:
       - name: apply
         needs: [get-iam-token]
         image:
-          name: ghcr.io/opentofu/opentofu:1.12.0
+          name: hashicorp/terraform:1.10
           entrypoint: ''
         env:
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
@@ -236,8 +235,8 @@ tasks:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_BOT_S3_SECRET_ACCESS_KEY }}
           TF_CLI_CONFIG_FILE: /tmp/.terraformrc
         script:
-          # Same mirror config как tofu-plan — registry.opentofu.org blocked
-          # from RU. Canon 2026-05.
+          - apk add --no-cache git bash
+          # Same mirror config как plan — stankoff canon 2026-04-25
           - |
             cat > /tmp/.terraformrc <<'EOF'
             provider_installation {
@@ -245,13 +244,13 @@ tasks:
                 url = "https://terraform-mirror.yandexcloud.net/"
               }
               direct {
-                exclude = ["registry.opentofu.org/*/*"]
+                exclude = ["registry.terraform.io/*/*"]
               }
             }
             EOF
           - cd infra
-          - tofu init -input=false
-          - tofu apply -auto-approve -input=false -parallelism=1
+          - terraform init -input=false
+          - terraform apply -auto-approve -input=false -parallelism=1
 
   # ---------------------------------------------------------------------------
   # MIRROR PLAYWRIGHT — crane copy MCR → cr.yandex (intra-DC fast pull).
