@@ -35,9 +35,14 @@ variable "container_concurrency" {
 }
 
 variable "container_provisioned" {
-  description = "Pre-warmed instances (0 = cold-start OK, 2 = stankoff canon)"
+  description = <<-EOT
+    Pre-warmed instances. Default `1` для demo: `DemoInboxAdapter` стейт
+    in-memory per instance — multi-instance создаёт 50/50 race для prospect
+    polling. Production track когда переходит к real SMTP сможет вернуть к
+    `2` (stankoff canon). Per `[[demo_inbox_multi_instance_canon_2026_05_22]]`.
+  EOT
   type        = number
-  default     = 2
+  default     = 1
 }
 
 resource "yandex_serverless_container" "backend" {

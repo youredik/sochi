@@ -61,9 +61,12 @@ test.describe('Demo funnel — empirical против prod', () => {
 			const res = await request.get(
 				`${PROD_BASE}/api/public/demo/inbox?email=${encodeURIComponent(email)}`,
 			)
-			const json = (await res.json()) as { data?: { latestUrl?: string } }
+			const json = (await res.json()) as { data?: { latestUrl?: string | null } }
 			const url = json?.data?.latestUrl
-			if (url !== undefined && url !== excludeUrl) return url
+			// API returns `latestUrl: null` until backend captures. Skip null
+			// AND skip excluded prev-url (return-visit case). Previously checked
+			// `!== undefined` which let null through prematurely → race fail.
+			if (url != null && url !== excludeUrl) return url
 			await new Promise((r) => setTimeout(r, 500))
 		}
 		return undefined
@@ -340,5 +343,55 @@ test.describe('Demo funnel — empirical против prod', () => {
 		await expect(page.getByRole('heading', { name: /Программа для управления/ })).toBeVisible({
 			timeout: 10_000,
 		})
+	})
+
+	/**
+	 * [E6] **DemoInboxPanel renders after submit — atomic-build-env canon**.
+	 *
+	 * 2026-05-22 regression guard для bug class «backend has DEMO_DEPLOYMENT
+	 * but frontend bundle was built без VITE_DEMO_DEPLOYMENT». Symptom:
+	 * user submits email, sees «Письмо отправлено», но NO panel UI with
+	 * captured magic-link → visitor stuck (real email never sent в demo
+	 * mode по `[[demo_inbox_canon]]`).
+	 *
+	 * Both env-vars are an ATOMIC PAIR. Test asserts:
+	 *   1. Submit magic-link form
+	 *   2. «Письмо отправлено» appears
+	 *   3. DemoInboxPanel визуально rendered (heading «Демо-почта»)
+	 *
+	 * If frontend env-var is dropped from CI, this test fails immediately
+	 * — preventing «pair broken» class.
+	 */
+	test('[E6] login form submit → DemoInboxPanel renders (build-env atomic-pair)', async ({
+		page,
+		request,
+	}) => {
+		const ts = Date.now()
+		const email = `e2e-panel-${ts}@example.invalid`
+
+		// Use the actual login UI (not API direct) — exercises full bundle
+		await page.goto('https://demo.sepshn.ru/login', { waitUntil: 'networkidle' })
+		await page.getByLabel('Email').fill(email)
+		await page.getByRole('button', { name: /Получить ссылку для входа/ }).click()
+
+		// Success card shows
+		await expect(page.getByText('Письмо отправлено')).toBeVisible({ timeout: 10_000 })
+
+		// DemoInboxPanel renders в two phases: «Ждём письмо…» (initial poll)
+		// → «Письмо пришло» (after backend capture propagates). Either
+		// proves panel is rendered (i.e. bundle was built с
+		// VITE_DEMO_DEPLOYMENT=true). Polling interval ~1Hz.
+		await expect(page.getByText(/Ждём письмо|Письмо пришло/)).toBeVisible({
+			timeout: 15_000,
+		})
+
+		// Stronger guarantee — wait для «Письмо пришло» (capture propagated)
+		// + magic-link button visible (final state). Multi-instance race может
+		// сделать backend polling эveнтуально consistent — UI panel retries
+		// indefinitely until it gets the URL, so test just waits for UI.
+		// Per `[[demo_inbox_multi_instance_canon]]`: don't trust direct API
+		// followup в multi-instance backend — UI is canonical truth.
+		await expect(page.getByText('Письмо пришло')).toBeVisible({ timeout: 30_000 })
+		await expect(page.getByRole('link', { name: /Открыть и войти/ })).toBeVisible()
 	})
 })
