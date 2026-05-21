@@ -81,7 +81,7 @@ resource "yandex_container_registry_iam_binding" "claude_pusher" {
 # Playwright mirror repo — anonymous pull для SC CI prepare-image phase
 # =============================================================================
 #
-# Empirical 2026-05-21 (run #22, #26): SC builder pulls image в prepare-image phase
+# Empirical 2026-05-21 (run #22, #26, #28): SC builder pulls image в prepare-image phase
 # ДО любого `script:` где можно docker login. Поэтому private cr.yandex pull
 # fails 401 Unauthorized. Workaround per канон 2026:
 #
