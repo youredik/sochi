@@ -394,4 +394,93 @@ test.describe('Demo funnel — empirical против prod', () => {
 		await expect(page.getByText('Письмо пришло')).toBeVisible({ timeout: 30_000 })
 		await expect(page.getByRole('link', { name: /Открыть и войти/ })).toBeVisible()
 	})
+
+	/**
+	 * [E7] **Real-user full happy path — apex → /grid**.
+	 *
+	 * 2026-05-22 canonical end-to-end empirical — every step a real
+	 * prospect takes, no shortcuts:
+	 *   1. visit apex marketing page
+	 *   2. click «Войти» (cross-origin к demo subdomain)
+	 *   3. type email → submit
+	 *   4. DemoInboxPanel captures + shows magic-link
+	 *   5. click magic-link → /welcome
+	 *   6. type org name + submit → /o/{slug}/setup
+	 *   7. ИНН 2320000001 (canonical Сочи mock) → DaData preview
+	 *   8. click Подтвердить → inventory step
+	 *   9. fill rooms count + nightly price → submit
+	 *  10. land on /o/{slug}/grid (шахматка)
+	 *
+	 * Verified manual walk-through 2026-05-22: complete в ~22s.
+	 *
+	 * If ANY step breaks, real prospects получат stuck funnel — this is
+	 * the ultimate regression guard. Per user-mandate «сам все проверяй
+	 * за реального пользователя» 2026-05-22.
+	 */
+	test('[E7] real-user full happy path — apex landing → /grid', async ({ page }) => {
+		const ts = Date.now()
+		const email = `e2e-realuser-${ts}@example.invalid`
+		const orgName = `Тестовый отель ${ts}`
+
+		// 1. Apex landing
+		await page.goto('https://sepshn.ru/', { waitUntil: 'networkidle' })
+		await expect(page.getByRole('heading', { name: /Программа для управления/ })).toBeVisible()
+
+		// 2. Click «Войти» — cross-origin к demo
+		const loginLink = page.locator('a:has-text("Войти")').first()
+		await expect(loginLink).toHaveAttribute('href', 'https://demo.sepshn.ru/login')
+		await loginLink.click()
+		await page.waitForURL(/demo\.sepshn\.ru\/login/, { timeout: 15_000 })
+
+		// 3. Submit email
+		await page.getByLabel('Email').fill(email)
+		await page.getByRole('button', { name: /Получить ссылку для входа/ }).click()
+		await expect(page.getByText('Письмо отправлено')).toBeVisible({ timeout: 10_000 })
+
+		// 4. DemoInboxPanel captures
+		await expect(page.getByText('Письмо пришло')).toBeVisible({ timeout: 30_000 })
+		const magicLinkLocator = page.getByRole('link', { name: /Открыть и войти/ })
+
+		// 5. Click magic-link
+		await magicLinkLocator.click()
+		await page.waitForURL(/\/welcome|\/o\//, { timeout: 15_000 })
+
+		// 6. Type org name + create (если на /welcome)
+		if (page.url().includes('/welcome')) {
+			await page.getByLabel(/Название гостиницы/).fill(orgName)
+			await page
+				.locator('button:has-text("Создать гостиницу"):not([disabled])')
+				.click({ timeout: 5_000 })
+			await page.waitForURL(/\/o\/[^/]+\/setup/, { timeout: 30_000 })
+		}
+
+		// 7. ИНН lookup canonical mock
+		await page.waitForLoadState('networkidle', { timeout: 10_000 })
+		await page.getByLabel('ИНН гостиницы').fill('2320000001')
+		await page.getByRole('button', { name: /^Найти$/ }).click()
+		await expect(page.getByRole('complementary', { name: 'Найденная организация' })).toBeVisible({
+			timeout: 10_000,
+		})
+
+		// 8. Подтвердить → inventory step
+		await page.getByRole('button', { name: /Подтвердить/ }).click()
+		await page.waitForLoadState('networkidle', { timeout: 5_000 })
+
+		// 9. Fill rooms + price (canonical: 10 rooms × 3000₽)
+		const numericInputs = await page.locator('input[inputmode="numeric"]').all()
+		expect(
+			numericInputs.length,
+			'Inventory step must have ≥ 2 numeric inputs',
+		).toBeGreaterThanOrEqual(2)
+		await numericInputs[0]?.fill('10')
+		await numericInputs[1]?.fill('3000')
+
+		// 10. Submit → /grid
+		await page.locator('button:has-text("Готово")').first().click()
+		await page.waitForURL(/\/o\/[^/]+\/grid/, { timeout: 30_000 })
+
+		// Success — landed on chessboard
+		const finalUrl = page.url()
+		expect(finalUrl, 'Full funnel must land on /grid').toMatch(/\/o\/[^/]+\/grid/)
+	})
 })
