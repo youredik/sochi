@@ -7,6 +7,7 @@ import type {
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
+import { getApiBaseUrl } from '../../../lib/api-base-url.ts'
 import { useCurrentUserId } from '../../../lib/use-can'
 import { logger } from '../../../lib/logger'
 
@@ -34,7 +35,8 @@ import { logger } from '../../../lib/logger'
  * No custom exponential backoff library — D-G10.4 canon.
  */
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
+// Same-origin canon 2026-05-21 — shared helper.
+const API_URL = getApiBaseUrl()
 
 interface UseBookingEventsStreamOptions {
 	/** propertyId к subscribe; null disables (no SSE while propertyId loading). */

@@ -13,6 +13,7 @@
 import type { TourismTaxOrgReport, TourismTaxOrgReportParams } from '@horeca/shared'
 import { queryOptions } from '@tanstack/react-query'
 import { api } from '../../../lib/api.ts'
+import { getApiBaseUrl } from '../../../lib/api-base-url.ts'
 
 export const tourismTaxOrgReportQueryOptions = (params: TourismTaxOrgReportParams) =>
 	queryOptions({
@@ -47,7 +48,7 @@ export const tourismTaxOrgReportQueryOptions = (params: TourismTaxOrgReportParam
  * navigation, поэтому работает «as is»).
  */
 export function buildTourismTaxXlsxUrl(params: TourismTaxOrgReportParams): string {
-	const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
+	const base = getApiBaseUrl()
 	const qs = new URLSearchParams({ from: params.from, to: params.to })
 	if (params.propertyId) qs.set('propertyId', params.propertyId)
 	return `${base}/api/admin/tax/tourism/export.xlsx?${qs.toString()}`

@@ -2,6 +2,7 @@ import type { PropertyMedia, PropertyMediaPatch } from '@horeca/shared'
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
+import { getApiBaseUrl } from '../../../lib/api-base-url.ts'
 import { type ApiError, errorFromResponse } from '../../../lib/api-errors.ts'
 import { logger } from '../../../lib/logger.ts'
 
@@ -76,7 +77,7 @@ function readImageDimensions(file: File): Promise<{ width: number; height: numbe
  */
 export function useUploadMedia(propertyId: string) {
 	const queryClient = useQueryClient()
-	const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
+	const apiUrl = getApiBaseUrl()
 
 	const runSplitFlow = async (
 		vars: UploadVars,

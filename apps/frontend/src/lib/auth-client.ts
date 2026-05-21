@@ -7,6 +7,7 @@ import {
 	organizationClient,
 } from 'better-auth/client/plugins'
 import { createAuthClient } from 'better-auth/react'
+import { getApiBaseUrl } from './api-base-url.ts'
 
 /**
  * Better Auth 1.6.x React client.
@@ -25,23 +26,9 @@ import { createAuthClient } from 'better-auth/react'
  * surface (session-list, passkey, two-factor) is added lazily when routes
  * need it so the API stays accidental-coupling-free.
  */
-/**
- * Same-origin canonical default 2026-05-21 (paired с `lib/api.ts` fix).
- *
- * BA's `createAuthClient` requires non-empty baseURL для fetch URL construction.
- * `import.meta.env.VITE_API_URL` undefined в CI build → BA fallback к broken
- * state → `/api/auth/get-session` → ERR_CONNECTION_REFUSED. Empirically caught
- * via `demo-funnel-smoke.spec.ts [E1]` 2026-05-21.
- *
- * `window.location.origin` в browser → same-origin URLs (`https://demo.sepshn.ru/api/auth/...`)
- * → API Gateway routes back к backend. SSR/test fallback → localhost (нет window).
- */
-const authBaseURL: string =
-	import.meta.env.VITE_API_URL ??
-	(typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8787')
-
 export const authClient = createAuthClient({
-	baseURL: authBaseURL,
+	// Same-origin canon 2026-05-21 — shared helper `lib/api-base-url.ts`.
+	baseURL: getApiBaseUrl(),
 	plugins: [
 		organizationClient(),
 		// Better Auth magic-link client — companion to server-side `magicLink()`
