@@ -280,11 +280,15 @@ tasks:
         script:
           - SHA=$(git rev-parse --short HEAD)
           - echo "${YC_TOKEN}" | docker login --username iam --password-stdin cr.yandex
-          # Conditional cache mode — canon 2026-05-20 (freecodecamp + Depot):
+          # Canon 2026-05: registry cache export requires `docker-container`
+          # buildx driver (default `docker` driver не поддерживает). Empirical
+          # run #26: «Cache export is not supported for the docker driver».
+          # Source: docs.docker.com/build/builders/drivers/docker-container/
+          - docker buildx create --name builder --driver docker-container --use --bootstrap
+          # Conditional cache mode — canon 2026-05 (freecodecamp + Depot):
           #   mode=max ТОЛЬКО когда lockfile/Dockerfile изменились (cache export 53s).
           #   mode=min на остальных commits (cache export ~5s).
-          # Empirical run #19: 53s cache export → потенциально -48s avg на 80% pushes.
-          - 'if git diff --name-only HEAD~1 HEAD -- apps/backend/Dockerfile pnpm-lock.yaml pnpm-workspace.yaml package.json 2>/dev/null | grep -q .; then CACHE_MODE=max; echo "lockfile/Dockerfile changed → mode=max"; else CACHE_MODE=min; echo "no lockfile change → mode=min (skip intermediate cache export)"; fi'
+          - 'if git diff --name-only HEAD~1 HEAD -- apps/backend/Dockerfile pnpm-lock.yaml pnpm-workspace.yaml package.json 2>/dev/null | grep -q .; then CACHE_MODE=max; echo "lockfile/Dockerfile changed → mode=max"; else CACHE_MODE=min; echo "no lockfile change → mode=min"; fi'
           # YC cr.yandex принимает zstd cache layers (verified run #17).
           # Image layers — gzip default (YC Serverless REJECTS zstd image, run #17).
           # OCI annotations — supply-chain hygiene (docs.docker.com/build/metadata/annotations).
