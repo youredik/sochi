@@ -27,6 +27,10 @@
 env:
   REGISTRY: 'cr.yandex/crp4um8fg84qoro1voi6'
   IMAGE_NAME: 'backend'
+  # Phase 2 Postbox redeploy trigger 2026-05-22 — force image rebuild so
+  # cf7cf75 backend dual-write code reaches runtime (latest deployed image
+  # `:76be5aa` predates Phase 2 refactor; intermediate pushes были infra-only
+  # → deploy workflow path-filter не matched). Touch this env line на rotate.
 
 tokens:
   yc:
