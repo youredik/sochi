@@ -136,3 +136,56 @@ resource "yandex_container_repository_lifecycle_policy" "playwright_retention" {
     expire_period = "48h"
   }
 }
+
+# =============================================================================
+# Node:24-slim mirror repo — anonymous pull для SC CI prepare-image phase
+# =============================================================================
+#
+# Empirical 2026-05-22 (run #47-50, #57-60): docker.io/library/node:24-slim
+# pull failing в SC builder prepare-image phase. Pattern matches Playwright
+# fix 2026-05-21: external public registries hit rate-limits / RU geoblock
+# / Docker Hub authentication issues. Mirror к cr.yandex intra-DC eliminates
+# external pull dependency.
+#
+# Bootstrap 2026-05-22: `crane copy node:24-slim cr.yandex/.../node:24-slim`
+# via local crane CLI (auto-created repo crpbhjjvos9aia66kbb2). TF resources
+# below — import existing + anon binding + lifecycle policy.
+#
+# Future node version bumps: mirror-node task в ci.yaml triggers crane copy
+# automatically when pnpm-lock.yaml changes (Idempotent — skips if digests
+# match). Manual bootstrap one-time only.
+
+import {
+  to = yandex_container_repository.node
+  id = "crpbhjjvos9aia66kbb2"
+}
+
+resource "yandex_container_repository" "node" {
+  name = "${yandex_container_registry.sepshn_cr.id}/node"
+}
+
+resource "yandex_container_repository_iam_binding" "node_anon_pull" {
+  repository_id = yandex_container_repository.node.id
+  role          = "container-registry.images.puller"
+  members       = ["system:allUsers"]
+}
+
+resource "yandex_container_repository_lifecycle_policy" "node_retention" {
+  name          = "node-mirror-retention"
+  status        = "active"
+  repository_id = yandex_container_repository.node.id
+
+  rule {
+    description   = "Keep 3 newest mirror tags + 30-day expire (rare bumps)"
+    untagged      = false
+    tag_regexp    = ".*"
+    retained_top  = 3
+    expire_period = "720h" # 30 days
+  }
+
+  rule {
+    description   = "Prune untagged stubs > 48h"
+    untagged      = true
+    expire_period = "48h"
+  }
+}

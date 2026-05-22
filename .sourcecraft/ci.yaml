@@ -104,6 +104,7 @@ workflows:
       max_cube_duration: 10m
     tasks:
       - mirror-playwright
+      - mirror-node
 
   deploy:
     settings:
@@ -133,21 +134,21 @@ tasks:
   - name: quality
     cubes:
       - name: install
-        image: node:24-slim
+        image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm install --frozen-lockfile
 
       - name: typecheck
         needs: [install]
-        image: node:24-slim
+        image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm typecheck
 
       - name: lint
         needs: [install]
-        image: node:24-slim
+        image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm lint
@@ -157,7 +158,7 @@ tasks:
       # ставим через npm install -g bun → /usr/local/bin/bun (system PATH).
       - name: test-fast
         needs: [install]
-        image: node:24-slim
+        image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
           - set -e
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
@@ -175,7 +176,7 @@ tasks:
       - name: supply-chain-audit
         needs: [install]
         allow_failure: true
-        image: node:24-slim
+        image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
           - set -e
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
@@ -313,6 +314,42 @@ tasks:
           - 'if [ "$SRC_DIGEST" = "$DST_DIGEST" ] && [ "$DST_DIGEST" != "MISSING" ]; then echo "mirror up-to-date, skip"; else echo "mirroring $SRC -> $DST"; /ko-app/crane copy --platform linux/amd64 "$SRC" "$DST"; fi'
 
   # ---------------------------------------------------------------------------
+  # MIRROR NODE — crane copy Docker Hub → cr.yandex (intra-DC, no rate limits).
+  # Bootstrap 2026-05-22 после runs #47-60 deploy fails: docker.io/library/node
+  # pull failing в SC prepare-image phase (geoblock / rate limit). Mirror к
+  # cr.yandex eliminates external pull dependency entirely.
+  # Idempotent — crane skips если src/dst digests match.
+  # ---------------------------------------------------------------------------
+  - name: mirror-node
+    cubes:
+      - name: get-iam-token
+        env:
+          ID_TOKEN: ${{ tokens.yc.id_token }}
+          YC_SA_ID: ${{ tokens.yc.service_account_id }}
+        image: cr.yandex/sourcecraft/yc-iam:latest
+
+      - name: mirror
+        needs: [get-iam-token]
+        image:
+          name: gcr.io/go-containerregistry/crane:debug
+          entrypoint: ''
+        env:
+          YC_IAM_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
+          NODE_VERSION: '24-slim'
+          DST_REGISTRY: 'cr.yandex/crp4um8fg84qoro1voi6'
+        script:
+          - set -e
+          - 'SRC=docker.io/library/node:${NODE_VERSION}'
+          - 'DST=${DST_REGISTRY}/node:${NODE_VERSION}'
+          - mkdir -p ~/.docker
+          - 'AUTH=$(printf "iam:%s" "$YC_IAM_TOKEN" | base64 -w 0)'
+          - 'echo "{\"auths\":{\"cr.yandex\":{\"auth\":\"${AUTH}\"}}}" > ~/.docker/config.json'
+          - 'SRC_DIGEST=$(/ko-app/crane digest "$SRC" 2>/dev/null || echo "NONE")'
+          - 'DST_DIGEST=$(/ko-app/crane digest "$DST" 2>/dev/null || echo "MISSING")'
+          - 'echo "src=$SRC_DIGEST dst=$DST_DIGEST"'
+          - 'if [ "$SRC_DIGEST" = "$DST_DIGEST" ] && [ "$DST_DIGEST" != "MISSING" ]; then echo "mirror up-to-date, skip"; else echo "mirroring $SRC -> $DST"; /ko-app/crane copy --platform linux/amd64 "$SRC" "$DST"; fi'
+
+  # ---------------------------------------------------------------------------
   # DEPLOY BACKEND — get-iam-token → build-push → revision-deploy
   # ---------------------------------------------------------------------------
   - name: deploy-backend
@@ -441,7 +478,7 @@ tasks:
       # install 76s overhead > savings 66s в build). Combined install+build
       # in one cube короче total wall.
       - name: build
-        image: node:24-slim
+        image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         # Build-time Vite env vars — `import.meta.env.VITE_*` inlined в
         # bundle constants.
         # - `VITE_DEMO_DEPLOYMENT=true` — DemoInboxPanel renders после
