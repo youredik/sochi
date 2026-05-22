@@ -38,6 +38,18 @@ export default defineConfig({
 		// Safari «Open as Web App» — game-changer (per plan §M9.4 + iOS 26
 		// research: Apple добавил «Open as Web App» по умолчанию ON 2025-09).
 		VitePWA({
+			// **2026-05-22 disabled** until proper offline-UX в roadmap.
+			// Empirical (HAR analysis sepshn.ru/demo): SW precache fetched ALL
+			// 115-292 JS chunks at first visit, including deep app routes
+			// `widget._tenantSlug_._propertyId.*` на маркетинг-лендинге → UX
+			// regression + лишний traffic. «Приложение готово работать offline»
+			// toast also unsolicited. Re-enable когда (1) operator UX explicitly
+			// нуждается в offline editing AND (2) narrow `globPatterns` к
+			// entry-only precache + runtime-caching для routes.
+			//
+			// Plugin still generates manifest.webmanifest (PWA add-to-home), но
+			// SW не регистрируется → no precache fetches.
+			disable: true,
 			// G11 (2026-05-16) — `prompt` (NOT autoUpdate) per R1+R2 ≥ 2026-05-16
 			// canon: operator app has forms (booking edit, wizard) → silent reload
 			// mid-edit = data loss. `useRegisterSW` hook + Sonner action toast
