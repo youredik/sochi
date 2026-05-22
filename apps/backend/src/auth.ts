@@ -117,7 +117,6 @@ export const auth = betterAuth({
 				{
 					nodeEnv: env.NODE_ENV,
 					...(env.SMARTCAPTCHA_SERVER_KEY ? { serverKey: env.SMARTCAPTCHA_SERVER_KEY } : {}),
-					...(env.DEMO_DEPLOYMENT ? { demoDeployment: true } : {}),
 				},
 			)
 			if (!decision.pass) {

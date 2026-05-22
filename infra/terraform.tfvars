@@ -10,8 +10,12 @@
 
 yc_cloud_id        = "b1gisf466novulsg0a0n"   # cloud sepshn (новое)
 yc_organization_id = "bpfar26apvm2ljel57ta"   # org Сэпшн (новое)
-infra_folder_id    = "b1gp4bo808jr6qvrnltu"   # folder infra (единственный)
-demo_folder_id     = "b1gp4bo808jr6qvrnltu"   # demo resources в том же folder
+infra_folder_id    = "b1gp4bo808jr6qvrnltu"   # folder infra (shared: DNS, KMS, Registry, Postbox identity)
+demo_folder_id     = "b1gtssqle0rbc3nv489v"   # folder demo (workload: Container, YDB, S3, Lockbox, Captcha, Sender SA)
+
+# Когда появится prod environment — отдельный cloud `sepshn-prod` (max isolation
+# per Yandex security canon, не folder). См. `[[handover_2026_05_22]]` § Future.
+# prod_folder_id   = "TBD"  # в новом cloud, не в этом
 
 # Bootstrap-created resources (см. _bootstrap/bootstrap.sh):
 tf_bot_sa_id           = "ajer6tlq2rcccuuln5vq"

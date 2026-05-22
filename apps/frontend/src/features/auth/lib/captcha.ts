@@ -1,28 +1,19 @@
 /**
  * Captcha enforcement flag — true when `VITE_YANDEX_CAPTCHA_SITE_KEY` is baked
- * into the build AND the deployment is NOT a demo deployment. Auth forms gate
- * submit on `captchaToken` only when this is true; dev (env unset) and demo
- * deployment (`VITE_DEMO_DEPLOYMENT=true`) skip captcha entirely.
+ * into the build. Auth forms gate submit on `captchaToken` только когда this is
+ * true; dev (env unset) skips captcha widget entirely.
  *
- * **Demo deployment** per `[[demo_strategy]]`: public hosted demo (e.g.
- * `demo.sochi.ru`) serves prospects evaluating the product. Captcha friction
- * на signup is a deal-breaker для acquisition flow — set
- * `VITE_DEMO_DEPLOYMENT=true` on demo builds to suppress. Backend pairs via
- * `DEMO_DEPLOYMENT=true` так captcha-gate bypasses validation symmetrically.
+ * **2026-05-22 decoupled от DEMO_DEPLOYMENT** per user-mandate: ботам всё
+ * равно демо это или prod — magic-link форма должна быть защищена captcha
+ * в обоих режимах. Если ключ есть → enforce. Раньше `isDemoDeployment=true`
+ * подавлял captcha (canonical «убрать friction для prospects»), но эмпирически
+ * это окно для flood-атак на DemoInbox (MAX_TOTAL_RECIPIENTS=500 квота),
+ * который ломает demo для других prospects.
  *
- * Mirrors the backend gate in `apps/backend/src/lib/auth/captcha-gate.ts`,
- * which returns `disabled` when `SMARTCAPTCHA_SERVER_KEY` is unset OR
- * `DEMO_DEPLOYMENT=true`. CI must set both keys (frontend + backend) and
- * both demo-flags consistently: mismatch (frontend unset, backend set OR
- * vice-versa) yields blanket 403 for every auth endpoint because forms
- * cannot mint a token AND the gate refuses non-tokened requests.
- *
- * `VITE_DEMO_DEPLOYMENT` is a STRING env-var (Vite inlines as string at
- * build); compare к literal `'true'` rather than `Boolean()` cast — empty
- * string и `'false'` would otherwise both round-trip к `false` correctly
- * but explicit string-match is safer для future maintainers.
+ * Mirrors the backend gate в `apps/backend/src/lib/auth/captcha-gate.ts`,
+ * который returns `disabled` когда `SMARTCAPTCHA_SERVER_KEY` unset. CI
+ * setup: VITE_YANDEX_CAPTCHA_SITE_KEY (build env) paired с SMARTCAPTCHA_
+ * SERVER_KEY (container env via Lockbox). Mismatch (frontend set, backend
+ * unset) → backend reject every captcha'd request. Set both или neither.
  */
-const isDemoDeployment = import.meta.env.VITE_DEMO_DEPLOYMENT === 'true'
-
-export const captchaEnforced: boolean =
-	!isDemoDeployment && Boolean(import.meta.env.VITE_YANDEX_CAPTCHA_SITE_KEY)
+export const captchaEnforced: boolean = Boolean(import.meta.env.VITE_YANDEX_CAPTCHA_SITE_KEY)

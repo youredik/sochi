@@ -76,13 +76,13 @@ describe('evaluateCaptchaGate', () => {
 		expect(res).toEqual({ pass: true, reason: 'non-production' })
 	})
 
-	test('[N3] nodeEnv=development wins over demoDeployment + serverKey', async () => {
+	test('[N3] nodeEnv=development wins over serverKey', async () => {
 		// Hard rule per `[[no_half_measures]]`: localhost never pays captcha
-		// friction, even if engineer accidentally configures BOTH a real
-		// server key AND demo flag in their local .env.
+		// friction, even if engineer accidentally configures a real server
+		// key в local .env.
 		const res = await evaluateCaptchaGate(
 			{ path: '/sign-in/magic-link', body: { captchaToken: 'ignored' } },
-			{ nodeEnv: 'development', serverKey: 'ysc2_real_key', demoDeployment: true },
+			{ nodeEnv: 'development', serverKey: 'ysc2_real_key' },
 		)
 		expect(res).toEqual({ pass: true, reason: 'non-production' })
 	})
@@ -118,31 +118,13 @@ describe('evaluateCaptchaGate', () => {
 		expect(res).toEqual({ pass: true, reason: 'disabled' })
 	})
 
-	test('[D1] demoDeployment=true bypasses gate EVEN when serverKey set', async () => {
-		// Per `[[demo_strategy]]`: publicly-hosted demo runs friction-free.
-		// demoDeployment short-circuits BEFORE serverKey check — captcha-less
-		// signup is the explicit canon for prospect acquisition.
+	test('[D1] 2026-05-22 — captcha enforced even в demo (decouple от DEMO_DEPLOYMENT)', async () => {
+		// Раньше demoDeployment=true bypass'ил captcha-gate. 2026-05-22 — убрано.
+		// Канон: если SMARTCAPTCHA_SERVER_KEY set, captcha enforced всегда
+		// (production-mode). Демо-окно для flood-атак на DemoInbox закрыто.
 		const res = await evaluateCaptchaGate(
 			{ path: '/sign-in/magic-link', body: { captchaToken: '' } },
-			{ serverKey: 'ysc2_x', demoDeployment: true },
-		)
-		expect(res).toEqual({ pass: true, reason: 'demo-deployment' })
-	})
-
-	test('[D2] demoDeployment=true bypasses gate EVEN for missing-token path', async () => {
-		// Same canon: demo prospect never sees a captcha widget, so the form
-		// won't supply a token. Gate must accept the empty-body case.
-		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {} },
-			{ serverKey: 'ysc2_x', demoDeployment: true },
-		)
-		expect(res).toEqual({ pass: true, reason: 'demo-deployment' })
-	})
-
-	test('[D3] demoDeployment=false (explicit) preserves serverKey gate semantics', async () => {
-		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: { captchaToken: '' } },
-			{ serverKey: 'ysc2_x', demoDeployment: false },
+			{ serverKey: 'ysc2_x' },
 		)
 		expect(res).toEqual({ pass: false, reason: 'missing_token' })
 	})

@@ -32,6 +32,9 @@ resource "yandex_dns_recordset" "y360_mx" {
 # «one SPF per domain» RFC 7208).
 # YC DNS provider canon: TXT values wrapped в literal RFC `"..."` (escaped quotes
 # в HCL = одинарные backslashes).
+#
+# TODO Postbox phase: добавить `include:_spf.cloud.yandex.net` (Postbox sends).
+# Сейчас только Yandex 360 outbound (hi@sepshn.ru).
 resource "yandex_dns_recordset" "apex_txt" {
   zone_id = yandex_dns_zone.sepshn_ru.id
   name    = "${var.domain}."

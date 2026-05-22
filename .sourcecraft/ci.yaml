@@ -421,14 +421,20 @@ tasks:
       # in one cube короче total wall.
       - name: build
         image: node:24-slim
-        # Build-time Vite env vars — `import.meta.env.VITE_*` is inlined по
-        # bundle constants. `VITE_DEMO_DEPLOYMENT=true` makes the demo-inbox
-        # panel render after «Письмо отправлено» so visitors кликом получают
-        # captured magic-link без нужды реального email delivery (per
-        # `[[demo_inbox_canon]]`). Paired с backend `DEMO_DEPLOYMENT=true`
-        # в `infra/container.tf:68` — without ОБЕИХ flags пара ломается.
+        # Build-time Vite env vars — `import.meta.env.VITE_*` inlined в
+        # bundle constants.
+        # - `VITE_DEMO_DEPLOYMENT=true` — DemoInboxPanel renders после
+        #   «Письмо отправлено» (canon `[[demo_inbox_panel_ci_canon_2026_05_21]]`).
+        # - `VITE_YANDEX_CAPTCHA_SITE_KEY` — SmartCaptcha client_key (public,
+        #   prefix `ysc1_`). Когда set → captcha widget renders на magic-link
+        #   форму. Bootstrap: получить value via `terraform output -raw
+        #   smartcaptcha_client_key` после первого `tofu apply` (см.
+        #   `infra/bootstrap.md` шаг 1.5). Empty value = captcha widget
+        #   не рендерится (backend canon `captcha-gate.ts` пропускает запросы
+        #   без validation если SMARTCAPTCHA_SERVER_KEY также unset — symmetric).
         env:
           VITE_DEMO_DEPLOYMENT: 'true'
+          VITE_YANDEX_CAPTCHA_SITE_KEY: '' # post-bootstrap: 'ysc1_...'
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm install --frozen-lockfile

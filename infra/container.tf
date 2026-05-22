@@ -118,6 +118,22 @@ resource "yandex_serverless_container" "backend" {
     environment_variable = "S3_SECRET_ACCESS_KEY"
   }
 
+  # SmartCaptcha server-key — bootstrap'нут в отдельный Lockbox secret
+  # вне TF state (issue #492 — server_key not exposed via TF). Когда vars
+  # smartcaptcha_lockbox_secret_id + _version_id заполнены (после bootstrap.md
+  # шага 2), container mounts SMARTCAPTCHA_SERVER_KEY env var.
+  # Default empty vars → block skipped → captcha disabled (backend canon
+  # `captcha-gate.ts` пропускает запросы без validation если no key).
+  dynamic "secrets" {
+    for_each = var.smartcaptcha_lockbox_secret_id != "" ? [1] : []
+    content {
+      id                   = var.smartcaptcha_lockbox_secret_id
+      version_id           = var.smartcaptcha_lockbox_version_id
+      key                  = "SMARTCAPTCHA_SERVER_KEY"
+      environment_variable = "SMARTCAPTCHA_SERVER_KEY"
+    }
+  }
+
   labels = {
     managed_by  = "opentofu"
     environment = "demo"

@@ -54,9 +54,13 @@ describe('captchaEnforced — env-gating canon', () => {
 		expect(await loadCaptchaEnforced()).toBe(true)
 	})
 
-	it('[R3] site key set, demo-deployment=true → false (demo deployment skip)', async () => {
+	it('[R3] site key set, demo-deployment=true → TRUE (2026-05-22 decouple — captcha enforced даже в demo)', async () => {
+		// Раньше: bypass'или captcha в demo (canon «no friction для prospects»).
+		// 2026-05-22: канон обновлён — captcha enforced если key set, иначе боты
+		// flood'ят DemoInbox. Только VITE_YANDEX_CAPTCHA_SITE_KEY presence
+		// determine enforcement.
 		setEnv('ymsk_test_site_key_42', 'true')
-		expect(await loadCaptchaEnforced()).toBe(false)
+		expect(await loadCaptchaEnforced()).toBe(true)
 	})
 
 	it('[R4] site key unset, demo-deployment=true → false (demo + no key)', async () => {

@@ -16,21 +16,20 @@ import { resolveClientIpSync } from '../net/client-ip.ts'
  * shift per `[[auth-passwordless-canon]]` 2026-05-13):
  *   - POST /sign-in/magic-link   (BA magic-link plugin — JIT signup + sign-in)
  *
- * Activation canon — TWO independent short-circuits, BOTH OFF in production:
+ * Activation canon — ONE short-circuit (dev), captcha enforced иначе:
  *   1. `nodeEnv !== 'production'` → captcha is ALWAYS skipped on localhost /
  *      CI / test. Hard rule per `[[no_half_measures]]` — even if an engineer
  *      pastes a real server key into local `.env`, dev requests still bypass.
  *      No surprise friction; pairs symmetrically с frontend widget which only
  *      renders when `VITE_YANDEX_CAPTCHA_SITE_KEY` is baked into the build.
- *   2. `demoDeployment === true` → public demo deployment bypass per
- *      `[[demo_strategy]]`. Allows demo.sochi.* hosts to run friction-free
- *      even though they're `NODE_ENV=production` builds.
  *
- * In production без demo flag the gate ENFORCES validation. If
- * `SMARTCAPTCHA_SERVER_KEY` is missing in prod the gate still passes
- * with reason `'disabled'` — this is a config-drift safety net, but the
- * startup guard в `index.ts` should refuse to boot in that state (see
- * `assertProductionCaptchaConfigured`).
+ * **2026-05-22 demoDeployment bypass УБРАН** — раньше демо deployment
+ * пропускал captcha (canonical «убрать friction для prospects»), но эмпирически
+ * боты могут flood'ить DemoInbox (MAX_TOTAL_RECIPIENTS=500), ломая demo для
+ * других prospects. Captcha enforced даже в demo если `SMARTCAPTCHA_SERVER_
+ * KEY` set. Если key пустой → fallback `'disabled'` (config-drift safety
+ * net, но startup guard в `index.ts` refuses to boot prod without key).
+ * Frontend canon `[[captcha_localhost_canon]]` updated same date.
  *
  * Token transport: body field `captchaToken`. Following stankoff pattern
  * which uses arbitrary body field; Better Auth forwards unknown fields
@@ -49,7 +48,7 @@ const captchaBodySchema = z.object({
 export type CaptchaGateResult =
 	| {
 			pass: true
-			reason: 'non-production' | 'disabled' | 'demo-deployment' | 'not-applicable' | 'validated'
+			reason: 'non-production' | 'disabled' | 'not-applicable' | 'validated'
 	  }
 	| { pass: false; reason: 'missing_token' | CaptchaValidationResult['reason'] }
 
@@ -62,14 +61,6 @@ export interface CaptchaGateContext {
 
 export interface CaptchaGateDeps {
 	serverKey?: string
-	/**
-	 * Demo deployment flag — when `true`, captcha-gate bypasses validation
-	 * EVEN IF `serverKey` is set. Per `[[demo_strategy]]` public hosted demo
-	 * runs friction-free для prospects. Frontend pairs via
-	 * `VITE_DEMO_DEPLOYMENT=true` (mirrored gate в
-	 * `apps/frontend/src/features/auth/lib/captcha.ts`).
-	 */
-	demoDeployment?: boolean
 	/**
 	 * Node runtime mode. Anything except `'production'` short-circuits the
 	 * gate before any other check — localhost / CI / test never pay captcha
@@ -93,9 +84,6 @@ export async function evaluateCaptchaGate(
 	const nodeEnv = deps.nodeEnv ?? 'production'
 	if (nodeEnv !== 'production') {
 		return { pass: true, reason: 'non-production' }
-	}
-	if (deps.demoDeployment === true) {
-		return { pass: true, reason: 'demo-deployment' }
 	}
 	const serverKey = deps.serverKey
 	if (!serverKey) {
