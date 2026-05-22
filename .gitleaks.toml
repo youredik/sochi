@@ -1,0 +1,29 @@
+# gitleaks v8.30+ config — allowlist для public-by-design Yandex identifiers.
+#
+# Lockbox secret IDs (prefix `e6q`) и SmartCaptcha client_keys (prefix `ysc1_`)
+# — public references, не secrets. Generic-api-key rule matched them on
+# entropy (false positive). Real secrets (server keys ysc2_, DKIM private
+# keys, BETTER_AUTH_SECRET, AWS keys) НЕ allowlisted — gitleaks blocks их
+# normally.
+#
+# Per Yandex docs:
+# - Lockbox secret_id: visible в console UI, used as TF reference — OK к commit
+# - SmartCaptcha client_key: embedded в frontend bundle by design — OK к commit
+# - SmartCaptcha server_key (prefix ysc2_): NEVER commit, Lockbox only
+# - DKIM private key: NEVER commit, Lockbox only
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Yandex Lockbox secret IDs — public references, not secret values"
+regexes = [
+  # YC IDs format: lowercase alphanum, prefix-driven (e6q* = Lockbox, b1g* = folder/cloud, abj* = KMS, aje* = SA)
+  '''e6q[a-z0-9]{17}''',
+]
+
+[[allowlists]]
+description = "Yandex SmartCaptcha client_key — public по design (frontend bundle)"
+regexes = [
+  '''ysc1_[A-Za-z0-9]{44,52}''',
+]

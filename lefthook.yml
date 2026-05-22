@@ -110,6 +110,16 @@ pre-push:
       # ДО async CI запуска.
       run: pnpm doctor
 
+    - name: yc-preflight
+      # Verify yc CLI active profile + cloud + folder matches sepshn-new.
+      # Canon после 2026-05-22 STANKOFF incident: создал SmartCaptcha в
+      # cloud b1gg0266sk64qsps35f5 (STANKOFF) вместо b1gisf466novulsg0a0n
+      # (SEPSHN) потому что default profile был `portal`. ~0.1s. Если
+      # planned push содержит infra/ changes, mismatch profile → CI
+      # tofu apply сделает ресурсы в чужом cloud (но это уже после push).
+      # Pre-push здесь — local-environment safety для манульных yc cmd.
+      run: bash scripts/yc-preflight.sh
+
     - name: ratchet
       # Ratchet gate — quality only goes UP. Counts depcruise/knip/audit/
       # typecheck/biome-errors/weak-assertions/multi-line-biome-ignore vs

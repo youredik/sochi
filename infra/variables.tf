@@ -88,3 +88,21 @@ variable "smartcaptcha_lockbox_version_id" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# Postbox Phase 2 — declared заранее чтобы `mv postbox.tf.skeleton postbox.tf`
+# не упал с «Reference to undeclared variable». Bootstrap: см. bootstrap.md
+# шаги 2.1-2.4 (DKIM keypair + Lockbox + tfvars).
+# ---------------------------------------------------------------------------
+
+variable "lockbox_postbox_dkim_secret_id" {
+  description = "Lockbox secret ID containing POSTBOX_DKIM_PRIVATE_KEY (RSA 2048 PEM). Bootstrap one-time via openssl + yc lockbox secret create — см. bootstrap.md шаг 2.2."
+  type        = string
+  default     = ""
+}
+
+variable "postbox_dkim_public_key" {
+  description = "Public DKIM key (base64, no PEM headers) для DNS TXT record. Generated from postbox_dkim private key — см. bootstrap.md шаг 2.1."
+  type        = string
+  default     = ""
+}

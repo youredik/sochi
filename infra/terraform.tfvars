@@ -22,3 +22,7 @@ tf_bot_sa_id           = "ajer6tlq2rcccuuln5vq"
 tf_state_kms_key_id    = "abjrq8h1v9o6tam8ml8n"
 tf_state_bucket        = "sepshn-tfstate-v2"
 bootstrap_claude_sa_id = "ajel5mli0hshm053amt8"
+
+# SmartCaptcha bootstrap (Phase 1 завершён 2026-05-22, см. bootstrap.md шаги 1.2-1.4)
+smartcaptcha_lockbox_secret_id  = "e6qa4in4mep35ubimi6c"  # sepshn-smartcaptcha-server-key в infra folder
+smartcaptcha_lockbox_version_id = "e6qvbn4ajnl1fcff7h9q"  # initial version с SMARTCAPTCHA_SERVER_KEY=ysc2_...

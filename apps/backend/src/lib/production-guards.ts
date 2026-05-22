@@ -78,8 +78,14 @@ export function assertNoDemoInProduction(env: EnvShape, opts: { logger?: GuardLo
  * captcha actually configured. Without this guard a missed env var would
  * silently disable email-enumeration protection on the public surface — the
  * gate falls through к `reason: 'disabled'` и every magic-link request goes
- * ungated. Demo deployments (`DEMO_DEPLOYMENT=true`) are exempt — they're
- * publicly friction-free by design per `[[demo_strategy]]`.
+ * ungated.
+ *
+ * **2026-05-22 DEMO_DEPLOYMENT exemption УБРАН** — synchronous с decouple
+ * canon в `captcha-gate.ts`. Боты не различают demo/prod — captcha должна
+ * быть configured в обоих режимах. Если запускаешь production-mode (APP_MODE
+ * =production), captcha key обязателен независимо от demo flag. Раньше
+ * demo был exempt («friction-free для prospects»), но эмпирически открывал
+ * окно для flood-атак на DemoInbox.
  *
  * Whitespace-only defence: a deploy environment where the secret manager
  * substituted an unset variable as `"   "` (newline / tab from CI YAML
@@ -90,11 +96,10 @@ export function assertProductionCaptchaConfigured(env: EnvShape): void {
 	// Guard is self-contained — sandbox skip (consistent с assertNoDemoInProduction).
 	// Caller can call regardless of APP_MODE; function no-ops outside production.
 	if (env.APP_MODE !== 'production') return
-	if (env.DEMO_DEPLOYMENT) return
 	if (env.SMARTCAPTCHA_SERVER_KEY && env.SMARTCAPTCHA_SERVER_KEY.trim().length > 0) return
 	throw new Error(
-		'Refusing to start in APP_MODE=production: SMARTCAPTCHA_SERVER_KEY is unset/blank and ' +
-			'DEMO_DEPLOYMENT=false. Either configure SmartCaptcha (see env.ts ' +
-			'SMARTCAPTCHA_SERVER_KEY) or flip DEMO_DEPLOYMENT=true для public demo builds.',
+		'Refusing to start in APP_MODE=production: SMARTCAPTCHA_SERVER_KEY is unset/blank. ' +
+			'Captcha is mandatory в production (2026-05-22 canon — decoupled от DEMO_DEPLOYMENT). ' +
+			'See `infra/bootstrap.md` Phase 1 для Lockbox setup.',
 	)
 }

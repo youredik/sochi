@@ -115,7 +115,10 @@ describe('assertProductionCaptchaConfigured', () => {
 		).not.toThrow()
 	})
 
-	test('DEMO=true exempts captcha requirement (per demo_strategy canon)', () => {
+	test('Production + DEMO=true + captcha UNSET → THROWS (2026-05-22 decouple)', () => {
+		// Раньше DEMO_DEPLOYMENT=true exempt'ил captcha requirement. 2026-05-22
+		// decoupled — captcha mandatory в production режиме регардлес demo flag,
+		// потому что боты flood'ят DemoInbox без captcha protection.
 		expect(() =>
 			assertProductionCaptchaConfigured(
 				asEnv({
@@ -124,7 +127,7 @@ describe('assertProductionCaptchaConfigured', () => {
 					SMARTCAPTCHA_SERVER_KEY: undefined,
 				}),
 			),
-		).not.toThrow()
+		).toThrow(/SMARTCAPTCHA_SERVER_KEY is unset\/blank/)
 	})
 
 	test('Production + DEMO=false + captcha SET → pass', () => {
@@ -170,15 +173,15 @@ describe('assertProductionCaptchaConfigured', () => {
 		).not.toThrow()
 	})
 
-	test('error message provides fix hints (both vectors)', () => {
+	test('error message points к bootstrap.md (canon 2026-05-22 — no demo escape)', () => {
 		try {
 			assertProductionCaptchaConfigured(
 				asEnv({ ...PRODUCTION_BASE, SMARTCAPTCHA_SERVER_KEY: undefined }),
 			)
 		} catch (err) {
 			const msg = (err as Error).message
-			expect(msg).toContain('configure SmartCaptcha')
-			expect(msg).toContain('flip DEMO_DEPLOYMENT=true')
+			expect(msg).toContain('Captcha is mandatory в production')
+			expect(msg).toContain('bootstrap.md')
 		}
 	})
 })
@@ -200,14 +203,15 @@ describe('combined guards — full production-mode boot scenarios', () => {
 		expect(() => assertProductionCaptchaConfigured(env)).not.toThrow()
 	})
 
-	test('foot-shot combo (production + demo, no override) → both guards trigger', () => {
+	test('foot-shot combo (production + demo + no captcha) → BOTH guards trigger (2026-05-22 canon)', () => {
 		const env = asEnv({
 			...PRODUCTION_BASE,
 			DEMO_DEPLOYMENT: true,
 			SMARTCAPTCHA_SERVER_KEY: undefined,
 		})
 		expect(() => assertNoDemoInProduction(env)).toThrow()
-		// captcha exempted by DEMO_DEPLOYMENT=true — symmetric с per-guard canon
-		expect(() => assertProductionCaptchaConfigured(env)).not.toThrow()
+		// Раньше captcha exempted DEMO_DEPLOYMENT=true. 2026-05-22 decoupled —
+		// production requires captcha key regardless of demo flag.
+		expect(() => assertProductionCaptchaConfigured(env)).toThrow()
 	})
 })
