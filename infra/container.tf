@@ -67,15 +67,15 @@ resource "yandex_serverless_container" "backend" {
     # для demo deployment — Mock-адаптеры активны по DEMO_DEPLOYMENT=true,
     # YDB connection auto-derived, остальное defaults.
     environment = {
-      APP_MODE                         = "sandbox"
-      NODE_ENV                         = "production"
-      LOG_LEVEL                        = "info"
-      DEMO_DEPLOYMENT                  = "true"
-      HOST                             = "demo.sepshn.ru"
-      PUBLIC_BASE_URL                  = "https://demo.sepshn.ru"
-      BETTER_AUTH_URL                  = "https://demo.sepshn.ru"
-      BETTER_AUTH_TRUSTED_ORIGINS      = "https://demo.sepshn.ru"
-      YDB_CONNECTION_STRING            = yandex_ydb_database_serverless.demo.ydb_full_endpoint
+      APP_MODE                    = "sandbox"
+      NODE_ENV                    = "production"
+      LOG_LEVEL                   = "info"
+      DEMO_DEPLOYMENT             = "true"
+      HOST                        = "demo.sepshn.ru"
+      PUBLIC_BASE_URL             = "https://demo.sepshn.ru"
+      BETTER_AUTH_URL             = "https://demo.sepshn.ru"
+      BETTER_AUTH_TRUSTED_ORIGINS = "https://demo.sepshn.ru"
+      YDB_CONNECTION_STRING       = yandex_ydb_database_serverless.demo.ydb_full_endpoint
       # Use metadata service для IAM token (Q2 2026 canon — no SA key file).
       # SDK polls 169.254.169.254 при container start.
       YDB_METADATA_CREDENTIALS         = "1"

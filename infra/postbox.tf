@@ -97,10 +97,31 @@ data "yandex_lockbox_secret_version" "postbox_dkim" {
 }
 
 locals {
-  postbox_dkim_private_key = [
+  # PEM от `openssl genrsa` включает headers (BEGIN/END PRIVATE KEY) +
+  # multi-line base64 body + newlines. AWS provider for SESv2 требует
+  # pure base64 без headers/whitespace («must be base64-encoded» error).
+  # Empirical Run #49 2026-05-22.
+  postbox_dkim_pem_raw = [
     for e in data.yandex_lockbox_secret_version.postbox_dkim.entries :
     e.text_value if e.key == "POSTBOX_DKIM_PRIVATE_KEY"
   ][0]
+
+  # Strip PEM markers + flatten newlines/whitespace → pure base64.
+  # Handles both PKCS8 (`-----BEGIN PRIVATE KEY-----`) and PKCS1
+  # (`-----BEGIN RSA PRIVATE KEY-----`) форматы.
+  postbox_dkim_private_key = replace(
+    replace(
+      replace(
+        replace(
+          replace(local.postbox_dkim_pem_raw, "-----BEGIN PRIVATE KEY-----", ""),
+          "-----END PRIVATE KEY-----", ""
+        ),
+        "-----BEGIN RSA PRIVATE KEY-----", ""
+      ),
+      "-----END RSA PRIVATE KEY-----", ""
+    ),
+    "\n", ""
+  )
 
   # Selector для DKIM. Postbox требует selector в DNS как
   # `{selector}._domainkey.{domain}`. «postbox» — convention.

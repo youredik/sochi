@@ -25,3 +25,10 @@ regexes = [
 [[allowlists]]
 description = "Yandex SmartCaptcha client_key — public по design (frontend bundle)"
 regexes = ['''ysc1_[A-Za-z0-9]{44,52}''']
+
+[[allowlists]]
+description = "PEM markers в TF code (string literals для strip operations, не actual keys)"
+regexes = [
+	'''-----BEGIN (RSA )?PRIVATE KEY-----''',
+	'''-----END (RSA )?PRIVATE KEY-----''',
+]
