@@ -387,7 +387,7 @@ tasks:
             --image "${REGISTRY}/${IMAGE_NAME}:${SHA}"
             --service-account-id "$YC_RUNTIME_SA_ID"
             --memory 1GB --cores 1 --core-fraction 100
-            --concurrency 4 --execution-timeout 30s --min-instances 2
+            --concurrency 4 --execution-timeout 30s --min-instances 1
             --environment APP_MODE=sandbox
             --environment NODE_ENV=production
             --environment LOG_LEVEL=info
@@ -410,6 +410,7 @@ tasks:
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=BETTER_AUTH_SECRET,environment-variable=BETTER_AUTH_SECRET
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=S3_ACCESS_KEY_ID,environment-variable=S3_ACCESS_KEY_ID
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=S3_SECRET_ACCESS_KEY,environment-variable=S3_SECRET_ACCESS_KEY
+            --secret id=e6qa4in4mep35ubimi6c,version-id=e6qvbn4ajnl1fcff7h9q,key=SMARTCAPTCHA_SERVER_KEY,environment-variable=SMARTCAPTCHA_SERVER_KEY
 
   # ---------------------------------------------------------------------------
   # DEPLOY FRONTEND — build (node:24-slim) + upload (aws-cli pinned)
