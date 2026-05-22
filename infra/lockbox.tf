@@ -46,6 +46,16 @@ resource "yandex_resourcemanager_folder_iam_member" "runtime_lockbox_viewer" {
   member    = "serviceAccount:${yandex_iam_service_account.sochi_backend_runtime.id}"
 }
 
+# Cross-folder access — SmartCaptcha server-key + Postbox DKIM Lockbox secrets
+# created в `infra` folder (shared canon, см. bootstrap.md шаги 1.3 + 2.2).
+# Runtime SA must also read those — иначе container revision deploy fails
+# с lockbox:PERMISSION_DENIED (empirical Run #53 2026-05-22).
+resource "yandex_resourcemanager_folder_iam_member" "runtime_lockbox_viewer_infra" {
+  folder_id = yandex_resourcemanager_folder.infra.id
+  role      = "lockbox.payloadViewer"
+  member    = "serviceAccount:${yandex_iam_service_account.sochi_backend_runtime.id}"
+}
+
 # ---------------------------------------------------------------------------
 # Backend secrets bundle
 # ---------------------------------------------------------------------------
