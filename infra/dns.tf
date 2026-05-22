@@ -30,11 +30,18 @@ resource "yandex_dns_recordset" "y360_mx" {
 
 # Apex TXT — yandex-verification + SPF (single recordset, two values per canon
 # «one SPF per domain» RFC 7208).
+#
+# SPF includes:
+#   - `_spf.yandex.net` — Yandex 360 для домена outbound (hi@sepshn.ru handle)
+#   - `_spf.cloud.yandex.net` — Yandex Cloud Postbox transactional sends
+#     (noreply@sepshn.ru магик-линки, см. postbox.tf — Phase 2 активирован 2026-05-22)
+#
+# `~all` (soft-fail) — мягкий старт. Через 2-4 недели после DKIM/DMARC
+# pass-rate validation → `-all` (hard-fail, RFC-strict). Per
+# `[[project_subdomain_architecture_canon]]` migration plan (Phase 3 DMARC roll-out).
+#
 # YC DNS provider canon: TXT values wrapped в literal RFC `"..."` (escaped quotes
 # в HCL = одинарные backslashes).
-#
-# TODO Postbox phase: добавить `include:_spf.cloud.yandex.net` (Postbox sends).
-# Сейчас только Yandex 360 outbound (hi@sepshn.ru).
 resource "yandex_dns_recordset" "apex_txt" {
   zone_id = yandex_dns_zone.sepshn_ru.id
   name    = "${var.domain}."
@@ -42,7 +49,7 @@ resource "yandex_dns_recordset" "apex_txt" {
   ttl     = 3600
   data = [
     "\"yandex-verification: 9334b7bd1c5cf369\"",
-    "\"v=spf1 include:_spf.yandex.net ~all\"",
+    "\"v=spf1 include:_spf.yandex.net include:_spf.cloud.yandex.net ~all\"",
   ]
 }
 

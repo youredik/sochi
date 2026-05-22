@@ -57,17 +57,30 @@ interface DemoInboxAdapterOptions {
 	readonly now?: () => number
 	/** Override TTL для tests; defaults to `DEFAULT_TTL_MS`. */
 	readonly ttlMs?: number
+	/**
+	 * Optional downstream adapter (e.g. PostboxAdapter) для DUAL-WRITE mode:
+	 * capture внутри DemoInbox (panel UI rendering) + forward к real adapter
+	 * (transmit real email). 2026-05-22 canon: demo + real email одновременно
+	 * (prospect видит link в panel UI + real users получают email).
+	 *
+	 * Без downstream — capture-only (старый pure demo mode).
+	 */
+	readonly downstream?: EmailAdapter
 }
 
 export class DemoInboxAdapter implements EmailAdapter {
 	private readonly perRecipient = new Map<string, CapturedMessageMutable[]>()
 	private readonly now: () => number
 	private readonly ttlMs: number
+	private readonly downstream?: EmailAdapter
 	private nextId = 1
 
 	constructor(opts: DemoInboxAdapterOptions = {}) {
 		this.now = opts.now ?? (() => Date.now())
 		this.ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS
+		if (opts.downstream !== undefined) {
+			this.downstream = opts.downstream
+		}
 	}
 
 	async send(input: SendEmailInput): Promise<SendEmailResult> {
@@ -94,6 +107,16 @@ export class DemoInboxAdapter implements EmailAdapter {
 			bucket.shift()
 		}
 		this.perRecipient.set(key, bucket)
+
+		// Dual-write mode: forward к downstream adapter (e.g. PostboxAdapter)
+		// для real email delivery. DemoInboxPanel UI работает через capture
+		// выше, real recipient получает email через downstream. 2026-05-22 canon.
+		// Если downstream errors → return его result (caller знает что real
+		// delivery failed). Capture в DemoInbox уже сделана — UI всё равно
+		// покажет link.
+		if (this.downstream !== undefined) {
+			return this.downstream.send(input)
+		}
 
 		const id = `demo-inbox-${this.nextId++}`
 		return { kind: 'sent', messageId: id }

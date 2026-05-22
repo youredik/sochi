@@ -253,9 +253,9 @@ export function extractEnvelopeAddress(mailbox: string): string {
  */
 let demoInboxSingleton: DemoInboxAdapter | null = null
 
-function getOrCreateDemoInbox(): DemoInboxAdapter {
+function getOrCreateDemoInbox(downstream?: EmailAdapter): DemoInboxAdapter {
 	if (!demoInboxSingleton) {
-		demoInboxSingleton = new DemoInboxAdapter()
+		demoInboxSingleton = new DemoInboxAdapter(downstream ? { downstream } : {})
 	}
 	return demoInboxSingleton
 }
@@ -465,31 +465,33 @@ interface FactoryLogger {
  * + DKIM/SPF/DMARC records on sender domain (set in infra-фаза, not here).
  */
 export function createEmailAdapter(env: EmailAdapterEnv, log: FactoryLogger): EmailAdapter {
+	// Build Postbox client если creds present — может wrap demo OR standalone.
+	const postbox = buildPostboxIfReady(env, log)
+
 	if (env.DEMO_DEPLOYMENT) {
+		// **DUAL-MODE 2026-05-22 canon**: DemoInbox captures (UI panel) +
+		// Postbox real send (если creds present). Prospect видит link в panel,
+		// real users получают email на свой inbox. Без Postbox creds —
+		// capture-only fallback (старый behavior).
+		const downstream = postbox
 		log.info(
-			{},
-			'Email adapter: DemoInboxAdapter (capture-only — public demo deployment per [[demo_strategy]])',
+			{ dualWrite: downstream !== undefined },
+			downstream !== undefined
+				? 'Email adapter: DemoInbox (capture + UI panel) + Postbox (real send)'
+				: 'Email adapter: DemoInbox (capture-only, no Postbox creds)',
 		)
-		return getOrCreateDemoInbox()
+		return getOrCreateDemoInbox(downstream)
 	}
 	if (env.POSTBOX_ENABLED) {
-		if (!env.POSTBOX_ACCESS_KEY_ID || !env.POSTBOX_SECRET_ACCESS_KEY) {
+		if (postbox === undefined) {
 			log.warn(
 				{ POSTBOX_ENABLED: true },
 				'POSTBOX_ENABLED=true but credentials missing — falling back to log-only StubAdapter',
 			)
 			return new StubAdapter()
 		}
-		const client = new SESv2Client({
-			region: 'ru-central1',
-			endpoint: env.POSTBOX_ENDPOINT,
-			credentials: {
-				accessKeyId: env.POSTBOX_ACCESS_KEY_ID,
-				secretAccessKey: env.POSTBOX_SECRET_ACCESS_KEY,
-			},
-		})
 		log.info({ endpoint: env.POSTBOX_ENDPOINT }, 'Email adapter: Yandex Cloud Postbox')
-		return new PostboxAdapter(client, SendEmailCommand)
+		return postbox
 	}
 
 	if (env.SMTP_HOST && env.SMTP_PORT) {
@@ -502,4 +504,26 @@ export function createEmailAdapter(env: EmailAdapterEnv, log: FactoryLogger): Em
 
 	log.info({}, 'Email adapter: StubAdapter (log-only — no transport configured)')
 	return new StubAdapter()
+}
+
+/**
+ * Build PostboxAdapter если environment fully configured (POSTBOX_ENABLED=true
+ * + access/secret keys). Returns `undefined` если any prereq missing.
+ * Caller decides what к do с undefined (wrap demo, fall к stub, etc.).
+ */
+function buildPostboxIfReady(
+	env: EmailAdapterEnv,
+	_log: FactoryLogger,
+): PostboxAdapter | undefined {
+	if (!env.POSTBOX_ENABLED) return undefined
+	if (!env.POSTBOX_ACCESS_KEY_ID || !env.POSTBOX_SECRET_ACCESS_KEY) return undefined
+	const client = new SESv2Client({
+		region: 'ru-central1',
+		endpoint: env.POSTBOX_ENDPOINT,
+		credentials: {
+			accessKeyId: env.POSTBOX_ACCESS_KEY_ID,
+			secretAccessKey: env.POSTBOX_SECRET_ACCESS_KEY,
+		},
+	})
+	return new PostboxAdapter(client, SendEmailCommand)
 }

@@ -134,6 +134,25 @@ resource "yandex_serverless_container" "backend" {
     }
   }
 
+  # Postbox sender AWS-style creds (2026-05-22 Phase 2 activated).
+  # Reuses `backend` Lockbox bundle — TF auto-derives current version_id
+  # via `yandex_lockbox_secret_version_hashed.backend.id`. CI deploy-backend
+  # cube must mirror these `--secret` flags AND reference matching version
+  # else apply ↔ CI revision races (TF wins eventually after operator
+  # syncs SC secret `YC_LOCKBOX_VERSION_ID`).
+  secrets {
+    id                   = yandex_lockbox_secret.backend.id
+    version_id           = yandex_lockbox_secret_version_hashed.backend.id
+    key                  = "POSTBOX_ACCESS_KEY_ID"
+    environment_variable = "POSTBOX_ACCESS_KEY_ID"
+  }
+  secrets {
+    id                   = yandex_lockbox_secret.backend.id
+    version_id           = yandex_lockbox_secret_version_hashed.backend.id
+    key                  = "POSTBOX_SECRET_ACCESS_KEY"
+    environment_variable = "POSTBOX_SECRET_ACCESS_KEY"
+  }
+
   labels = {
     managed_by  = "opentofu"
     environment = "demo"

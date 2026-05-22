@@ -89,7 +89,7 @@ resource "random_password" "better_auth_secret" {
 # - version_id known at plan time → no chicken-and-egg
 resource "yandex_lockbox_secret_version_hashed" "backend" {
   secret_id   = yandex_lockbox_secret.backend.id
-  description = "v1 — initial bundle: BETTER_AUTH_SECRET + S3 creds"
+  description = "v2 — BETTER_AUTH_SECRET + S3 creds + Postbox AWS-style creds (sender SA)"
 
   # BETTER_AUTH_SECRET — magic-link signing
   key_1        = "BETTER_AUTH_SECRET"
@@ -101,4 +101,15 @@ resource "yandex_lockbox_secret_version_hashed" "backend" {
 
   key_3        = "S3_SECRET_ACCESS_KEY"
   text_value_3 = yandex_iam_service_account_static_access_key.backend_s3.secret_key
+
+  # Postbox sender AWS-style creds (runtime SA → @aws-sdk/client-sesv2).
+  # Reuses sochi_backend_runtime SA с дополнительной postbox.sender role +
+  # отдельный static access key (least-privilege per stankoff canon — sender
+  # key independent от S3 key, separate rotation lifecycle).
+  # 2026-05-22 Phase 2 Postbox active.
+  key_4        = "POSTBOX_ACCESS_KEY_ID"
+  text_value_4 = yandex_iam_service_account_static_access_key.runtime_postbox_key.access_key
+
+  key_5        = "POSTBOX_SECRET_ACCESS_KEY"
+  text_value_5 = yandex_iam_service_account_static_access_key.runtime_postbox_key.secret_key
 }
