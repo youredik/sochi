@@ -3,7 +3,6 @@ import { type FormEvent, useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { DEFAULT_WELCOME_ORG_NAME } from '@/features/auth/lib/welcome-defaults'
 import { useActiveOrg } from '@/features/tenancy/hooks/use-active-org'
 import { authClient, sessionQueryOptions } from '@/lib/auth-client'
 import { useFindByInn } from '../hooks/use-find-by-inn.ts'
@@ -58,21 +57,23 @@ export function IdentifyStep() {
 	}
 
 	/**
-	 * Confirm DaData party → step 2. Side-effect: if the current org name is
-	 * still the welcome-form default placeholder (`Гостиница Ромашка`), rename
-	 * it к `party.name` (e.g. `ООО «Сочи-Парк Отель»`). The default value
-	 * usually means «user accepted the placeholder as their value», a classic
-	 * placeholder-as-default UX trap — without this auto-fix the sidebar
-	 * forever shows «Гостиница Ромашка» while the property header inside
-	 * Шахматка shows the real legal name. Slug stays untouched (URL
-	 * stability > display cleanliness in the middle of a wizard).
+	 * Confirm DaData party → step 2. Side-effect: sync org.name → party.name
+	 * whenever they differ. Earlier (2026-05-14) we gated rename behind
+	 * «if activeOrg.name === DEFAULT_WELCOME_ORG_NAME» — это пропускало
+	 * случай когда user в /welcome ввёл custom value (например ИНН вместо
+	 * placeholder), и потом sidebar показывал «2310123920» при property
+	 * header «ПАО СБЕРБАНК» — diverged identity. 2026-05-22 canon: DaData
+	 * lookup ВСЕГДА выигрывает (single source of truth для legal entity
+	 * name). User может позже rename через Профиль гостиницы если хочет
+	 * brand label вместо legal name. Slug stays untouched (URL stability
+	 * > display cleanliness mid-wizard).
 	 *
 	 * Fail-soft: a BA update error MUST NOT block the wizard. The user can
 	 * always rename via Профиль гостиницы; aborting the step on rename
 	 * failure trades a cosmetic mismatch для a hard onboarding stall.
 	 */
 	async function handleConfirm() {
-		if (party && activeOrg && activeOrg.name === DEFAULT_WELCOME_ORG_NAME) {
+		if (party && activeOrg && activeOrg.name !== party.name) {
 			try {
 				await authClient.organization.update({ data: { name: party.name } })
 				await queryClient.invalidateQueries({ queryKey: ['auth', 'organizations'] })

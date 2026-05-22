@@ -46,14 +46,22 @@ variable "container_provisioned" {
 }
 
 resource "yandex_serverless_container" "backend" {
-  folder_id          = yandex_resourcemanager_folder.demo.id
-  name               = "sochi-backend-demo"
-  description        = "Demo backend (Node 24 Alpine + Hono): demo.sepshn.ru/api/*"
-  memory             = var.container_memory_mb
-  cores              = 1
-  core_fraction      = 100
-  concurrency        = var.container_concurrency
-  execution_timeout  = "30s"
+  folder_id     = yandex_resourcemanager_folder.demo.id
+  name          = "sochi-backend-demo"
+  description   = "Demo backend (Node 24 Alpine + Hono): demo.sepshn.ru/api/*"
+  memory        = var.container_memory_mb
+  cores         = 1
+  core_fraction = 100
+  concurrency   = var.container_concurrency
+  # Long-lived (3600s) — SSE real-time streams `/api/v1/properties/.../events
+  # ?stream=bookings` нужно continuous connection минутами/часами для
+  # operator console. Default 30s killed SSE handshake на 30 sec → 502 Bad
+  # Gateway visible в operator UI (см. issue 2026-05-22 «Связь с сервером
+  # прервана»). Per YC docs «timeout over 10 min available для long-lived
+  # containers» — 3600s = 1 hour max. SSE client auto-reconnects via
+  # browser EventSource + server `retry: 5000` directive after each
+  # connection cycle (`use-booking-events-stream.ts` G10 canon).
+  execution_timeout  = "3600s"
   service_account_id = yandex_iam_service_account.sochi_backend_runtime.id
 
   provision_policy {

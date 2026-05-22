@@ -158,14 +158,18 @@ export function useBookingEventsStream(opts: UseBookingEventsStreamOptions): voi
 
 		// Transport error — browser will auto-reconnect via `retry:` directive.
 		// Surface toast on FIRST error; clears когда `ready` fires after reconnect.
+		// Copy canon 2026-05-22: explain WHAT remains working (page loaded,
+		// changes you make commit) — only realtime updates from others pause.
+		// Generic «Связь прервана» тревожит как будто всё сломалось.
 		source.addEventListener('error', () => {
 			if (source.readyState === EventSource.CLOSED) {
-				toast.error('Связь с сервером прервана', {
+				toast.warning('Обновления в реальном времени временно недоступны', {
 					id: 'sse-connection',
-					description: 'Попробуйте обновить страницу.',
+					description:
+						'Ваши действия сохраняются. Изменения от других пользователей появятся после обновления страницы.',
 				})
 			} else {
-				toast.warning('Восстанавливаем связь с сервером…', {
+				toast.info('Восстанавливаем real-time обновления…', {
 					id: 'sse-connection',
 				})
 			}

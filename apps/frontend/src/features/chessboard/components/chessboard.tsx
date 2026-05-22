@@ -17,7 +17,6 @@ import { useGridData } from '../hooks/use-grid-data'
 import {
 	channelIndicator,
 	formatTourismTaxRub,
-	maskGuestNameRu,
 	paletteFor,
 	registrationBadgeFor,
 } from '../lib/booking-palette'
@@ -635,7 +634,12 @@ export function Chessboard() {
 												}`}
 												role="gridcell"
 												aria-colindex={ariaColIdx}
-												aria-label={`Свободно, ${rt.name}, ${d}. Enter — создать бронь.`}
+												aria-label={`Свободно${colIdx === todayIdx ? ' (сегодня)' : ''}, ${rt.name}, ${d}. Enter — создать бронь.`}
+												title={
+													colIdx === todayIdx
+														? `Сегодня · ${rt.name} · ${d}. Кликните, чтобы создать бронь.`
+														: `Создать бронь · ${rt.name} · ${d}`
+												}
 												data-cell-room-type-id={rt.id}
 												data-cell-date={d}
 												data-row-idx={rowIdx}

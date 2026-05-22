@@ -4,7 +4,12 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { registerInstrumentations } from '@opentelemetry/instrumentation'
 import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch'
 import { resourceFromAttributes } from '@opentelemetry/resources'
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import {
+	AlwaysOnSampler,
+	BatchSpanProcessor,
+	ParentBasedSampler,
+	TraceIdRatioBasedSampler,
+} from '@opentelemetry/sdk-trace-base'
 import { WebTracerProvider } from '@opentelemetry/sdk-trace-web'
 import {
 	ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
@@ -46,7 +51,20 @@ export function setupOtel(): void {
 	if (registered) return
 	registered = true
 
+	// Sampler canon 2026 (OneUptime + OTel SDK best practice):
+	//   ParentBased(TraceIdRatio(0.1)) — 10% root spans, child спаны
+	//   наследуют решение родителя. Snowflake / Datadog production canon.
+	// Без sampling каждое UI взаимодействие → 1+ trace export → /api/otel/v1/
+	// traces flood (наблюдалось 2026-05-22: 10+ POST/page-load на demo,
+	// bandwidth/log noise). 100% sampling = dev-only.
+	// Development MODE keeps 100% для full local visibility.
+	const isProd = import.meta.env.MODE === 'production'
+	const sampler = isProd
+		? new ParentBasedSampler({ root: new TraceIdRatioBasedSampler(0.1) })
+		: new ParentBasedSampler({ root: new AlwaysOnSampler() })
+
 	const provider = new WebTracerProvider({
+		sampler,
 		resource: resourceFromAttributes({
 			[ATTR_SERVICE_NAME]: SERVICE_NAME,
 			[ATTR_SERVICE_VERSION]: SERVICE_VERSION,

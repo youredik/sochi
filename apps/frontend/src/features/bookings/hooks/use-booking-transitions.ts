@@ -473,9 +473,16 @@ export function useUnassignedBookings(propertyId: string | null) {
 			return body.data.filter((b) => !b.assignedRoomId)
 		},
 		enabled: Boolean(propertyId),
-		refetchInterval: 5_000,
+		// 2026-05-22: SSE (`use-booking-events-stream.ts`) — primary real-time
+		// channel. Polling сохраняем как defensive fallback для случаев SSE
+		// disconnect / non-realtime panels. 30s достаточно для unassigned-panel
+		// freshness (operator workflow не блокируется задержкой 30s в counter).
+		// Default 5s полил backend 12×/min × ~10 operators в production → 7200
+		// extra requests/hour для cosmetic counter, при том что SSE invalidates
+		// same query на real booking events instantly.
+		refetchInterval: 30_000,
 		refetchIntervalInBackground: false,
-		staleTime: 2_000,
+		staleTime: 10_000,
 		// G11 v3 (2026-05-18) — PII present (guestSnapshot full). NEVER persist
 		// к IndexedDB per 152-ФЗ data-minimization + TanStack TkDodo canon.
 		// In-memory only; refetched fresh after page reload.

@@ -84,7 +84,7 @@ afterEach(() => {
 	cleanup()
 })
 
-describe('IdentifyStep — placeholder-as-default auto-rename', () => {
+describe('IdentifyStep — DaData party wins org rename canon (2026-05-22)', () => {
 	it('[A1] confirm с DaData party + default-placeholder orgName → org.update({name: party.name}) + step→inventory', async () => {
 		seedActiveOrgName(DEFAULT_WELCOME_ORG_NAME)
 		useWizardStore.setState({ party: PARTY, manualOverride: false })
@@ -107,8 +107,36 @@ describe('IdentifyStep — placeholder-as-default auto-rename', () => {
 		})
 	})
 
-	it('[A2] confirm с DaData party + CUSTOM orgName → update NOT called; step still advances', async () => {
+	it('[A2] confirm с DaData party + CUSTOM orgName differing from party → ALSO update (DaData wins)', async () => {
+		// Canon change 2026-05-22: prior gating «only rename if name === placeholder»
+		// пропускало случай когда user в /welcome ввёл custom value (e.g. ИНН вместо
+		// org name) → sidebar показывал «2310123920» при property header «ПАО
+		// СБЕРБАНК». New canon: DaData party.name всегда выигрывает (single source
+		// of truth для legal entity name).
 		seedActiveOrgName('МойОтель Pro')
+		useWizardStore.setState({ party: PARTY, manualOverride: false })
+
+		renderWithQuery(<IdentifyStep />)
+		await waitFor(() => {
+			expect(screen.queryByText('ООО «Сочи-Парк Отель»')).not.toBe(null)
+		})
+
+		await userEvent.setup().click(screen.getByRole('button', { name: /Подтвердить/ }))
+
+		await waitFor(() => {
+			expect(organizationUpdateMock).toHaveBeenCalledTimes(1)
+		})
+		expect(organizationUpdateMock.mock.calls[0]).toEqual([
+			{ data: { name: 'ООО «Сочи-Парк Отель»' } },
+		])
+		await waitFor(() => {
+			expect(useWizardStore.getState().step).toBe('inventory')
+		})
+	})
+
+	it('[A2b] confirm с orgName ALREADY equal к party.name → update NOT called (no-op)', async () => {
+		// Idempotency check — if names already match, skip the BA call entirely.
+		seedActiveOrgName('ООО «Сочи-Парк Отель»')
 		useWizardStore.setState({ party: PARTY, manualOverride: false })
 
 		renderWithQuery(<IdentifyStep />)

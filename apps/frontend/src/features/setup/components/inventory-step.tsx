@@ -262,6 +262,18 @@ export function InventoryStep() {
 					{bulk.isPending ? 'Создаём…' : `Готово → /o/${orgSlug}/grid`}
 				</Button>
 			</div>
+
+			{/*
+			 * «You can change this later» canon hint (Stripe / Linear / Mews
+			 * onboarding pattern). Снижает страх «выбрать неправильно сейчас»
+			 * для prospect'a — даёт сигнал что wizard это quick-start, не
+			 * финальная конфигурация. Все advanced features (категории, гибкие
+			 * тарифы, сезонные цены, каналы дистрибуции, турналог) живут в
+			 * обычных разделах после /grid landing.
+			 */}
+			<p className="text-xs text-muted-foreground">
+				Категории номеров, тарифы и каналы продаж добавите позже — в настройках гостиницы.
+			</p>
 		</form>
 	)
 }
