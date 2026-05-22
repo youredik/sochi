@@ -161,11 +161,11 @@ resource "yandex_dns_recordset" "postbox_dkim_txt" {
   type    = "TXT"
   ttl     = 3600
   data = [
-    # Public DKIM key derived from private (RSA standard p= attribute).
-    # Format: `v=DKIM1; k=rsa; p=<base64-public-key>` — Postbox auto-derives
-    # public from private. Manually computed in bootstrap.md шаг 3 OR auto
-    # via tls_private_key resource (future improvement).
-    "\"v=DKIM1; k=rsa; p=${var.postbox_dkim_public_key}\"",
+    # Format precisely matches Yandex official example (yandex-cloud-examples/
+    # yc-postbox-tf) — `h=sha256` required и no spaces between fields.
+    # Empirical 2026-05-22: пропуск `h=sha256` + spaces → Postbox identity
+    # DKIM check fails → SendEmail returns HTTP 404 NotFoundException.
+    "\"v=DKIM1;h=sha256;k=rsa;p=${var.postbox_dkim_public_key}\"",
   ]
 
   depends_on = [aws_sesv2_email_identity.sepshn]
