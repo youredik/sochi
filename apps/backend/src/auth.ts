@@ -186,6 +186,11 @@ export const auth = betterAuth({
 					subject,
 					html,
 					text,
+					// Reply-To канон 2026: from = noreply@ (отскок) →
+					// `Reply-To: hi@sepshn.ru` направляет ответы recipient'а
+					// к живому inbox. EMAIL_REPLY_TO env (optional, fallback к
+					// noreply — bounce поведение прежнее).
+					...(env.EMAIL_REPLY_TO_ADDRESS ? { replyTo: env.EMAIL_REPLY_TO_ADDRESS } : {}),
 				})
 				if (result.kind === 'sent') {
 					logger.info({ messageId: result.messageId }, 'Magic-link email dispatched')

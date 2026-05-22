@@ -1,5 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, Outlet, redirect, useParams, useRouter } from '@tanstack/react-router'
+import {
+	createFileRoute,
+	Outlet,
+	redirect,
+	useLocation,
+	useParams,
+	useRouter,
+} from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { AdminSidebar } from '../components/app-shell/admin-sidebar.tsx'
 import { InstallPrompt } from '../components/install-prompt.tsx'
@@ -7,6 +14,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/
 import { orgListQueryOptions } from '../features/tenancy/hooks/use-active-org.ts'
 import { authClient, sessionQueryOptions } from '../lib/auth-client.ts'
 import { subscribeAuthBroadcasts } from '../lib/broadcast-auth.ts'
+import { isFullscreenWizardRoute } from '../lib/is-fullscreen-wizard-route.ts'
 
 /**
  * Authenticated shell. Pathless layout (`_app.tsx`) — does NOT consume a
@@ -79,7 +87,13 @@ function AppLayout() {
 	const queryClient = useQueryClient()
 	const router = useRouter()
 	const params = useParams({ strict: false })
-	const orgSlug = params.orgSlug as string | undefined
+	const location = useLocation()
+	const orgSlug = params.orgSlug
+	// `/setup` subtree — onboarding wizard. Render fullscreen без sidebar/
+	// AdminSidebar: prospect ещё не настроил property, и навигация (Шахматка/
+	// Гости/Дебиторка) уводит на пустые dashboards. Onboarding focus canon
+	// 2026-05-22. Segment-aware match — см. `is-fullscreen-wizard-route.ts`.
+	const isFullscreenWizard = isFullscreenWizardRoute(location.pathname)
 
 	useEffect(
 		() =>
@@ -114,6 +128,15 @@ function AppLayout() {
 			}),
 		[queryClient, router],
 	)
+
+	if (isFullscreenWizard) {
+		return (
+			<>
+				<Outlet />
+				<InstallPrompt />
+			</>
+		)
+	}
 
 	return (
 		<SidebarProvider defaultOpen>

@@ -45,6 +45,22 @@ export interface SendEmailInput {
 	html: string
 	text: string
 	attachments?: ReadonlyArray<EmailAttachment>
+	/**
+	 * Reply-To header (RFC 5322). Когда recipient жмёт «Reply», письмо
+	 * направится к этому адресу вместо `from`. Используется для transactional
+	 * emails где `from = noreply@…` (отскок) — Reply-To указывает на живой
+	 * `hi@…` inbox. 2026 canon: всегда указывать Reply-To если from = noreply.
+	 */
+	replyTo?: string
+	/**
+	 * List-Unsubscribe header (RFC 8058 + Gmail/Yahoo 2024+ canon).
+	 * Format: comma-separated mailto/https URIs in angle brackets, e.g.
+	 *   `<mailto:unsubscribe@sepshn.ru?subject=unsub>, <https://demo.sepshn.ru/unsubscribe?token=...>`
+	 * Plus `List-Unsubscribe-Post: List-Unsubscribe=One-Click` для RFC 8058
+	 * one-click unsubscribe (set by adapter automatically когда listUnsubscribe
+	 * present). For transactional не строго обязательно но defensively включаем.
+	 */
+	listUnsubscribe?: string
 }
 
 export type SendEmailResult =

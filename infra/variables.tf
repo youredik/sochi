@@ -106,3 +106,29 @@ variable "postbox_dkim_public_key" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# DaData (onboarding find-by-inn) — Phase 2.5 2026-05-22
+# ---------------------------------------------------------------------------
+# Per `[[reference_dadata_credentials]]` API key хранится в gitignored
+# local .env. SmartCaptcha-style bootstrap (mirror canon): secret создаётся
+# вне TF через `yc lockbox secret create`, TF принимает IDs через input vars.
+# Это гарантирует что value никогда не trip через tofu state.
+#
+# Без этих IDs backend factory `createDaDataAdapter` deteрминированно
+# создаёт mock-импл (см. apps/backend/src/domains/identity/dadata/factory.ts) —
+# демо-онбординг работает только для 4 фиктивных ИНН с префиксом `2320`.
+# При заполнении IDs backend переключается на live `suggestions.dadata.ru`
+# API (free tier 10k req/day).
+
+variable "dadata_lockbox_secret_id" {
+  description = "Lockbox secret ID containing DADATA_API_KEY. Bootstrap one-time via `yc lockbox secret create --name sepshn-dadata-api-key --folder-id <infra> --payload '[{\"key\":\"DADATA_API_KEY\",\"text_value\":\"<key>\"}]'`. Empty → backend uses mock-dadata (4 canonical Сочи ИНН only)."
+  type        = string
+  default     = ""
+}
+
+variable "dadata_lockbox_version_id" {
+  description = "Lockbox version ID для DADATA_API_KEY entry. Update при rotation."
+  type        = string
+  default     = ""
+}

@@ -118,15 +118,29 @@ interface SesAttachment {
 	ContentTransferEncoding: 'BASE64'
 }
 
+interface SesMessageHeader {
+	Name: string
+	Value: string
+}
+
 interface SendEmailCommandConstructor {
 	new (input: {
 		FromEmailAddress: string
 		Destination: { ToAddresses: string[] }
+		/** RFC 5322 Reply-To. Recipients clicking «Reply» направляются сюда. */
+		ReplyToAddresses?: string[]
 		Content: {
 			Simple: {
 				Subject: { Data: string }
 				Body: { Html: { Data: string }; Text: { Data: string } }
 				Attachments?: SesAttachment[]
+				/**
+				 * Custom headers (AWS SES v2 2024+ canon). Used для:
+				 *   - `List-Unsubscribe` (RFC 8058 one-click)
+				 *   - `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+				 *   - other RFC 5322 headers
+				 */
+				Headers?: SesMessageHeader[]
 			}
 		}
 	}): unknown
@@ -166,6 +180,7 @@ export class PostboxAdapter implements EmailAdapter {
 				Subject: { Data: string }
 				Body: { Html: { Data: string }; Text: { Data: string } }
 				Attachments?: SesAttachment[]
+				Headers?: SesMessageHeader[]
 			} = {
 				Subject: { Data: input.subject },
 				Body: { Html: { Data: input.html }, Text: { Data: input.text } },
@@ -173,9 +188,22 @@ export class PostboxAdapter implements EmailAdapter {
 			if (sesAttachments && sesAttachments.length > 0) {
 				simple.Attachments = sesAttachments
 			}
+			// Custom RFC 5322 headers (List-Unsubscribe + RFC 8058 one-click).
+			// SES v2 Simple.Headers — array of {Name, Value}. Postbox passthrough
+			// per AWS SES v2 compat docs (verified 2026-05-22).
+			const headers: SesMessageHeader[] = []
+			if (input.listUnsubscribe) {
+				headers.push({ Name: 'List-Unsubscribe', Value: input.listUnsubscribe })
+				// RFC 8058 — declares one-click POST support. Gmail/Yahoo 2024+
+				// требуют этот pair с List-Unsubscribe для bulk senders.
+				headers.push({ Name: 'List-Unsubscribe-Post', Value: 'List-Unsubscribe=One-Click' })
+			}
+			if (headers.length > 0) simple.Headers = headers
+
 			const command = new this.SendEmailCommand({
 				FromEmailAddress: input.from,
 				Destination: { ToAddresses: [input.to] },
+				...(input.replyTo ? { ReplyToAddresses: [input.replyTo] } : {}),
 				Content: { Simple: simple },
 			})
 			const response = await this.client.send(command)

@@ -30,3 +30,11 @@ smartcaptcha_lockbox_version_id = "e6qvbn4ajnl1fcff7h9q" # initial version с SM
 # Postbox DKIM bootstrap (Phase 2 завершён 2026-05-22, см. bootstrap.md шаги 2.1-2.2)
 lockbox_postbox_dkim_secret_id = "e6q473a65ocn37tkcovg" # sepshn-postbox-dkim в infra folder
 postbox_dkim_public_key        = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqmdBBaBHEe6at3617TxeVG/O1BYumtSbArUi7wCkvES/qFC8oKBYzh3HMp/vs3vmCDMqaKGHAWdemCQcMoYk1b/f/t+Gyq4svV6cyFsFpW2YD8EWEido/6yx1cb42lNkviLfOcR4G1OCnDQChkFE1RX0zBaUoJrTnegi9vlMzxtYctp8zvkjBOezyN9CTyeBvxjTy+0yC8BM/8uK+8jMK2hNl6qPTHp+DHsVkb8mF8NwUVzWGtT0oEdnXXCyclkJTF46Z1HI4XBWHwtcmBMNMoRm16sapxZTJ/bhCo9VuiaYwd00xYeFo62jLdWwllSdfn1aR5JKHFglOUQ4VTRi9QIDAQAB"
+
+# DaData live API key bootstrap (Phase 2.5 завершён 2026-05-22).
+# Bootstrap: `yc lockbox secret create --name sepshn-dadata-api-key --folder-id
+# b1gp4bo808jr6qvrnltu --payload '[{"key":"DADATA_API_KEY","text_value":"<key>"}]'`.
+# Без этих IDs backend factory создаёт mock-dadata (только 4 фиктивных ИНН
+# с префиксом `2320` lookupable). С IDs — live `suggestions.dadata.ru`.
+dadata_lockbox_secret_id  = "e6q3ug4k0m9eobgstvv2" # sepshn-dadata-api-key в infra folder
+dadata_lockbox_version_id = "e6q96288msve5pnu3rvo" # initial version с DADATA_API_KEY

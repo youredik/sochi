@@ -97,6 +97,10 @@ resource "yandex_serverless_container" "backend" {
       # sends real email. From address must match Postbox identity (sepshn.ru).
       EMAIL_FROM_ADDRESS = "noreply@sepshn.ru"
       EMAIL_FROM_NAME    = "Сэпшн"
+      # Reply-To: recipient'ы жмущие «Reply» направляются к живому Yandex 360
+      # inbox `hi@sepshn.ru` (manual setup в admin.yandex.ru — см. bootstrap.md
+      # шаг 2.3). До настройки inbox — отвечать будут bounce'ить, no harm.
+      EMAIL_REPLY_TO_ADDRESS = "hi@sepshn.ru"
     }
   }
 
@@ -136,6 +140,20 @@ resource "yandex_serverless_container" "backend" {
       version_id           = var.smartcaptcha_lockbox_version_id
       key                  = "SMARTCAPTCHA_SERVER_KEY"
       environment_variable = "SMARTCAPTCHA_SERVER_KEY"
+    }
+  }
+
+  # DaData API key — bootstrap'нут в отдельный Lockbox secret вне TF state
+  # (mirror SmartCaptcha pattern — никогда не trip через tofu state).
+  # Default empty vars → block skipped → backend creates mock-dadata
+  # (only 4 canonical Сочи ИНН lookupable). Live API enables full onboarding.
+  dynamic "secrets" {
+    for_each = var.dadata_lockbox_secret_id != "" ? [1] : []
+    content {
+      id                   = var.dadata_lockbox_secret_id
+      version_id           = var.dadata_lockbox_version_id
+      key                  = "DADATA_API_KEY"
+      environment_variable = "DADATA_API_KEY"
     }
   }
 

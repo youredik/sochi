@@ -132,6 +132,13 @@ export const envSchema = z.object({
 	SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1125),
 	EMAIL_FROM_ADDRESS: z.email(),
 	EMAIL_FROM_NAME: z.string().default('HoReCa'),
+	/**
+	 * Reply-To address. Когда recipient жмёт «Reply» в transactional emails
+	 * (sent с `noreply@…`), письмо направится к этому адресу вместо bounce.
+	 * Canon 2026: `hi@sepshn.ru` (живой Yandex 360 inbox для домена). Если
+	 * не set — Reply-To header опускается (recipient ответ bounce'нет).
+	 */
+	EMAIL_REPLY_TO_ADDRESS: z.email().optional(),
 
 	// Yandex SmartCaptcha server key (`ysc2_...`) for POST /validate.
 	// Optional: when unset, captcha enforcement is disabled (dev / CI).
