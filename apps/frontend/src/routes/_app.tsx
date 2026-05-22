@@ -92,7 +92,8 @@ function AppLayout() {
 	// `/setup` subtree — onboarding wizard. Render fullscreen без sidebar/
 	// AdminSidebar: prospect ещё не настроил property, и навигация (Шахматка/
 	// Гости/Дебиторка) уводит на пустые dashboards. Onboarding focus canon
-	// 2026-05-22. Segment-aware match — см. `is-fullscreen-wizard-route.ts`.
+	// 2026-05-22. Segment-aware match — см. `is-fullscreen-wizard-route.ts`
+	// (purely pathname-based — does not depend on TanStack Router runtime).
 	const isFullscreenWizard = isFullscreenWizardRoute(location.pathname)
 
 	useEffect(
