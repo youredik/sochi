@@ -380,6 +380,15 @@ tasks:
           - 'echo "YC_TOKEN length=${#YC_TOKEN}"'
           - 'test -n "$YC_TOKEN" || { echo "FAIL: IAM_TOKEN empty"; exit 1; }'
           - SHA=$(git rev-parse --short HEAD)
+          # Auto-fetch latest Lockbox version_id — eliminates manual SC secret
+          # sync после каждого TF apply (canon 2026-05-22). TF version_hashed
+          # bundles rotate when contents change (Postbox keys + SmartCaptcha
+          # additions); CI all'ways uses current head.
+          # yc-cli:latest имеет yq utility (https://github.com/mikefarah/yq)
+          # установленный, но не jq. Используем yaml parsing.
+          - YC_LOCKBOX_VERSION_ID=$(yc --token "$YC_TOKEN" lockbox secret get "$YC_LOCKBOX_ID" --format yaml | awk '/^current_version:/{flag=1;next} flag && /^  id:/{print $2; exit}')
+          - 'test -n "$YC_LOCKBOX_VERSION_ID" || { echo "FAIL: could not fetch Lockbox version_id"; exit 1; }'
+          - 'echo "Using Lockbox version_id=$YC_LOCKBOX_VERSION_ID"'
           # --token флаг takes precedence over env/profile — bulletproof auth
           - yc --token "$YC_TOKEN" serverless container revision deploy
             --container-name "$YC_CONTAINER_NAME"
