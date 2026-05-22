@@ -439,7 +439,7 @@ tasks:
             --image "${REGISTRY}/${IMAGE_NAME}:${SHA}"
             --service-account-id "$YC_RUNTIME_SA_ID"
             --memory 1GB --cores 1 --core-fraction 100
-            --concurrency 4 --execution-timeout 30s --min-instances 1
+            --concurrency 4 --execution-timeout 3600s --min-instances 1
             --environment APP_MODE=sandbox
             --environment NODE_ENV=production
             --environment LOG_LEVEL=info
