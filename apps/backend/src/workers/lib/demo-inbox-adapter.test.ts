@@ -24,11 +24,12 @@ import { describe, expect, it } from 'bun:test'
 import {
 	DEFAULT_TTL_MS,
 	DemoInboxAdapter,
+	isReservedTestDomain,
 	MAX_PER_RECIPIENT,
 	MAX_TOTAL_RECIPIENTS,
 	normalizeEmail,
 } from './demo-inbox-adapter.ts'
-import type { SendEmailInput } from './postbox-adapter.ts'
+import type { EmailAdapter, SendEmailInput, SendEmailResult } from './postbox-adapter.ts'
 
 const VERIFY_URL_A =
 	'http://localhost:8787/api/auth/magic-link/verify?token=tok-A&callbackURL=%2Fwelcome'
@@ -208,5 +209,110 @@ describe('DemoInboxAdapter — admin/test surface', () => {
 		expect(adapter.recipientCount()).toBe(1)
 		await adapter.send(emailWithLink('b@x.com', VERIFY_URL_B))
 		expect(adapter.recipientCount()).toBe(2)
+	})
+})
+
+describe('isReservedTestDomain — RFC 2606/6761 detection', () => {
+	it('[R-RFC1] example.com → true', () => {
+		expect(isReservedTestDomain('user@example.com')).toBe(true)
+	})
+
+	it('[R-RFC2] example.org → true', () => {
+		expect(isReservedTestDomain('user@example.org')).toBe(true)
+	})
+
+	it('[R-RFC3] example.net → true', () => {
+		expect(isReservedTestDomain('user@example.net')).toBe(true)
+	})
+
+	it('[R-RFC4] *.test → true', () => {
+		expect(isReservedTestDomain('user@foo.test')).toBe(true)
+		expect(isReservedTestDomain('user@deep.subdomain.test')).toBe(true)
+	})
+
+	it('[R-RFC5] *.invalid → true', () => {
+		expect(isReservedTestDomain('user@foo.invalid')).toBe(true)
+	})
+
+	it('[R-RFC6] *.localhost → true', () => {
+		expect(isReservedTestDomain('user@app.localhost')).toBe(true)
+	})
+
+	it('[R-RFC7] bare `localhost` → true', () => {
+		expect(isReservedTestDomain('user@localhost')).toBe(true)
+	})
+
+	it('[R-RFC8] real .com / .ru / .net → false', () => {
+		expect(isReservedTestDomain('user@gmail.com')).toBe(false)
+		expect(isReservedTestDomain('user@yandex.ru')).toBe(false)
+		expect(isReservedTestDomain('user@sepshn.ru')).toBe(false)
+	})
+
+	it('[R-RFC9] substring trap — `example-llc.com` ≠ reserved', () => {
+		expect(isReservedTestDomain('user@example-llc.com')).toBe(false)
+		expect(isReservedTestDomain('user@notexample.com')).toBe(false)
+		expect(isReservedTestDomain('user@testing.com')).toBe(false)
+	})
+
+	it('[R-RFC10] case-insensitive + trim', () => {
+		expect(isReservedTestDomain('  User@EXAMPLE.COM  ')).toBe(true)
+		expect(isReservedTestDomain('USER@Foo.TEST')).toBe(true)
+	})
+
+	it('[R-RFC11] no @-sign → false (defensive)', () => {
+		expect(isReservedTestDomain('not-an-email')).toBe(false)
+		expect(isReservedTestDomain('')).toBe(false)
+	})
+})
+
+describe('DemoInboxAdapter — downstream forward guard (security 2026-05-22)', () => {
+	function recordingDownstream(): { calls: SendEmailInput[]; adapter: EmailAdapter } {
+		const calls: SendEmailInput[] = []
+		const adapter: EmailAdapter = {
+			async send(input: SendEmailInput): Promise<SendEmailResult> {
+				calls.push(input)
+				return { kind: 'sent', messageId: `ds-${calls.length}` }
+			},
+		}
+		return { calls, adapter }
+	}
+
+	it('[D1] reserved test domain → downstream NOT called (synthetic success)', async () => {
+		const { calls, adapter: downstream } = recordingDownstream()
+		const inbox = new DemoInboxAdapter({ downstream })
+		const result = await inbox.send(emailWithLink('demo-guest-0@example.com', VERIFY_URL_A))
+		expect(calls.length).toBe(0)
+		expect(result.kind).toBe('sent')
+		// Capture в UI всё равно happens
+		expect(inbox.getLatest('demo-guest-0@example.com')?.magicLinkUrl).toBe(VERIFY_URL_A)
+	})
+
+	it('[D2] real domain → downstream IS called + capture also happens', async () => {
+		const { calls, adapter: downstream } = recordingDownstream()
+		const inbox = new DemoInboxAdapter({ downstream })
+		const result = await inbox.send(emailWithLink('user@gmail.com', VERIFY_URL_A))
+		expect(calls.length).toBe(1)
+		expect(calls[0]?.to).toBe('user@gmail.com')
+		expect(result.kind).toBe('sent')
+		// Returned messageId from downstream (real send)
+		if (result.kind === 'sent') expect(result.messageId).toBe('ds-1')
+	})
+
+	it('[D3] *.test TLD → downstream NOT called', async () => {
+		const { calls, adapter: downstream } = recordingDownstream()
+		const inbox = new DemoInboxAdapter({ downstream })
+		await inbox.send(emailWithLink('integration@feature.test', VERIFY_URL_A))
+		expect(calls.length).toBe(0)
+	})
+
+	it('[D4] capture-only mode (no downstream) — reserved or real, same path', async () => {
+		const inbox = new DemoInboxAdapter()
+		const r1 = await inbox.send(emailWithLink('user@example.com', VERIFY_URL_A))
+		const r2 = await inbox.send(emailWithLink('user@gmail.com', VERIFY_URL_B))
+		expect(r1.kind).toBe('sent')
+		expect(r2.kind).toBe('sent')
+		// Both captured in UI
+		expect(inbox.getLatest('user@example.com')?.magicLinkUrl).toBe(VERIFY_URL_A)
+		expect(inbox.getLatest('user@gmail.com')?.magicLinkUrl).toBe(VERIFY_URL_B)
 	})
 })

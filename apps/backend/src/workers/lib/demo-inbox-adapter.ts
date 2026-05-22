@@ -114,7 +114,17 @@ export class DemoInboxAdapter implements EmailAdapter {
 		// Если downstream errors → return его result (caller знает что real
 		// delivery failed). Capture в DemoInbox уже сделана — UI всё равно
 		// покажет link.
-		if (this.downstream !== undefined) {
+		//
+		// **RFC 2606/6761 reserved-domain shield** (security canon 2026-05-22):
+		// demo seed создаёт fake guests с `@example.com` адресами для UI
+		// fixtures. Без этого фильтра каждый container boot forwards 32+ writes
+		// в Postbox → hard bounces → quota burn (наблюдалось 5 deploys × 32
+		// = 160 emails / quota 200 daily free tier). Reserved domains никогда
+		// не разрешимы в real DNS — forwarding gratuitously жжёт reputation +
+		// quota. Skip downstream BUT return synthetic success так чтобы
+		// bookingService NotificationDispatcher не retry'ил. Capture в UI
+		// остаётся для testing visibility.
+		if (this.downstream !== undefined && !isReservedTestDomain(input.to)) {
 			return this.downstream.send(input)
 		}
 
@@ -161,4 +171,43 @@ export class DemoInboxAdapter implements EmailAdapter {
  */
 export function normalizeEmail(email: string): string {
 	return email.trim().toLowerCase()
+}
+
+/**
+ * RFC 2606 (BCP 32) + RFC 6761 reserved-for-testing domain detection.
+ *
+ * These domains are **guaranteed never deliverable** in real DNS by IANA:
+ *   - Second-level: `example.com`, `example.net`, `example.org`
+ *   - TLDs: `.test`, `.example`, `.invalid`, `.localhost`
+ *
+ * Sending к таким адресам:
+ *   1. ВСЕГДА hard-bounce → MTA reputation damage
+ *   2. Жжёт Postbox quota gratuitously (наблюдалось 2026-05-22:
+ *      demo seed × N deploys = 160+ writes / 200 daily free quota)
+ *   3. Может попасть в анти-spam blocklists некоторых receivers
+ *
+ * Used by `DemoInboxAdapter.send` для gate downstream forward — capture
+ * в UI panel остаётся (test visibility), но real send skipped.
+ *
+ * Source: tools.ietf.org/html/rfc2606 + rfc6761.
+ */
+export function isReservedTestDomain(email: string): boolean {
+	const at = email.lastIndexOf('@')
+	if (at === -1) return false
+	const domain = email
+		.slice(at + 1)
+		.trim()
+		.toLowerCase()
+	if (domain === '') return false
+	// Exact second-level matches per RFC 2606 §3.
+	if (domain === 'example.com' || domain === 'example.net' || domain === 'example.org') {
+		return true
+	}
+	// Reserved TLDs per RFC 2606 §2 + RFC 6761 §6.3.
+	// Match как точное domain (e.g. `localhost`) или suffix (e.g. `foo.test`).
+	const reservedTlds = ['test', 'example', 'invalid', 'localhost']
+	for (const tld of reservedTlds) {
+		if (domain === tld || domain.endsWith(`.${tld}`)) return true
+	}
+	return false
 }
