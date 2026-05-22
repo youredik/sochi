@@ -78,10 +78,14 @@ resource "yandex_serverless_container" "backend" {
       YDB_CONNECTION_STRING       = yandex_ydb_database_serverless.demo.ydb_full_endpoint
       # Use metadata service для IAM token (Q2 2026 canon — no SA key file).
       # SDK polls 169.254.169.254 при container start.
-      YDB_METADATA_CREDENTIALS         = "1"
-      PAYMENT_PROVIDER                 = "stub"
-      VISION_PROVIDER                  = "mock"
-      POSTBOX_ENABLED                  = "false"
+      YDB_METADATA_CREDENTIALS = "1"
+      PAYMENT_PROVIDER         = "stub"
+      VISION_PROVIDER          = "mock"
+      # Phase 2 2026-05-22: Postbox active для dual-write (DemoInbox capture +
+      # real email через Postbox). Backend `createEmailAdapter` factory routes
+      # via DEMO_DEPLOYMENT=true → DemoInboxAdapter(downstream=PostboxAdapter).
+      POSTBOX_ENABLED                  = "true"
+      POSTBOX_ENDPOINT                 = "https://postbox.cloud.yandex.net"
       APP_MODE_PERMITTED_MOCK_ADAPTERS = "email.demo-inbox,sms.demo-inbox,payment.stub,vision.mock"
 
       # S3 non-secret: endpoint + region + bucket name (canon — secrets via Lockbox)
@@ -89,9 +93,10 @@ resource "yandex_serverless_container" "backend" {
       S3_REGION   = "ru-central1"
       S3_BUCKET   = yandex_storage_bucket.demo_backend_files.bucket
 
-      # Email — demo использует DemoInboxAdapter (capture-only).
-      EMAIL_FROM_ADDRESS = "noreply@demo.sepshn.ru"
-      EMAIL_FROM_NAME    = "Sochi HoReCa Demo"
+      # Email — Phase 2 dual-write: DemoInboxAdapter captures + PostboxAdapter
+      # sends real email. From address must match Postbox identity (sepshn.ru).
+      EMAIL_FROM_ADDRESS = "noreply@sepshn.ru"
+      EMAIL_FROM_NAME    = "Сэпшн"
     }
   }
 
