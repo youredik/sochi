@@ -18,12 +18,10 @@ useDefault = true
 [[allowlists]]
 description = "Yandex Lockbox secret IDs — public references, not secret values"
 regexes = [
-  # YC IDs format: lowercase alphanum, prefix-driven (e6q* = Lockbox, b1g* = folder/cloud, abj* = KMS, aje* = SA)
-  '''e6q[a-z0-9]{17}''',
+	# YC IDs format: lowercase alphanum, prefix-driven (e6q* = Lockbox, b1g* = folder/cloud, abj* = KMS, aje* = SA)
+	'''e6q[a-z0-9]{17}''',
 ]
 
 [[allowlists]]
 description = "Yandex SmartCaptcha client_key — public по design (frontend bundle)"
-regexes = [
-  '''ysc1_[A-Za-z0-9]{44,52}''',
-]
+regexes = ['''ysc1_[A-Za-z0-9]{44,52}''']
