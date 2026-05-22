@@ -49,6 +49,7 @@ export type {
 // type-annotate against the same identifiers без duplicating the public
 // re-export.
 import type { EmailAdapter, SendEmailInput, SendEmailResult } from './email-adapter.types.ts'
+import { isReservedTestDomain } from './reserved-test-ranges.ts'
 
 /* ----------------------------------------------------------------- StubAdapter */
 
@@ -165,6 +166,18 @@ export class PostboxAdapter implements EmailAdapter {
 	}
 
 	async send(input: SendEmailInput): Promise<SendEmailResult> {
+		// **Outbound-side-effect-discipline canon 2026-05-22** (defense-in-depth):
+		// Symmetric shield с `DemoInboxAdapter` для recipients в RFC 2606/6761
+		// reserved test domains. Если future code path bypasses `DemoInboxAdapter`
+		// wrap и hits Postbox directly (e.g. test isolation, ad-hoc admin tooling),
+		// этот guard prevents quota burn + reputation damage. См. canon
+		// `[[outbound_side_effect_discipline_2026_05_22]]`.
+		if (isReservedTestDomain(input.to)) {
+			return {
+				kind: 'permanent',
+				reason: 'reserved test domain (RFC 2606/6761) — shield blocked Postbox send',
+			}
+		}
 		try {
 			// SES v2 attachments shape: Content.Simple.Attachments[] с base64
 			// RawContent. Per AWS docs (verified 2026-04 — `aws-sdk-js-v3

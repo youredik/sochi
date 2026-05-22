@@ -225,6 +225,52 @@ describe('PostboxAdapter — happy path + anomalies', () => {
 		expect(result.kind).toBe('permanent')
 		if (result.kind === 'permanent') expect(result.reason).toBe('MessageRejectedException')
 	})
+
+	/* === Reserved-domain shield (defense-in-depth canon 2026-05-22) === */
+
+	test('[SHIELD-1] @example.com → permanent reject, NO SES call', async () => {
+		const sendSpy = mock().mockResolvedValue({ MessageId: 'should-not-be-called' })
+		class FakeCommand {
+			input: unknown
+			constructor(input: unknown) {
+				this.input = input
+			}
+		}
+		const adapter = new PostboxAdapter({ send: sendSpy }, FakeCommand as never)
+		const result = await adapter.send({ ...sample, to: 'demo-guest-0@example.com' })
+		expect(result.kind).toBe('permanent')
+		if (result.kind === 'permanent') expect(result.reason).toContain('reserved test domain')
+		expect(sendSpy).not.toHaveBeenCalled()
+	})
+
+	test('[SHIELD-2] @foo.test (reserved TLD) → permanent reject, NO SES call', async () => {
+		const sendSpy = mock().mockResolvedValue({ MessageId: 'unused' })
+		class FakeCommand {
+			input: unknown
+			constructor(input: unknown) {
+				this.input = input
+			}
+		}
+		const adapter = new PostboxAdapter({ send: sendSpy }, FakeCommand as never)
+		const result = await adapter.send({ ...sample, to: 'integration@feature.test' })
+		expect(result.kind).toBe('permanent')
+		expect(sendSpy).not.toHaveBeenCalled()
+	})
+
+	test('[SHIELD-3] real @gmail.com → proceeds к SES normally', async () => {
+		const sendSpy = mock().mockResolvedValue({ MessageId: 'real-msg-id' })
+		class FakeCommand {
+			input: unknown
+			constructor(input: unknown) {
+				this.input = input
+			}
+		}
+		const adapter = new PostboxAdapter({ send: sendSpy }, FakeCommand as never)
+		const result = await adapter.send({ ...sample, to: 'user@gmail.com' })
+		expect(result.kind).toBe('sent')
+		if (result.kind === 'sent') expect(result.messageId).toBe('real-msg-id')
+		expect(sendSpy).toHaveBeenCalledTimes(1)
+	})
 })
 
 /* ============================================================ createEmailAdapter factory */

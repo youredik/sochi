@@ -1,5 +1,6 @@
 import { extractMagicLinkUrl } from '@horeca/shared'
 import type { EmailAdapter, SendEmailInput, SendEmailResult } from './email-adapter.types.ts'
+import { isReservedTestDomain } from './reserved-test-ranges.ts'
 
 /**
  * Demo deployment in-process inbox — captures outgoing emails per recipient
@@ -173,41 +174,9 @@ export function normalizeEmail(email: string): string {
 	return email.trim().toLowerCase()
 }
 
-/**
- * RFC 2606 (BCP 32) + RFC 6761 reserved-for-testing domain detection.
- *
- * These domains are **guaranteed never deliverable** in real DNS by IANA:
- *   - Second-level: `example.com`, `example.net`, `example.org`
- *   - TLDs: `.test`, `.example`, `.invalid`, `.localhost`
- *
- * Sending к таким адресам:
- *   1. ВСЕГДА hard-bounce → MTA reputation damage
- *   2. Жжёт Postbox quota gratuitously (наблюдалось 2026-05-22:
- *      demo seed × N deploys = 160+ writes / 200 daily free quota)
- *   3. Может попасть в анти-spam blocklists некоторых receivers
- *
- * Used by `DemoInboxAdapter.send` для gate downstream forward — capture
- * в UI panel остаётся (test visibility), но real send skipped.
- *
- * Source: tools.ietf.org/html/rfc2606 + rfc6761.
- */
-export function isReservedTestDomain(email: string): boolean {
-	const at = email.lastIndexOf('@')
-	if (at === -1) return false
-	const domain = email
-		.slice(at + 1)
-		.trim()
-		.toLowerCase()
-	if (domain === '') return false
-	// Exact second-level matches per RFC 2606 §3.
-	if (domain === 'example.com' || domain === 'example.net' || domain === 'example.org') {
-		return true
-	}
-	// Reserved TLDs per RFC 2606 §2 + RFC 6761 §6.3.
-	// Match как точное domain (e.g. `localhost`) или suffix (e.g. `foo.test`).
-	const reservedTlds = ['test', 'example', 'invalid', 'localhost']
-	for (const tld of reservedTlds) {
-		if (domain === tld || domain.endsWith(`.${tld}`)) return true
-	}
-	return false
-}
+// `isReservedTestDomain` moved к `./reserved-test-ranges.ts` — shared seam
+// for outbound-side-effect-discipline canon 2026-05-22 (also consumed by
+// `PostboxAdapter` для defense-in-depth + future SMS-live adapter via the
+// sibling `isReservedTestPhone` predicate). Re-export сохраняет backward
+// compat с existing test imports.
+export { isReservedTestDomain } from './reserved-test-ranges.ts'
