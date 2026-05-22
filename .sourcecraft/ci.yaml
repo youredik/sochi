@@ -384,9 +384,11 @@ tasks:
           # sync после каждого TF apply (canon 2026-05-22). TF version_hashed
           # bundles rotate when contents change (Postbox keys + SmartCaptcha
           # additions); CI all'ways uses current head.
-          # yc-cli:latest имеет yq utility (https://github.com/mikefarah/yq)
-          # установленный, но не jq. Используем yaml parsing.
-          - YC_LOCKBOX_VERSION_ID=$(yc --token "$YC_TOKEN" lockbox secret get "$YC_LOCKBOX_ID" --format yaml | awk '/^current_version:/{flag=1;next} flag && /^  id:/{print $2; exit}')
+          # `--id` flag обязателен — positional arg ambiguous if a different
+          # secret has matching name (run #50 empirical: "two 'secret' objects
+          # has been found"). yc-cli:latest does not include jq; используем
+          # yaml output + awk.
+          - YC_LOCKBOX_VERSION_ID=$(yc --token "$YC_TOKEN" lockbox secret get --id "$YC_LOCKBOX_ID" --format yaml | awk '/^current_version:/{flag=1;next} flag && /^  id:/{print $2; exit}')
           - 'test -n "$YC_LOCKBOX_VERSION_ID" || { echo "FAIL: could not fetch Lockbox version_id"; exit 1; }'
           - 'echo "Using Lockbox version_id=$YC_LOCKBOX_VERSION_ID"'
           # --token флаг takes precedence over env/profile — bulletproof auth

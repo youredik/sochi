@@ -21,7 +21,16 @@
 
 set -euo pipefail
 
-: "${SC_PAT:?SC_PAT not set. export SC_PAT=pv1_...}"
+# Auto-load SC_PAT из .env если не set в shell. Canon 2026-05-22 — token
+# persisted в gitignored .env file, future sessions автоматически подхватывают.
+if [[ -z "${SC_PAT:-}" && -f "$(dirname "$0")/../.env" ]]; then
+	# shellcheck disable=SC1090,SC1091
+	set -a
+	source "$(dirname "$0")/../.env"
+	set +a
+fi
+
+: "${SC_PAT:?SC_PAT not set. Put SC_PAT=pv1_... в .env или export shell env. Token из https://sourcecraft.dev/security/tokens}"
 ORG="${SC_ORG:-sepshn}"
 REPO="${SC_REPO:-sepshn}"
 API="https://api.sourcecraft.tech"
