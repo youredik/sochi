@@ -32,6 +32,7 @@ import { createMockEpguTransport } from './domains/epgu/transport/mock-epgu.ts'
 import { createVisionAdapterFromEnv } from './domains/epgu/vision/vision.factory.ts'
 import { createVisionRoutes } from './domains/epgu/vision/vision.routes.ts'
 import { createConsentRevokeRoutes } from './domains/epgu/passport-scan/consent/consent-revoke.routes.ts'
+import { createGuestDocumentRoutes } from './domains/guest/guest-document.routes.ts'
 import { createPassportDataExportRoutes } from './domains/epgu/passport-scan/dsar/passport-data-export.routes.ts'
 import { createPassportScanFactory } from './domains/epgu/passport-scan/passport-scan.factory.ts'
 import { createPassportPhotoStorageFromEnv } from './domains/epgu/passport-scan/storage/passport-photo-storage.factory.ts'
@@ -110,6 +111,7 @@ import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
 import { createSlotReconciliationHandler } from './workers/handlers/slot-reconciliation.ts'
 import { createMigrationRegistrationEnqueuerHandler } from './workers/handlers/migration-registration-enqueuer.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
+import { createOpsMetricsRoutes } from './domains/observability/ops-metrics.routes.ts'
 import { createPassportScanAuditProjectorHandler } from './workers/handlers/passport-scan-audit-projector.ts'
 import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
 import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
@@ -970,6 +972,18 @@ const routes = app
 	.route('/api/v1', createSseRoutes(bookingEventBroadcaster, propertyFactory.service))
 	.route('/api/v1', createActivityRoutes(activityFactory))
 	.route('/api/v1', createGuestRoutes(guestFactory, idempotency))
+	// Sprint C+ Senior P0-1 fix 2026-05-23d: from-scan endpoint that INSERTs
+	// guestDocument после operator confirms entities в UI. Closes dead-code
+	// gap exposed by 5-expert audit — previously RTBF cascade + DSAR list
+	// had no rows. Endpoint receives photoConsentLogId from preceding scan
+	// response and links the new row, so cascade can actually scrub.
+	.route(
+		'/api/v1',
+		createGuestDocumentRoutes({
+			guestRepo: guestFactory.repo,
+			documentRepo: guestFactory.documentRepo,
+		}),
+	)
 	.route(
 		'/api/v1',
 		createMeRoutes((tenantId) => loadTenantMode(sql, tenantId)),
@@ -1022,6 +1036,9 @@ const routes = app
 	)
 	.route('/api/v1', createIdentityRoutes(dadata.adapter))
 	.route('/api/v1', createOnboardingRoutes(onboardingFactory, idempotency))
+	// Sprint C+ Senior P1-6 fix 2026-05-23d: ops-metrics drain endpoint
+	// (Prometheus-style). Token-gated via INTERNAL_OPS_TOKEN.
+	.route('/api', createOpsMetricsRoutes({ internalToken: env.INTERNAL_OPS_TOKEN }))
 	// Demo inbox public route. Always mounted at the public path, but the
 	// handler itself рассматривает `env.DEMO_DEPLOYMENT` — when false, returns
 	// 404 (route literally has no inbox to surface). Belt-and-braces поверх

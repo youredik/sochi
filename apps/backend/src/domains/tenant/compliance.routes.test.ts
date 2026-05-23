@@ -53,6 +53,8 @@ const FAKE_COMPLIANCE: TenantCompliance = {
 	annualRevenueEstimateMicroRub: 5_000_000_000_000n,
 	guestHouseFz127Registered: true,
 	ksrVerifiedAt: '2026-04-27T10:00:00.000Z',
+	legalAddress: null,
+	dpoEmail: null,
 }
 
 interface FakeRepoOpts {

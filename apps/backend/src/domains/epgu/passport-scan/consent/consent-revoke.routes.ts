@@ -148,14 +148,16 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 			}
 
 			// (3+4) Atomic DB cascade: audit nullify + guestDocument scrub +
-			// consent revoke с shared timestamp. ROUND 2 P0-1 fix: objectKeys
-			// collected INSIDE the tx snapshot — race-free vs concurrent scan
-			// writing новый inputObjectKey. Throws → 500 + S3 objects still
+			// consent revoke + scrubLog append-only event с shared timestamp.
+			// objectKeys collected INSIDE tx snapshot — race-free vs concurrent
+			// scan writing новый inputObjectKey. Throws → 500 + S3 objects still
 			// intact (operator can retry, lifecycle 90-day backstop).
+			const operatorUserIdRevoke = c.var.session?.userId ?? c.var.user?.id ?? 'unknown'
 			const result = await cascadeRtbfRevoke({
 				tenantId,
 				consentId,
 				reason: body.reason,
+				operatorUserId: operatorUserIdRevoke,
 			})
 			const objectKeys = result.objectKeysToDelete
 

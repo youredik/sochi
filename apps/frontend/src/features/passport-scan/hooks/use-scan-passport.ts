@@ -6,9 +6,25 @@
  *   - Returns RecognizePassportResponse с per-field confidence + outcome
  *   - Error mapping: 403 RBAC, 400 validation
  */
-import type { IdentityMethod, RecognizePassportResponse } from '@horeca/shared'
+import type { IdentityMethod, RecognizePassportResponse, RklStatusForScan } from '@horeca/shared'
 import { useMutation } from '@tanstack/react-query'
 import { api } from '../../../lib/api.ts'
+
+/**
+ * Sprint C+ Senior P0-1 fix 2026-05-23d: scan response now includes
+ * photoConsentLogId so caller can chain POST /guests/:id/documents/from-scan.
+ */
+export interface ScanPassportResult extends RecognizePassportResponse {
+	readonly rklStatus: RklStatusForScan
+	readonly rklMatchType: 'exact' | 'partial' | null
+	readonly rklRegistryRevision: string | null
+	/**
+	 * photoConsentLog ID created in atomic write. Required для downstream POST
+	 * /guests/:guestId/documents/from-scan (links guestDocument к consent for
+	 * 152-ФЗ ст.20 RTBF cascade).
+	 */
+	readonly photoConsentLogId: string | null
+}
 
 export interface ScanPassportInput {
 	imageBase64: string
@@ -40,7 +56,7 @@ export interface ScanPassportInput {
 
 export function useScanPassport() {
 	return useMutation({
-		mutationFn: async (input: ScanPassportInput): Promise<RecognizePassportResponse> => {
+		mutationFn: async (input: ScanPassportInput): Promise<ScanPassportResult> => {
 			const { idempotencyKey, ...jsonBody } = input
 			const res = await api.api.v1.passport.scan.$post(
 				{ json: jsonBody },
@@ -63,7 +79,7 @@ export function useScanPassport() {
 				if (status === 500) throw new Error('Сервис распознавания временно недоступен')
 				throw new Error(msg)
 			}
-			const body = (await res.json()) as { data: RecognizePassportResponse }
+			const body = (await res.json()) as { data: ScanPassportResult }
 			return body.data
 		},
 	})

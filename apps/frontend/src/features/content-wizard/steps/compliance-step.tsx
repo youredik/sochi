@@ -91,6 +91,10 @@ interface FormValues {
 	taxRegime: TaxRegime | ''
 	annualRevenueRub: string
 	guestHouseFz127Registered: 'yes' | 'no' | 'unset'
+	// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity
+	// fields. legalAddress mandatory per statute; dpoEmail recommended by РКН.
+	legalAddress: string
+	dpoEmail: string
 }
 
 function toMicroRub(rubInput: string): bigint | null {
@@ -138,6 +142,8 @@ export function ComplianceStep() {
 					: existing?.guestHouseFz127Registered === false
 						? 'no'
 						: 'unset',
+			legalAddress: existing?.legalAddress ?? '',
+			dpoEmail: existing?.dpoEmail ?? '',
 		} satisfies FormValues,
 		onSubmit: async ({ value }) => {
 			const microRevenue = toMicroRub(value.annualRevenueRub)
@@ -152,6 +158,9 @@ export function ComplianceStep() {
 					value.guestHouseFz127Registered === 'unset'
 						? null
 						: value.guestHouseFz127Registered === 'yes',
+				// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 fields.
+				legalAddress: value.legalAddress.trim() === '' ? null : value.legalAddress.trim(),
+				dpoEmail: value.dpoEmail.trim() === '' ? null : value.dpoEmail.trim(),
 			}
 			// Fresh key per submit click — TanStack Query auto-retry reuses
 			// the same vars (same key), so the server's idempotency middleware
@@ -389,6 +398,58 @@ export function ComplianceStep() {
 						)}
 					</form.Field>
 				) : null}
+
+				{/*
+				 * Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity.
+				 * legalAddress required by statute («наименование или ФИО и адрес оператора»),
+				 * dpoEmail recommended by РКН practice (ст.22.1 contact для регулятора).
+				 * These flow в Consent152FzModal через useCompliance hook.
+				 */}
+				<form.Field name="legalAddress">
+					{(field) => {
+						const id = `${field.name}-id`
+						return (
+							<div className="grid gap-2">
+								<Label htmlFor={id}>Юридический адрес оператора</Label>
+								<Input
+									id={id}
+									type="text"
+									value={field.state.value}
+									onChange={(e) => field.handleChange(e.target.value)}
+									placeholder="г. Сочи, ул. Курортный проспект, д. 1"
+									maxLength={500}
+									autoComplete="street-address"
+								/>
+								<p className="text-xs text-muted-foreground">
+									152-ФЗ ст.9 ч.4 — обязательно в тексте согласия на обработку ПДн.
+								</p>
+							</div>
+						)
+					}}
+				</form.Field>
+
+				<form.Field name="dpoEmail">
+					{(field) => {
+						const id = `${field.name}-id`
+						return (
+							<div className="grid gap-2">
+								<Label htmlFor={id}>Контакт DPO (рекомендовано РКН)</Label>
+								<Input
+									id={id}
+									type="email"
+									value={field.state.value}
+									onChange={(e) => field.handleChange(e.target.value)}
+									placeholder="dpo@hotel-domain.ru"
+									maxLength={200}
+									autoComplete="email"
+								/>
+								<p className="text-xs text-muted-foreground">
+									152-ФЗ ст.22.1 — контакт для уведомлений Роскомнадзора.
+								</p>
+							</div>
+						)
+					}}
+				</form.Field>
 
 				{liveInvariantWarnings.length > 0 ? (
 					<Alert variant="destructive">

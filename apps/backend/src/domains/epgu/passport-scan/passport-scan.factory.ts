@@ -137,6 +137,12 @@ interface RtbfRevokeInput {
 	readonly tenantId: string
 	readonly consentId: string
 	readonly reason: string
+	/**
+	 * Sprint C+ Legal/Senior P1 fix 2026-05-23d: operator userId для append-only
+	 * scrub event log (passportOcrAuditScrubLog). 'unknown' fallback допустим
+	 * when caller cannot resolve (rare; route falls back если session не set).
+	 */
+	readonly operatorUserId: string
 }
 
 export interface RtbfRevokeResult {
@@ -152,6 +158,15 @@ export interface RtbfRevokeResult {
 	 * write новый inputObjectKey untracked). Caller uses этот list для S3 delete.
 	 */
 	readonly objectKeysToDelete: readonly string[]
+	/**
+	 * Sprint C+ Legal/Senior P1 fix 2026-05-23d: append-only scrub event log row ID.
+	 * Null when alreadyRevoked (no new event). Returned для observability +
+	 * traceability в operator-facing response.
+	 */
+	readonly scrubLogId: string | null
+	/** Counts captured inside cascade tx для immutable event row. */
+	readonly auditRowsScrubbed: number
+	readonly guestDocumentRowsScrubbed: number
 }
 
 export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory {
@@ -208,12 +223,20 @@ export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory 
 				alreadyRevoked: true,
 				revokedReason: existing.revokedReason ?? '',
 				objectKeysToDelete: [],
+				scrubLogId: null,
+				auditRowsScrubbed: 0,
+				guestDocumentRowsScrubbed: 0,
 			}
 		}
 		// Round 2 P0-1 fix: collect object keys INSIDE tx (was: route fetched
 		// outside → race window). Audit + guestDocument both contribute.
-		// Round 2 Legal P0-2: guestDocument cascade — nullify PII + scrub.
+		// Sprint C+ Legal/Senior P1 fix 2026-05-23d: emit append-only scrubLog
+		// row inside same tx so журнал ↔ scrub state atomic. Counts captured
+		// для immutable forensic event row.
 		let objectKeysToDelete: readonly string[] = []
+		const scrubLogId = newId('passportOcrAuditScrubLog')
+		let auditRowsScrubbed = 0
+		let guestDocumentRowsScrubbed = 0
 		await sql.begin({ idempotent: true }, async (tx) => {
 			const txSql = tx as unknown as typeof SQL
 			const auditRepoTx = createPassportOcrAuditRepo(txSql)
@@ -232,13 +255,24 @@ export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory 
 				.filter((path): path is string => path !== null)
 			objectKeysToDelete = [...auditKeys, ...docKeys]
 
+			// 2.5) Count rows touched по этому consent ДО nullify — для scrubLog.
+			const [auditCountRows = []] = await txSql<{ cnt: number | bigint }[]>`
+				SELECT COUNT(*) AS cnt FROM passportOcrAudit
+				WHERE tenantId = ${input.tenantId} AND photoConsentLogId = ${input.consentId}
+			`.idempotent(true)
+			const [docCountRows = []] = await txSql<{ cnt: number | bigint }[]>`
+				SELECT COUNT(*) AS cnt FROM guestDocument
+				WHERE tenantId = ${input.tenantId} AND photoConsentLogId = ${input.consentId}
+			`.idempotent(true)
+			auditRowsScrubbed = Number(auditCountRows[0]?.cnt ?? 0)
+			guestDocumentRowsScrubbed = Number(docCountRows[0]?.cnt ?? 0)
+
 			// 3) Nullify audit PII.
 			await auditRepoTx.nullifyEntitiesByConsentId(input.tenantId, input.consentId)
-			// 4) Nullify guestDocument PII (Round 2 Legal P0-2). All structured PII
-			//    columns → NULL except (tenantId, id, identityMethod, citizenshipIso3,
-			//    createdAt) which stay для accountability trail. Mark entitiesAnonymizedAt.
+			// 4) Nullify guestDocument PII. All structured PII columns → NULL except
+			//    (tenantId, id, identityMethod, citizenshipIso3, createdAt) которые
+			//    stay для accountability trail. Mark entitiesAnonymizedAt.
 			//    NB: documentNumber NOT NULL в schema — wipe to placeholder вместо NULL.
-			//    citizenshipIso3 NOT NULL аналогично — keep как proof of ст.10 ч.2 basis.
 			await txSql`
 				UPDATE guestDocument
 				SET documentSeries = ${textOpt(null)},
@@ -254,12 +288,36 @@ export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory 
 			`
 			// 5) Revoke consent with shared timestamp.
 			await consentRepoTx.revokeAt(input.tenantId, input.consentId, input.reason, revokedAt)
+			// 6) Append-only scrub event log (Sprint C+ Legal/Senior P1 fix
+			//    2026-05-23d). Immutable forensic record для 152-ФЗ ст.21 ч.5
+			//    proof «исполнили уничтожение в течение 30 дней» under РКН
+			//    inspection canon (FSTEK Приказ 21 «защита от несанкционированных
+			//    изменений»). objectKeysDeleted/Failed counts populated to 0 here —
+			//    caller updates after S3 delete loop completes (out of tx scope).
+			await txSql`
+				UPSERT INTO passportOcrAuditScrubLog (
+					tenantId, id, photoConsentLogId, guestId,
+					scrubReason, operatorUserId,
+					auditRowsScrubbed, guestDocumentRowsScrubbed,
+					objectKeysDeleted, objectKeysFailed,
+					scrubbedAt, createdAt
+				) VALUES (
+					${input.tenantId}, ${scrubLogId}, ${input.consentId}, ${existing.guestId},
+					${input.reason}, ${input.operatorUserId},
+					${BigInt(auditRowsScrubbed)}, ${BigInt(guestDocumentRowsScrubbed)},
+					${BigInt(0)}, ${BigInt(0)},
+					${toTs(revokedAt)}, ${toTs(revokedAt)}
+				)
+			`.idempotent(true)
 		})
 		return {
 			revokedAt,
 			alreadyRevoked: false,
 			revokedReason: input.reason,
 			objectKeysToDelete,
+			scrubLogId,
+			auditRowsScrubbed,
+			guestDocumentRowsScrubbed,
 		}
 	}
 

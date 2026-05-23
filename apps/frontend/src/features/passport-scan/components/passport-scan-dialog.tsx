@@ -72,8 +72,9 @@ import {
 	SelectValue,
 } from '../../../components/ui/select.tsx'
 import { generateUuid } from '../../../lib/uuid-fallback.ts'
-import { useScanPassport } from '../hooks/use-scan-passport.ts'
+import { type ScanPassportResult, useScanPassport } from '../hooks/use-scan-passport.ts'
 import { CONSENT_152FZ_VERSION } from '../lib/consent-version.ts'
+import { ddmmyyyyToIso } from '../../../lib/format-ru.ts'
 import { fileToBase64, transcodeToJpegForVision } from '../lib/transcode-image.ts'
 import { Consent152FzModal, type OperatorIdentity } from './consent-152fz-modal.tsx'
 
@@ -108,6 +109,14 @@ export interface PassportScanResult {
 	consent152fzVersion: string
 	consent152fzAcceptedAt: string
 	rklStatus: RklStatusForScan
+	/**
+	 * Sprint C+ Senior P0-1 fix 2026-05-23d: photoConsentLogId from backend
+	 * scan response. Parent caller passes this to /guests/:id/documents/from-scan
+	 * чтобы привязать guestDocument к согласию для RTBF cascade.
+	 */
+	photoConsentLogId: string | null
+	/** OCR-active identity method — needed для from-scan persist call. */
+	identityMethod: 'passport_paper' | 'passport_zagran' | 'driver_license'
 }
 
 /** Подмножество IdentityMethod что обрабатывается через OCR-flow в этом диалоге. */
@@ -187,7 +196,7 @@ export function PassportScanDialog({
 	const [consentAcceptedAt, setConsentAcceptedAt] = useState<string | null>(null)
 	const [pendingFile, setPendingFile] = useState<File | null>(null)
 	const [recognizedEntities, setRecognizedEntities] = useState<PassportEntities | null>(null)
-	const [recognized, setRecognized] = useState<RecognizePassportResponse | null>(null)
+	const [recognized, setRecognized] = useState<ScanPassportResult | null>(null)
 	const [validationError, setValidationError] = useState<string | null>(null)
 	// Sprint C: destructive «Сканировать заново» confirmation gate.
 	const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
@@ -286,41 +295,80 @@ export function PassportScanDialog({
 	 * сохранение пустого/истёкшего паспорта. ЕПГУ отвергнет downstream регистрацию —
 	 * fail-fast lучше.
 	 */
-	const validateBeforeSave = (entities: PassportEntities): string | null => {
+	/**
+	 * Sprint C+ A11y audit 2026-05-23d: accept BOTH ISO (YYYY-MM-DD) and RU
+	 * (DD.MM.YYYY) date input. Normalize RU → ISO before passing к backend.
+	 * Returns null if value is empty / unparseable; caller validates required-ness.
+	 */
+	const normalizeDate = (raw: string | null): string | null => {
+		if (raw === null) return null
+		const trimmed = raw.trim()
+		if (trimmed.length === 0) return null
+		if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+		const isoFromRu = ddmmyyyyToIso(trimmed)
+		return isoFromRu.length > 0 ? isoFromRu : trimmed // keep raw → validator surfaces format error
+	}
+
+	/**
+	 * Validate + normalize before save. Returns `{ normalized }` on success
+	 * (entities cloned с dates → ISO) OR `{ error }` for caller to surface.
+	 * PassportEntities readonly — returning fresh object preserves immutability.
+	 */
+	const validateBeforeSave = (
+		entities: PassportEntities,
+	):
+		| { error: string; normalized?: undefined }
+		| { normalized: PassportEntities; error?: undefined } => {
 		// Required core fields для миграционной регистрации.
 		if (entities.surname === null || entities.surname.trim().length === 0) {
-			return 'Заполните фамилию'
+			return { error: 'Заполните фамилию' }
 		}
 		if (entities.name === null || entities.name.trim().length === 0) {
-			return 'Заполните имя'
+			return { error: 'Заполните имя' }
 		}
 		if (entities.documentNumber === null || entities.documentNumber.trim().length === 0) {
-			return 'Заполните номер документа'
+			return { error: 'Заполните номер документа' }
 		}
-		if (entities.birthDate === null || !/^\d{4}-\d{2}-\d{2}$/.test(entities.birthDate)) {
-			return 'Заполните дату рождения в формате YYYY-MM-DD'
+		const normBirth = normalizeDate(entities.birthDate)
+		if (normBirth === null || !/^\d{4}-\d{2}-\d{2}$/.test(normBirth)) {
+			return { error: 'Заполните дату рождения в формате ДД.ММ.ГГГГ' }
 		}
-		// Загранпаспорт + ВУ — expirationDate ОБЯЗАТЕЛЕН и НЕ должен быть истёкшим.
+		const normIssue = normalizeDate(entities.issueDate)
+		const issueDateNorm =
+			normIssue !== null && /^\d{4}-\d{2}-\d{2}$/.test(normIssue) ? normIssue : entities.issueDate
+		let expirationDateNorm: string | null = entities.expirationDate
 		const requiresExpiry =
 			selectedIdentityMethod === 'passport_zagran' || selectedIdentityMethod === 'driver_license'
 		if (requiresExpiry) {
-			if (
-				entities.expirationDate === null ||
-				!/^\d{4}-\d{2}-\d{2}$/.test(entities.expirationDate)
-			) {
-				return 'Заполните срок действия в формате YYYY-MM-DD'
+			const normExp = normalizeDate(entities.expirationDate)
+			if (normExp === null || !/^\d{4}-\d{2}-\d{2}$/.test(normExp)) {
+				return { error: 'Заполните срок действия в формате ДД.ММ.ГГГГ' }
 			}
-			const expiry = new Date(entities.expirationDate)
+			const expiry = new Date(normExp)
 			const today = new Date()
 			today.setUTCHours(0, 0, 0, 0)
 			if (Number.isNaN(expiry.getTime())) {
-				return 'Срок действия — некорректная дата'
+				return { error: 'Срок действия — некорректная дата' }
 			}
 			if (expiry < today) {
-				return `Документ истёк ${entities.expirationDate}. Гость должен предъявить действующий документ.`
+				return {
+					error: `Документ истёк ${normExp}. Гость должен предъявить действующий документ.`,
+				}
+			}
+			expirationDateNorm = normExp
+		} else if (entities.expirationDate !== null) {
+			const normExp = normalizeDate(entities.expirationDate)
+			if (normExp !== null && /^\d{4}-\d{2}-\d{2}$/.test(normExp)) {
+				expirationDateNorm = normExp
 			}
 		}
-		return null
+		const normalized: PassportEntities = {
+			...entities,
+			birthDate: normBirth,
+			issueDate: issueDateNorm,
+			expirationDate: expirationDateNorm,
+		}
+		return { normalized }
 	}
 
 	const handleSave = () => {
@@ -333,19 +381,24 @@ export function PassportScanDialog({
 			)
 			return
 		}
-		const err = validateBeforeSave(recognizedEntities)
-		if (err !== null) {
-			setValidationError(err)
+		const validation = validateBeforeSave(recognizedEntities)
+		if (validation.error !== undefined) {
+			setValidationError(validation.error)
 			return
 		}
 		setValidationError(null)
 		onSave({
-			entities: recognizedEntities,
+			entities: validation.normalized,
 			confidenceHeuristic: recognized.confidenceHeuristic,
 			outcome: recognized.outcome,
 			consent152fzVersion: CONSENT_152FZ_VERSION,
 			consent152fzAcceptedAt: consentAcceptedAt,
 			rklStatus: recognized.rklStatus,
+			// Sprint C+ Senior P0-1 fix: pass photoConsentLogId + identityMethod so
+			// parent can chain POST /guests/:id/documents/from-scan via
+			// useSaveDocumentFromScan hook → RTBF cascade has a real row to scrub.
+			photoConsentLogId: recognized.photoConsentLogId,
+			identityMethod: selectedIdentityMethod,
 		})
 		reset()
 		onClose()
@@ -656,11 +709,11 @@ function ConfirmStage({
 	const nameInvalid = entities.name === null || entities.name.trim().length === 0
 	const documentNumberInvalid =
 		entities.documentNumber === null || entities.documentNumber.trim().length === 0
-	const birthDateInvalid =
-		entities.birthDate === null || !/^\d{4}-\d{2}-\d{2}$/.test(entities.birthDate)
-	const expirationInvalid =
-		expirationRequired &&
-		(entities.expirationDate === null || !/^\d{4}-\d{2}-\d{2}$/.test(entities.expirationDate))
+	// Sprint C+ A11y audit 2026-05-23d: accept ISO OR DD.MM.YYYY (RU canonical).
+	const dateOk = (v: string | null) =>
+		v !== null && (/^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{2}\.\d{2}\.\d{4}$/.test(v))
+	const birthDateInvalid = !dateOk(entities.birthDate)
+	const expirationInvalid = expirationRequired && !dateOk(entities.expirationDate)
 
 	return (
 		<div className="space-y-3">
@@ -750,12 +803,12 @@ function ConfirmStage({
 				label="Дата рождения"
 				value={entities.birthDate ?? ''}
 				onChange={(v) => update('birthDate', v)}
-				placeholder="YYYY-MM-DD"
+				placeholder="ДД.ММ.ГГГГ"
 				autoComplete="bday"
 				inputMode="numeric"
 				required={true}
 				invalid={birthDateInvalid && validationError !== null}
-				errorMessage={birthDateInvalid ? 'Формат YYYY-MM-DD' : null}
+				errorMessage={birthDateInvalid ? 'Формат ДД.ММ.ГГГГ' : null}
 			/>
 			<CitizenshipRow
 				value={entities.citizenshipIso3 ?? ''}
@@ -778,8 +831,8 @@ function ConfirmStage({
 				onChange={(v) => update('issueDate', v)}
 				placeholder={
 					identityMethod === 'passport_zagran'
-						? 'YYYY-MM-DD — не в MRZ, заполните вручную'
-						: 'YYYY-MM-DD'
+						? 'ДД.ММ.ГГГГ — не в MRZ, заполните вручную'
+						: 'ДД.ММ.ГГГГ'
 				}
 				autoComplete="off"
 				inputMode="numeric"
@@ -798,13 +851,13 @@ function ConfirmStage({
 				value={entities.expirationDate ?? ''}
 				onChange={(v) => update('expirationDate', v)}
 				placeholder={
-					expirationRequired ? 'YYYY-MM-DD (обязательно)' : 'YYYY-MM-DD (только загран/СНГ)'
+					expirationRequired ? 'ДД.ММ.ГГГГ (обязательно)' : 'ДД.ММ.ГГГГ (только загран/СНГ)'
 				}
 				autoComplete="off"
 				inputMode="numeric"
 				required={expirationRequired}
 				invalid={expirationInvalid && validationError !== null}
-				errorMessage={expirationInvalid ? 'Формат YYYY-MM-DD — обязательно для загран/ВУ' : null}
+				errorMessage={expirationInvalid ? 'Формат ДД.ММ.ГГГГ — обязательно для загран/ВУ' : null}
 			/>
 		</div>
 	)

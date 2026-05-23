@@ -14,15 +14,36 @@
 import { z } from 'zod'
 
 /**
- * ПП-174 (с 01.03.2026) identity_method enum — 5 values per новой
- * редакции Постановления Правительства о порядке миграционного учёта.
+ * identity_method enum. Sprint C+ legal-expert audit 2026-05-23d:
+ *
+ * **Canonical legal source = ПП-1912 от 27.11.2025** (effective 01.03.2026,
+ * replaces ПП-1853; verified government.ru/docs/all/162231/ + garant.ru).
+ * Prior memo cited ПП-174 — that decree is partial editor; ПП-1912 is the new
+ * canonical hotel guest-identification act.
+ *
+ * Hotel identification methods recognized под ПП-1912:
+ *   - паспорт РФ + загранпаспорт + ВУ — traditional document scan flows (OCR)
+ *   - ЕБС (Единая Биометрическая Система) — biometric QR/face flow (not OCR)
+ *   - МФСОИ (Многофункциональный сервис обмена информацией) — canonical legal
+ *     name for the «Госуслуги / МАХ» check-in flow. User-facing brand is МАХ
+ *     приложение / Госуслуги. Backend integration begins 01.04.2026 per
+ *     ПП-1912 phased rollout.
+ *
+ * Values:
+ *   - `mfsoi` — canonical ПП-1912 value (Sprint C+ 2026-05-23d addition).
+ *     Use this для new integrations; reporting к МВД/Roskomnadzor expects
+ *     this naming в structured fields.
+ *   - `digital_id_max` — legacy alias retained для backward compatibility
+ *     с pre-2026-05-23d clients. Maps к same МФСОИ flow; will be deprecated
+ *     after one release cycle.
  */
 export const identityMethodValues = [
 	'passport_paper', // паспорт РФ бумажный
 	'passport_zagran', // заграничный паспорт
 	'driver_license', // водительское удостоверение (для граждан РФ)
 	'ebs', // ЕБС (Единая Биометрическая Система)
-	'digital_id_max', // Цифровой ID через приложение «МАX»
+	'mfsoi', // МФСОИ (Госуслуги/МАХ) — ПП-1912 canonical (since 2026-05-23d)
+	'digital_id_max', // Legacy alias for МФСОИ — deprecated, kept for backward compat
 ] as const
 export const identityMethodSchema = z.enum(identityMethodValues)
 export type IdentityMethod = z.infer<typeof identityMethodSchema>

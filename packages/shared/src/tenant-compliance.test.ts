@@ -205,6 +205,9 @@ describe('tenantComplianceSchema (Zod parsing)', () => {
 			annualRevenueEstimateMicroRub: 5_000_000_000_000n,
 			guestHouseFz127Registered: true,
 			ksrVerifiedAt: '2026-04-27T10:00:00.000Z',
+			// Sprint C+ Senior P1-5 fix 2026-05-23d: legalAddress + dpoEmail.
+			legalAddress: 'г. Сочи, Курортный пр-т, д. 1',
+			dpoEmail: 'dpo@hotel-sochi.ru',
 		}
 		const out = tenantComplianceSchema.parse(input)
 		expect(out).toEqual(input)
@@ -219,6 +222,8 @@ describe('tenantComplianceSchema (Zod parsing)', () => {
 			annualRevenueEstimateMicroRub: null,
 			guestHouseFz127Registered: null,
 			ksrVerifiedAt: null,
+			legalAddress: null,
+			dpoEmail: null,
 		})
 		expect(out.ksrRegistryId).toBeNull()
 	})

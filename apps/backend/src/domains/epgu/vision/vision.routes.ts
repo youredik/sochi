@@ -258,13 +258,20 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 				)
 			}
 
-			// (c) Reject не-OCR identityMethods early.
-			if (body.identityMethod === 'ebs' || body.identityMethod === 'digital_id_max') {
+			// (c) Reject не-OCR identityMethods early. Sprint C+ legal-expert audit
+			// 2026-05-23d: added `mfsoi` (canonical ПП-1912 МФСОИ value, since
+			// 2026-05-23d). All three are biometric/QR-style flows that don't pass
+			// through Vision OCR — caller must use dedicated biometric/QR route.
+			if (
+				body.identityMethod === 'ebs' ||
+				body.identityMethod === 'digital_id_max' ||
+				body.identityMethod === 'mfsoi'
+			) {
 				return c.json(
 					{
 						error: {
 							code: 'BAD_REQUEST',
-							message: `Тип документа '${body.identityMethod}' не сканируется через OCR — используйте biometric/QR flow`,
+							message: `Тип документа '${body.identityMethod}' не сканируется через OCR — используйте biometric/QR flow (ЕБС / Госуслуги-МАХ через МФСОИ)`,
 						},
 					},
 					400,
@@ -601,6 +608,10 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 						rklStatus: rklEval.status,
 						rklMatchType: rklEval.matchType,
 						rklRegistryRevision: rklEval.registryRevision,
+						// Sprint C+ Senior P0-1 fix 2026-05-23d: expose photoConsentLogId
+						// so frontend can pass it to POST /guests/:id/documents/from-scan,
+						// linking the new guestDocument row для RTBF cascade.
+						photoConsentLogId: atomicResult.consentId,
 					},
 				},
 				200,

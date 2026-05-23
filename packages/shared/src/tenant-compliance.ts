@@ -111,6 +111,19 @@ export const ksrRegistryIdSchema = z.string().min(1).max(50)
  * Полный compliance-блок профиля. Все поля nullable — заполняются поэтапно
  * через wizard. Repo принимает partial-patch.
  */
+/**
+ * Sprint C+ Senior P1-5 + Legal audit 2026-05-23d: 152-ФЗ ст.9 ч.4 mandates
+ * `наименование или ФИО + адрес оператора` in consent text. legalAddress
+ * captured here. dpoEmail recommended by РКН practice (ст.22.1 contact для
+ * РКН notification — not mandatory in consent text per Legal expert verdict,
+ * но defensible best-practice).
+ *
+ * `inn` already lives on organizationProfile (migration 0001) — not added here
+ * because it's read directly от organizationProfile, not via compliance shape.
+ */
+export const legalAddressSchema = z.string().min(5).max(500)
+export const dpoEmailSchema = z.string().email().max(200)
+
 export const tenantComplianceSchema = z.object({
 	ksrRegistryId: ksrRegistryIdSchema.nullable(),
 	ksrCategory: ksrCategorySchema.nullable(),
@@ -119,6 +132,8 @@ export const tenantComplianceSchema = z.object({
 	annualRevenueEstimateMicroRub: annualRevenueEstimateMicroRubSchema.nullable(),
 	guestHouseFz127Registered: z.boolean().nullable(),
 	ksrVerifiedAt: z.string().datetime().nullable(),
+	legalAddress: legalAddressSchema.nullable(),
+	dpoEmail: dpoEmailSchema.nullable(),
 })
 export type TenantCompliance = z.infer<typeof tenantComplianceSchema>
 
@@ -136,6 +151,9 @@ export const tenantCompliancePatchSchema = z
 		annualRevenueEstimateMicroRub: annualRevenueEstimateMicroRubSchema.nullable().optional(),
 		guestHouseFz127Registered: z.boolean().nullable().optional(),
 		ksrVerifiedAt: z.string().datetime().nullable().optional(),
+		// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity.
+		legalAddress: legalAddressSchema.nullable().optional(),
+		dpoEmail: dpoEmailSchema.nullable().optional(),
 	})
 	.refine((obj) => Object.keys(obj).length > 0, 'At least one field must be provided')
 export type TenantCompliancePatch = z.infer<typeof tenantCompliancePatchSchema>

@@ -81,6 +81,8 @@ describe('tenant.compliance.repo', () => {
 			annualRevenueEstimateMicroRub: null,
 			guestHouseFz127Registered: null,
 			ksrVerifiedAt: null,
+			legalAddress: null,
+			dpoEmail: null,
 		})
 	})
 

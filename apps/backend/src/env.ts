@@ -238,6 +238,14 @@ export const envSchema = z.object({
 	/** Separate bucket для passport scans (НЕ shared с property media). Optional — defaults к S3_BUCKET. */
 	S3_BUCKET_PASSPORT_SCANS: z.string().optional(),
 
+	/**
+	 * Sprint C+ Senior P1-6 fix 2026-05-23d: internal API token for
+	 * `/api/internal/ops-metrics` Prometheus-style drain endpoint. 32+ chars
+	 * random recommended; resolved from Lockbox в production. Empty = endpoint
+	 * disabled (returns 503).
+	 */
+	INTERNAL_OPS_TOKEN: z.string().default(''),
+
 	// Right-most-trusted-proxy canon (P2.5 hardening, 2026-05-19).
 	//
 	// CSV list of CIDRs corresponding to OWN reverse-proxy infrastructure

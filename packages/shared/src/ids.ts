@@ -42,6 +42,9 @@ export const ID_PREFIXES = {
 	migrationRegistration: 'mreg',
 	rklHistory: 'rkl',
 	passportOcrAudit: 'ocra',
+	// Sprint C+ append-only RTBF scrub event journal 2026-05-23d — Legal/Senior P1.
+	// One row per 152-ФЗ ст.20 revoke event (immutable proof of destruction).
+	passportOcrAuditScrubLog: 'ocrslog',
 	// M9.5 Phase D — Better Auth passkey plugin (WebAuthn).
 	passkey: 'pk',
 	// M9.widget.5 — magic-link guest portal tokens (single-use via stateful consumedAt).

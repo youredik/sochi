@@ -29,6 +29,8 @@ import {
 import { Textarea } from '../../../components/ui/textarea.tsx'
 import { formatDateShort } from '../../../lib/format-ru.ts'
 import type { OperatorIdentity } from '../../passport-scan/components/consent-152fz-modal.tsx'
+import { useSaveDocumentFromScan } from '../../passport-scan/hooks/use-save-document-from-scan.ts'
+import { useCompliance } from '../../content-wizard/hooks/use-compliance.ts'
 import {
 	PassportScanDialog,
 	type PassportScanResult,
@@ -247,14 +249,23 @@ function RescanSection({ row }: { row: MigrationRegistration }) {
 	const headingId = useId()
 	const [scanOpen, setScanOpen] = useState(false)
 	const [lastScan, setLastScan] = useState<PassportScanResult | null>(null)
-	// Sprint C Day 3+: operator identity для 152-ФЗ ст.9 ч.4 in consent modal.
-	// `active.name` = registered legal name (BA org plugin). INN + legal address
-	// требуют otherwise org-settings expansion sprint — fallback к undefined =
-	// modal renders generic placeholder.
+	const [savedDocumentId, setSavedDocumentId] = useState<string | null>(null)
+	const [persistError, setPersistError] = useState<string | null>(null)
+	const saveFromScan = useSaveDocumentFromScan()
+	// Sprint C+ legal-expert audit 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity.
+	// `active.name` = org name (Better Auth). compliance row contributes
+	// legalAddress + dpoEmail (Senior P1-5 fix — settings UI now wired в
+	// content-wizard/compliance-step). All optional; missing fields fallback к
+	// generic placeholder в Consent152FzModal renderOperatorBlock.
 	const { active } = useActiveOrg()
+	const compliance = useCompliance()
 	const operatorIdentity: OperatorIdentity | undefined =
 		active && typeof active.name === 'string' && active.name.length > 0
-			? { legalName: active.name }
+			? {
+					legalName: active.name,
+					legalAddress: compliance.data?.legalAddress ?? null,
+					dpoEmail: compliance.data?.dpoEmail ?? null,
+				}
 			: undefined
 
 	return (
@@ -264,15 +275,18 @@ function RescanSection({ row }: { row: MigrationRegistration }) {
 			</h3>
 			<p className="text-xs text-muted-foreground mb-3">
 				При обнаружении неточностей в данных гостя — повторное сканирование через Yandex Vision.
-				152-ФЗ согласие требуется отдельно (separate document, 2025-09-01). Реальная интеграция с
-				обновлением guestDocument lands в M9.
+				152-ФЗ согласие требуется отдельно (separate document, 2025-09-01). После подтверждения
+				данных оператором структурированные поля сохраняются в guestDocument и связываются с
+				согласием для каскада 152-ФЗ ст.20.
 			</p>
 			<Button variant="outline" onClick={() => setScanOpen(true)}>
 				Открыть сканер
 			</Button>
 			{lastScan ? (
 				<Alert className="mt-3">
-					<AlertTitle>OCR данные получены</AlertTitle>
+					<AlertTitle>
+						OCR данные получены{savedDocumentId ? ' • документ сохранён' : ''}
+					</AlertTitle>
 					<AlertDescription className="text-xs space-y-1 mt-1">
 						<div>
 							Гость: {lastScan.entities.surname} {lastScan.entities.name}{' '}
@@ -288,10 +302,19 @@ function RescanSection({ row }: { row: MigrationRegistration }) {
 						<div className="text-muted-foreground">
 							152-ФЗ согласие v{lastScan.consent152fzVersion} от {lastScan.consent152fzAcceptedAt}
 						</div>
-						<div className="text-muted-foreground italic">
-							Persistence в guestDocument deferred до M9 booking integration.
-						</div>
+						{savedDocumentId ? (
+							<div className="text-muted-foreground">
+								guestDocument.id = <code>{savedDocumentId}</code> — связан с согласием
+								<code className="ml-1">{lastScan.photoConsentLogId}</code>.
+							</div>
+						) : null}
 					</AlertDescription>
+				</Alert>
+			) : null}
+			{persistError !== null ? (
+				<Alert variant="destructive" className="mt-3" role="alert">
+					<AlertTitle>Документ не сохранён</AlertTitle>
+					<AlertDescription>{persistError}</AlertDescription>
 				</Alert>
 			) : null}
 			<PassportScanDialog
@@ -300,6 +323,36 @@ function RescanSection({ row }: { row: MigrationRegistration }) {
 				onSave={(result) => {
 					setLastScan(result)
 					setScanOpen(false)
+					setPersistError(null)
+					setSavedDocumentId(null)
+					// Sprint C+ Senior P0-1 fix 2026-05-23d: persist guestDocument
+					// linked к photoConsentLogId. Without this, RTBF cascade has no
+					// rows to scrub. Errors surfaced through persistError state.
+					if (result.photoConsentLogId === null) {
+						setPersistError(
+							'Backend не вернул photoConsentLogId — сохранение документа невозможно. Повторите сканирование.',
+						)
+						return
+					}
+					saveFromScan.mutate(
+						{
+							guestId: row.guestId,
+							identityMethod: result.identityMethod,
+							entities: result.entities,
+							photoConsentLogId: result.photoConsentLogId,
+							ocrConfidenceHeuristic: result.confidenceHeuristic,
+							// Object storage path not exposed через current scan response;
+							// audit row stores it server-side, this row leaves it null until
+							// vision response includes the key (M9 enhancement).
+							objectStoragePath: null,
+							objectMimeType: null,
+							objectSizeBytes: null,
+						},
+						{
+							onSuccess: (data) => setSavedDocumentId(data.documentId),
+							onError: (err) => setPersistError(err instanceof Error ? err.message : String(err)),
+						},
+					)
 				}}
 				guestAlreadyConsentedToVersion={null}
 				guestId={row.guestId}

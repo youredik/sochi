@@ -125,6 +125,8 @@ function renderWithCompliance(partial: Partial<TenantCompliance>): void {
 		annualRevenueEstimateMicroRub: null,
 		guestHouseFz127Registered: null,
 		ksrVerifiedAt: null,
+		legalAddress: null,
+		dpoEmail: null,
 		...partial,
 	}
 	mockedUseCompliance.mockReturnValue({
@@ -215,6 +217,8 @@ describe('<ComplianceStep> — branches', () => {
 			annualRevenueEstimateMicroRub: 5_000_000_000_000n,
 			guestHouseFz127Registered: null,
 			ksrVerifiedAt: null,
+			legalAddress: null,
+			dpoEmail: null,
 		}
 		mockedUseCompliance.mockReturnValue({
 			data: row,
@@ -379,6 +383,9 @@ describe('<ComplianceStep> — submit serialization', () => {
 				taxRegime: null,
 				annualRevenueEstimateMicroRub: null,
 				guestHouseFz127Registered: null,
+				// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity fields.
+				legalAddress: null,
+				dpoEmail: null,
 			},
 			idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
 		})

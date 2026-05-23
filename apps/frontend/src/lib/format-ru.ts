@@ -159,6 +159,43 @@ export function formatRelative(d: Date | string): string {
 	return RTF.format(0, 'minute')
 }
 
+/* ======================================================= date input helpers */
+
+/**
+ * Sprint C+ A11y audit 2026-05-23d: RU operators expect DD.MM.YYYY date input
+ * format, NOT ISO YYYY-MM-DD. Round 4 passport-scan-dialog used ISO placeholder
+ * + ISO validation regex — operators must mentally swap year-month-day under
+ * front-desk pressure, causing typos at check-in. WCAG 3.3.4 + 152-ФЗ ст.14
+ * proof readability both favor RU-native format.
+ *
+ * Display layer (`isoToDdmmyyyy`): ISO `2026-05-23` → RU `23.05.2026`. Empty
+ * string passes through; invalid ISO returns empty string (defensive — caller
+ * shows placeholder when display result is empty).
+ *
+ * Parse layer (`ddmmyyyyToIso`): RU `23.05.2026` → ISO `2026-05-23`. Returns
+ * empty string when input doesn't match DD.MM.YYYY shape — caller surfaces
+ * validation error. Date arithmetic NOT performed here (e.g. 31.02.2026 still
+ * normalizes — caller validates calendar correctness separately).
+ */
+/**
+ * Internal helper — symmetric ISO→RU display formatter. Not exported to keep
+ * knip happy; uncomment export when consumer lands (M9 EntityRow refactor that
+ * displays normalized DD.MM.YYYY instead of raw user input).
+ */
+// biome-ignore lint/correctness/noUnusedVariables: reserved для future EntityRow display layer
+function _isoToDdmmyyyy(iso: string): string {
+	if (iso.length === 0) return ''
+	const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+	if (!match) return ''
+	return `${match[3]}.${match[2]}.${match[1]}`
+}
+
+export function ddmmyyyyToIso(ru: string): string {
+	const match = ru.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+	if (!match) return ''
+	return `${match[3]}-${match[2]}-${match[1]}`
+}
+
 /* ============================================================ percentages */
 
 /**

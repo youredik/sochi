@@ -47,6 +47,9 @@ type ComplianceRow = {
 	annualRevenueEstimateMicroRub: bigint | null
 	guestHouseFz127Registered: boolean | null
 	ksrVerifiedAt: Date | null
+	// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity.
+	legalAddress: string | null
+	dpoEmail: string | null
 }
 
 function rowToCompliance(r: ComplianceRow): TenantCompliance {
@@ -58,6 +61,8 @@ function rowToCompliance(r: ComplianceRow): TenantCompliance {
 		annualRevenueEstimateMicroRub: r.annualRevenueEstimateMicroRub,
 		guestHouseFz127Registered: r.guestHouseFz127Registered,
 		ksrVerifiedAt: r.ksrVerifiedAt ? r.ksrVerifiedAt.toISOString() : null,
+		legalAddress: r.legalAddress,
+		dpoEmail: r.dpoEmail,
 	}
 }
 
@@ -73,7 +78,8 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 			const [rows = []] = await sql<ComplianceRow[]>`
 				SELECT
 					ksrRegistryId, ksrCategory, legalEntityType, taxRegime,
-					annualRevenueEstimateMicroRub, guestHouseFz127Registered, ksrVerifiedAt
+					annualRevenueEstimateMicroRub, guestHouseFz127Registered, ksrVerifiedAt,
+					legalAddress, dpoEmail
 				FROM organizationProfile
 				WHERE organizationId = ${tenantId}
 				LIMIT 1
@@ -138,6 +144,12 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 							: row.ksrVerifiedAt
 								? row.ksrVerifiedAt.toISOString()
 								: null,
+					legalAddress:
+						'legalAddress' in patch && patch.legalAddress !== undefined
+							? patch.legalAddress
+							: row.legalAddress,
+					dpoEmail:
+						'dpoEmail' in patch && patch.dpoEmail !== undefined ? patch.dpoEmail : row.dpoEmail,
 				}
 
 				const ksrVerifiedAtBind = merged.ksrVerifiedAt
@@ -152,6 +164,8 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 						annualRevenueEstimateMicroRub = ${int64Opt(merged.annualRevenueEstimateMicroRub)},
 						guestHouseFz127Registered = ${boolOpt(merged.guestHouseFz127Registered)},
 						ksrVerifiedAt = ${ksrVerifiedAtBind},
+						legalAddress = ${textOpt(merged.legalAddress)},
+						dpoEmail = ${textOpt(merged.dpoEmail)},
 						updatedAt = CurrentUtcTimestamp()
 					WHERE organizationId = ${tenantId}
 				`
