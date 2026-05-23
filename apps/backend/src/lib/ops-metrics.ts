@@ -104,6 +104,16 @@ export class OpsMetricsBuffer {
 	peek(): OpsMetricEvent | undefined {
 		return this.#queue[0]
 	}
+
+	/**
+	 * Sprint C+1 self-review H7 fix: reset droppedCount после ops-metrics
+	 * exporter consumed the warning. Otherwise droppedCount accumulates
+	 * across full buffer lifetime → false-positive alerts. Tests verify
+	 * этот reset gates the alarm correctly.
+	 */
+	resetDroppedCount(): void {
+		this.#droppedCount = 0
+	}
 }
 
 /**
@@ -111,14 +121,54 @@ export class OpsMetricsBuffer {
  * this — instantiate own buffer per test для isolation.
  *
  * Capacity 5000 = ~3min of passport scans @ 30/min × multiplier sites.
+ *
+ * **Sprint C+1 self-review P1.3 — multi-instance gotcha**: Этот singleton =
+ * per-process. На YC Serverless с provisioned_instances=2+ каждый pod имеет
+ * свой buffer → drain to YC Monitoring должен либо:
+ *   (a) keep provisioned_instances=1 (current default в container.tf),
+ *   (b) migrate к YDB-backed metrics (M11+),
+ *   (c) use Yandex Cloud Logging as canonical source (every emitPassportScanMetric
+ *       also calls c.var.logger.info with same labels, which YC Cloud Logging
+ *       aggregates per-instance → final metrics consistent).
+ * Current canon = (a) + (c). See [[demo_inbox_multi_instance_canon]] precedent.
  */
 export const opsMetricsBuffer = new OpsMetricsBuffer({ capacity: 5000 })
+
+/**
+ * Threshold для warning log когда buffer drops events. Helps operator detect
+ * sustained load без YC Monitoring exporter wired up yet.
+ */
+const OPS_METRICS_DROP_WARN_THRESHOLD = 100
 
 /**
  * Convenience helper — emit passport_scan metric. Wraps push() с canonical
  * name `passport_scan.{kind}_total`. Labels MUST be low-cardinality (outcome,
  * identityMethod, apiModel) — НЕ tenantId/guestId/imageHash.
+ *
+ * Sprint C+1 self-review P1.4 fix: cost_kopecks model-aware rate table вместо
+ * hardcoded 71 копеек. Yandex Vision pricing varies per model — `passport`
+ * @ 0.71 ₽, `page` (загранпаспорт через recognizeText) и `driver-license-front`
+ * @ same rate per Yandex AI Studio pricing 2026-Q2. Future Yandex price changes
+ * = only update этот table.
+ *
+ * Self-review H7 fix: if buffer crosses drop threshold (capacity full + N
+ * silent drops), emit warning log so operator can detect sustained load.
  */
+const PASSPORT_SCAN_COST_KOPECKS_BY_MODEL: Readonly<Record<string, number>> = {
+	passport: 71,
+	page: 71,
+	'driver-license-front': 71,
+	'driver-license-back': 71,
+}
+
+/**
+ * Sprint C+1 self-review: lookup cost per Yandex Vision model. Returns null
+ * для unknown models (no metric emitted — better than wrong number).
+ */
+export function passportScanCostKopecks(apiModel: string): number | null {
+	return PASSPORT_SCAN_COST_KOPECKS_BY_MODEL[apiModel] ?? null
+}
+
 export function emitPassportScanMetric(input: {
 	kind: 'attempts' | 'duration_ms' | 'cost_kopecks' | 'orphan_compensation_failed'
 	outcome: string
@@ -141,4 +191,19 @@ export function emitPassportScanMetric(input: {
 		labels,
 		value: input.value,
 	})
+	// Self-review H7: monitor sustained load. console.warn intentionally —
+	// no Pino logger access here (lib/ vs domain dependency). Production
+	// console.warn surfaces в YC Cloud Logging stderr stream.
+	if (opsMetricsBuffer.droppedCount >= OPS_METRICS_DROP_WARN_THRESHOLD) {
+		console.warn(
+			JSON.stringify({
+				event: 'ops_metrics.buffer_overflow',
+				droppedCount: opsMetricsBuffer.droppedCount,
+				capacity: opsMetricsBuffer.capacity,
+				size: opsMetricsBuffer.size,
+				msg: 'ops-metrics buffer dropped events — wire YC Monitoring exporter (M11+)',
+			}),
+		)
+		opsMetricsBuffer.resetDroppedCount()
+	}
 }

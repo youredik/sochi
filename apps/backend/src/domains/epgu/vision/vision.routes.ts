@@ -40,7 +40,7 @@ import { env } from '../../../env.ts'
 import type { AppEnv } from '../../../factory.ts'
 import { extractClientIpFromContext } from '../../../lib/net/client-ip.ts'
 import { assertMimeMatchesBytes } from '../../../lib/magic-byte-sniff.ts'
-import { emitPassportScanMetric } from '../../../lib/ops-metrics.ts'
+import { emitPassportScanMetric, passportScanCostKopecks } from '../../../lib/ops-metrics.ts'
 import { authMiddleware } from '../../../middleware/auth.ts'
 import type { IdempotencyMiddleware } from '../../../middleware/idempotency.ts'
 import { requirePermission } from '../../../middleware/require-permission.ts'
@@ -431,16 +431,21 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 					rklStatus: rklEval.status,
 					value: visionResult.latencyMs,
 				})
-				// Yandex Vision pricing 0.71 ₽/call → 71 копеек (verified 2026-05-22 research).
-				// passport model только если successful — failed calls не billed per Yandex docs.
+				// Yandex Vision pricing — model-aware (passport/page/driver-license-* all
+				// 0.71 ₽ = 71 копеек per Yandex AI Studio 2026-Q2). Self-review P1.4:
+				// hardcoded `71` removed; passportScanCostKopecks() returns null for
+				// unknown models so мы don't emit wrong cost.
 				if (visionResult.outcome === 'success' || visionResult.outcome === 'low_confidence') {
-					emitPassportScanMetric({
-						kind: 'cost_kopecks',
-						outcome: outcomeForMetric,
-						identityMethod,
-						apiModel,
-						value: 71,
-					})
+					const costKop = passportScanCostKopecks(apiModel)
+					if (costKop !== null) {
+						emitPassportScanMetric({
+							kind: 'cost_kopecks',
+							outcome: outcomeForMetric,
+							identityMethod,
+							apiModel,
+							value: costKop,
+						})
+					}
 				}
 			}
 			if (auditWriteFailed && compensationFailed) {

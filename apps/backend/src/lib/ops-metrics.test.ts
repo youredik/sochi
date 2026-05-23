@@ -14,7 +14,12 @@
  *   [P3] emitPassportScanMetric labels low-cardinality — outcome/identityMethod/apiModel only
  */
 import { describe, expect, test } from 'bun:test'
-import { OpsMetricsBuffer, emitPassportScanMetric, opsMetricsBuffer } from './ops-metrics.ts'
+import {
+	emitPassportScanMetric,
+	OpsMetricsBuffer,
+	opsMetricsBuffer,
+	passportScanCostKopecks,
+} from './ops-metrics.ts'
 
 describe('OpsMetricsBuffer — ring semantics', () => {
 	test('[B1] push 1 event → size=1, drain returns event', () => {
@@ -175,5 +180,37 @@ describe('emitPassportScanMetric — convenience helper', () => {
 			'passport_scan.cost_kopecks',
 			'passport_scan.orphan_compensation_failed',
 		])
+	})
+
+	test('[P5] passportScanCostKopecks — model-aware lookup canonical', () => {
+		// Yandex Vision pricing 2026-Q2: 0.71 ₽ per call для passport flow models
+		expect(passportScanCostKopecks('passport')).toBe(71)
+		expect(passportScanCostKopecks('page')).toBe(71)
+		expect(passportScanCostKopecks('driver-license-front')).toBe(71)
+		expect(passportScanCostKopecks('driver-license-back')).toBe(71)
+	})
+
+	test('[P6] passportScanCostKopecks — unknown model returns null (defensive)', () => {
+		// Self-review P1.4: future Yandex models добавятся → null vs wrong number.
+		// Caller checks для null и skips metric emission rather than burning cost
+		// budget на wrong assumption.
+		expect(passportScanCostKopecks('text')).toBeNull()
+		expect(passportScanCostKopecks('unknown-future-model')).toBeNull()
+		expect(passportScanCostKopecks('')).toBeNull()
+	})
+})
+
+describe('OpsMetricsBuffer — overflow handling', () => {
+	test('[O1] resetDroppedCount — counter clears for next monitoring cycle', () => {
+		const buf = new OpsMetricsBuffer({ capacity: 2, now: () => 0 })
+		buf.push({ name: 'a', labels: {}, value: 1 })
+		buf.push({ name: 'b', labels: {}, value: 2 })
+		buf.push({ name: 'c', labels: {}, value: 3 }) // drops 'a'
+		expect(buf.droppedCount).toBe(1)
+		buf.resetDroppedCount()
+		expect(buf.droppedCount).toBe(0)
+		// After reset, new drops re-accumulate from 0
+		buf.push({ name: 'd', labels: {}, value: 4 }) // drops 'b'
+		expect(buf.droppedCount).toBe(1)
 	})
 })
