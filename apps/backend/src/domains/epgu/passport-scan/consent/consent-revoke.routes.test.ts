@@ -114,10 +114,21 @@ function makeStubFactory(opts: StubFactoryOpts = {}) {
 			cascadeRtbfRevoke: async (input: { tenantId: string; consentId: string; reason: string }) => {
 				if (opts.cascadeShouldThrow === true) throw new Error('cascade failed')
 				cascadeCalls.push(input)
+				// Sprint C self-review: shape now { revokedAt, alreadyRevoked, revokedReason }
+				return {
+					revokedAt: new Date('2026-05-23T12:00:00Z'),
+					alreadyRevoked: false,
+					revokedReason: input.reason,
+				}
 			},
 		} as unknown,
 		cascadeCalls,
 	}
+}
+
+/** Pass-through idempotency middleware — tests focus on revoke logic, not dedup. */
+const noopIdempotency = async (_c: unknown, next: () => Promise<void>) => {
+	await next()
 }
 
 function buildApp(role: MemberRole, factoryOpts: StubFactoryOpts = {}) {
@@ -136,6 +147,8 @@ function buildApp(role: MemberRole, factoryOpts: StubFactoryOpts = {}) {
 			// biome-ignore lint/suspicious/noExplicitAny: stub factory shape
 			passportScanFactory: factory as any,
 			photoStorage: photoStorageStub,
+			// biome-ignore lint/suspicious/noExplicitAny: stub middleware shape
+			idempotency: noopIdempotency as any,
 		}),
 	)
 	app.onError(onError)

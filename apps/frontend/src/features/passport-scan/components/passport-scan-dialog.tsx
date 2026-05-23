@@ -52,7 +52,7 @@ import {
 	AlertDialogTitle,
 } from '../../../components/ui/alert-dialog.tsx'
 import { Badge } from '../../../components/ui/badge.tsx'
-import { Button } from '../../../components/ui/button.tsx'
+import { Button, buttonVariants } from '../../../components/ui/button.tsx'
 import {
 	Dialog,
 	DialogContent,
@@ -131,7 +131,6 @@ export function PassportScanDialog({
 	open,
 	onClose,
 	onSave,
-	guestAlreadyConsentedToVersion,
 	identityMethod: identityMethodProp = 'passport_paper',
 	guestId,
 	operatorIdentity,
@@ -139,7 +138,12 @@ export function PassportScanDialog({
 	open: boolean
 	onClose: () => void
 	onSave: (result: PassportScanResult) => void
-	/** If guest previously accepted current version — skip consent modal. */
+	/**
+	 * If guest previously accepted current version — historically skip consent
+	 * modal. Sprint C self-review removed bypass logic per 152-ФЗ ст.9 ч.4
+	 * (each scan = new textSnapshot proof event). Prop kept в signature для
+	 * future re-introduction когда caller также supplies textSnapshot pair.
+	 */
 	guestAlreadyConsentedToVersion?: string | null
 	/**
 	 * Тип документа (per ПП-1912). Default 'passport_paper'. Operator может
@@ -174,12 +178,17 @@ export function PassportScanDialog({
 		isOcrIdentityMethod(identityMethodProp) ? identityMethodProp : 'passport_paper',
 	)
 	const [consentOpen, setConsentOpen] = useState(false)
-	const [consentAcceptedAt, setConsentAcceptedAt] = useState<string | null>(
-		guestAlreadyConsentedToVersion === CONSENT_152FZ_VERSION ? new Date().toISOString() : null,
-	)
+	// Sprint C self-review fix: do NOT bypass consent based on previous version —
+	// 152-ФЗ ст.9 ч.4 requires NEW textSnapshot per scan event. Stale auto-init
+	// сбивает backend Zod `consent152fzTextSnapshot.min(1)` (vision.routes.ts).
+	// `guestAlreadyConsentedToVersion` оставлен как prop для future feature: skip
+	// only когда CALLER provides matching textSnapshot too — current canon = always
+	// show modal для tamper-proof textSnapshot capture.
+	const [consentAcceptedAt, setConsentAcceptedAt] = useState<string | null>(null)
 	const [pendingFile, setPendingFile] = useState<File | null>(null)
 	const [recognizedEntities, setRecognizedEntities] = useState<PassportEntities | null>(null)
 	const [recognized, setRecognized] = useState<RecognizePassportResponse | null>(null)
+	const [validationError, setValidationError] = useState<string | null>(null)
 	// Sprint C: destructive «Сканировать заново» confirmation gate.
 	const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
 
@@ -190,6 +199,11 @@ export function PassportScanDialog({
 		setRecognized(null)
 		setScanError(null)
 		setValidationError(null)
+		// Sprint C self-review H2 fix: also clear consent state — each scan event
+		// is a separate consent per 152-ФЗ ст.9 ч.4. Stale `consentAcceptedAt` от
+		// предыдущего сканирования = mismatched audit trail.
+		setConsentAcceptedAt(null)
+		lastConsentTextSnapshot.current = null
 		scanMut.reset()
 	}
 
@@ -213,6 +227,18 @@ export function PassportScanDialog({
 	}
 
 	const runScan = async (file: File) => {
+		// Sprint C self-review H4 fix: double-click guard. Without this, operator
+		// click → file picker → click again → fires TWO parallel runScan calls:
+		// 1) Transcode runs 2× (CPU heavy), 2) Vision API billed 2× (0.71 ₽ each),
+		// 3) audit + consent rows written 2× (different idempotencyKeys = NO backend
+		// dedup). Guard: if mutation in flight or transcode already running, no-op.
+		if (scanMut.isPending || stage === 'processing') return
+		// Defensive: textSnapshot MUST be set (modal sets it before runScan called).
+		// Empty snapshot = 152-ФЗ ст.9 ч.4 proof gap; reject early before Vision call.
+		if (lastConsentTextSnapshot.current === null || lastConsentTextSnapshot.current.length === 0) {
+			setScanError('Согласие 152-ФЗ не зафиксировано (textSnapshot пуст). Откройте диалог заново.')
+			return
+		}
 		setStage('processing')
 		try {
 			// Client-side transcode: HEIC/HEIF/large JPEG → 2048-max JPEG q=0.85.
@@ -233,7 +259,7 @@ export function PassportScanDialog({
 				identityMethod: selectedIdentityMethod,
 				guestId,
 				consent152fzVersion: CONSENT_152FZ_VERSION,
-				consent152fzTextSnapshot: lastConsentTextSnapshot.current ?? '',
+				consent152fzTextSnapshot: lastConsentTextSnapshot.current,
 				separateConsents: { generalPdn: true, citizenshipSpecial: true, biometricPhoto: true },
 				consent152fzAccepted: true,
 				idempotencyKey,
@@ -293,8 +319,6 @@ export function PassportScanDialog({
 		}
 		return null
 	}
-
-	const [validationError, setValidationError] = useState<string | null>(null)
 
 	const handleSave = () => {
 		if (!recognizedEntities || !recognized || !consentAcceptedAt) return
@@ -372,7 +396,26 @@ export function PassportScanDialog({
 					<div className="flex-1 overflow-y-auto -mx-6 px-6 -mb-2 pb-2">
 						{stage === 'initial' ? (
 							<div className="space-y-4">
-								<fieldset>
+								{/*
+								 * Sprint C+1 self-review L1 hard-gate: 152-ФЗ ст.9 ч.4 requires
+								 * оператор идентифицируется в consent тексте. Без legalName operator
+								 * identity is void (Tinkoff УКБО precedent 2025) — block scan flow
+								 * entirely и направить operator к onboarding settings заполнить.
+								 *
+								 * Соглашение для unit-tests / Storybook: identity optional, modal
+								 * renders generic placeholder. Real product UI uses gate ниже.
+								 */}
+								{operatorIdentity === undefined || operatorIdentity.legalName.length === 0 ? (
+									<Alert variant="destructive" role="alert">
+										<AlertTitle>Сканирование заблокировано (152-ФЗ ст.9 ч.4)</AlertTitle>
+										<AlertDescription>
+											Оператор не идентифицирован — обязательно укажите юридическое название и ИНН в
+											настройках организации. Без идентификации оператора согласие 152-ФЗ юридически
+											ничтожно.
+										</AlertDescription>
+									</Alert>
+								) : null}
+								<fieldset disabled={!operatorIdentity || operatorIdentity.legalName.length === 0}>
 									<legend className="text-sm font-medium mb-2">Тип документа</legend>
 									<RadioGroup
 										value={selectedIdentityMethod}
@@ -411,12 +454,21 @@ export function PassportScanDialog({
 										{...({ capture: 'environment' } as {
 											capture?: 'user' | 'environment'
 										})}
+										// Sprint C self-review H4 + L1 fix: native disabled = (1) prevent
+										// double-click race + (2) hard-block scan если operator identity
+										// missing (152-ФЗ ст.9 ч.4 — void consent without legal name).
+										disabled={
+											scanMut.isPending ||
+											!operatorIdentity ||
+											operatorIdentity.legalName.length === 0
+										}
+										aria-describedby={`${fileInputId}-hint`}
 										onChange={(e) => {
 											const f = e.target.files?.[0]
 											if (f) void handleFile(f)
 										}}
 									/>
-									<p className="text-xs text-muted-foreground mt-1">
+									<p id={`${fileInputId}-hint`} className="text-xs text-muted-foreground mt-1">
 										JPEG, PNG или PDF (iPhone-HEIC автоматически конвертируется). На мобильном
 										откроется задняя камера.
 									</p>
@@ -511,7 +563,17 @@ export function PassportScanDialog({
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Продолжить редактирование</AlertDialogCancel>
-						<AlertDialogAction onClick={() => reset()}>Да, сканировать заново</AlertDialogAction>
+						{/*
+						 * Sprint C+1 self-review A3 fix: destructive variant + data-loss
+						 * красный тон. WCAG 1.4.1 + RU UX canon: destructive буттоны должны
+						 * визуально signal harm.
+						 */}
+						<AlertDialogAction
+							onClick={() => reset()}
+							className={buttonVariants({ variant: 'destructive' })}
+						>
+							Да, сканировать заново
+						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
@@ -804,7 +866,16 @@ function EntityRow({
 }) {
 	const id = useId()
 	const errorId = useId()
+	// Sprint C+1 self-review A6 fix: blur-triggered validation. Field-level error
+	// предотвращён до пользователь leaves field — WCAG 3.3.1 «errors identified
+	// when detected». `touched` flag bridges "first focus" → user не сразу видит
+	// invalid state.
+	const [touched, setTouched] = useState(false)
+	// Show error если: (1) save attempted (invalid prop true from parent) OR
+	// (2) field touched и empty/invalid (local blur detection).
 	const showError = invalid === true && typeof errorMessage === 'string' && errorMessage.length > 0
+	const shouldHighlight =
+		invalid === true || (touched && required === true && value.trim().length === 0)
 	return (
 		<div>
 			<Label htmlFor={id} className="text-sm">
@@ -820,11 +891,12 @@ function EntityRow({
 				value={value}
 				placeholder={placeholder}
 				onChange={(e) => onChange(e.target.value)}
+				onBlur={() => setTouched(true)}
 				className="mt-1"
 				autoComplete={autoComplete}
 				inputMode={inputMode}
 				aria-required={required === true ? true : undefined}
-				aria-invalid={invalid === true ? true : undefined}
+				aria-invalid={shouldHighlight ? true : undefined}
 				aria-describedby={showError ? errorId : undefined}
 			/>
 			{showError ? (

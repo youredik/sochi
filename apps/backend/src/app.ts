@@ -947,9 +947,15 @@ const routes = app
 		}),
 	)
 	// Sprint C: RTBF endpoint — 152-ФЗ ст.20 (10 рабочих дней)
+	// Self-review I4 fix: idempotency middleware added — double-click revoke
+	// dedupes на backend per Stripe canon (avoid second cascade running).
 	.route(
 		'/api/v1',
-		createConsentRevokeRoutes({ passportScanFactory, photoStorage: passportPhotoStorage }),
+		createConsentRevokeRoutes({
+			passportScanFactory,
+			photoStorage: passportPhotoStorage,
+			idempotency,
+		}),
 	)
 	// Sprint C: DSAR endpoint — 152-ФЗ ст.14 (30 рабочих дней)
 	.route(

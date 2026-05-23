@@ -70,7 +70,16 @@ export interface OperatorIdentity {
  */
 function renderOperatorBlock(identity: OperatorIdentity | undefined): string {
 	if (!identity) {
-		return '   • Оператор: средство размещения и его операторы (юр.имя не предоставлено)\n   • Реквизиты доступны по запросу в адрес администратора средства размещения.'
+		// Sprint C+1 self-review L1/P13 fix: tame language vs alarming
+		// «юр.имя не предоставлено» (которое pugает гостей). NO modal can render
+		// без identity per `useOperatorIdentityHardGate` (см. passport-scan-dialog.tsx
+		// `OperatorIdentityMissingAlert`) — этот fallback срабатывает только в
+		// edge case (тест/dev) где caller не передал. Production = blocked upstream.
+		return [
+			'   • Оператор: средство размещения (реквизиты уточняются у администратора)',
+			'   • ИНН и юр.адрес: будут предоставлены оператором по запросу до подписания',
+			'   • Контакт DPO: запрос через администратора средства размещения',
+		].join('\n')
 	}
 	const lines = [`   • Оператор (юр.имя): ${identity.legalName}`]
 	if (typeof identity.inn === 'string' && identity.inn.length > 0) {
@@ -194,9 +203,21 @@ export function Consent152FzModal({
 						отдельный документ для общих ПДн, спецкатегории и биометрии.
 					</DialogDescription>
 				</DialogHeader>
-				<div className="flex-1 overflow-y-auto border rounded-md p-4 text-sm whitespace-pre-line bg-muted/30">
+				{/*
+				 * Sprint C+1 self-review A8 fix: scrollable consent text WCAG 2.1.1
+				 * compliant. <section aria-label> provides landmark for screen readers.
+				 * Modern browsers (Chromium 87+, Firefox 86+, Safari 16+) автоматически
+				 * make overflow:auto containers keyboard-scrollable via arrow keys/
+				 * PageUp/Down once focus enters their parent — no explicit tabIndex
+				 * required (biome lint: noNoninteractiveTabindex). Operator может
+				 * Tab внутрь dialog → checkbox group или scroll по text via arrow keys.
+				 */}
+				<section
+					className="flex-1 overflow-y-auto border rounded-md p-4 text-sm whitespace-pre-line bg-muted/30"
+					aria-label="Текст согласия на обработку персональных данных"
+				>
 					{consentText}
-				</div>
+				</section>
 				<fieldset className="mt-4 space-y-3">
 					<legend className="sr-only">Согласия на обработку данных</legend>
 

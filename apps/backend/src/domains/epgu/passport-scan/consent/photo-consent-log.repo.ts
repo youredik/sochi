@@ -139,31 +139,42 @@ function rowToConsent(row: DbRow): PhotoConsentLogRow {
 }
 
 export function createPhotoConsentLogRepo(sql: SqlInstance) {
+	const insertWithId = async (id: string, input: PhotoConsentLogInsert): Promise<string> => {
+		const now = new Date()
+		await sql`
+			UPSERT INTO photoConsentLog (
+				tenantId, id, guestId, version, scope,
+				acceptedAt, ipAddress, userAgent,
+				revokedAt, revokedReason, createdAt,
+				textSnapshot, separateConsents
+			) VALUES (
+				${input.tenantId}, ${id}, ${input.guestId}, ${input.version}, ${input.scope},
+				${toTs(input.acceptedAt)}, ${input.ipAddress}, ${input.userAgent},
+				${timestampOpt(null)}, ${textOpt(null)}, ${toTs(now)},
+				${input.textSnapshot}, ${toJson(input.separateConsents)}
+			)
+		`.idempotent(true)
+		return id
+	}
+
 	return {
 		/**
 		 * Insert fresh consent record. Returns generated `cns_*` ID.
 		 *
-		 * Idempotent on (tenantId, id) PK. Caller MUST NOT retry с same id (each
-		 * scan call generates new id внутри этой функции).
+		 * Self-review note (Sprint C 2026-05-23 Y3 fix): factory's
+		 * recordConsentAndAuditAtomic uses `insertWithId(id, ...)` with caller-
+		 * generated ID so `sql.begin({idempotent:true})` retries don't mint new
+		 * IDs per attempt. This wrapper kept for non-transactional call sites.
 		 */
 		async insert(input: PhotoConsentLogInsert): Promise<string> {
-			const id = newId('consent')
-			const now = new Date()
-			await sql`
-				UPSERT INTO photoConsentLog (
-					tenantId, id, guestId, version, scope,
-					acceptedAt, ipAddress, userAgent,
-					revokedAt, revokedReason, createdAt,
-					textSnapshot, separateConsents
-				) VALUES (
-					${input.tenantId}, ${id}, ${input.guestId}, ${input.version}, ${input.scope},
-					${toTs(input.acceptedAt)}, ${input.ipAddress}, ${input.userAgent},
-					${timestampOpt(null)}, ${textOpt(null)}, ${toTs(now)},
-					${input.textSnapshot}, ${toJson(input.separateConsents)}
-				)
-			`.idempotent(true)
-			return id
+			return insertWithId(newId('consent'), input)
 		},
+
+		/**
+		 * Insert with caller-provided ID — used by factory под sql.begin
+		 * idempotent retry boundary. Same UPSERT shape as insert().
+		 */
+		insertWithId,
 
 		/** Read by composite PK. Returns null if not found OR cross-tenant access. */
 		async findById(tenantId: string, id: string): Promise<PhotoConsentLogRow | null> {
@@ -178,19 +189,30 @@ export function createPhotoConsentLogRepo(sql: SqlInstance) {
 
 		/**
 		 * Soft revoke — right-to-be-forgotten 152-ФЗ ст.20 (10 рабочих дней).
-		 * Atomic UPDATE sets revokedAt + revokedReason. Idempotent — повторный
-		 * revoke вернёт already-revoked state без error.
+		 * Atomic UPDATE sets revokedAt + revokedReason. Caller pre-generates
+		 * timestamp via `revokeAt` for single-clock canon.
+		 *
+		 * Legacy: `revoke()` retained для backward compat; calls revokeAt с
+		 * fresh `new Date()`. Self-review fix H3 — prefer revokeAt downstream.
 		 */
 		async revoke(tenantId: string, id: string, reason: string): Promise<{ revoked: boolean }> {
-			const now = new Date()
+			await this.revokeAt(tenantId, id, reason, new Date())
+			return { revoked: true }
+		},
+
+		/**
+		 * Sprint C self-review H3 fix: revoke с caller-supplied timestamp.
+		 * Used by factory `cascadeRtbfRevoke` чтобы tx UPDATE и operator API
+		 * response share canonical clock. WHERE includes `revokedAt IS NULL`
+		 * для idempotency — повторный revoke не overwritits the original
+		 * timestamp/reason (TOCTOU race safety).
+		 */
+		async revokeAt(tenantId: string, id: string, reason: string, when: Date): Promise<void> {
 			await sql`
 				UPDATE photoConsentLog
-				SET revokedAt = ${toTs(now)}, revokedReason = ${reason}
+				SET revokedAt = ${toTs(when)}, revokedReason = ${reason}
 				WHERE tenantId = ${tenantId} AND id = ${id} AND revokedAt IS NULL
 			`
-			// YDB UPDATE не возвращает affected-row count в данной обёртке —
-			// caller проверит через findById если нужно подтвердить.
-			return { revoked: true }
 		},
 
 		/** List all consents для гостя (admin view, revocation flow). */
@@ -199,7 +221,7 @@ export function createPhotoConsentLogRepo(sql: SqlInstance) {
 				SELECT * FROM photoConsentLog
 				WHERE tenantId = ${tenantId} AND guestId = ${guestId}
 				ORDER BY createdAt DESC
-				LIMIT 100
+				LIMIT 1000
 			`.idempotent(true)
 			return rows.map(rowToConsent)
 		},

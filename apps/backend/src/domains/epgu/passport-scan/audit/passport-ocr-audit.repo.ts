@@ -122,6 +122,39 @@ function rowToExportEntity(row: DbAuditExportRow): PassportOcrAuditExportRow {
 }
 
 export function createPassportOcrAuditRepo(sql: SqlInstance) {
+	const insertWithId = async (id: string, input: PassportOcrAuditInsert): Promise<string> => {
+		const now = new Date()
+		const e = input.entities
+		await sql`
+			UPSERT INTO passportOcrAudit (
+				tenantId, id, guestId, documentId, bookingId, operatorUserId,
+				inputMimeType, inputSizeBytes, inputObjectKey,
+				apiEndpoint, apiModel, httpStatus, latencyMs,
+				surname, name, middleName, gender, citizenshipIso3,
+				birthDate, birthPlace, documentNumber, issueDate,
+				detectedCountryIso3, isCountryWhitelisted,
+				apiConfidenceRaw, confidenceHeuristic, outcome,
+				rawResponseJson, photoConsentLogId, createdAt
+			) VALUES (
+				${input.tenantId}, ${id},
+				${textOpt(input.guestId)}, ${textOpt(input.documentId)}, ${textOpt(input.bookingId)},
+				${input.operatorUserId},
+				${input.inputMimeType}, ${BigInt(input.inputSizeBytes)}, ${textOpt(input.inputObjectKey)},
+				${input.apiEndpoint}, ${input.apiModel}, ${input.httpStatus}, ${input.latencyMs},
+				${textOpt(e?.surname ?? null)}, ${textOpt(e?.name ?? null)}, ${textOpt(e?.middleName ?? null)},
+				${textOpt(e?.gender ?? null)}, ${textOpt(e?.citizenshipIso3 ?? null)},
+				${dateOpt(e?.birthDate ?? null)}, ${textOpt(e?.birthPlace ?? null)},
+				${textOpt(e?.documentNumber ?? null)}, ${dateOpt(e?.issueDate ?? null)},
+				${textOpt(input.detectedCountryIso3)}, ${input.isCountryWhitelisted},
+				${doubleOpt(input.apiConfidenceRaw)}, ${doubleOpt(input.confidenceHeuristic)},
+				${input.outcome},
+				${toJson(input.rawResponseJson)},
+				${textOpt(input.photoConsentLogId)}, ${toTs(now)}
+			)
+		`.idempotent(true)
+		return id
+	}
+
 	return {
 		/**
 		 * Insert audit row. Returns generated `ocra_*` ID.
@@ -129,40 +162,16 @@ export function createPassportOcrAuditRepo(sql: SqlInstance) {
 		 * MUST be called после КАЖДОГО vision.recognizePassport — success AND
 		 * failure path (152-ФЗ ст.21 ч.4). Caller обёрнут в try-finally чтобы
 		 * audit write не throw'ил из-за main flow error.
+		 *
+		 * Self-review Sprint C Y3 fix: factory's recordConsentAndAuditAtomic
+		 * uses insertWithId(id, ...) within sql.begin idempotent retry boundary
+		 * чтобы prevent duplicate-row insert on retryable-error replay.
 		 */
 		async insert(input: PassportOcrAuditInsert): Promise<string> {
-			const id = newId('passportOcrAudit')
-			const now = new Date()
-			const e = input.entities
-			await sql`
-				UPSERT INTO passportOcrAudit (
-					tenantId, id, guestId, documentId, bookingId, operatorUserId,
-					inputMimeType, inputSizeBytes, inputObjectKey,
-					apiEndpoint, apiModel, httpStatus, latencyMs,
-					surname, name, middleName, gender, citizenshipIso3,
-					birthDate, birthPlace, documentNumber, issueDate,
-					detectedCountryIso3, isCountryWhitelisted,
-					apiConfidenceRaw, confidenceHeuristic, outcome,
-					rawResponseJson, photoConsentLogId, createdAt
-				) VALUES (
-					${input.tenantId}, ${id},
-					${textOpt(input.guestId)}, ${textOpt(input.documentId)}, ${textOpt(input.bookingId)},
-					${input.operatorUserId},
-					${input.inputMimeType}, ${BigInt(input.inputSizeBytes)}, ${textOpt(input.inputObjectKey)},
-					${input.apiEndpoint}, ${input.apiModel}, ${input.httpStatus}, ${input.latencyMs},
-					${textOpt(e?.surname ?? null)}, ${textOpt(e?.name ?? null)}, ${textOpt(e?.middleName ?? null)},
-					${textOpt(e?.gender ?? null)}, ${textOpt(e?.citizenshipIso3 ?? null)},
-					${dateOpt(e?.birthDate ?? null)}, ${textOpt(e?.birthPlace ?? null)},
-					${textOpt(e?.documentNumber ?? null)}, ${dateOpt(e?.issueDate ?? null)},
-					${textOpt(input.detectedCountryIso3)}, ${input.isCountryWhitelisted},
-					${doubleOpt(input.apiConfidenceRaw)}, ${doubleOpt(input.confidenceHeuristic)},
-					${input.outcome},
-					${toJson(input.rawResponseJson)},
-					${textOpt(input.photoConsentLogId)}, ${toTs(now)}
-				)
-			`.idempotent(true)
-			return id
+			return insertWithId(newId('passportOcrAudit'), input)
 		},
+
+		insertWithId,
 
 		/**
 		 * DSAR — list scans for guest (152-ФЗ ст.14, 30-day SLA).

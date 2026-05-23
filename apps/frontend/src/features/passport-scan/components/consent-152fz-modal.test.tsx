@@ -228,11 +228,16 @@ describe('Consent152FzModal — gate semantics (legal compliance)', () => {
 		expect(body).toContain('dpo@hotel-sochi.ru')
 	})
 
-	test('[G16] missing operatorIdentity → generic placeholder rendered (no crash)', () => {
+	test('[G16] missing operatorIdentity → tame placeholder rendered (no alarming language)', () => {
 		render(<Consent152FzModal open={true} onAccept={mock()} onCancel={mock()} />)
 		const body = document.body.textContent ?? ''
-		// Generic fallback presence — proves modal renders без identity
-		expect(body).toContain('юр.имя не предоставлено')
+		// Sprint C+1 self-review L1/A13: «юр.имя не предоставлено» (alarming) →
+		// «реквизиты уточняются у администратора» (neutral, calm). Production-grade
+		// UI uses hard-gate в PassportScanDialog (Alert variant=destructive + disabled
+		// file input) before reaching modal — этот placeholder только для dev/test/Storybook.
+		expect(body).toContain('реквизиты уточняются у администратора')
+		// Defensive: alarm text НЕ должно появиться в guest-facing copy
+		expect(body.includes('не предоставлено')).toBe(false)
 	})
 
 	test('[G17] partial operatorIdentity (только legalName) — других секций not rendered', () => {

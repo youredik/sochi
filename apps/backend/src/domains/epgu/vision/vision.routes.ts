@@ -94,7 +94,14 @@ const scanPassportSchema = z.object({
 	 * Stored в photoConsentLog.textSnapshot для tamper-proof Roskomnadzor inspection
 	 * (152-ФЗ ст.9 ч.4 «оператор обязан доказать получение»). Git history ≠ proof.
 	 */
-	consent152fzTextSnapshot: z.string().min(1, 'consent text snapshot обязателен (ст.9 ч.4)'),
+	consent152fzTextSnapshot: z
+		.string()
+		.min(1, 'consent text snapshot обязателен (ст.9 ч.4)')
+		// Sprint C self-review I5 fix: max-length cap. Canonical consent text
+		// ~3.5KB; 8KB = generous (включая operator identity injection до 1KB).
+		// Prevents log-poisoning / DoS via 7+MB payloads (body limit catches
+		// total, but per-field cap defends в case bodyLimit relaxes downstream).
+		.max(8192, 'consent text snapshot >8 KB — подозрительный payload, обратитесь к администратору'),
 	/** Sprint C: 3-checkbox state per ст.10 + ст.11 defensive over-consent. */
 	separateConsents: separateConsentsSchema,
 	consent152fzAccepted: z.literal(true, {

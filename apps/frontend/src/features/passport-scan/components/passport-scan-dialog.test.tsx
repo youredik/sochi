@@ -126,4 +126,47 @@ describe('PassportScanDialog — UI shape (Sprint C Day 2)', () => {
 		expect(body).toContain('HEIC')
 		expect(body).toContain('задняя камера')
 	})
+
+	test('[D10] missing operatorIdentity → destructive Alert + file input disabled (152-ФЗ ст.9 ч.4 gate)', () => {
+		renderWithQueryClient(
+			<PassportScanDialog open={true} onClose={mock()} onSave={mock()} guestId="guest_test" />,
+		)
+		const body = document.body.textContent ?? ''
+		expect(body).toContain('Сканирование заблокировано')
+		expect(body).toContain('152-ФЗ ст.9 ч.4')
+		const fileInput = screen.getByLabelText(/Файл документа/) as HTMLInputElement
+		expect(fileInput.disabled).toBe(true)
+	})
+
+	test('[D11] valid operatorIdentity → no gate Alert + file input enabled', () => {
+		renderWithQueryClient(
+			<PassportScanDialog
+				open={true}
+				onClose={mock()}
+				onSave={mock()}
+				guestId="guest_test"
+				operatorIdentity={{ legalName: 'ООО «Гостиница Сочи»', inn: '2320200001' }}
+			/>,
+		)
+		const body = document.body.textContent ?? ''
+		expect(body.includes('Сканирование заблокировано')).toBe(false)
+		const fileInput = screen.getByLabelText(/Файл документа/) as HTMLInputElement
+		expect(fileInput.disabled).toBe(false)
+	})
+
+	test('[D12] empty legalName treated как missing (defense-in-depth)', () => {
+		renderWithQueryClient(
+			<PassportScanDialog
+				open={true}
+				onClose={mock()}
+				onSave={mock()}
+				guestId="guest_test"
+				operatorIdentity={{ legalName: '', inn: '2320200001' }}
+			/>,
+		)
+		const body = document.body.textContent ?? ''
+		expect(body).toContain('Сканирование заблокировано')
+		const fileInput = screen.getByLabelText(/Файл документа/) as HTMLInputElement
+		expect(fileInput.disabled).toBe(true)
+	})
 })

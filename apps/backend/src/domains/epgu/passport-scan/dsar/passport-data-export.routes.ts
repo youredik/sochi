@@ -81,16 +81,74 @@ export function createPassportDataExportRoutesInner(deps: PassportDataExportRout
 				)
 			}
 
-			// Aggregate всех consent + audit rows для гостя
-			const [consents, scans] = await Promise.all([
+			// Sprint C self-review I9 fix: Promise.allSettled vs all — partial DB
+			// failure не cripples весь DSAR (152-ФЗ ст.14 30-day SLA — нельзя
+			// systemically fail). Каждый leg fails в isolation, report partial
+			// dataset с explicit warnings field так что guest и Roskomnadzor видят
+			// что fetch не завершился полностью.
+			const [consentsResult, scansResult] = await Promise.allSettled([
 				consentRepo.findByGuestId(tenantId, guestId),
 				auditRepo.findByGuestId(tenantId, guestId),
 			])
+			const consents = consentsResult.status === 'fulfilled' ? consentsResult.value : []
+			const scans = scansResult.status === 'fulfilled' ? scansResult.value : []
+			const warnings: string[] = []
+			if (consentsResult.status === 'rejected') {
+				warnings.push(
+					'Не удалось получить журнал согласий — обратитесь к администратору. ' +
+						'Этот частичный экспорт НЕ заменяет полное обращение по ст.14 152-ФЗ.',
+				)
+				c.var.logger.error(
+					{
+						event: 'passport_data_export.consents_fetch_failed',
+						tenantId,
+						guestId,
+						err:
+							consentsResult.reason instanceof Error
+								? consentsResult.reason.message
+								: String(consentsResult.reason),
+					},
+					'DSAR partial failure — consents leg',
+				)
+			}
+			if (scansResult.status === 'rejected') {
+				warnings.push('Не удалось получить аудит OCR — обратитесь к администратору.')
+				c.var.logger.error(
+					{
+						event: 'passport_data_export.scans_fetch_failed',
+						tenantId,
+						guestId,
+						err:
+							scansResult.reason instanceof Error
+								? scansResult.reason.message
+								: String(scansResult.reason),
+					},
+					'DSAR partial failure — scans leg',
+				)
+			}
+
+			// Self-review I10 fix: truncation warning surfaced explicitly.
+			// repo LIMIT 1000 / consent LIMIT 1000 — at limit means возможны more.
+			const CONSENT_LIMIT = 1000
+			const SCAN_LIMIT = 1000
+			if (consents.length >= CONSENT_LIMIT) {
+				warnings.push(
+					`Возвращены последние ${CONSENT_LIMIT} согласий. ` +
+						'Для полной выгрузки обратитесь к оператору письменно (152-ФЗ ст.14).',
+				)
+			}
+			if (scans.length >= SCAN_LIMIT) {
+				warnings.push(
+					`Возвращены последние ${SCAN_LIMIT} сканов. ` +
+						'Для полной выгрузки обратитесь к оператору письменно (152-ФЗ ст.14).',
+				)
+			}
 
 			const exportPayload = {
 				exportedAt: new Date().toISOString(),
 				guestId,
 				tenantId,
+				warnings: warnings.length > 0 ? warnings : undefined,
 				dataSubjectRights: {
 					article: '152-ФЗ ст.14 (право на ознакомление)',
 					revokeUrl: `/api/v1/passport-scan/consent/{consentId}/revoke`,
@@ -100,24 +158,24 @@ export function createPassportDataExportRoutesInner(deps: PassportDataExportRout
 						photoStorage: '90 дней (lifecycle policy)',
 					},
 				},
-				consents: consents.map((c) => ({
-					id: c.id,
-					version: c.version,
-					scope: c.scope,
-					acceptedAt: c.acceptedAt.toISOString(),
-					textSnapshot: c.textSnapshot, // verbatim text shown
-					separateConsents: c.separateConsents, // ст.10+ст.11 multi-checkbox state
-					revokedAt: c.revokedAt?.toISOString() ?? null,
-					revokedReason: c.revokedReason,
+				consents: consents.map((consent) => ({
+					id: consent.id,
+					version: consent.version,
+					scope: consent.scope,
+					acceptedAt: consent.acceptedAt.toISOString(),
+					textSnapshot: consent.textSnapshot, // verbatim text shown
+					separateConsents: consent.separateConsents, // ст.10+ст.11 multi-checkbox state
+					revokedAt: consent.revokedAt?.toISOString() ?? null,
+					revokedReason: consent.revokedReason,
 				})),
-				scans: scans.map((s) => ({
-					id: s.id,
-					createdAt: s.createdAt.toISOString(),
-					outcome: s.outcome,
-					apiModel: s.apiModel,
-					entities: s.entities, // nullified if revoked (entitiesAnonymizedAt set)
-					confidenceHeuristic: s.confidenceHeuristic,
-					entitiesAnonymizedAt: s.entitiesAnonymizedAt?.toISOString() ?? null,
+				scans: scans.map((scan) => ({
+					id: scan.id,
+					createdAt: scan.createdAt.toISOString(),
+					outcome: scan.outcome,
+					apiModel: scan.apiModel,
+					entities: scan.entities, // nullified if revoked (entitiesAnonymizedAt set)
+					confidenceHeuristic: scan.confidenceHeuristic,
+					entitiesAnonymizedAt: scan.entitiesAnonymizedAt?.toISOString() ?? null,
 				})),
 			}
 
@@ -132,13 +190,22 @@ export function createPassportDataExportRoutesInner(deps: PassportDataExportRout
 					operatorUserId: c.var.session?.userId ?? c.var.user?.id ?? 'unknown',
 					consentCount: consents.length,
 					scanCount: scans.length,
+					warningsCount: warnings.length,
 				},
 				'152-ФЗ ст.14 DSAR export served',
 			)
 
-			// Downloadable JSON — operator может save и передать гостю.
+			// Self-review P0-3 fix: explicit cache + sniff prevention. Self-review
+			// P2-6: sanitize filename — guestId already TypeID-formatted (alphanumeric +
+			// underscore) per @horeca/shared/newId canon, no path-traversal risk.
+			const safeFilename = guestId.replace(/[^a-zA-Z0-9_-]/g, '')
+			const datePart = new Date().toISOString().slice(0, 10)
 			return c.json({ data: exportPayload }, 200, {
-				'Content-Disposition': `attachment; filename="passport-data-${guestId}-${new Date().toISOString().slice(0, 10)}.json"`,
+				'Content-Disposition': `attachment; filename="passport-data-${safeFilename}-${datePart}.json"`,
+				'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+				Pragma: 'no-cache',
+				'X-Content-Type-Options': 'nosniff',
+				// Defense-in-depth: PII export response must NOT linger в browser cache.
 			})
 		},
 	)

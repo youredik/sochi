@@ -7,17 +7,26 @@
  * existed since Sprint B, но zero routes → гость не мог exercise ст.20 →
  * автоматический fail Roskomnadzor inspection (КоАП ч.5 = 100-300к ₽).
  *
- * Flow (всё в sql.begin atomic):
+ * Self-review fix 2026-05-23 (Sprint C+1):
+ *   - **Order inversion**: DB cascade FIRST, then S3 delete. Старый порядок
+ *     удалял S3 объекты ДО tx — если cascade throws, audit rows still claim
+ *     `inputObjectKey` exist но object уже gone (data inconsistency). New
+ *     order: tx commits «scrubbed» state; S3 delete runs only when audit
+ *     already nullified.
+ *   - **Truthful state**: factory.cascadeRtbfRevoke returns canonical
+ *     {revokedAt, alreadyRevoked, revokedReason} вместо always-true lie.
+ *     Route returns this verbatim чтобы DSAR + operator API share clock.
+ *   - **Idempotency** middleware applied — double-click on revoke button
+ *     теперь dedupes на backend per Stripe canon (vision route уже paid).
+ *
+ * Flow (DB cascade FIRST):
  *   1. Find consent by (tenantId, consentId) → 404 если cross-tenant / not found
  *   2. If already revoked → return existing state (idempotent — повторный
  *      revoke допустим per 152-ФЗ canon).
- *   3. Find inputObjectKey'и в audit rows linked к этому consent
- *   4. Delete S3 objects immediately (НЕ ждать 90-day lifecycle GC) для ст.20 SLA
- *   5. Nullify PII fields в audit rows (cascade scrub) + set entitiesAnonymizedAt
- *   6. consent.revoke (sets revokedAt + revokedReason)
- *
- * НЕ deletes consent row — keeps proof что согласие existed (ст.21 ч.4
- * accountability log). Только scrubs linked PII.
+ *   3. Find inputObjectKeys в audit rows linked к этому consent (BEFORE nullify
+ *      because audit.nullify wipes inputObjectKey to NULL too)
+ *   4. cascadeRtbfRevoke в sql.begin: nullify audit + revoke consent atomic
+ *   5. AFTER tx commits — delete S3 objects (storage не транзакционен с DB)
  *
  * RBAC: requires manager+ permission — operator может revoke consents любого
  * guest в своём tenant; гость sам зайдёт через guest portal (отдельный flow).
@@ -33,6 +42,7 @@ import { rateLimiter } from 'hono-rate-limiter'
 import { z } from 'zod'
 import type { AppEnv } from '../../../../factory.ts'
 import { authMiddleware } from '../../../../middleware/auth.ts'
+import type { IdempotencyMiddleware } from '../../../../middleware/idempotency.ts'
 import { requirePermission } from '../../../../middleware/require-permission.ts'
 import { tenantMiddleware } from '../../../../middleware/tenant.ts'
 import type { PassportScanFactory } from '../passport-scan.factory.ts'
@@ -54,11 +64,13 @@ const REVOKE_RATE_LIMIT_MAX = 60
 export interface ConsentRevokeRoutesDeps {
 	readonly passportScanFactory: PassportScanFactory
 	readonly photoStorage: PassportPhotoStorage
+	/** Sprint C self-review I4 fix: Stripe-style dedup на double-click. */
+	readonly idempotency: IdempotencyMiddleware
 }
 
 export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
-	const { passportScanFactory, photoStorage } = deps
-	const { consentRepo, auditRepo } = passportScanFactory
+	const { passportScanFactory, photoStorage, idempotency } = deps
+	const { consentRepo, auditRepo, cascadeRtbfRevoke } = passportScanFactory
 
 	return new Hono<AppEnv>().post(
 		'/passport-scan/consent/:consentId/revoke',
@@ -75,6 +87,7 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 				},
 			},
 		}),
+		idempotency,
 		requirePermission({ guest: ['update'] }),
 		zValidator('json', revokeBodySchema),
 		async (c) => {
@@ -82,13 +95,16 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 			const body = c.req.valid('json')
 			const tenantId = c.var.tenantId
 
-			// (1) Cross-tenant lookup — 404 если consent не найден или не в нашем tenant
+			// (1) Cross-tenant lookup — 404 если consent не найден или не в нашем tenant.
+			// Self-review I8 mitigation: same 404 для not-found AND cross-tenant —
+			// caller cannot distinguish (timing attack mitigated by RBAC + rate limit).
 			const consent = await consentRepo.findById(tenantId, consentId)
 			if (consent === null) {
 				return c.json({ error: { code: 'NOT_FOUND', message: 'Согласие не найдено' } }, 404)
 			}
 
-			// (2) Idempotent — повторный revoke ОК per canon
+			// (2) Idempotent — повторный revoke ОК per canon. factory's cascade
+			// also re-checks revokedAt to handle TOCTOU race window.
 			if (consent.revokedAt !== null) {
 				return c.json(
 					{
@@ -98,25 +114,36 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 							revokedReason: consent.revokedReason,
 							alreadyRevoked: true,
 							deletedObjects: 0,
-							anonymizedAuditRows: 0,
 						},
 					},
 					200,
 				)
 			}
 
-			// (3+4+5+6) Atomic cascade: find objectKeys → delete S3 → nullify entities → revoke consent
+			// (3) Find inputObjectKeys BEFORE cascade nullify (which wipes inputObjectKey).
+			// Self-review C3+L10 fix: order changed — used to delete S3 first.
 			const objectKeys = await auditRepo.findObjectKeysByConsentId(tenantId, consentId)
 
-			// Delete S3 objects ВНЕ transaction (storage не транзакционен с DB).
-			// Любые failures логируются, но не блокируют DB revoke (lifecycle 90d backstop).
+			// (4) Atomic DB cascade: audit nullify + consent revoke с shared timestamp.
+			// Throws → 500 + S3 objects still intact (operator can retry, lifecycle
+			// 90-day backstop). Better than partial state «S3 gone, audit claims
+			// still there» from previous order.
+			const result = await cascadeRtbfRevoke({
+				tenantId,
+				consentId,
+				reason: body.reason,
+			})
+
+			// (5) AFTER DB tx commits, delete S3 objects. Storage failures не блокируют —
+			// audit rows already scrubbed (no PII linkage). Lifecycle 90d backstop
+			// catches stragglers per 152-ФЗ ст.21 ч.7 «не дольше необходимого».
 			let deletedObjects = 0
 			for (const key of objectKeys) {
 				try {
 					await photoStorage.delete(key)
 					deletedObjects++
 				} catch (err) {
-					c.var.logger?.warn(
+					c.var.logger.warn(
 						{
 							event: 'consent_revoke.storage_delete_failed',
 							consentId,
@@ -129,13 +156,6 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 				}
 			}
 
-			// DB cascade — atomicity via passport-scan factory helper
-			await passportScanFactory.cascadeRtbfRevoke({
-				tenantId,
-				consentId,
-				reason: body.reason,
-			})
-
 			// Sprint C: structured log для RTBF audit trail. Roskomnadzor inspection
 			// может requested «покажите когда + сколько данных удалено для consent X».
 			c.var.logger.info(
@@ -143,7 +163,9 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 					event: 'consent_revoke',
 					consentId,
 					tenantId,
+					operatorUserId: c.var.session?.userId ?? c.var.user?.id ?? 'unknown',
 					reason: body.reason,
+					alreadyRevoked: result.alreadyRevoked,
 					storageObjectsRequested: objectKeys.length,
 					storageObjectsDeleted: deletedObjects,
 				},
@@ -154,13 +176,12 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 				{
 					data: {
 						consentId,
-						revokedAt: new Date().toISOString(),
-						revokedReason: body.reason,
-						alreadyRevoked: false,
+						// Self-review H3 fix: use factory's canonical timestamp,
+						// not fresh new Date() (which drifts из tx commit latency).
+						revokedAt: result.revokedAt.toISOString(),
+						revokedReason: result.revokedReason,
+						alreadyRevoked: result.alreadyRevoked,
 						deletedObjects,
-						// Count of S3 objects successfully removed. Audit rows scrubbed
-						// = ВСЕ rows linked к consent (включая те без inputObjectKey).
-						// Точное число не surfaced — backend logs содержат полную картину.
 					},
 				},
 				200,
