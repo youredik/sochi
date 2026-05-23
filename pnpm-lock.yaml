@@ -165,6 +165,9 @@ importers:
       lru-cache:
         specifier: 11.3.6
         version: 11.3.6
+      mrz:
+        specifier: 5.0.2
+        version: 5.0.2
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -7018,6 +7021,9 @@ packages:
   mrmime@2.0.1:
     resolution: {integrity: sha512-Y3wQdFg2Va6etvQ5I82yUhGdsKrcYox6p7FfL1LbK2J4V01F9TGlepTIhnK24t7koZibmg82KGglhA1XK5IsLQ==}
     engines: {node: '>=10'}
+
+  mrz@5.0.2:
+    resolution: {integrity: sha512-GXZ2eCwXrXHy3aTYLwckAyKy0V2yIEGM1Hgj8SjIbsGwVdZRdwrUSdNdetLZV4avgPUfKslBVvwbN7RVdWiyzw==}
 
   ms@2.0.0:
     resolution: {integrity: sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A==}
@@ -15605,6 +15611,8 @@ snapshots:
       react-dom: 19.3.0-canary-d5736f09-20260507(react@19.3.0-canary-d5736f09-20260507)
 
   mrmime@2.0.1: {}
+
+  mrz@5.0.2: {}
 
   ms@2.0.0: {}
 

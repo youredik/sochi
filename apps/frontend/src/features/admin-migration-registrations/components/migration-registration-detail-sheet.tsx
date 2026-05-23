@@ -291,6 +291,7 @@ function RescanSection({ row }: { row: MigrationRegistration }) {
 					setScanOpen(false)
 				}}
 				guestAlreadyConsentedToVersion={null}
+				guestId={row.guestId}
 			/>
 			<input
 				type="hidden"

@@ -46,6 +46,19 @@ export interface PassportEntities {
 	readonly expirationDate: string | null
 }
 
+/**
+ * РКЛ (Реестр Контролируемых Лиц) status, returned by passport.scan endpoint.
+ *
+ *   - clean:        adapter confirmed clean (or RU-bypass whitelist)
+ *   - match:        adapter found a match — operator attention required, Save blocked
+ *   - inconclusive: adapter could not decide — operator warned, Save allowed
+ *   - check_failed: adapter threw / network error / insufficient data — Save allowed (МВД re-checks at submit)
+ *   - skipped_ru:   RU citizen — РКЛ not applicable (registry foreign-only)
+ *
+ * Sprint C: surfaced к frontend so operator sees RKL status в ConfirmStage badge.
+ */
+export type RklStatusForScan = 'clean' | 'match' | 'inconclusive' | 'check_failed' | 'skipped_ru'
+
 export interface RecognizePassportResponse {
 	/** Detected ISO-3 country code, или null если не определилось. */
 	readonly detectedCountryIso3: string | null
@@ -77,4 +90,54 @@ export interface RecognizePassportResponse {
 	readonly latencyMs: number
 	/** HTTP status code. 200 для success, 400/401/429/503 для errors. */
 	readonly httpStatus: number
+	/**
+	 * Sprint C: РКЛ pre-check outcome — surfaced для operator UX badge в ConfirmStage.
+	 * 'match' = Save кнопка disabled (гость в реестре контролируемых лиц МВД).
+	 */
+	readonly rklStatus: RklStatusForScan
+	readonly rklMatchType: 'exact' | 'partial' | null
+	/** RKL registry version если adapter call был сделан. Null если skipped_ru / insufficient data. */
+	readonly rklRegistryRevision: string | null
 }
+
+/**
+ * Sprint C: PASSPORT_COUNTRY_WHITELIST + RU labels lifted к shared.
+ *
+ * Yandex Vision passport model поддерживает 20 ISO-3166-1 alpha-3 кодов
+ * (research-cache yandex-vision-passport.md §2.1, 2026-04-27). Frontend
+ * использует labels для Select dropdown в ConfirmStage; backend проверяет
+ * `isCountryWhitelisted` для outcome classification.
+ *
+ * **Не дублировать в backend** — backend re-exports same Set через alias
+ * (apps/backend/src/domains/epgu/vision/types.ts).
+ */
+export const PASSPORT_COUNTRY_WHITELIST_RU: ReadonlyArray<{
+	readonly iso3: string
+	readonly labelRu: string
+}> = [
+	{ iso3: 'rus', labelRu: 'Россия' },
+	{ iso3: 'blr', labelRu: 'Беларусь' },
+	{ iso3: 'kaz', labelRu: 'Казахстан' },
+	{ iso3: 'kgz', labelRu: 'Кыргызстан' },
+	{ iso3: 'tjk', labelRu: 'Таджикистан' },
+	{ iso3: 'uzb', labelRu: 'Узбекистан' },
+	{ iso3: 'arm', labelRu: 'Армения' },
+	{ iso3: 'aze', labelRu: 'Азербайджан' },
+	{ iso3: 'mda', labelRu: 'Молдова' },
+	{ iso3: 'tkm', labelRu: 'Туркменистан' },
+	{ iso3: 'ukr', labelRu: 'Украина' },
+	{ iso3: 'tur', labelRu: 'Турция' },
+	{ iso3: 'isr', labelRu: 'Израиль' },
+	{ iso3: 'usa', labelRu: 'США' },
+	{ iso3: 'gbr', labelRu: 'Великобритания' },
+	{ iso3: 'deu', labelRu: 'Германия' },
+	{ iso3: 'fra', labelRu: 'Франция' },
+	{ iso3: 'ita', labelRu: 'Италия' },
+	{ iso3: 'esp', labelRu: 'Испания' },
+	{ iso3: 'chn', labelRu: 'Китай' },
+] as const
+
+/** Fast lookup для backend `isCountryWhitelisted` check. */
+export const PASSPORT_COUNTRY_WHITELIST_SET: ReadonlySet<string> = new Set(
+	PASSPORT_COUNTRY_WHITELIST_RU.map((c) => c.iso3),
+)

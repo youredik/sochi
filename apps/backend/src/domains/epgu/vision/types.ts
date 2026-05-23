@@ -1,12 +1,19 @@
 /**
- * VisionOcrAdapter — channel-agnostic interface для passport OCR.
+ * VisionOcrAdapter — channel-agnostic interface для document OCR.
  *
  * Production-grade contract: тот же shape, что Mock и real Yandex Vision
- * AI Studio adapter. Swap через factory binding в M8.A.live.
+ * AI Studio adapter. Swap через factory binding.
+ *
+ * Поддерживаемые типы (через `identityMethod` в request):
+ *   - `passport_paper`   — паспорт РФ внутренний → Vision `passport` model
+ *   - `passport_zagran`  — загранпаспорт РФ → `recognizeText` + MRZ-парсер
+ *   - `driver_license`   — ВУ РФ → `driver-license-front` + `-back`
+ *   - `ebs` / `digital_id_max` — не OCR, handled outside Vision adapter
  *
  * Source: research/yandex-vision-passport.md (canonical Yandex AI Studio
- * `passport` model spec).
+ * `passport` model spec) + round-2 ресёрч 2026-05-22 §1 (template coverage).
  */
+import { type IdentityMethod, PASSPORT_COUNTRY_WHITELIST_SET } from '@horeca/shared'
 
 /**
  * Vision `passport` model entities — 9 canonical + 1 conditional (`expirationDate`).
@@ -41,14 +48,27 @@ export interface PassportEntities {
 export interface RecognizePassportRequest {
 	/** Original document bytes. */
 	readonly bytes: Uint8Array
-	/** image/jpeg | image/png | image/heic | application/pdf */
+	/**
+	 * MIME type документа. Vision принимает только JPEG/PNG/PDF (research §1,
+	 * 2026-05-22). HEIC отвергается; frontend делает client-side transcode.
+	 */
 	readonly mimeType: string
 	/**
 	 * Heuristic country hint. Vision model is multi-country (20 countries
-	 * supported), but if caller knows the country — speeds up recognition.
+	 * supported), но если caller знает страну — ускоряет recognition.
 	 * Null = auto-detect.
 	 */
 	readonly countryHint?: string | null
+	/**
+	 * Тип документа — определяет какую Vision модель использовать (см.
+	 * VisionOcrAdapter doc). Default: 'passport_paper' (backward-compat).
+	 *
+	 * - `passport_paper`   → Vision `passport` model (20 countries, structured)
+	 * - `passport_zagran`  → Vision `recognizeText` + MRZ-парсер (ICAO 9303)
+	 * - `driver_license`   → 2× Vision calls (front + back), merged
+	 * - `ebs` / `digital_id_max` → adapter should reject (handled outside)
+	 */
+	readonly identityMethod?: IdentityMethod
 }
 
 export interface RecognizePassportResponse {
@@ -87,30 +107,11 @@ export interface RecognizePassportResponse {
 
 /**
  * Whitelist of 20 countries supported by Yandex Vision passport model
- * (research/yandex-vision-passport.md §2.1).
+ * (research/yandex-vision-passport.md §2.1). Sprint C lifted к
+ * `@horeca/shared` (PASSPORT_COUNTRY_WHITELIST_RU + _SET) для frontend
+ * Select dropdown re-use. This alias preserves backend API surface.
  */
-export const PASSPORT_COUNTRY_WHITELIST: ReadonlySet<string> = new Set([
-	'rus', // Россия (внутренний + загран)
-	'blr', // Беларусь
-	'kaz', // Казахстан
-	'kgz', // Кыргызстан
-	'tjk', // Таджикистан
-	'uzb', // Узбекистан
-	'arm', // Армения
-	'aze', // Азербайджан
-	'mda', // Молдова
-	'tkm', // Туркменистан
-	'ukr', // Украина
-	'tur', // Турция
-	'isr', // Израиль
-	'usa', // США
-	'gbr', // Великобритания
-	'deu', // Германия
-	'fra', // Франция
-	'ita', // Италия
-	'esp', // Испания
-	'chn', // Китай
-])
+export const PASSPORT_COUNTRY_WHITELIST = PASSPORT_COUNTRY_WHITELIST_SET
 
 export interface VisionOcrAdapter {
 	/** Identifier для audit (`yandex_vision` | `mock_vision` | `sora_ocr_2027`). */

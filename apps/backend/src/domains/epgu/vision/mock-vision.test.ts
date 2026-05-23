@@ -270,3 +270,47 @@ describe('MockVisionOcr — apiConfidenceRaw always 0', () => {
 		}
 	})
 })
+
+describe('MockVisionOcr — passport_zagran identity (MRZ-shape entities)', () => {
+	test('[Z1] forceOutcome=success + identityMethod=passport_zagran → ICAO 9303 shape', async () => {
+		const m = createMockVisionOcr({ random: makeRng(1001), forceOutcome: 'success' })
+		const res = await m.recognizePassport({
+			bytes: VALID_BYTES,
+			mimeType: 'image/jpeg',
+			identityMethod: 'passport_zagran',
+		})
+		// MRZ зона не содержит отчество / место рождения / дату выдачи
+		expect(res.entities.middleName).toBeNull()
+		expect(res.entities.birthPlace).toBeNull()
+		expect(res.entities.issueDate).toBeNull()
+		// expirationDate ОБЯЗАТЕЛЕН для загранпаспорта (≠ внутреннего)
+		expect(res.entities.expirationDate).not.toBeNull()
+		// documentNumber — 9 цифр без пробела (формат загран РФ), НЕ "4608 123456"
+		expect(res.entities.documentNumber).toMatch(/^\d{9}$/)
+	})
+
+	test('[Z2] forceOutcome=invalid_document + passport_zagran → MRZ shape сохраняется', async () => {
+		const m = createMockVisionOcr({ random: makeRng(1002), forceOutcome: 'invalid_document' })
+		const res = await m.recognizePassport({
+			bytes: VALID_BYTES,
+			mimeType: 'image/jpeg',
+			identityMethod: 'passport_zagran',
+		})
+		expect(res.entities.middleName).toBeNull()
+		expect(res.entities.expirationDate).not.toBeNull()
+	})
+
+	test('[Z3] default identityMethod (passport_paper) → middleName заполнен', async () => {
+		const m = createMockVisionOcr({ random: makeRng(1003), forceOutcome: 'success' })
+		const res = await m.recognizePassport({
+			bytes: VALID_BYTES,
+			mimeType: 'image/jpeg',
+			// identityMethod не задан → default 'passport_paper'
+		})
+		// Внутренний паспорт MUST иметь middleName (отчество ВСЕГДА в РФ паспорте)
+		expect(res.entities.middleName).not.toBeNull()
+		// Внутренний паспорт без expirationDate (РФ внутренний без срока)
+		// Mock 80% даёт internal без expiry, но stable для seed 1003 проверим
+		expect(typeof res.entities.documentNumber).toBe('string')
+	})
+})

@@ -45,6 +45,7 @@ import {
 	wrap,
 } from 'cockatiel'
 import { computeHeuristicConfidence } from './mock-vision.ts'
+import { parsePassportMrz } from './mrz-parser.ts'
 import {
 	PASSPORT_COUNTRY_WHITELIST,
 	type PassportEntities,
@@ -246,11 +247,12 @@ async function callYandexOcr(opts: {
 
 	const bodyText = await res.text()
 	if (res.status === HTTP_OK || res.status === HTTP_CREATED) {
-		// Vision OCR returns chunked stream — for single-page passport take
-		// first non-empty line. Multi-page would loop, but passport=1 page.
-		const firstChunk = bodyText.split('\n').find((l) => l.trim().length > 0) ?? '{}'
+		// Sync `/ocr/v1/recognizeText` returns single JSON envelope (verified
+		// 2026-05-22 round 3 OCR expert review). Chunked JSONL stream — only
+		// async multi-page PDF path (out of scope phase 1). Direct JSON.parse —
+		// no split-by-newline needed.
 		try {
-			return JSON.parse(firstChunk)
+			return JSON.parse(bodyText)
 		} catch (err) {
 			throw new YandexVisionBadRequestError(
 				`Yandex Vision returned non-JSON 2xx body: ${(err as Error).message}`,
@@ -416,6 +418,47 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 	const policy = buildResiliencePolicy()
 	const url = `${apiBase}${OCR_RECOGNIZE_PATH}`
 
+	/**
+	 * Shared call infrastructure — single Yandex Vision API call с idempotency
+	 * + resilience policy. Returns parsed chunk OR throws YandexVisionError-family.
+	 *
+	 * Vision model выбирается caller (passport / text / driver-license-front / ...).
+	 */
+	const executeOcrCall = async (model: string, req: RecognizePassportRequest) => {
+		const body = {
+			content: Buffer.from(req.bytes).toString('base64'),
+			mimeType: req.mimeType,
+			languageCodes: ['ru', 'en'],
+			model,
+		}
+		const idempotencyKey = uuid()
+		return policy.execute(({ signal }) =>
+			callYandexOcr({
+				fetcher,
+				input: {
+					url,
+					apiKey: opts.apiKey,
+					folderId: opts.folderId,
+					idempotencyKey,
+					body,
+				},
+				abortSignal: signal,
+			}),
+		)
+	}
+
+	/** Empty-bytes / API-error fallback response — shared между flows. */
+	const buildErrorResponse = (t0: number, httpStatus: number): RecognizePassportResponse => ({
+		detectedCountryIso3: null,
+		isCountryWhitelisted: false,
+		entities: emptyPassportEntities(),
+		apiConfidenceRaw: 0,
+		confidenceHeuristic: 0,
+		outcome: 'api_error',
+		latencyMs: now() - t0,
+		httpStatus,
+	})
+
 	return {
 		source: 'yandex_vision',
 		/**
@@ -426,34 +469,27 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 		 * passport biometric-class data per Roskomnadzor 2026 clarifications —
 		 * delete within 5 min of processing). No persistent caching, no logging
 		 * of raw bytes (Pino redact paths `*.bytes` / `*.content`).
+		 *
+		 * Branch по identityMethod:
+		 *   - 'passport_paper' (default): Vision `passport` model (template OCR),
+		 *     возвращает structured entities 9 полей.
+		 *   - 'passport_zagran': Vision generic `text` model + MRZ-парсер (ICAO 9303 TD3),
+		 *     возвращает 7 полей из MRZ зоны (middleName/birthPlace/issueDate = null).
+		 *   - 'driver_license': (Phase 4) — 2× Vision (`driver-license-front` + `-back`).
+		 *   - 'ebs' / 'digital_id_max': adapter не должен получать (route отвергает).
 		 */
 		async recognizePassport(req: RecognizePassportRequest): Promise<RecognizePassportResponse> {
 			const t0 = now()
 
-			// Validate input
 			if (req.bytes.length === 0) {
-				return {
-					detectedCountryIso3: null,
-					isCountryWhitelisted: false,
-					entities: emptyPassportEntities(),
-					apiConfidenceRaw: 0,
-					confidenceHeuristic: 0,
-					outcome: 'api_error',
-					latencyMs: now() - t0,
-					httpStatus: 400,
-				}
+				return { ...buildErrorResponse(t0, 400) }
 			}
 
-			const body = {
-				content: Buffer.from(req.bytes).toString('base64'),
-				mimeType: req.mimeType,
-				languageCodes: ['ru', 'en'],
-				model: 'passport',
-			}
-
+			const identityMethod = req.identityMethod ?? 'passport_paper'
 			logger?.info(
 				{
 					provider: 'yandex_vision',
+					identityMethod,
 					mimeType: req.mimeType,
 					bytesLen: req.bytes.length,
 					countryHint: req.countryHint ?? null,
@@ -461,33 +497,31 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 				'yandex_vision.recognizePassport',
 			)
 
-			// Idempotency-Key generated ONCE outside retry callback — retries MUST
-			// reuse same key for Yandex Cloud server-side dedup (IETF canon).
-			// Generating inside `policy.execute` callback would defeat idempotency
-			// because cockatiel re-invokes the closure on each retry.
-			const idempotencyKey = uuid()
+			if (identityMethod === 'passport_zagran') {
+				return recognizeZagranFlow({
+					req,
+					t0,
+					executeOcrCall,
+					buildErrorResponse,
+					now,
+					logger,
+				})
+			}
 
+			// Default path: passport_paper (Vision `passport`) или driver_license
+			// (Vision `driver-license-front`). Оба возвращают entities array в одном
+			// shape — driver-license-front имеет surname/name/birth_date/number/
+			// issue_date/expiration_date (back-side categories — out of scope phase 1).
+			const visionModel = identityMethod === 'driver_license' ? 'driver-license-front' : 'passport'
 			let httpStatus = HTTP_OK
 			let chunk: unknown
 			try {
-				chunk = await policy.execute(({ signal }) =>
-					callYandexOcr({
-						fetcher,
-						input: {
-							url,
-							apiKey: opts.apiKey,
-							folderId: opts.folderId,
-							idempotencyKey,
-							body,
-						},
-						abortSignal: signal,
-					}),
-				)
+				chunk = await executeOcrCall(visionModel, req)
 			} catch (err) {
 				if (err instanceof YandexVisionError) {
 					httpStatus = err.status
 				} else if (err instanceof YandexVisionNetworkError) {
-					httpStatus = 0 // 0 = network failure (no HTTP exchange)
+					httpStatus = 0
 				} else {
 					throw err
 				}
@@ -499,19 +533,9 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 					},
 					'yandex_vision.recognizePassport: API failure → api_error outcome',
 				)
-				return {
-					detectedCountryIso3: null,
-					isCountryWhitelisted: false,
-					entities: emptyPassportEntities(),
-					apiConfidenceRaw: 0,
-					confidenceHeuristic: 0,
-					outcome: 'api_error',
-					latencyMs: now() - t0,
-					httpStatus,
-				}
+				return buildErrorResponse(t0, httpStatus)
 			}
 
-			// Parse chunk envelope. Zod validates shape — if API drifts, fail loud.
 			const parsed = yandexVisionChunkSchema.parse(chunk)
 			if (parsed.error !== undefined) {
 				logger?.warn(
@@ -522,16 +546,7 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 					},
 					'yandex_vision.recognizePassport: API error envelope → api_error outcome',
 				)
-				return {
-					detectedCountryIso3: null,
-					isCountryWhitelisted: false,
-					entities: emptyPassportEntities(),
-					apiConfidenceRaw: 0,
-					confidenceHeuristic: 0,
-					outcome: 'api_error',
-					latencyMs: now() - t0,
-					httpStatus,
-				}
+				return buildErrorResponse(t0, httpStatus)
 			}
 
 			const rawEntities = parsed.result?.textAnnotation?.entities ?? []
@@ -563,12 +578,198 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 				detectedCountryIso3,
 				isCountryWhitelisted,
 				entities,
-				apiConfidenceRaw: 0, // Yandex Vision canon — broken upstream (per types.ts §3.2)
+				apiConfidenceRaw: 0,
 				confidenceHeuristic,
 				outcome,
 				latencyMs,
 				httpStatus,
 			}
 		},
+	}
+}
+
+// -----------------------------------------------------------------------------
+// passport_zagran flow — Vision `text` model + MRZ parser
+// -----------------------------------------------------------------------------
+
+/**
+ * Heuristic confidence для загранпаспорта (MRZ-based).
+ *
+ * Отличается от внутреннего паспорта:
+ *   - expirationDate ОБЯЗАТЕЛЕН (-0.2 если null)
+ *   - documentNumber regex другой (9 цифр для российского загран)
+ *   - middleName/birthPlace/issueDate NULL — OK, не штрафуем
+ *   - mrz.isValid=false → -0.25 (checksums broken — likely OCR error)
+ */
+function computeZagranConfidence(
+	entities: PassportEntities,
+	mrzValid: boolean,
+	today: Date,
+): number {
+	let score = 1.0
+	if (entities.surname === null || entities.name === null || entities.documentNumber === null) {
+		score -= 0.2
+	}
+	if (entities.birthDate === null) score -= 0.2
+	if (entities.expirationDate === null) score -= 0.2
+	if (!mrzValid) score -= 0.25
+	// Birth date sanity
+	if (entities.birthDate !== null) {
+		const bd = new Date(entities.birthDate)
+		if (Number.isNaN(bd.getTime())) {
+			score -= 0.1
+		} else {
+			const year = bd.getFullYear()
+			if (year < 1900 || bd > today) score -= 0.1
+			const ageYears = (today.getTime() - bd.getTime()) / (365.25 * 24 * 3600 * 1000)
+			if (ageYears < 14) score -= 0.2
+		}
+	}
+	// Expiration date sanity (future date expected)
+	if (entities.expirationDate !== null) {
+		const ed = new Date(entities.expirationDate)
+		if (!Number.isNaN(ed.getTime()) && ed < today) {
+			// Истёкший паспорт — не штрафуем confidence (это другая проверка),
+			// но в логике caller UI должна показать red banner.
+		}
+	}
+	return Math.max(0, Math.min(1, score))
+}
+
+async function recognizeZagranFlow(deps: {
+	req: RecognizePassportRequest
+	t0: number
+	executeOcrCall: (model: string, req: RecognizePassportRequest) => Promise<unknown>
+	buildErrorResponse: (t0: number, httpStatus: number) => RecognizePassportResponse
+	now: () => number
+	logger:
+		| {
+				info(obj: Record<string, unknown>, msg?: string): void
+				warn(obj: Record<string, unknown>, msg?: string): void
+		  }
+		| undefined
+}): Promise<RecognizePassportResponse> {
+	const { req, t0, executeOcrCall, buildErrorResponse, now, logger } = deps
+	let httpStatus = HTTP_OK
+	let chunk: unknown
+	try {
+		// `page` = default generic OCR model per Yandex Vision docs (verified
+		// 2026-05-22 round 3 — `text` НЕ supported model name; canonical generic
+		// is `page` or omit-field-uses-default). Returns fullText без template-
+		// extraction — идеально для MRZ-парсинга. ~0.13 ₽/scan vs `passport`
+		// 0.71 ₽/scan (5× cheaper).
+		chunk = await executeOcrCall('page', req)
+	} catch (err) {
+		if (err instanceof YandexVisionError) {
+			httpStatus = err.status
+		} else if (err instanceof YandexVisionNetworkError) {
+			httpStatus = 0
+		} else {
+			throw err
+		}
+		logger?.warn(
+			{ provider: 'yandex_vision', httpStatus, err: (err as Error).message },
+			'yandex_vision.recognizeZagranFlow: API failure',
+		)
+		return buildErrorResponse(t0, httpStatus)
+	}
+
+	const parsed = yandexVisionChunkSchema.parse(chunk)
+	if (parsed.error !== undefined) {
+		logger?.warn(
+			{ provider: 'yandex_vision', errCode: parsed.error.code },
+			'yandex_vision.recognizeZagranFlow: API error envelope',
+		)
+		return buildErrorResponse(t0, httpStatus)
+	}
+
+	const fullText = parsed.result?.textAnnotation?.fullText ?? ''
+	if (fullText.length === 0) {
+		logger?.warn(
+			{ provider: 'yandex_vision' },
+			'yandex_vision.recognizeZagranFlow: empty fullText в OCR response',
+		)
+		// HTTP 200 + empty text = НЕ api_error (API сработала), это low-quality scan.
+		// Оператор увидит "не распознано" и сможет перескан или ручной ввод.
+		return {
+			detectedCountryIso3: null,
+			isCountryWhitelisted: false,
+			entities: emptyPassportEntities(),
+			apiConfidenceRaw: 0,
+			confidenceHeuristic: 0,
+			outcome: 'low_confidence',
+			latencyMs: now() - t0,
+			httpStatus,
+		}
+	}
+
+	const mrz = parsePassportMrz(fullText)
+	if (mrz === null) {
+		logger?.warn(
+			{ provider: 'yandex_vision' },
+			'yandex_vision.recognizeZagranFlow: MRZ зона не найдена — не загранпаспорт?',
+		)
+		// MRZ не найдена — возвращаем low_confidence с empty entities,
+		// оператор увидит "распознавание неудачно, заполните вручную".
+		return {
+			detectedCountryIso3: null,
+			isCountryWhitelisted: false,
+			entities: emptyPassportEntities(),
+			apiConfidenceRaw: 0,
+			confidenceHeuristic: 0,
+			outcome: 'low_confidence',
+			latencyMs: now() - t0,
+			httpStatus,
+		}
+	}
+
+	const entities = mrz.entities
+	const detectedCountryIso3 = entities.citizenshipIso3
+	const isCountryWhitelisted =
+		detectedCountryIso3 !== null && PASSPORT_COUNTRY_WHITELIST.has(detectedCountryIso3)
+	const confidenceHeuristic = computeZagranConfidence(entities, mrz.isValid, new Date(now()))
+
+	let outcome: RecognizePassportResponse['outcome']
+	if (httpStatus >= 400) {
+		outcome = 'api_error'
+	} else if (!isCountryWhitelisted && detectedCountryIso3 !== null) {
+		outcome = 'invalid_document'
+	} else if (
+		confidenceHeuristic >= 0.75 &&
+		entities.surname !== null &&
+		entities.name !== null &&
+		entities.documentNumber !== null &&
+		entities.birthDate !== null &&
+		entities.expirationDate !== null
+	) {
+		outcome = 'success'
+	} else {
+		outcome = 'low_confidence'
+	}
+
+	const latencyMs = now() - t0
+	logger?.info(
+		{
+			provider: 'yandex_vision',
+			flow: 'zagran',
+			outcome,
+			confidenceHeuristic,
+			detectedCountryIso3,
+			mrzValid: mrz.isValid,
+			mrzFormat: mrz.mrzFormat,
+			latencyMs,
+		},
+		'yandex_vision.recognizeZagranFlow: complete',
+	)
+
+	return {
+		detectedCountryIso3,
+		isCountryWhitelisted,
+		entities,
+		apiConfidenceRaw: 0,
+		confidenceHeuristic,
+		outcome,
+		latencyMs,
+		httpStatus,
 	}
 }

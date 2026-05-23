@@ -229,6 +229,15 @@ export const envSchema = z.object({
 	YC_VISION_API_KEY: z.string().optional(),
 	YC_VISION_FOLDER_ID: z.string().optional(),
 
+	// Passport photo storage provider (Sprint B 2026-05-22).
+	//   disabled — no storage, inputObjectKey=null в audit (Phase 1 minimal mode)
+	//   mock     — behaviour-faithful (no actual S3 PUT, generates canonical key)
+	//   yandex   — YC Object Storage (S3-compatible). Reuses S3_* env (canon).
+	// Bucket needs lifecycle policy для 90-day auto-delete (Terraform).
+	PASSPORT_PHOTO_STORAGE: z.enum(['disabled', 'mock', 'yandex']).default('disabled'),
+	/** Separate bucket для passport scans (НЕ shared с property media). Optional — defaults к S3_BUCKET. */
+	S3_BUCKET_PASSPORT_SCANS: z.string().optional(),
+
 	// Right-most-trusted-proxy canon (P2.5 hardening, 2026-05-19).
 	//
 	// CSV list of CIDRs corresponding to OWN reverse-proxy infrastructure

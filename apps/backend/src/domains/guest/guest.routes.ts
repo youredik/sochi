@@ -1,12 +1,21 @@
 import { zValidator } from '@hono/zod-validator'
 import { guestCreateInput, guestIdParam, guestUpdateInput } from '@horeca/shared'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { NotFoundError } from '../../errors/domain.ts'
 import type { AppEnv } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import type { IdempotencyMiddleware } from '../../middleware/idempotency.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
 import type { createGuestFactory } from './guest.factory.ts'
+
+/**
+ * Sprint C halfmeasure sibling fix: guest routes принимают PII payloads
+ * (passport data, contact info) — нужен body cap так же как vision.routes.ts
+ * (анти-DoS + adversarial JSON bomb protection). 256KB достаточно для
+ * полной формы гостя с многими полями.
+ */
+const GUEST_BODY_LIMIT = 256 * 1024
 
 /**
  * Guest routes.
@@ -24,6 +33,38 @@ export function createGuestRoutes(
 	return new Hono<AppEnv>()
 		.use('*', authMiddleware(), tenantMiddleware())
 		.use('*', idempotency)
+		.use(
+			'/guests',
+			bodyLimit({
+				maxSize: GUEST_BODY_LIMIT,
+				onError: (c) =>
+					c.json(
+						{
+							error: {
+								code: 'PAYLOAD_TOO_LARGE',
+								message: `Тело запроса превышает лимит ${Math.floor(GUEST_BODY_LIMIT / 1024)} КБ`,
+							},
+						},
+						413,
+					),
+			}),
+		)
+		.use(
+			'/guests/*',
+			bodyLimit({
+				maxSize: GUEST_BODY_LIMIT,
+				onError: (c) =>
+					c.json(
+						{
+							error: {
+								code: 'PAYLOAD_TOO_LARGE',
+								message: `Тело запроса превышает лимит ${Math.floor(GUEST_BODY_LIMIT / 1024)} КБ`,
+							},
+						},
+						413,
+					),
+			}),
+		)
 		.get('/guests', async (c) => {
 			const items = await service.list(c.var.tenantId)
 			return c.json({ data: items }, 200)

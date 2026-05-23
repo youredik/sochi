@@ -5,6 +5,7 @@ import { newId } from '@horeca/shared'
 import { Hono } from 'hono'
 import { contextStorage } from 'hono/context-storage'
 import { cors } from 'hono/cors'
+import { secureHeaders } from 'hono/secure-headers'
 import { requestId } from 'hono/request-id'
 import { pinoLogger } from 'hono-pino'
 import { auth } from './auth.ts'
@@ -30,6 +31,10 @@ import { createMockRklCheck } from './domains/epgu/rkl/mock-rkl.ts'
 import { createMockEpguTransport } from './domains/epgu/transport/mock-epgu.ts'
 import { createVisionAdapterFromEnv } from './domains/epgu/vision/vision.factory.ts'
 import { createVisionRoutes } from './domains/epgu/vision/vision.routes.ts'
+import { createConsentRevokeRoutes } from './domains/epgu/passport-scan/consent/consent-revoke.routes.ts'
+import { createPassportDataExportRoutes } from './domains/epgu/passport-scan/dsar/passport-data-export.routes.ts'
+import { createPassportScanFactory } from './domains/epgu/passport-scan/passport-scan.factory.ts'
+import { createPassportPhotoStorageFromEnv } from './domains/epgu/passport-scan/storage/passport-photo-storage.factory.ts'
 import { createFolioFactory } from './domains/folio/folio.factory.ts'
 import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
 import { createDemoInboxRoutes } from './domains/demo/inbox.routes.ts'
@@ -190,6 +195,25 @@ const visionResult = createVisionAdapterFromEnv({
 	ycVisionFolderId: env.YC_VISION_FOLDER_ID,
 })
 const visionOcrAdapter = visionResult.adapter
+
+// Passport photo storage — YC Object Storage native (Sprint B 2026-05-22).
+// 90-day retention bucket lifecycle policy в Terraform — auto-delete без cron.
+const passportPhotoStorageResult = createPassportPhotoStorageFromEnv({
+	storageProvider: env.PASSPORT_PHOTO_STORAGE,
+	appMode: env.APP_MODE,
+	s3Endpoint: env.S3_ENDPOINT,
+	s3Region: env.S3_REGION,
+	s3AccessKeyId: env.S3_ACCESS_KEY_ID,
+	s3SecretAccessKey: env.S3_SECRET_ACCESS_KEY,
+	s3Bucket: env.S3_BUCKET_PASSPORT_SCANS ?? env.S3_BUCKET,
+})
+const passportPhotoStorage = passportPhotoStorageResult.adapter
+
+// Sprint C: passport-scan factory — owns consent + audit repos + atomic write
+// helper + RTBF cascade. Routes import factory type, not `sql` directly
+// (depcruise `no-routes-to-db` enforcement).
+const passportScanFactory = createPassportScanFactory(sql)
+
 registerAdapter(visionResult.metadata)
 // DaData identity-lookup adapter — auto-fills ИНН → org name/address/tax regime
 // в 2-step onboarding wizard. Mock-вариант возвращает canonical demo dataset
@@ -710,6 +734,26 @@ app.use('*', requestId())
 // hono-pino picks up `requestId` from the context automatically via referRequestIdKey.
 app.use('*', pinoLogger({ pino: logger }))
 
+// Sprint B 2026-05-22 — native Hono security headers (Strict-Transport-Security,
+// X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
+// Defaults are sane для backend API: blocks framing, content-type sniffing, MITM.
+// Не включаем CSP (не serve HTML — frontend has own CSP in index.html).
+app.use(
+	'*',
+	secureHeaders({
+		// HSTS — force HTTPS на год; в dev без HTTPS browser ignores но header
+		// безвредный. Production behind YC ALB сразу включает.
+		strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+		// X-Frame-Options: DENY — backend API не должен embed в iframe (clickjacking).
+		xFrameOptions: 'DENY',
+		// MIME-sniffing — отключаем (defense-in-depth дополнительно к magic-byte).
+		xContentTypeOptions: 'nosniff',
+		// Referrer: strict-origin-when-cross-origin (canon 2026 web baseline).
+		referrerPolicy: 'strict-origin-when-cross-origin',
+		// CSP не задаём — это API не HTML, frontend имеет свой CSP в index.html.
+	}),
+)
+
 app.use(
 	'*',
 	cors({
@@ -891,7 +935,27 @@ const routes = app
 	)
 	.route('/api/v1', createRefundRoutes(refundFactory, idempotency))
 	.route('/api/v1', createMigrationRegistrationRoutes(migrationRegistrationFactory, idempotency))
-	.route('/api/v1', createVisionRoutes(visionOcrAdapter))
+	.route(
+		'/api/v1',
+		createVisionRoutes({
+			visionAdapter: visionOcrAdapter,
+			rklAdapter,
+			idempotency,
+			guestRepo: guestFactory.repo,
+			photoStorage: passportPhotoStorage,
+			passportScanFactory, // Sprint C: factory encapsulates sql + atomic consent+audit writes
+		}),
+	)
+	// Sprint C: RTBF endpoint — 152-ФЗ ст.20 (10 рабочих дней)
+	.route(
+		'/api/v1',
+		createConsentRevokeRoutes({ passportScanFactory, photoStorage: passportPhotoStorage }),
+	)
+	// Sprint C: DSAR endpoint — 152-ФЗ ст.14 (30 рабочих дней)
+	.route(
+		'/api/v1',
+		createPassportDataExportRoutes({ passportScanFactory, guestRepo: guestFactory.repo }),
+	)
 	.route('/api/v1', createIdentityRoutes(dadata.adapter))
 	.route('/api/v1', createOnboardingRoutes(onboardingFactory, idempotency))
 	// Demo inbox public route. Always mounted at the public path, but the

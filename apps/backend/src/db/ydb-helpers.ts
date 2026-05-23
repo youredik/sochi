@@ -3,6 +3,8 @@ import {
 	Bool,
 	BoolType,
 	DateType,
+	Double,
+	DoubleType,
 	FloatType,
 	Int32Type,
 	Int64,
@@ -43,6 +45,18 @@ export const NULL_INT64 = new Optional(null, new Int64Type())
 
 /** Typed null for nullable `Float` columns. */
 export const NULL_FLOAT = new Optional(null, new FloatType())
+
+/** Typed null for nullable `Double` columns. */
+const NULL_DOUBLE = new Optional(null, new DoubleType())
+
+/**
+ * Bind a number (or null) to a nullable `Double` column. Used for confidence
+ * scores in `passportOcrAudit` (apiConfidenceRaw / confidenceHeuristic) which
+ * are Double per migration 0037.
+ */
+export function doubleOpt(value: number | null): Optional<DoubleType> {
+	return value === null ? NULL_DOUBLE : new Optional(new Double(value), new DoubleType())
+}
 
 /** Typed null for nullable `Timestamp` columns. */
 export const NULL_TIMESTAMP = new Optional(null, new TimestampType())

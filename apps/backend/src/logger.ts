@@ -34,6 +34,27 @@ const REDACT_PATHS = [
 	'*.content', // base64 body field в request к Yandex Vision
 	'*.passport',
 	'*.fullText', // raw OCR output text
+	'*.imageBase64', // route body field (frontend → backend)
+	'*.archive', // route handler local var (Uint8Array from base64 decode)
+	'*.inputObjectKey', // S3 object key — adversarial reconstruction risk
+	// 152-ФЗ: passport entities — scoped к `entities.*` чтобы НЕ redact'ить
+	// unrelated `name`/`surname` поля в booking/property logs. Round 3
+	// security review insight 2026-05-22.
+	'*.entities.name',
+	'*.entities.surname',
+	'*.entities.middleName',
+	'*.entities.gender',
+	'*.entities.birthDate',
+	'*.entities.birthPlace',
+	'*.entities.documentNumber',
+	'*.entities.issueDate',
+	'*.entities.expirationDate',
+	'*.entities.citizenshipIso3',
+	'*.entities', // top-level fallback если объект entities целиком в log
+	// 152-ФЗ: национальность из паспорта = special category ст.10
+	'*.detectedCountryIso3',
+	'*.citizenshipIso3',
+	'*.rawResponseJson', // full Yandex Vision response may contain entities
 	// 152-ФЗ: PII contact fields
 	'*.email',
 	'*.phone',

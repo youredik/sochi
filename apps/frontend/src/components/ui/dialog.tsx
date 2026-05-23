@@ -44,11 +44,16 @@ function DialogContent({
 				{...props}
 			>
 				{children}
+				{/*
+				 * WCAG 2.2 AA 2.5.8 — minimum target size 24×24 CSS px.
+				 * `p-2 + size-4` icon → 32×32 effective touch target. Icon stays visually
+				 * small (16px), но hit area extends к 32px через padding (Apple HIG canon).
+				 */}
 				<DialogPrimitive.Close
-					className="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+					className="absolute top-3 right-3 inline-flex items-center justify-center rounded-sm p-2 opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
 					aria-label="Закрыть"
 				>
-					<XIcon className="size-4" />
+					<XIcon className="size-4" aria-hidden="true" />
 				</DialogPrimitive.Close>
 			</DialogPrimitive.Content>
 		</DialogPortal>

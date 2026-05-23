@@ -98,8 +98,41 @@ function buildFullEntities(random: () => number): PassportEntities {
 	}
 }
 
-function buildPartialEntities(random: () => number): PassportEntities {
-	const full = buildFullEntities(random)
+/**
+ * Zagran (загранпаспорт) entities — MRZ flow specifics:
+ *   - middleName всегда null (ICAO 9303 не содержит отчество)
+ *   - birthPlace всегда null (только VIZ-зона)
+ *   - issueDate всегда null (только VIZ-зона)
+ *   - expirationDate всегда заполнен (загран всегда имеет срок ~10 лет)
+ *   - documentNumber = 9 цифр (формат загран РФ), не "4608 123456"
+ */
+function buildZagranEntities(random: () => number): PassportEntities {
+	const issueYear = 2015 + Math.floor(random() * 10) // 2015-2024
+	const expiryYear = issueYear + 10
+	const mm = (1 + Math.floor(random() * 12)).toString().padStart(2, '0')
+	const dd = (1 + Math.floor(random() * 28)).toString().padStart(2, '0')
+	const expirationDate = `${expiryYear}-${mm}-${dd}`
+	// 9-digit number (зарплата passport canon, no space separator)
+	const docNumber = Array.from({ length: 9 }, () => Math.floor(random() * 10)).join('')
+	return {
+		surname: pick(SAMPLE_RUS_SURNAMES, random),
+		name: pick(SAMPLE_RUS_NAMES, random),
+		middleName: null,
+		gender: random() < 0.5 ? 'male' : 'female',
+		citizenshipIso3: 'rus',
+		birthDate: randomDateInRange(random, 1960, 2008),
+		birthPlace: null,
+		documentNumber: docNumber,
+		issueDate: null,
+		expirationDate,
+	}
+}
+
+function buildPartialEntities(
+	random: () => number,
+	fullBuilder: (rnd: () => number) => PassportEntities = buildFullEntities,
+): PassportEntities {
+	const full = fullBuilder(random)
 	// Drop 3-5 random fields
 	const fieldsToDrop = 3 + Math.floor(random() * 3)
 	const keys = Object.keys(full) as Array<keyof PassportEntities>
@@ -209,6 +242,12 @@ export function createMockVisionOcr(opts: MockVisionOcrOptions = {}): VisionOcrA
 				}
 			}
 
+			// Build "full" entities depends on identityMethod: загран имеет shape отличный
+			// от paper passport (no middleName/birthPlace/issueDate, mandatory expiry).
+			const identityMethod = req.identityMethod ?? 'passport_paper'
+			const buildFull = (rnd: () => number): PassportEntities =>
+				identityMethod === 'passport_zagran' ? buildZagranEntities(rnd) : buildFullEntities(rnd)
+
 			// Outcome distribution
 			const roll = random()
 			let outcome: RecognizePassportResponse['outcome']
@@ -222,13 +261,13 @@ export function createMockVisionOcr(opts: MockVisionOcrOptions = {}): VisionOcrA
 						entities = emptyEntities()
 						break
 					case 'invalid_document':
-						entities = buildFullEntities(random)
+						entities = buildFull(random)
 						break
 					case 'low_confidence':
 						entities = buildPartialEntities(random)
 						break
 					default:
-						entities = buildFullEntities(random)
+						entities = buildFull(random)
 				}
 			} else if (roll < 0.03) {
 				// 3% invalid_argument
@@ -245,12 +284,15 @@ export function createMockVisionOcr(opts: MockVisionOcrOptions = {}): VisionOcrA
 				outcome = 'low_confidence'
 				entities = emptyEntities()
 			} else if (roll < 0.17) {
-				// 7% partial entities
+				// 7% partial entities — pass identityMethod-specific builder для shape parity
 				outcome = 'low_confidence'
-				entities = buildPartialEntities(random)
+				entities = buildPartialEntities(
+					random,
+					identityMethod === 'passport_zagran' ? buildZagranEntities : buildFullEntities,
+				)
 			} else {
 				// ~83% full extract
-				entities = buildFullEntities(random)
+				entities = buildFull(random)
 				outcome = 'success' // re-classified below by computeHeuristic
 			}
 

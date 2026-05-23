@@ -100,6 +100,12 @@ resource "yandex_serverless_container" "backend" {
       S3_ENDPOINT = "https://storage.yandexcloud.net"
       S3_REGION   = "ru-central1"
       S3_BUCKET   = yandex_storage_bucket.demo_backend_files.bucket
+      # Sprint B 2026-05-22 — separate bucket для passport scans с 90-day
+      # lifecycle policy + versioning OFF (152-ФЗ PII isolation canon).
+      S3_BUCKET_PASSPORT_SCANS = yandex_storage_bucket.demo_passport_scans.bucket
+      # Passport photo storage режим. Demo = mock (no real upload — saves quota).
+      # Production swap = "yandex" → real PUT в demo_passport_scans bucket.
+      PASSPORT_PHOTO_STORAGE = "mock"
 
       # Email — Phase 2 dual-write: DemoInboxAdapter captures + PostboxAdapter
       # sends real email. From address must match Postbox identity (sepshn.ru).
