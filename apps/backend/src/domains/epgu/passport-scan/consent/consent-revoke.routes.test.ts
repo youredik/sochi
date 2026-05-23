@@ -126,7 +126,6 @@ function buildApp(role: MemberRole, factoryOpts: StubFactoryOpts = {}) {
 	const deleteCalls: string[] = []
 	const photoStorageStub = {
 		...photoStorage,
-		// biome-ignore lint/suspicious/noExplicitAny: stub mode shape
 		delete: async (key: string) => {
 			deleteCalls.push(key)
 		},

@@ -23,12 +23,21 @@
  */
 
 import { Hono } from 'hono'
+import { rateLimiter } from 'hono-rate-limiter'
 import type { AppEnv } from '../../../../factory.ts'
 import { authMiddleware } from '../../../../middleware/auth.ts'
 import { requirePermission } from '../../../../middleware/require-permission.ts'
 import { tenantMiddleware } from '../../../../middleware/tenant.ts'
 import type { GuestRepo } from '../../../guest/guest.repo.ts'
 import type { PassportScanFactory } from '../passport-scan.factory.ts'
+
+/**
+ * Sprint C Day 3+: DSAR endpoint rate limit 30/min/tenant. Heavier than
+ * revoke (DB aggregation + larger response payload). Realistic operator
+ * workflow = 1 DSAR request per minute max.
+ */
+const DSAR_RATE_LIMIT_WINDOW_MS = 60_000
+const DSAR_RATE_LIMIT_MAX = 30
 
 export interface PassportDataExportRoutesDeps {
 	readonly passportScanFactory: PassportScanFactory
@@ -40,6 +49,19 @@ export function createPassportDataExportRoutesInner(deps: PassportDataExportRout
 	const { consentRepo, auditRepo } = passportScanFactory
 	return new Hono<AppEnv>().get(
 		'/guests/:guestId/passport-data-export',
+		rateLimiter<AppEnv>({
+			windowMs: DSAR_RATE_LIMIT_WINDOW_MS,
+			limit: DSAR_RATE_LIMIT_MAX,
+			keyGenerator: (c) => c.var.tenantId ?? 'anonymous',
+			standardHeaders: 'draft-7',
+			statusCode: 429,
+			message: {
+				error: {
+					code: 'RATE_LIMITED',
+					message: 'Слишком много DSAR-запросов в минуту. Лимит = 30/мин на тенант.',
+				},
+			},
+		}),
 		requirePermission({ guest: ['read'] }),
 		async (c) => {
 			const guestId = c.req.param('guestId')
@@ -98,6 +120,21 @@ export function createPassportDataExportRoutesInner(deps: PassportDataExportRout
 					entitiesAnonymizedAt: s.entitiesAnonymizedAt?.toISOString() ?? null,
 				})),
 			}
+
+			// Sprint C: structured ops log для DSAR access audit trail. Roskomnadzor
+			// inspection: «покажите кто и когда выгружал данные для guestId X».
+			// Operator user ID + counts — для accountability per 152-ФЗ ст.21 ч.4.
+			c.var.logger.info(
+				{
+					event: 'passport_data_export',
+					tenantId,
+					guestId,
+					operatorUserId: c.var.session?.userId ?? c.var.user?.id ?? 'unknown',
+					consentCount: consents.length,
+					scanCount: scans.length,
+				},
+				'152-ФЗ ст.14 DSAR export served',
+			)
 
 			// Downloadable JSON — operator может save и передать гостю.
 			return c.json({ data: exportPayload }, 200, {

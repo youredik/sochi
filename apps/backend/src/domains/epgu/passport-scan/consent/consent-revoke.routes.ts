@@ -29,6 +29,7 @@
 
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
+import { rateLimiter } from 'hono-rate-limiter'
 import { z } from 'zod'
 import type { AppEnv } from '../../../../factory.ts'
 import { authMiddleware } from '../../../../middleware/auth.ts'
@@ -41,6 +42,15 @@ const revokeBodySchema = z.object({
 	reason: z.enum(['user_request', 'gdpr_export', 'mistake', 'other']).default('user_request'),
 })
 
+/**
+ * Sprint C Day 3+: rate limit 60 revoke/min/tenant. Even с RBAC, compromised
+ * operator account could brute-force consentIds (UUID-like cns_* + tenantId
+ * filter = high entropy, но defense-in-depth). 60 = generous для legitimate
+ * support workflows (operator revokes 1 per minute = 60/h max realistic).
+ */
+const REVOKE_RATE_LIMIT_WINDOW_MS = 60_000
+const REVOKE_RATE_LIMIT_MAX = 60
+
 export interface ConsentRevokeRoutesDeps {
 	readonly passportScanFactory: PassportScanFactory
 	readonly photoStorage: PassportPhotoStorage
@@ -52,6 +62,19 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 
 	return new Hono<AppEnv>().post(
 		'/passport-scan/consent/:consentId/revoke',
+		rateLimiter<AppEnv>({
+			windowMs: REVOKE_RATE_LIMIT_WINDOW_MS,
+			limit: REVOKE_RATE_LIMIT_MAX,
+			keyGenerator: (c) => c.var.tenantId ?? 'anonymous',
+			standardHeaders: 'draft-7',
+			statusCode: 429,
+			message: {
+				error: {
+					code: 'RATE_LIMITED',
+					message: 'Слишком много отзывов согласий в минуту. Лимит = 60/мин на тенант.',
+				},
+			},
+		}),
 		requirePermission({ guest: ['update'] }),
 		zValidator('json', revokeBodySchema),
 		async (c) => {
