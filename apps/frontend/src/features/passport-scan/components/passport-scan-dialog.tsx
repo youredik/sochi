@@ -75,7 +75,7 @@ import { generateUuid } from '../../../lib/uuid-fallback.ts'
 import { useScanPassport } from '../hooks/use-scan-passport.ts'
 import { CONSENT_152FZ_VERSION } from '../lib/consent-version.ts'
 import { fileToBase64, transcodeToJpegForVision } from '../lib/transcode-image.ts'
-import { Consent152FzModal } from './consent-152fz-modal.tsx'
+import { Consent152FzModal, type OperatorIdentity } from './consent-152fz-modal.tsx'
 
 type Stage = 'initial' | 'processing' | 'confirm'
 
@@ -134,6 +134,7 @@ export function PassportScanDialog({
 	guestAlreadyConsentedToVersion,
 	identityMethod: identityMethodProp = 'passport_paper',
 	guestId,
+	operatorIdentity,
 }: {
 	open: boolean
 	onClose: () => void
@@ -151,6 +152,12 @@ export function PassportScanDialog({
 	identityMethod?: IdentityMethod
 	/** Soft FK guest.id — для photoConsentLog linkage (Sprint B). */
 	guestId: string
+	/**
+	 * Sprint C Day 3+: operator identity для 152-ФЗ ст.9 ч.4 identification
+	 * в consent text. If undefined, modal falls back к generic placeholder.
+	 * Caller (e.g. migration-registration-detail-sheet) injects from active org.
+	 */
+	operatorIdentity?: OperatorIdentity
 }) {
 	const titleId = useId()
 	const fileInputId = useId()
@@ -476,6 +483,7 @@ export function PassportScanDialog({
 
 			<Consent152FzModal
 				open={consentOpen}
+				{...(operatorIdentity ? { operatorIdentity } : {})}
 				onAccept={(payload) => {
 					// Sprint C: capture timestamp at moment of click (not mount) +
 					// textSnapshot для backend tamper-proof proof (152-ФЗ ст.9 ч.4).

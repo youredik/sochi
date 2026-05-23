@@ -28,10 +28,12 @@ import {
 } from '../../../components/ui/responsive-sheet.tsx'
 import { Textarea } from '../../../components/ui/textarea.tsx'
 import { formatDateShort } from '../../../lib/format-ru.ts'
+import type { OperatorIdentity } from '../../passport-scan/components/consent-152fz-modal.tsx'
 import {
 	PassportScanDialog,
 	type PassportScanResult,
 } from '../../passport-scan/components/passport-scan-dialog.tsx'
+import { useActiveOrg } from '../../tenancy/hooks/use-active-org.ts'
 import {
 	migrationRegistrationDetailQueryOptions,
 	useCancelMigrationRegistration,
@@ -245,6 +247,15 @@ function RescanSection({ row }: { row: MigrationRegistration }) {
 	const headingId = useId()
 	const [scanOpen, setScanOpen] = useState(false)
 	const [lastScan, setLastScan] = useState<PassportScanResult | null>(null)
+	// Sprint C Day 3+: operator identity для 152-ФЗ ст.9 ч.4 in consent modal.
+	// `active.name` = registered legal name (BA org plugin). INN + legal address
+	// требуют otherwise org-settings expansion sprint — fallback к undefined =
+	// modal renders generic placeholder.
+	const { active } = useActiveOrg()
+	const operatorIdentity: OperatorIdentity | undefined =
+		active && typeof active.name === 'string' && active.name.length > 0
+			? { legalName: active.name }
+			: undefined
 
 	return (
 		<section aria-labelledby={headingId} className="border-t pt-4">
@@ -292,6 +303,7 @@ function RescanSection({ row }: { row: MigrationRegistration }) {
 				}}
 				guestAlreadyConsentedToVersion={null}
 				guestId={row.guestId}
+				{...(operatorIdentity ? { operatorIdentity } : {})}
 			/>
 			<input
 				type="hidden"

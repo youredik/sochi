@@ -48,10 +48,53 @@ export interface Consent152FzAcceptPayload {
 	}
 }
 
-const CONSENT_TEXT = `
+/**
+ * Sprint C Day 3+: operator identity для 152-ФЗ ст.9 ч.4 idenfication
+ * (оператор обязан себя идентифицировать в consent тексте). Минимум —
+ * legal name; ИНН + legal address + DPO contact desirable, но не блокируют
+ * scan flow if missing (вариант для new tenants pre-onboarding).
+ */
+export interface OperatorIdentity {
+	readonly legalName: string
+	readonly inn?: string | null
+	readonly legalAddress?: string | null
+	readonly dpoEmail?: string | null
+}
+
+/**
+ * Render operator identification block для consent text. Per 152-ФЗ ст.9 ч.4:
+ * subject должен знать, КОМУ он даёт согласие. Без identity = void consent.
+ *
+ * Fallback к «средство размещения / его операторы» (generic placeholder) если
+ * caller не предоставил identity (e.g. pre-onboarding scenarios).
+ */
+function renderOperatorBlock(identity: OperatorIdentity | undefined): string {
+	if (!identity) {
+		return '   • Оператор: средство размещения и его операторы (юр.имя не предоставлено)\n   • Реквизиты доступны по запросу в адрес администратора средства размещения.'
+	}
+	const lines = [`   • Оператор (юр.имя): ${identity.legalName}`]
+	if (typeof identity.inn === 'string' && identity.inn.length > 0) {
+		lines.push(`   • ИНН: ${identity.inn}`)
+	}
+	if (typeof identity.legalAddress === 'string' && identity.legalAddress.length > 0) {
+		lines.push(`   • Юр.адрес: ${identity.legalAddress}`)
+	}
+	if (typeof identity.dpoEmail === 'string' && identity.dpoEmail.length > 0) {
+		lines.push(`   • Контакт DPO: ${identity.dpoEmail}`)
+	} else {
+		lines.push(`   • Контакт DPO: запрос через администратора средства размещения`)
+	}
+	return lines.join('\n')
+}
+
+function buildConsentText(identity: OperatorIdentity | undefined): string {
+	return `
 В соответствии с Федеральным законом от 27.07.2006 № 152-ФЗ «О персональных данных»
 (в редакции от 24.06.2025, ст. 156-ФЗ) даю отдельное согласие на обработку моих
-персональных данных средству размещения и его операторам.
+персональных данных оператору-средству размещения, указанному ниже.
+
+0. Идентификация оператора (152-ФЗ ст.9 ч.4):
+${renderOperatorBlock(identity)}
 
 1. Цели обработки:
    • Постановка на миграционный учёт по месту пребывания через ЕПГУ
@@ -93,16 +136,25 @@ const CONSENT_TEXT = `
 
 Версия документа: ${CONSENT_152FZ_VERSION}.
 `
+}
 
 export function Consent152FzModal({
 	open,
 	onAccept,
 	onCancel,
+	operatorIdentity,
 }: {
 	open: boolean
 	onAccept: (payload: Consent152FzAcceptPayload) => void
 	onCancel: () => void
+	/**
+	 * 152-ФЗ ст.9 ч.4 identification — оператор обязан себя идентифицировать
+	 * в тексте согласия. Sprint C Day 3+: passed from caller (active org).
+	 * If undefined, falls back к generic placeholder.
+	 */
+	operatorIdentity?: OperatorIdentity
 }) {
+	const consentText = buildConsentText(operatorIdentity)
 	const titleId = useId()
 	const descId = useId()
 	const generalPdnId = useId()
@@ -119,7 +171,7 @@ export function Consent152FzModal({
 		onAccept({
 			acceptedAt: new Date().toISOString(),
 			version: CONSENT_152FZ_VERSION,
-			textSnapshot: CONSENT_TEXT.trim(),
+			textSnapshot: consentText.trim(),
 			separateConsents: {
 				generalPdn: true,
 				citizenshipSpecial: true,
@@ -143,7 +195,7 @@ export function Consent152FzModal({
 					</DialogDescription>
 				</DialogHeader>
 				<div className="flex-1 overflow-y-auto border rounded-md p-4 text-sm whitespace-pre-line bg-muted/30">
-					{CONSENT_TEXT}
+					{consentText}
 				</div>
 				<fieldset className="mt-4 space-y-3">
 					<legend className="sr-only">Согласия на обработку данных</legend>

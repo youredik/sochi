@@ -205,4 +205,75 @@ describe('Consent152FzModal — gate semantics (legal compliance)', () => {
 		// Snapshot trimmed — exact same starting phrase
 		expect(payload.textSnapshot.startsWith('В соответствии с Федеральным законом')).toBe(true)
 	})
+
+	test('[G15] operatorIdentity rendered в consent text (152-ФЗ ст.9 ч.4 identification)', () => {
+		const onAccept = mock()
+		render(
+			<Consent152FzModal
+				open={true}
+				onAccept={onAccept}
+				onCancel={mock()}
+				operatorIdentity={{
+					legalName: 'ООО «Гостиница Сочи»',
+					inn: '2320200001',
+					legalAddress: 'г. Сочи, ул. Курортный проспект, д. 1',
+					dpoEmail: 'dpo@hotel-sochi.ru',
+				}}
+			/>,
+		)
+		const body = document.body.textContent ?? ''
+		expect(body).toContain('ООО «Гостиница Сочи»')
+		expect(body).toContain('2320200001')
+		expect(body).toContain('г. Сочи, ул. Курортный проспект, д. 1')
+		expect(body).toContain('dpo@hotel-sochi.ru')
+	})
+
+	test('[G16] missing operatorIdentity → generic placeholder rendered (no crash)', () => {
+		render(<Consent152FzModal open={true} onAccept={mock()} onCancel={mock()} />)
+		const body = document.body.textContent ?? ''
+		// Generic fallback presence — proves modal renders без identity
+		expect(body).toContain('юр.имя не предоставлено')
+	})
+
+	test('[G17] partial operatorIdentity (только legalName) — других секций not rendered', () => {
+		render(
+			<Consent152FzModal
+				open={true}
+				onAccept={mock()}
+				onCancel={mock()}
+				operatorIdentity={{ legalName: 'ИП Иванов И. И.' }}
+			/>,
+		)
+		const body = document.body.textContent ?? ''
+		expect(body).toContain('ИП Иванов И. И.')
+		// ИНН line — present only когда inn provided (here null)
+		expect(body.includes('ИНН: ')).toBe(false)
+		// DPO fallback present (legal requirement — subject должен знать how to revoke)
+		expect(body).toContain('Контакт DPO: запрос через администратора')
+	})
+
+	test('[G18] operatorIdentity появляется в textSnapshot — tamper-proof identity audit', () => {
+		const onAccept = mock()
+		render(
+			<Consent152FzModal
+				open={true}
+				onAccept={onAccept}
+				onCancel={mock()}
+				operatorIdentity={{
+					legalName: 'ООО «Тестовый отель»',
+					inn: '7700000001',
+				}}
+			/>,
+		)
+		const [generalPdn, citizenship, biometric] = getAllCheckboxes()
+		fireEvent.click(generalPdn as HTMLInputElement)
+		fireEvent.click(citizenship as HTMLInputElement)
+		fireEvent.click(biometric as HTMLInputElement)
+		fireEvent.click(screen.getByRole('button', { name: ACCEPT_BUTTON_NAME }))
+		const payload = onAccept.mock.calls[0]?.[0] as { textSnapshot: string }
+		// textSnapshot должен содержать operator identity — иначе Roskomnadzor inspection
+		// «оператор не идентифицирован» = void consent per 152-ФЗ ст.9 ч.4
+		expect(payload.textSnapshot).toContain('ООО «Тестовый отель»')
+		expect(payload.textSnapshot).toContain('7700000001')
+	})
 })
