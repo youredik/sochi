@@ -152,6 +152,7 @@ export function Consent152FzModal({
 	onAccept,
 	onCancel,
 	operatorIdentity,
+	citizenshipBasis,
 }: {
 	open: boolean
 	onAccept: (payload: Consent152FzAcceptPayload) => void
@@ -162,6 +163,20 @@ export function Consent152FzModal({
 	 * If undefined, falls back к generic placeholder.
 	 */
 	operatorIdentity?: OperatorIdentity
+	/**
+	 * Round 2 self-review Batch 8: citizenship-aware consent. Per ст.10 ч.2 п.6
+	 * 152-ФЗ — статутное исключение для миграционного учёта: национальность
+	 * processed without special consent если basis = migration law. Для
+	 * RU citizens (citizenshipIso3='rus') ст.10 checkbox = OVER-CONSENT =
+	 * blurs legal basis (Tinkoff УКБО precedent: «зачем собирали, если не
+	 * нужно?»). Hide checkbox + auto-set true.
+	 *
+	 * Caller передаёт hint от guest profile / pre-fill identity method:
+	 *   - 'ru' — паспорт_paper (RF internal) → skip ст.10 checkbox
+	 *   - 'foreign' — passport_zagran / driver_license → show ст.10 checkbox
+	 *   - undefined — show ст.10 checkbox (defensive default)
+	 */
+	citizenshipBasis?: 'ru' | 'foreign'
 }) {
 	const consentText = buildConsentText(operatorIdentity)
 	const titleId = useId()
@@ -170,9 +185,14 @@ export function Consent152FzModal({
 	const citizenshipId = useId()
 	const biometricId = useId()
 	const [generalPdn, setGeneralPdn] = useState(false)
-	const [citizenshipSpecial, setCitizenshipSpecial] = useState(false)
+	// Round 2 Batch 8: для RU граждан citizenshipSpecial — статутное исключение
+	// (ст.10 ч.2 п.6). Auto-true + checkbox скрыт чтобы не over-collect.
+	const isRuStatutoryException = citizenshipBasis === 'ru'
+	const [citizenshipSpecial, setCitizenshipSpecial] = useState(isRuStatutoryException)
 	const [biometricPhoto, setBiometricPhoto] = useState(false)
 
+	// allChecked logic: для RU citizens — только generalPdn + biometric required
+	// (citizenshipSpecial auto-true), для foreign — все 3
 	const allChecked = generalPdn && citizenshipSpecial && biometricPhoto
 
 	const handleAccept = () => {
@@ -241,22 +261,38 @@ export function Consent152FzModal({
 						</Label>
 					</div>
 
-					<div className="flex items-start gap-3 min-h-11">
-						<Checkbox
-							id={citizenshipId}
-							checked={citizenshipSpecial}
-							onCheckedChange={(v) => setCitizenshipSpecial(v === true)}
-							className="mt-0.5"
-						/>
-						<Label
-							htmlFor={citizenshipId}
-							className="text-sm leading-snug cursor-pointer font-normal"
-						>
-							<strong>Специальная категория — национальность (ст.10 152-ФЗ)</strong> — даю отдельное
-							согласие на обработку гражданства/национальности в целях миграционного учёта (ст.10
-							ч.2 п.6 — статутное исключение).
-						</Label>
-					</div>
+					{isRuStatutoryException ? (
+						/*
+						 * Round 2 Batch 8: для RU граждан ст.10 checkbox HIDDEN.
+						 * Статутное исключение (ст.10 ч.2 п.6) — миграц. законодательство
+						 * = legal basis sans consent. Tinkoff УКБО precedent: over-consent
+						 * blurs basis. Показываем notice вместо checkbox для transparency.
+						 */
+						<div className="flex items-start gap-3 min-h-11 text-xs text-muted-foreground bg-muted/30 rounded-md p-3">
+							<span>
+								<strong>Национальность (ст.10 ч.2 п.6):</strong> для граждан РФ обработка
+								национальности основана на статутном исключении (миграционное законодательство) —
+								отдельное согласие не требуется.
+							</span>
+						</div>
+					) : (
+						<div className="flex items-start gap-3 min-h-11">
+							<Checkbox
+								id={citizenshipId}
+								checked={citizenshipSpecial}
+								onCheckedChange={(v) => setCitizenshipSpecial(v === true)}
+								className="mt-0.5"
+							/>
+							<Label
+								htmlFor={citizenshipId}
+								className="text-sm leading-snug cursor-pointer font-normal"
+							>
+								<strong>Специальная категория — национальность (ст.10 152-ФЗ)</strong> — даю
+								отдельное согласие на обработку гражданства/национальности (для не-РФ граждан basis
+								= explicit consent).
+							</Label>
+						</div>
+					)}
 
 					<div className="flex items-start gap-3 min-h-11">
 						<Checkbox

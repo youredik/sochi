@@ -65,7 +65,14 @@ const TD3_LINE_2_PATTERN = /^[A-Z0-9<]{9}\d[A-Z<]{3}/
 export function extractMrzLines(fullText: string): readonly string[] | null {
 	const candidateLines = fullText
 		.split('\n')
-		.map((l) => l.replace(/\s/g, '').toUpperCase())
+		// Round 2 self-review InfoSec P2-3: Unicode NFKD normalization PRIOR
+		// to uppercase. Adversarial OCR output может contain Cyrillic-Latin
+		// confusables (e.g. `Р` U+0420 vs `P` U+0050). NFKD decomposes
+		// и .toUpperCase() per ICU consistent. Без normalization Cyrillic
+		// chars survive uppercase, fail [A-Z0-9<] regex → false-negative
+		// MRZ extraction → fallback к OCR fullText recognition (which is
+		// the canonical path for загранпаспорт anyway). Defense-in-depth.
+		.map((l) => l.replace(/\s/g, '').normalize('NFKD').toUpperCase())
 		.filter((l) => l.length === TD3_LINE_LENGTH && l.includes('<') && /^[A-Z0-9<]+$/.test(l))
 	if (candidateLines.length < 2) return null
 	// TD3 passport canon: первая строка ВСЕГДА начинается с 'P<' (document code 'P' +

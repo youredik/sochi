@@ -554,6 +554,11 @@ export function PassportScanDialog({
 			<Consent152FzModal
 				open={consentOpen}
 				{...(operatorIdentity ? { operatorIdentity } : {})}
+				// Round 2 Batch 8: identity method → citizenshipBasis для ст.10 conditional.
+				// passport_paper = RF internal паспорт = RU citizen (статутное исключение).
+				// passport_zagran / driver_license могут быть RU OR foreign — defensive «foreign»
+				// показывает checkbox, оператор всегда может accept если citizen is RU foreign.
+				citizenshipBasis={selectedIdentityMethod === 'passport_paper' ? 'ru' : 'foreign'}
 				onAccept={(payload) => {
 					// Sprint C: capture timestamp at moment of click (not mount) +
 					// textSnapshot для backend tamper-proof proof (152-ФЗ ст.9 ч.4).

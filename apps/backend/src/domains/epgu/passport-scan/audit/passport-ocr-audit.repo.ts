@@ -201,6 +201,15 @@ export function createPassportOcrAuditRepo(sql: SqlInstance) {
 		 */
 		async nullifyEntitiesByConsentId(tenantId: string, consentId: string): Promise<void> {
 			const now = new Date()
+			// Round 2 self-review Batch 9 (InfoSec P2-7): also nullify side-channel
+			// technical metadata. Без этого: inputMimeType + inputSizeBytes + httpStatus
+			// + latencyMs persist post-revoke → adversarial DBA reconstructs «какой
+			// документ был» по mime+size hash + timing fingerprint. Schema columns
+			// NOT NULL (Utf8/Int32/Int64) — cannot set NULL, use sentinel values:
+			//   - inputMimeType → 'scrubbed'
+			//   - inputSizeBytes / httpStatus / latencyMs → 0 (signals «redacted»)
+			// Combined с entitiesAnonymizedAt timestamp = clean audit story:
+			// «scrubbed at X, technical metadata redacted».
 			await sql`
 				UPDATE passportOcrAudit
 				SET surname = NULL,
@@ -217,6 +226,10 @@ export function createPassportOcrAuditRepo(sql: SqlInstance) {
 				    confidenceHeuristic = NULL,
 				    rawResponseJson = NULL,
 				    inputObjectKey = NULL,
+				    inputMimeType = 'scrubbed',
+				    inputSizeBytes = 0,
+				    httpStatus = 0,
+				    latencyMs = 0,
 				    entitiesAnonymizedAt = ${toTs(now)}
 				WHERE tenantId = ${tenantId} AND photoConsentLogId = ${consentId}
 			`

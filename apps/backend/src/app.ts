@@ -754,6 +754,37 @@ app.use(
 	}),
 )
 
+// Sprint C+1 Round 2 self-review batch 7 (bodyLimit full sweep):
+// global defense-in-depth bodyLimit 16MB на ALL routes BEFORE per-route
+// overrides. 16MB > max per-route (vision 8MB) — global cannot reject
+// images that per-route would accept. Per-route caps still apply (vision
+// 8MB, booking 512KB, guest 256KB, identity 4KB, compliance 16KB) и
+// run later в chain → stricter limit wins.
+//
+// Globe cap protects routes БЕЗ explicit per-route bodyLimit от 100MB+
+// adversarial JSON-bomb / slow-loris that would crash node before any
+// зод validation. Hono bodyLimit reads Content-Length pre-decode → reject
+// before alloc.
+import { bodyLimit as honoBodyLimit } from 'hono/body-limit'
+
+const GLOBAL_BODY_LIMIT_BYTES = 16 * 1024 * 1024
+app.use(
+	'*',
+	honoBodyLimit({
+		maxSize: GLOBAL_BODY_LIMIT_BYTES,
+		onError: (c) =>
+			c.json(
+				{
+					error: {
+						code: 'PAYLOAD_TOO_LARGE',
+						message: `Тело запроса превышает глобальный лимит ${Math.floor(GLOBAL_BODY_LIMIT_BYTES / 1024 / 1024)} МБ`,
+					},
+				},
+				413,
+			),
+	}),
+)
+
 app.use(
 	'*',
 	cors({
