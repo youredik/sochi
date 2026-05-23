@@ -53,6 +53,12 @@ resource "yandex_storage_bucket" "demo_passport_scans" {
 
   default_storage_class = "STANDARD"
 
+  # Round 2 self-review YDB P0: explicit `acl = "private"` — даже если default
+  # это private, explicit signal к operator audit + defends против Terraform
+  # state drift где default может shift в future provider versions. 152-ФЗ
+  # PII bucket MUST never anonymous-readable.
+  acl = "private"
+
   # Versioning DISABLED — privacy canon. Once deleted, no recoverable copy.
   # 152-ФЗ data minimization: previous versions = retention contract violation.
   versioning {
