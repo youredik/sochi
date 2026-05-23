@@ -28,12 +28,20 @@ import {
 	tenantCompliancePatchSchema,
 } from '@horeca/shared'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import type { AppEnv } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import type { IdempotencyMiddleware } from '../../middleware/idempotency.ts'
 import { requirePermission } from '../../middleware/require-permission.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
 import type { TenantComplianceFactory } from './compliance.factory.ts'
+
+/**
+ * Sprint C halfmeasure sibling sweep 2026-05-23: compliance route принимает
+ * KSR + tax + ФЗ-127 fields — все small enum / int values. 16KB cap (big
+ * запас, anti-DoS).
+ */
+const COMPLIANCE_BODY_LIMIT = 16 * 1024
 
 /**
  * Wire shape — bigints serialized as strings (canon convention; matches
@@ -109,5 +117,21 @@ export function createTenantComplianceRoutes(
 	return new Hono<AppEnv>()
 		.use('*', authMiddleware(), tenantMiddleware())
 		.use('*', idempotency)
+		.use(
+			'/me/compliance',
+			bodyLimit({
+				maxSize: COMPLIANCE_BODY_LIMIT,
+				onError: (c) =>
+					c.json(
+						{
+							error: {
+								code: 'PAYLOAD_TOO_LARGE',
+								message: `Тело запроса превышает лимит ${Math.floor(COMPLIANCE_BODY_LIMIT / 1024)} КБ`,
+							},
+						},
+						413,
+					),
+			}),
+		)
 		.route('/', createTenantComplianceRoutesInner(f))
 }

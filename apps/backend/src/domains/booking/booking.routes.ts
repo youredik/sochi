@@ -15,12 +15,38 @@ import {
 	tourismTaxReportParams,
 } from '@horeca/shared'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { BookingNotFoundError } from '../../errors/domain.ts'
 import type { AppEnv } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import type { IdempotencyMiddleware } from '../../middleware/idempotency.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
 import type { BookingFactory } from './booking.factory.ts'
+
+/**
+ * Sprint C halfmeasure sibling sweep 2026-05-23: booking routes accept
+ * guest PII через `guestSnapshot` (паспорт data + контакты). Per same
+ * canon as guest.routes.ts + vision.routes.ts — anti-DoS + adversarial
+ * JSON bomb protection. 512KB достаточно для multi-guest booking с
+ * полными данными per гость.
+ */
+const BOOKING_BODY_LIMIT = 512 * 1024
+
+function bookingBodyLimit() {
+	return bodyLimit({
+		maxSize: BOOKING_BODY_LIMIT,
+		onError: (c) =>
+			c.json(
+				{
+					error: {
+						code: 'PAYLOAD_TOO_LARGE',
+						message: `Тело запроса превышает лимит ${Math.floor(BOOKING_BODY_LIMIT / 1024)} КБ`,
+					},
+				},
+				413,
+			),
+	})
+}
 
 /**
  * Booking routes — full M4b API surface.
@@ -39,6 +65,11 @@ export function createBookingRoutes(f: BookingFactory, idempotency: IdempotencyM
 		new Hono<AppEnv>()
 			.use('*', authMiddleware(), tenantMiddleware())
 			.use('*', idempotency)
+			// Sprint C halfmeasure sibling sweep: PII body cap on routes that accept
+			// JSON (POST/PATCH). GET endpoints unaffected (Hono bodyLimit only checks
+			// requests with Content-Length).
+			.use('/properties/:propertyId/bookings', bookingBodyLimit())
+			.use('/bookings/*', bookingBodyLimit())
 			.get(
 				'/properties/:propertyId/bookings',
 				zValidator('param', bookingPropertyParam),

@@ -1,12 +1,20 @@
 import { parseDaDataParty } from '@horeca/shared'
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { z } from 'zod'
 import type { AppEnv } from '../../factory.ts'
 import { logger } from '../../logger.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
 import type { DaDataAdapter } from './dadata/types.ts'
+
+/**
+ * Sprint C halfmeasure sibling sweep 2026-05-23: identity route принимает
+ * ИНН body (12-байтный numeric string max) — strict 4KB cap для anti-DoS
+ * (адверсариально пытаются BIG-JSON crash node). ИНН - 12 цифр, 4KB = 4096-кратный запас.
+ */
+const IDENTITY_BODY_LIMIT = 4 * 1024
 
 /**
  * Onboarding identity-lookup routes — currently just `POST /onboarding/find-by-inn`,
@@ -66,5 +74,21 @@ export function createIdentityRoutesInner(adapter: DaDataAdapter) {
 export function createIdentityRoutes(adapter: DaDataAdapter) {
 	return new Hono<AppEnv>()
 		.use('*', authMiddleware(), tenantMiddleware())
+		.use(
+			'/onboarding/find-by-inn',
+			bodyLimit({
+				maxSize: IDENTITY_BODY_LIMIT,
+				onError: (c) =>
+					c.json(
+						{
+							error: {
+								code: 'PAYLOAD_TOO_LARGE',
+								message: `Тело запроса превышает лимит ${Math.floor(IDENTITY_BODY_LIMIT / 1024)} КБ`,
+							},
+						},
+						413,
+					),
+			}),
+		)
 		.route('/', createIdentityRoutesInner(adapter))
 }
