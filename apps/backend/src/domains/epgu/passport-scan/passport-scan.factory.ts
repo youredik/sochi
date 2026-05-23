@@ -34,7 +34,7 @@
 
 import { newId } from '@horeca/shared'
 import type { sql as SQL } from '../../../db/index.ts'
-import { textOpt, timestampOpt, toTs } from '../../../db/ydb-helpers.ts'
+import { dateOpt, textOpt, toTs } from '../../../db/ydb-helpers.ts'
 import {
 	createPassportOcrAuditRepo,
 	type PassportOcrAuditRepo,
@@ -220,8 +220,8 @@ export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory 
 				SET documentSeries = ${textOpt(null)},
 				    documentNumber = '[scrubbed-rtbf]',
 				    documentIssuedBy = ${textOpt(null)},
-				    documentIssuedDate = ${timestampOpt(null)},
-				    documentExpiryDate = ${timestampOpt(null)},
+				    documentIssuedDate = ${dateOpt(null)},
+				    documentExpiryDate = ${dateOpt(null)},
 				    objectStoragePath = ${textOpt(null)},
 				    objectMimeType = ${textOpt(null)},
 				    entitiesAnonymizedAt = ${toTs(revokedAt)}

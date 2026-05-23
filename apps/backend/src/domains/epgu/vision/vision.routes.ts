@@ -66,7 +66,8 @@ const VISION_API_ENDPOINT = 'https://ocr.api.cloud.yandex.net/ocr/v1/recognizeTe
  * Sprint C: 3-checkbox consent state per 152-ФЗ ст.10 + ст.11 defensive over-consent.
  * Per Roskomnadzor 2022 guidance (legalacts.ru/doc/razjasnenija-roskomnadzora), passport
  * scan storage-only ≠ biometric, BUT defensive 3-checkbox UI buys insurance против 2026
- * enforcement-year surprises (КоАП ч.16-17 биометрия = 3-18 млн ₽).
+ * enforcement-year surprises (КоАП ст.13.11 ч.17 биометрия = 15-20 млн ₽
+ * для юр.лиц, повторно 25-30 млн ₽; ред. № 421-ФЗ от 30.11.2024, вступ. 30.05.2025).
  *
  *   - generalPdn         — ст.6 общие ПДн (ФИО, паспорт, гражданство для миграц. учёта)
  *   - citizenshipSpecial — ст.10 ч.2 национальность beyond миграц. учёт purpose
@@ -165,9 +166,12 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 		rateLimiter<AppEnv>({
 			windowMs: RATE_LIMIT_WINDOW_MS,
 			limit: RATE_LIMIT_MAX,
-			// keyGenerator: c.var.tenantId set by tenantMiddleware ДО этого
-			// middleware. Fallback к 'anonymous' graceful degrade.
-			keyGenerator: (c) => c.var.tenantId ?? 'anonymous',
+			// Round 4 self-review YDB P0-RL-1 fix: per-IP fallback when tenantId
+			// is null. Previous `'anonymous'` sentinel funneled ALL unauthenticated
+			// requests в single bucket → first attacker exhausts для everyone.
+			// Now per-IP (resolveClientIpSync canon) — separate buckets per source.
+			keyGenerator: (c) =>
+				c.var.tenantId ?? `ip:${extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)}`,
 			standardHeaders: 'draft-7',
 			statusCode: 429,
 			message: rateLimitMessage,
@@ -514,6 +518,26 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 						error: {
 							code: 'VISION_API_ERROR',
 							message: 'Сканирование документа временно недоступно. Попробуйте позже.',
+						},
+					},
+					500,
+				)
+			}
+
+			// Round 4 self-review Senior P0-1 fix: if atomic consent+audit write
+			// failed, operator MUST NOT receive 200 + entities. Otherwise frontend
+			// saves данные гостя без consent/audit proof → 152-ФЗ ст.21 ч.4
+			// breach + ст.9 ч.4 «оператор обязан доказать получение» violated.
+			// Compensating S3 delete already ran (line 419 above). Operator UI
+			// will surface 500 → они retry → новый Idempotency-Key → fresh attempt.
+			if (auditWriteFailed) {
+				return c.json(
+					{
+						error: {
+							code: 'CONSENT_AUDIT_PERSIST_FAILED',
+							message:
+								'Согласие и аудит записать не удалось. Сканирование отменено. ' +
+								'Попробуйте ещё раз; если ошибка повторяется — обратитесь к администратору.',
 						},
 					},
 					500,

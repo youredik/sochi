@@ -1,5 +1,6 @@
 /**
- * Data Subject Access Request (DSAR) endpoint — 152-ФЗ ст.14 (30 рабочих дней).
+ * Data Subject Access Request (DSAR) endpoint — 152-ФЗ ст.14 (10 рабочих дней
+ * с 01.07.2025 per № 23-ФЗ от 28.02.2025; HALVED от прежних 30).
  *
  * GET /api/v1/guests/:guestId/passport-data-export
  *
@@ -24,7 +25,9 @@
 
 import { Hono } from 'hono'
 import { rateLimiter } from 'hono-rate-limiter'
+import { env } from '../../../../env.ts'
 import type { AppEnv } from '../../../../factory.ts'
+import { extractClientIpFromContext } from '../../../../lib/net/client-ip.ts'
 import { authMiddleware } from '../../../../middleware/auth.ts'
 import { requirePermission } from '../../../../middleware/require-permission.ts'
 import { tenantMiddleware } from '../../../../middleware/tenant.ts'
@@ -52,7 +55,9 @@ export function createPassportDataExportRoutesInner(deps: PassportDataExportRout
 		rateLimiter<AppEnv>({
 			windowMs: DSAR_RATE_LIMIT_WINDOW_MS,
 			limit: DSAR_RATE_LIMIT_MAX,
-			keyGenerator: (c) => c.var.tenantId ?? 'anonymous',
+			// Round 4 P0-RL-1 fix: per-IP fallback (resolveClientIpSync canon).
+			keyGenerator: (c) =>
+				c.var.tenantId ?? `ip:${extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)}`,
 			standardHeaders: 'draft-7',
 			statusCode: 429,
 			message: {
@@ -182,10 +187,13 @@ export function createPassportDataExportRoutesInner(deps: PassportDataExportRout
 					article: '152-ФЗ ст.14 (право на ознакомление)',
 					revokeUrl: `/api/v1/passport-scan/consent/{consentId}/revoke`,
 					retentionPolicy: {
-						consentLog: '5 лет (152-ФЗ ст.21 ч.7)',
-						scanAudit: '90 дней (миграционное закон-во)',
-						photoStorage: '90 дней (lifecycle policy)',
-						guestDocument: '5 лет (152-ФЗ + миграц. законодательство)',
+						// Round 4 Legal P1-5 fix: ст.21 ч.7 не существует — actual canon
+						// = ст.5 ч.7 («не дольше необходимого») + ст.21 ч.5 («срок
+						// уничтожения 30 дней с момента достижения цели»).
+						consentLog: '5 лет (152-ФЗ ст.5 ч.7 + ст.21 ч.5 + миграц. зак-во)',
+						scanAudit: '90 дней (миграционное закон-во + ст.5 ч.7)',
+						photoStorage: '90 дней (lifecycle policy + ст.5 ч.7)',
+						guestDocument: '5 лет (152-ФЗ ст.5 ч.7 + миграц. закон-во)',
 					},
 				},
 				consents: consents.map((consent) => ({

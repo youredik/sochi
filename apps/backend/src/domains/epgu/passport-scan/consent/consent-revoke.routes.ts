@@ -40,7 +40,9 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { rateLimiter } from 'hono-rate-limiter'
 import { z } from 'zod'
+import { env } from '../../../../env.ts'
 import type { AppEnv } from '../../../../factory.ts'
+import { extractClientIpFromContext } from '../../../../lib/net/client-ip.ts'
 import { authMiddleware } from '../../../../middleware/auth.ts'
 import type { IdempotencyMiddleware } from '../../../../middleware/idempotency.ts'
 import { requirePermission } from '../../../../middleware/require-permission.ts'
@@ -92,7 +94,9 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 		rateLimiter<AppEnv>({
 			windowMs: REVOKE_RATE_LIMIT_WINDOW_MS,
 			limit: REVOKE_RATE_LIMIT_MAX,
-			keyGenerator: (c) => c.var.tenantId ?? 'anonymous',
+			// Round 4 P0-RL-1 fix: per-IP fallback (resolveClientIpSync canon).
+			keyGenerator: (c) =>
+				c.var.tenantId ?? `ip:${extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)}`,
 			standardHeaders: 'draft-7',
 			statusCode: 429,
 			message: {

@@ -44,7 +44,7 @@
 		"cockatiel": "^3.2.1",
 		"croner": "^10.0.1",
 		"fflate": "0.8.2",
-		"hono": "^4.12.18",
+		"hono": "^4.12.22",
 		"hono-pino": "^0.10.3",
 		"hono-rate-limiter": "0.5.3",
 		"ical-generator": "^10.2.0",

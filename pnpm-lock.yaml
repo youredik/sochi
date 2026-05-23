@@ -101,10 +101,10 @@ importers:
         version: 1.6.11(@better-auth/core@1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.5.0-canary.20260504T180558))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-auth@1.6.11(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6))(better-call@1.3.5(zod@4.5.0-canary.20260504T180558))(nanostores@1.3.0)
       '@hono/node-server':
         specifier: ^2.0.2
-        version: 2.0.2(hono@4.12.18)
+        version: 2.0.2(hono@4.12.22)
       '@hono/zod-validator':
         specifier: ^0.8.0
-        version: 0.8.0(hono@4.12.18)(zod@4.5.0-canary.20260504T180558)
+        version: 0.8.0(hono@4.12.22)(zod@4.5.0-canary.20260504T180558)
       '@horeca/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -148,14 +148,14 @@ importers:
         specifier: 0.8.2
         version: 0.8.2
       hono:
-        specifier: ^4.12.18
-        version: 4.12.18
+        specifier: ^4.12.22
+        version: 4.12.22
       hono-pino:
         specifier: ^0.10.3
-        version: 0.10.3(hono@4.12.18)(pino@10.3.1)
+        version: 0.10.3(hono@4.12.22)(pino@10.3.1)
       hono-rate-limiter:
         specifier: 0.5.3
-        version: 0.5.3(hono@4.12.18)
+        version: 0.5.3(hono@4.12.22)
       ical-generator:
         specifier: ^10.2.0
         version: 10.2.0(@types/node@25.7.0)
@@ -290,8 +290,8 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0
       hono:
-        specifier: ^4.12.18
-        version: 4.12.18
+        specifier: ^4.12.22
+        version: 4.12.22
       idb-keyval:
         specifier: 6.2.2
         version: 6.2.2
@@ -6221,8 +6221,8 @@ packages:
       unstorage:
         optional: true
 
-  hono@4.12.18:
-    resolution: {integrity: sha512-RWzP96k/yv0PQfyXnWjs6zot20TqfpfsNXhOnev8d1InAxubW93L11/oNUc3tQqn2G0bSdAOBpX+2uDFHV7kdQ==}
+  hono@4.12.22:
+    resolution: {integrity: sha512-7fvVPbB92zNRsQke+uiRGwtTuef0tB2Dg4hWxYfFNvkQhIltWoyi0ONReM5LWA+jJWS3nfT5lTq+qbsIpX0IQw==}
     engines: {node: '>=16.9.0'}
 
   html-escaper@2.0.2:
@@ -10522,13 +10522,13 @@ snapshots:
 
   '@hexagon/base64@1.1.28': {}
 
-  '@hono/node-server@2.0.2(hono@4.12.18)':
+  '@hono/node-server@2.0.2(hono@4.12.22)':
     dependencies:
-      hono: 4.12.18
+      hono: 4.12.22
 
-  '@hono/zod-validator@0.8.0(hono@4.12.18)(zod@4.5.0-canary.20260504T180558)':
+  '@hono/zod-validator@0.8.0(hono@4.12.22)(zod@4.5.0-canary.20260504T180558)':
     dependencies:
-      hono: 4.12.18
+      hono: 4.12.22
       zod: 4.5.0-canary.20260504T180558
 
   '@img/colour@1.1.0': {}
@@ -14885,17 +14885,17 @@ snapshots:
 
   help-me@5.0.0: {}
 
-  hono-pino@0.10.3(hono@4.12.18)(pino@10.3.1):
+  hono-pino@0.10.3(hono@4.12.22)(pino@10.3.1):
     dependencies:
       defu: 6.1.7
-      hono: 4.12.18
+      hono: 4.12.22
       pino: 10.3.1
 
-  hono-rate-limiter@0.5.3(hono@4.12.18):
+  hono-rate-limiter@0.5.3(hono@4.12.22):
     dependencies:
-      hono: 4.12.18
+      hono: 4.12.22
 
-  hono@4.12.18: {}
+  hono@4.12.22: {}
 
   html-escaper@2.0.2:
     optional: true

@@ -86,6 +86,33 @@ interface DbAuditExportRow {
 	issueDate: Date | null
 	confidenceHeuristic: number | bigint | null
 	entitiesAnonymizedAt: Date | null
+	/**
+	 * Round 4 Senior P0-3 fix: rawResponseJson contains full Vision response
+	 * including `expirationDate` which is NOT stored as separate audit column
+	 * (per 0037 schema — RU internal паспорт has no expiry). DSAR ст.14
+	 * «полный объём» requires expirationDate когда present (загранпаспорт/
+	 * driver license).
+	 */
+	rawResponseJson: string | object | null
+}
+
+function extractExpirationDate(raw: string | object | null): string | null {
+	if (raw === null) return null
+	let parsed: { entities?: { expirationDate?: string | null } }
+	if (typeof raw === 'string') {
+		try {
+			parsed = JSON.parse(raw) as { entities?: { expirationDate?: string | null } }
+		} catch {
+			return null
+		}
+	} else {
+		parsed = raw as { entities?: { expirationDate?: string | null } }
+	}
+	const date = parsed.entities?.expirationDate
+	if (typeof date !== 'string' || date.length === 0) return null
+	// YYYY-MM-DD validation — defensive vs adversarial JSON injection
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+	return date
 }
 
 function rowToExportEntity(row: DbAuditExportRow): PassportOcrAuditExportRow {
@@ -108,7 +135,10 @@ function rowToExportEntity(row: DbAuditExportRow): PassportOcrAuditExportRow {
 				birthPlace: row.birthPlace,
 				documentNumber: row.documentNumber,
 				issueDate: row.issueDate?.toISOString().slice(0, 10) ?? null,
-				expirationDate: null, // not stored в audit table per 0037 schema
+				// Round 4 Senior P0-3 fix: parse expirationDate from rawResponseJson.
+				// Was hardcoded null → 152-ФЗ ст.14 «полный объём» violation для
+				// загранпаспорта/ВУ scans which DO have expiry.
+				expirationDate: extractExpirationDate(row.rawResponseJson),
 			}
 	return {
 		id: row.id,
@@ -179,11 +209,14 @@ export function createPassportOcrAuditRepo(sql: SqlInstance) {
 		 * (those are оператора internal data, не subject's data).
 		 */
 		async findByGuestId(tenantId: string, guestId: string): Promise<PassportOcrAuditExportRow[]> {
+			// Round 4 Senior P0-3 fix: SELECT rawResponseJson too — exporter
+			// parses expirationDate из этого column. 152-ФЗ ст.14 requires
+			// «полный объём обрабатываемых ПДн» — expirationDate IS processed.
 			const [rows = []] = await sql<DbAuditExportRow[]>`
 				SELECT id, createdAt, outcome, apiModel,
 				       surname, name, middleName, gender, citizenshipIso3,
 				       birthDate, birthPlace, documentNumber, issueDate,
-				       confidenceHeuristic, entitiesAnonymizedAt
+				       confidenceHeuristic, entitiesAnonymizedAt, rawResponseJson
 				FROM passportOcrAudit
 				WHERE tenantId = ${tenantId} AND guestId = ${guestId}
 				ORDER BY createdAt DESC

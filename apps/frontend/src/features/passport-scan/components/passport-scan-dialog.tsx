@@ -485,7 +485,18 @@ export function PassportScanDialog({
 
 						{stage === 'processing' ? (
 							<div className="py-8 text-center" aria-live="polite" aria-busy="true" role="status">
-								<div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-primary border-r-transparent" />
+								{/*
+								 * Round 4 self-review A11y P0-2 fix:
+								 * - aria-hidden="true" — spinner = visual indicator, screen reader
+								 *   gets <p> message ниже.
+								 * - motion-reduce:animate-none — WCAG 2.3.3 AAA Animation from
+								 *   Interactions: respect prefers-reduced-motion для vestibular-
+								 *   impaired operators (long-shift front-desk Сочи canon).
+								 */}
+								<div
+									className="inline-block animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-2 border-primary border-r-transparent"
+									aria-hidden="true"
+								/>
 								<p className="mt-3 text-sm text-muted-foreground">
 									Распознавание документа... (Yandex Vision OCR ~2-5 сек)
 								</p>

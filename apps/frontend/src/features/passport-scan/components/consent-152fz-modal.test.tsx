@@ -9,7 +9,7 @@
  *   [G5] uncheck 1 of 3 after all checked → Accept disabled again
  *   [G6] Cancel button always enabled (user can always decline)
  *   [G7] modal contains 152-ФЗ + ст.10 + ст.11 + 156-ФЗ references
- *   [G8] modal contains Постановление №1668 + ГС МИР (specific goals)
+ *   [G8] modal contains № 109-ФЗ + ПП № 9 + ПП-1937 + ГС МИР (specific goals)
  *   [G9] open=false → modal NOT rendered
  *   [G10] Cancel callback fires onCancel
  *   [G11] Accept callback fires only when all 3 checked
@@ -98,11 +98,18 @@ describe('Consent152FzModal — gate semantics (legal compliance)', () => {
 		expect(body).toContain('156-ФЗ')
 	})
 
-	test('[G8] modal contains Постановление №1668 + ГС МИР (specific goals)', () => {
+	test('[G8] modal contains № 109-ФЗ + ПП № 9 + ПП-1937 + ГС МИР (verified primary sources)', () => {
+		// Round 4 self-review Legal P0-1 fix: replaced fictitious «ПП-1668 от 27.10.2025»
+		// (not in pravo.gov.ru registry) с canonical citations verified primary source:
+		// 109-ФЗ + ПП-9 от 15.01.2007 (current canon до 01.03.2026), ПП-1937 от 28.11.2025
+		// (с 01.03.2026, verified garant.ru/products/ipo/prime/doc/413119605/).
 		render(<Consent152FzModal open={true} onAccept={mock()} onCancel={mock()} />)
 		const body = document.body.textContent ?? ''
-		expect(body).toContain('1668')
+		expect(body).toContain('109-ФЗ')
+		expect(body).toContain('1937')
 		expect(body).toContain('ГС МИР')
+		// Defensive: fictitious ПП-1668 MUST NOT appear
+		expect(body.includes('1668')).toBe(false)
 	})
 
 	test('[G9] open=false → modal not rendered', () => {
@@ -176,11 +183,15 @@ describe('Consent152FzModal — gate semantics (legal compliance)', () => {
 			}
 		}
 		expect(payload.version).toBe(CONSENT_152FZ_VERSION)
-		// textSnapshot — verbatim consent text (tamper-proof per ст.9 ч.4)
+		// textSnapshot — verbatim consent text (tamper-proof per ст.9 ч.4).
+		// Round 4 legal correction: ПП-1668 (fictitious) → 109-ФЗ + ПП-1937.
 		expect(payload.textSnapshot).toContain('152-ФЗ')
-		expect(payload.textSnapshot).toContain('1668')
+		expect(payload.textSnapshot).toContain('109-ФЗ')
+		expect(payload.textSnapshot).toContain('1937')
 		expect(payload.textSnapshot).toContain('ГС МИР')
 		expect(payload.textSnapshot).toContain(CONSENT_152FZ_VERSION)
+		// Defensive: fictitious citation MUST NOT appear в proof
+		expect(payload.textSnapshot.includes('1668')).toBe(false)
 		// All 3 separate consents true (ст.10 + ст.11 separate documents per 156-ФЗ)
 		expect(payload.separateConsents.generalPdn).toBe(true)
 		expect(payload.separateConsents.citizenshipSpecial).toBe(true)
