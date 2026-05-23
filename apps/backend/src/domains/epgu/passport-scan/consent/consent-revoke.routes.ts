@@ -1,7 +1,15 @@
 /**
- * Right-To-Be-Forgotten (RTBF) endpoint — 152-ФЗ ст.20 (10 рабочих дней).
+ * Right-To-Be-Forgotten (RTBF) endpoint — 152-ФЗ ст.20 (право отзыва) +
+ * ст.21 ч.5 (30 дней на уничтожение).
  *
  * POST /api/v1/passport-scan/consent/:consentId/revoke
+ *
+ * **Timer corrections (Sprint C+ legal-expert audit 2026-05-23d)**:
+ *   - ст.20 = право субъекта отозвать согласие (без timer'а — само право).
+ *   - ст.21 ч.5 = 30 дней на уничтожение ПДн после отзыва (NOT 10; ст.21 ч.3's
+ *     10 рабочих дней относится к «неправомерной обработке» — другой scenario).
+ *   - Endpoint выполняет destruction immediately (одна tx + S3 delete), что
+ *     ≤≤ 30-дневного SLA — operator не должен ждать deadline.
  *
  * Sprint C 2026-05-22 — закрывает критический legal gap: `consentRepo.revoke()`
  * existed since Sprint B, но zero routes → гость не мог exercise ст.20 →

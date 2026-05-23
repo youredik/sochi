@@ -116,14 +116,20 @@ function extractExpirationDate(raw: string | object | null): string | null {
 }
 
 function rowToExportEntity(row: DbAuditExportRow): PassportOcrAuditExportRow {
-	// Если entities anonymized — все PII fields null (per cascade revoke)
-	const allFieldsNull =
-		row.surname === null &&
-		row.name === null &&
-		row.middleName === null &&
-		row.documentNumber === null &&
-		row.birthDate === null
-	const entities: PassportEntities | null = allFieldsNull
+	// Sprint C+ Senior P0-3 fix (2026-05-23 evening): use entitiesAnonymizedAt
+	// as CANONICAL scrub check, not field-by-field nullness sniffing. Previous
+	// `allFieldsNull` heuristic had two failure modes:
+	//   (a) low-quality OCR that returns surname=null but documentNumber set
+	//       would be treated as «not scrubbed» → entities leak post-revoke if
+	//       partial-write race occurred in cascade.
+	//   (b) extractExpirationDate ran regardless of scrub state → leaked
+	//       expirationDate from rawResponseJson even when entitiesAnonymizedAt
+	//       set (cascade rawResponseJson NULL fixed это, but defense-in-depth
+	//       at read layer = belt-and-suspenders per 152-ФЗ ст.20).
+	// Canonical check: row.entitiesAnonymizedAt !== null → all PII fields are
+	// definitively scrubbed per RTBF cascade contract (factory.cascadeRtbfRevoke).
+	const isScrubbed = row.entitiesAnonymizedAt !== null
+	const entities: PassportEntities | null = isScrubbed
 		? null
 		: {
 				surname: row.surname,
@@ -135,9 +141,11 @@ function rowToExportEntity(row: DbAuditExportRow): PassportOcrAuditExportRow {
 				birthPlace: row.birthPlace,
 				documentNumber: row.documentNumber,
 				issueDate: row.issueDate?.toISOString().slice(0, 10) ?? null,
-				// Round 4 Senior P0-3 fix: parse expirationDate from rawResponseJson.
-				// Was hardcoded null → 152-ФЗ ст.14 «полный объём» violation для
-				// загранпаспорта/ВУ scans which DO have expiry.
+				// Sprint C+ Senior P0-3: parse expirationDate from rawResponseJson
+				// ONLY when not scrubbed. 152-ФЗ ст.14 «полный объём» for active
+				// records (загранпаспорт/ВУ have expiry); ст.20 «уничтожение» wins
+				// when entitiesAnonymizedAt set — rawResponseJson already NULL'd
+				// by cascade, but defensive read-layer guard prevents future regression.
 				expirationDate: extractExpirationDate(row.rawResponseJson),
 			}
 	return {

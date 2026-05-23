@@ -21,11 +21,17 @@ export interface ScanPassportInput {
 	consent152fzVersion: string
 	/** Sprint C: verbatim consent text shown — tamper-proof proof per 152-ФЗ ст.9 ч.4. */
 	consent152fzTextSnapshot: string
-	/** Sprint C: 3-checkbox state per ст.10 + ст.11 defensive over-consent. */
+	/**
+	 * Sprint C+ 2-checkbox state per legal-expert audit 2026-05-23d.
+	 * `citizenshipSpecial` was Round 4 mis-labeling of citizenship as ст.10 special
+	 * category. Citizenship = country code (ст.6 общие ПДн), не ethnic origin (ст.10).
+	 * Backend keeps `citizenshipSpecial` as optional for backward-compat — new
+	 * clients omit it; old clients (pre-2026-05-23d deploy) still pass validation.
+	 */
 	separateConsents: {
 		generalPdn: true
-		citizenshipSpecial: true
 		biometricPhoto: true
+		citizenshipSpecial?: true
 	}
 	consent152fzAccepted: true
 	/** UUID per click — Stripe-style idempotency. */

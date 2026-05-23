@@ -63,22 +63,35 @@ const RATE_LIMIT_MAX = 30
 const VISION_API_ENDPOINT = 'https://ocr.api.cloud.yandex.net/ocr/v1/recognizeText'
 
 /**
- * Sprint C: 3-checkbox consent state per 152-ФЗ ст.10 + ст.11 defensive over-consent.
- * Per Roskomnadzor 2022 guidance (legalacts.ru/doc/razjasnenija-roskomnadzora), passport
- * scan storage-only ≠ biometric, BUT defensive 3-checkbox UI buys insurance против 2026
- * enforcement-year surprises (КоАП ст.13.11 ч.17 биометрия = 15-20 млн ₽
- * для юр.лиц, повторно 25-30 млн ₽; ред. № 421-ФЗ от 30.11.2024, вступ. 30.05.2025).
+ * Sprint C+ 2-checkbox consent state per legal-expert audit 2026-05-23d.
  *
- *   - generalPdn         — ст.6 общие ПДн (ФИО, паспорт, гражданство для миграц. учёта)
- *   - citizenshipSpecial — ст.10 ч.2 национальность beyond миграц. учёт purpose
- *   - biometricPhoto     — ст.11 ч.1 photo storage as documentary proof (defensive)
+ * Round 4 had 3 checkboxes incl. `citizenshipSpecial` ст.10 ч.1 label.
+ * Legal-expert REFUTED: ст.10 ч.1 152-ФЗ verbatim covers «расовая, национальная
+ * принадлежность» (ethnic origin), NOT citizenship. Citizenship (ISO 3166-1 code)
+ * is general ПДн ст.6. Mis-labeling = first РКН-inspection blocker.
+ *
+ * Canonical 2-checkbox model:
+ *   - generalPdn     — ст.6 ч.1 общие ПДн (ФИО, паспорт, гражданство, период)
+ *   - biometricPhoto — ст.11 ч.1 фото паспорта как documentary proof
+ *
+ * Penalty floor (verified consultant.ru cons_doc_LAW_34661, ред. 420-ФЗ от
+ * 30.11.2024 вступ. 30.05.2025, NOT 421-ФЗ which is УК): КоАП ст.13.11 ч.17
+ * биометрия 15-20 млн ₽ юр.лиц; ч.18 повторно — оборотный 1-3% выручки
+ * (min 25 млн, max 500 млн ₽, NOT 25-30).
+ *
+ * Backward-compat: `citizenshipSpecial` kept as `.optional()` so old clients
+ * sending the legacy 3-field payload still pass validation. Server normalizes
+ * to 2-field shape before storing.
  */
 const separateConsentsSchema = z.object({
 	generalPdn: z.literal(true, { message: 'Согласие на общие ПДн обязательно' }),
-	citizenshipSpecial: z.literal(true, {
-		message: 'Согласие на спецкатегорию (национальность) обязательно',
-	}),
 	biometricPhoto: z.literal(true, { message: 'Согласие на хранение фото обязательно' }),
+	/**
+	 * Legacy field (Round 4 pre-2026-05-23d): old clients may still send true.
+	 * Server ignores value — only generalPdn + biometricPhoto are mandatory.
+	 * Schema accepts `true` literal OR omitted; rejects `false` (catch corrupt clients).
+	 */
+	citizenshipSpecial: z.literal(true).optional(),
 })
 
 const scanPassportSchema = z.object({
@@ -349,6 +362,23 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 			// possible на audit DB failure (worst-case compliance scenario).
 			//
 			// Factory layer encapsulates sql.begin — routes don't import db/ directly.
+			// Sprint C+ legal audit 2026-05-23d: normalize separateConsents to drop
+			// optional legacy `citizenshipSpecial` field when undefined. Required because
+			// tsconfig.exactOptionalPropertyTypes=true forbids passing `{key: undefined}`
+			// to interface with `key?: boolean`. Strips field cleanly when omitted by
+			// new clients (2-checkbox model); preserves it when sent by old clients.
+			const normalizedSeparateConsents =
+				body.separateConsents.citizenshipSpecial === undefined
+					? {
+							generalPdn: body.separateConsents.generalPdn,
+							biometricPhoto: body.separateConsents.biometricPhoto,
+						}
+					: {
+							generalPdn: body.separateConsents.generalPdn,
+							biometricPhoto: body.separateConsents.biometricPhoto,
+							citizenshipSpecial: body.separateConsents.citizenshipSpecial,
+						}
+
 			const atomicResult = await passportScanFactory.recordConsentAndAuditAtomic({
 				consent: {
 					tenantId,
@@ -359,7 +389,7 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 					ipAddress,
 					userAgent,
 					textSnapshot: body.consent152fzTextSnapshot,
-					separateConsents: body.separateConsents,
+					separateConsents: normalizedSeparateConsents,
 				},
 				audit: {
 					tenantId,

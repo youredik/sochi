@@ -1,8 +1,13 @@
 /**
- * Data Subject Access Request (DSAR) endpoint — 152-ФЗ ст.14 (10 рабочих дней
- * с 01.07.2025 per № 23-ФЗ от 28.02.2025; HALVED от прежних 30).
+ * Data Subject Access Request (DSAR) endpoint — 152-ФЗ ст.14 (10 рабочих дней).
  *
  * GET /api/v1/guests/:guestId/passport-data-export
+ *
+ * **Timer provenance fix (Sprint C+ legal-expert audit 2026-05-23d)**:
+ * 10-рабочих-дней SLA для ст.14 verbatim существует в законе до 23-ФЗ от
+ * 28.02.2025 — NOT новинка («halved from 30» — мой Round 4 claim REFUTED;
+ * 30 рабочих дней никогда не было normal-rule для ст.14). Source: Consultant
+ * cons_doc_LAW_61801 ст.14 ч.8.
  *
  * Sprint C 2026-05-22 — closes Round 4+5 legal blocker: ст.14 mandates оператор
  * обязан предоставить субъекту ПДн «информация… о наличии ПДн… способах их
@@ -187,13 +192,25 @@ export function createPassportDataExportRoutesInner(deps: PassportDataExportRout
 					article: '152-ФЗ ст.14 (право на ознакомление)',
 					revokeUrl: `/api/v1/passport-scan/consent/{consentId}/revoke`,
 					retentionPolicy: {
-						// Round 4 Legal P1-5 fix: ст.21 ч.7 не существует — actual canon
-						// = ст.5 ч.7 («не дольше необходимого») + ст.21 ч.5 («срок
-						// уничтожения 30 дней с момента достижения цели»).
-						consentLog: '5 лет (152-ФЗ ст.5 ч.7 + ст.21 ч.5 + миграц. зак-во)',
-						scanAudit: '90 дней (миграционное закон-во + ст.5 ч.7)',
-						photoStorage: '90 дней (lifecycle policy + ст.5 ч.7)',
-						guestDocument: '5 лет (152-ФЗ ст.5 ч.7 + миграц. закон-во)',
+						// Sprint C+ legal-expert audit 2026-05-23d:
+						//   - consentLog: 5 лет — defensible under ст.5 ч.7 + ст.21 ч.4 (audit)
+						//     + миграц. законодательство (109-ФЗ). Business justification
+						//     documented в политике обработки оператора.
+						//   - scanAudit + photoStorage 90 дней: ст.5 ч.7 «не дольше необходимого».
+						//     Документально обосновано как min МВД-аудит period; альтернатива
+						//     30 дней более защищена под ст.21 ч.4 (30-day post-goal destruction).
+						//   - guestDocument 5 лет: NK ст.23 (5 лет первичка с 2025) — налоговое/
+						//     бухгалтерское основание, НЕ только 152-ФЗ.
+						consentLog: '5 лет (152-ФЗ ст.5 ч.7 + ст.21 ч.4 audit + 109-ФЗ + НК ст.23)',
+						scanAudit: '90 дней (152-ФЗ ст.5 ч.7 + миграц. законодательство)',
+						photoStorage: '90 дней (lifecycle policy + ст.5 ч.7 + МВД-аудит)',
+						guestDocument: '5 лет (НК ст.23 первичка + 152-ФЗ ст.5 ч.7)',
+					},
+					// Differentiated 152-ФЗ timers per ст.21 ч.3/ч.4/ч.5:
+					destructionTimers: {
+						revocation: '30 дней с момента получения отзыва согласия (ст.21 ч.5)',
+						unlawfulProcessing: '10 рабочих дней (ст.21 ч.3, неправомерная обработка)',
+						goalAchieved: '30 дней с момента достижения цели (ст.21 ч.4)',
 					},
 				},
 				consents: consents.map((consent) => ({

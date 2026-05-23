@@ -110,6 +110,7 @@ import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
 import { createSlotReconciliationHandler } from './workers/handlers/slot-reconciliation.ts'
 import { createMigrationRegistrationEnqueuerHandler } from './workers/handlers/migration-registration-enqueuer.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
+import { createPassportScanAuditProjectorHandler } from './workers/handlers/passport-scan-audit-projector.ts'
 import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
 import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
 import { createEmailAdapter } from './workers/lib/postbox-adapter.ts'
@@ -621,6 +622,29 @@ const slotReconciliationConsumer = startCdcConsumer(driver, sql, {
 	label: 'slot_reconciliation:booking',
 })
 
+// Sprint C+ 5-expert audit fix 2026-05-23d (YDB P0 + Senior P1-1):
+// Migration 0069 reserved `passportScanAuditProjector` consumer on TWO topics
+// (photoConsentLog + passportOcrAudit changefeeds) WITHOUT a worker. With Tier-A
+// retention PT24H (Serverless empirical canon, 0014a), unread events expire
+// after 24h → first worker deploy replays nothing = silent CDC data loss.
+// Minimal projector below consumes both topics, advances offsets, emits a
+// structured `passport_scan_audit_changefeed` log per event so Roskomnadzor
+// inspection can prove the audit feed is being projected (152-ФЗ ст.21 ч.4).
+// M11+ will swap projection to write append-only `passportOcrAuditScrubLog`
+// event table for separation between mutable consent table and immutable journal.
+const passportConsentAuditProjector = startCdcConsumer(driver, sql, {
+	topic: 'photoConsentLog/photoConsentLogChanges',
+	consumer: 'passportScanAuditProjector',
+	projection: createPassportScanAuditProjectorHandler('photoConsentLog', logger),
+	label: 'passport_scan_audit:consent',
+})
+const passportOcrAuditProjector = startCdcConsumer(driver, sql, {
+	topic: 'passportOcrAudit/passportOcrAuditChanges',
+	consumer: 'passportScanAuditProjector',
+	projection: createPassportScanAuditProjectorHandler('passportOcrAudit', logger),
+	label: 'passport_scan_audit:ocr',
+})
+
 // Night-audit cron — posts per-night accommodation lines on `in_house`
 // bookings at 03:00 Europe/Moscow. Boot catch-up handles restart-during-window
 // gaps. Idempotent via deterministic folioLine.id (PK collision = no-op).
@@ -680,6 +704,8 @@ const allCdcConsumers = [
 	channelBroadcastConsumer,
 	sseBookingConsumer,
 	slotReconciliationConsumer,
+	passportConsentAuditProjector,
+	passportOcrAuditProjector,
 ] as const
 
 /**
@@ -977,7 +1003,8 @@ const routes = app
 			passportScanFactory, // Sprint C: factory encapsulates sql + atomic consent+audit writes
 		}),
 	)
-	// Sprint C: RTBF endpoint — 152-ФЗ ст.20 (10 рабочих дней)
+	// Sprint C: RTBF endpoint — 152-ФЗ ст.20 (право отзыва) + ст.21 ч.5
+	// (30 дней на уничтожение). Our endpoint destroys immediately << SLA.
 	// Self-review I4 fix: idempotency middleware added — double-click revoke
 	// dedupes на backend per Stripe canon (avoid second cascade running).
 	.route(

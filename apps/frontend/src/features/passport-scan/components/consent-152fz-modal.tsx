@@ -1,27 +1,40 @@
 /**
- * 152-ФЗ согласие — Sprint C 3-checkbox defensive over-consent.
+ * 152-ФЗ согласие — Sprint C+ 2-checkbox model (post legal-expert audit 2026-05-23d).
  *
- * Per round 5 RU UX expert research (May 2026):
- *   - Roskomnadzor 2022 guidance: passport scan storage-only ≠ biometric.
- *     НО defensive over-consent (3 checkboxes) buys insurance против 2026
- *     enforcement-year surprises (КоАП ст.13.11 ч.17 биометрия = 15-20 млн ₽
- *     для юр.лиц, повторно 25-30 млн ₽; ред. № 421-ФЗ от 30.11.2024,
- *     вступ. 30.05.2025).
- *   - 156-ФЗ от 24.06.2025 + ст.10/ст.11 — bundled consent (1 checkbox для
- *     special category + biometric) → void per Tinkoff УКБО precedent 2025.
- *   - FLAT 3 checkboxes (НЕ master+sub) — каждое = consent atom, future-mappable
- *     к Госуслуги consent registry (launches 01.03.2028).
+ * **Architectural shift from 3-checkbox to 2-checkbox**:
+ * Round 4 had 3 checkboxes (generalPdn / citizenshipSpecial / biometricPhoto).
+ * Legal expert REFUTED `citizenshipSpecial` ст.10 spec.category labeling: citizenship
+ * (гражданство = country code) is NOT in ст.10 ч.1 verbatim list («расовая,
+ * национальная принадлежность» = ethnic origin, different concept). Citizenship
+ * processing falls under ст.6 общие ПДн. Mis-labeling = РКН inspection first hit.
+ *
+ * **Canonical model**:
+ *   - `generalPdn` — ст.6 ч.1 общие ПДн (ФИО, паспорт, гражданство, период пребывания)
+ *   - `biometricPhoto` — ст.11 ч.1 фото паспорта как documentary proof
+ *
+ * **Backward compatibility**:
+ * Backend schema (vision.routes.ts) keeps `citizenshipSpecial` field as `.optional()`
+ * so old clients sending 3 fields still validate. Legacy DB rows (pre-2026-05-23d)
+ * with all-3-true persist; parseSeparateConsents in photo-consent-log.repo.ts tolerates
+ * the legacy field. New payloads from this modal send only 2 fields.
+ *
+ * **Legal context per 5-expert audit 2026-05-23**:
+ *   - 156-ФЗ от 24.06.2025 (effective 01.09.2025): consent MUST be standalone
+ *     document (NOT bundled с TOS). This modal IS standalone — only consent text +
+ *     checkboxes, no TOS/Privacy click hijacked.
+ *   - КоАП ст.13.11 ч.17 биометрия: 15-20 млн ₽ юр.лиц (ред. 420-ФЗ от 30.11.2024;
+ *     not 421-ФЗ which was about УК). ч.18 повторно: оборотный 1-3%, 25-500 млн.
+ *   - ст.21 ч.5 152-ФЗ: destruction within **30 days** after revocation (NOT 10;
+ *     ст.21 ч.3's 10 раб.дней is for "неправомерная обработка" — different scenario).
  *
  * UX patterns applied:
- *   - All required, submit disabled until все 3 checked
- *   - Scrollable consent text (no scroll-gate — WCAG-friendlier, гость reads
- *     полный текст в «Подробнее»)
- *   - textSnapshot passed upstream via onAccept callback — backend stores
- *     verbatim text для tamper-proof Roskomnadzor inspection (ст.9 ч.4)
+ *   - Both required, submit disabled until все 2 checked
+ *   - Scrollable consent text (WCAG-friendlier)
+ *   - textSnapshot passed upstream via onAccept callback (152-ФЗ ст.9 ч.4 proof)
  *
  * a11y:
  *   - Radix Dialog focus-trap + Esc close built-in
- *   - 3 separate checkboxes — каждый со своим Label + htmlFor
+ *   - 2 separate checkboxes с своими Label + htmlFor
  *   - role="dialog" + aria-labelledby
  */
 import { useId, useState } from 'react'
@@ -38,23 +51,27 @@ import {
 import { Label } from '../../../components/ui/label.tsx'
 import { CONSENT_152FZ_VERSION } from '../lib/consent-version.ts'
 
-/** Sprint C: payload что caller получает on accept — для backend POST. */
+/**
+ * Sprint C+ 2-checkbox payload (legal-expert audit fix).
+ *
+ * Backend schema accepts `citizenshipSpecial?: true` as legacy-optional;
+ * new payloads omit it. Both shapes validate.
+ */
 export interface Consent152FzAcceptPayload {
 	readonly acceptedAt: string
 	readonly version: string
 	readonly textSnapshot: string
 	readonly separateConsents: {
 		readonly generalPdn: true
-		readonly citizenshipSpecial: true
 		readonly biometricPhoto: true
 	}
 }
 
 /**
- * Sprint C Day 3+: operator identity для 152-ФЗ ст.9 ч.4 idenfication
- * (оператор обязан себя идентифицировать в consent тексте). Минимум —
- * legal name; ИНН + legal address + DPO contact desirable, но не блокируют
- * scan flow if missing (вариант для new tenants pre-onboarding).
+ * 152-ФЗ ст.9 ч.4 identification per legal expert audit:
+ * required by law = `legalName` + `address`. `inn` + `dpoEmail` recommended by РКН
+ * practice but NOT statutory mandate (DPO contact is ст.22.1 РКН-notification scope,
+ * not consent-text scope).
  */
 export interface OperatorIdentity {
 	readonly legalName: string
@@ -65,18 +82,10 @@ export interface OperatorIdentity {
 
 /**
  * Render operator identification block для consent text. Per 152-ФЗ ст.9 ч.4:
- * subject должен знать, КОМУ он даёт согласие. Без identity = void consent.
- *
- * Fallback к «средство размещения / его операторы» (generic placeholder) если
- * caller не предоставил identity (e.g. pre-onboarding scenarios).
+ * subject должен знать, КОМУ он даёт согласие.
  */
 function renderOperatorBlock(identity: OperatorIdentity | undefined): string {
 	if (!identity) {
-		// Sprint C+1 self-review L1/P13 fix: tame language vs alarming
-		// «юр.имя не предоставлено» (которое pugает гостей). NO modal can render
-		// без identity per `useOperatorIdentityHardGate` (см. passport-scan-dialog.tsx
-		// `OperatorIdentityMissingAlert`) — этот fallback срабатывает только в
-		// edge case (тест/dev) где caller не передал. Production = blocked upstream.
 		return [
 			'   • Оператор: средство размещения (реквизиты уточняются у администратора)',
 			'   • ИНН и юр.адрес: будут предоставлены оператором по запросу до подписания',
@@ -113,48 +122,62 @@ ${renderOperatorBlock(identity)}
      Федеральному закону № 109-ФЗ «О миграционном учёте иностранных
      граждан и лиц без гражданства в Российской Федерации» и
      Постановлению Правительства РФ № 9 от 15.01.2007 (с 01.03.2026 —
-     Постановление Правительства РФ № 1937 от 28.11.2025).
+     Постановление Правительства РФ № 1912 от 27.11.2025, действует
+     до 01.03.2032).
    • Передача данных в МВД РФ через Государственную систему миграционного
      и регистрационного учёта (ГС МИР).
    • Аудит обработки персональных данных согласно 152-ФЗ ст.21 ч.4.
 
-2. Состав обрабатываемых данных:
-   • Общие ПДн (ст.6 ч.1 п.5 152-ФЗ — обработка для реализации
-     законом возложенных функций): ФИО, дата рождения, серия/номер
-     документа, даты выдачи/окончания, период пребывания.
-   • Гражданство (ст.10 152-ФЗ + миграционное законодательство):
-     для граждан РФ обработка не относится к спецкатегории; для
-     иностранных граждан — отдельное согласие требуется согласно
-     ст.10 ч.1 152-ФЗ.
-   • Хранение фотографии страницы паспорта (ст.11 152-ФЗ): documentary
-     proof (НЕ биометрические данные для идентификации) — фото
-     используется ТОЛЬКО как доказательство для аудиторских проверок,
-     лицо НЕ распознаётся автоматически (572-ФЗ ст.1 + разъяснения РКН).
+2. Состав обрабатываемых данных (общие ПДн под ст.6 ч.1 152-ФЗ):
+   • ФИО, дата рождения, серия/номер документа, дата выдачи, кем выдан,
+     дата окончания действия (для загранпаспорта/ВУ), гражданство (код
+     страны по ISO 3166-1), период пребывания.
+   • Гражданство = код страны выдачи документа (это общие ПДн под ст.6,
+     НЕ спецкатегория ст.10 — ст.10 ч.1 152-ФЗ verbatim относится к
+     национальной принадлежности (этническому происхождению), что мы НЕ
+     собираем и НЕ обрабатываем).
+   • Хранение фотографии страницы паспорта обрабатывается отдельно
+     под ст.11 152-ФЗ (см. п.3 и второе согласие ниже).
 
-3. Хранение скан-копии документа:
-   • Изображение документа загружается в Yandex Object Storage в РФ
+3. Хранение скан-копии документа (152-ФЗ ст.11 — отдельное согласие):
+   • Изображение документа загружается в объектное хранилище в РФ
      (152-ФЗ ст.18 ч.5 в ред. № 23-ФЗ от 28.02.2025, вступ. 01.07.2025
      — локализация ПДн в РФ) с серверным шифрованием at-rest.
    • Доступ к изображению только для аудиторских проверок Роскомнадзора
-     и МВД.
+     и МВД РФ; автоматическое распознавание лица НЕ выполняется.
+   • Срок хранения изображения: 90 дней (lifecycle policy объектного
+     хранилища) — минимальный срок для МВД-аудита. По истечении срока
+     хранения изображение автоматически удаляется.
 
 4. Способы обработки: автоматизированная и неавтоматизированная.
 
-5. Сроки хранения по типам данных:
-   • Изображение документа: 90 дней (auto-delete через YDB bucket
-     lifecycle policy) — минимальный срок для проведения аудиторских
-     проверок МВД согласно миграционному законодательству.
-   • Структурированные текстовые данные (ФИО, серия/номер, даты): до
-     отзыва согласия или 5 лет с даты последнего взаимодействия
-     (152-ФЗ ст.5 ч.7 «не дольше необходимого» + ст.21 ч.5 «срок
-     уничтожения 30 дней с момента достижения цели»).
-   • Журнал согласий (photoConsentLog): 5 лет для аудита Роскомнадзора
-     (ст.21 ч.4).
+5. Сроки хранения по типам данных (152-ФЗ ст.5 ч.7 «не дольше необходимого»):
+   • Изображение документа: 90 дней (см. п.3).
+   • Структурированные текстовые данные (ФИО, серия/номер, даты,
+     гражданство): до отзыва согласия или 5 лет с даты последнего
+     взаимодействия — обоснование в политике обработки оператора
+     (152-ФЗ ст.5 ч.7 + миграционное законодательство).
+   • Журнал согласий (photoConsentLog): 5 лет — proof для аудита РКН
+     (152-ФЗ ст.21 ч.4).
 
-6. Право отзыва (ст.21 ч.3 152-ФЗ, в ред. № 23-ФЗ от 28.02.2025):
-   вы можете отозвать настоящее согласие в любой момент письменным
-   заявлением оператору средства размещения. Срок исполнения запроса
-   оператором — НЕ более 10 рабочих дней с даты получения заявления.
+6. Право отзыва согласия (152-ФЗ ст.20 + ст.21 ч.5):
+   Вы вправе отозвать настоящее согласие в любой момент письменным
+   заявлением оператору средства размещения (ст.20 152-ФЗ). После
+   получения заявления оператор обязан прекратить обработку и уничтожить
+   ваши персональные данные в течение **30 дней** (152-ФЗ ст.21 ч.5).
+   Если уничтожение технически невозможно — данные блокируются на
+   6 месяцев с последующим уничтожением (ст.21 ч.5).
+
+7. Право на ознакомление (152-ФЗ ст.14):
+   Вы вправе получить выгрузку всех обрабатываемых о вас данных
+   в течение 10 рабочих дней с момента запроса (ст.14 152-ФЗ).
+
+8. Контроль и ответственность оператора:
+   Нарушение требований 152-ФЗ — административная ответственность по
+   ст.13.11 КоАП РФ (в ред. № 420-ФЗ от 30.11.2024, вступ. 30.05.2025).
+   В частности: ч.17 — за нарушения с биометрией штраф для юр.лиц от
+   15 до 20 млн ₽; ч.18 — повторное нарушение — оборотный штраф 1-3%
+   от совокупной выручки (минимум 25 млн ₽, максимум 500 млн ₽).
 
 Версия документа: ${CONSENT_152FZ_VERSION}.
 `
@@ -165,7 +188,6 @@ export function Consent152FzModal({
 	onAccept,
 	onCancel,
 	operatorIdentity,
-	citizenshipBasis,
 }: {
 	open: boolean
 	onAccept: (payload: Consent152FzAcceptPayload) => void
@@ -176,37 +198,16 @@ export function Consent152FzModal({
 	 * If undefined, falls back к generic placeholder.
 	 */
 	operatorIdentity?: OperatorIdentity
-	/**
-	 * Round 2 self-review Batch 8: citizenship-aware consent. Per ст.10 ч.2 п.6
-	 * 152-ФЗ — статутное исключение для миграционного учёта: национальность
-	 * processed without special consent если basis = migration law. Для
-	 * RU citizens (citizenshipIso3='rus') ст.10 checkbox = OVER-CONSENT =
-	 * blurs legal basis (Tinkoff УКБО precedent: «зачем собирали, если не
-	 * нужно?»). Hide checkbox + auto-set true.
-	 *
-	 * Caller передаёт hint от guest profile / pre-fill identity method:
-	 *   - 'ru' — паспорт_paper (RF internal) → skip ст.10 checkbox
-	 *   - 'foreign' — passport_zagran / driver_license → show ст.10 checkbox
-	 *   - undefined — show ст.10 checkbox (defensive default)
-	 */
-	citizenshipBasis?: 'ru' | 'foreign'
 }) {
 	const consentText = buildConsentText(operatorIdentity)
 	const titleId = useId()
 	const descId = useId()
 	const generalPdnId = useId()
-	const citizenshipId = useId()
 	const biometricId = useId()
 	const [generalPdn, setGeneralPdn] = useState(false)
-	// Round 2 Batch 8: для RU граждан citizenshipSpecial — статутное исключение
-	// (ст.10 ч.2 п.6). Auto-true + checkbox скрыт чтобы не over-collect.
-	const isRuStatutoryException = citizenshipBasis === 'ru'
-	const [citizenshipSpecial, setCitizenshipSpecial] = useState(isRuStatutoryException)
 	const [biometricPhoto, setBiometricPhoto] = useState(false)
 
-	// allChecked logic: для RU citizens — только generalPdn + biometric required
-	// (citizenshipSpecial auto-true), для foreign — все 3
-	const allChecked = generalPdn && citizenshipSpecial && biometricPhoto
+	const allChecked = generalPdn && biometricPhoto
 
 	const handleAccept = () => {
 		if (!allChecked) return
@@ -216,7 +217,6 @@ export function Consent152FzModal({
 			textSnapshot: consentText.trim(),
 			separateConsents: {
 				generalPdn: true,
-				citizenshipSpecial: true,
 				biometricPhoto: true,
 			},
 		})
@@ -233,23 +233,16 @@ export function Consent152FzModal({
 					<DialogTitle id={titleId}>Согласие на обработку персональных данных</DialogTitle>
 					<DialogDescription id={descId}>
 						Согласно ФЗ-152 «О персональных данных» (ред. 156-ФЗ от 24.06.2025, вступ. 01.09.2025) —
-						отдельный документ для общих ПДн, спецкатегории и биометрии.
+						отдельный документ для общих ПДн и хранения фотографии паспорта.
 					</DialogDescription>
 				</DialogHeader>
 				{/*
-				 * Round 2 self-review A11y P0-4 fix: scrollable consent text WCAG 2.1.1.
-				 * <article> semantic element is INTERACTIVE per WAI-ARIA 1.2 spec
-				 * (landmark + document content) — biome lint accepts tabIndex без
-				 * suppression. Same keyboard scroll behavior как <section tabIndex=0>
-				 * but doesn't trigger noNoninteractiveTabindex.
-				 *
-				 * Empirically verified WCAG 2.1.1 compliance: keyboard Tab enters
-				 * region, arrow keys scroll content, focus-visible ring signals where
-				 * focus landed. NVDA + VoiceOver announce «article, Текст согласия...».
+				 * WCAG 2.1.1: scrollable consent text keyboard accessible.
+				 * <article> semantic element accepts tabIndex={0} for arrow-key scroll.
 				 */}
 				<article
-					className="flex-1 overflow-y-auto border rounded-md p-4 text-sm whitespace-pre-line bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring outline-none"
-					// biome-ignore lint/a11y/noNoninteractiveTabindex: WCAG 2.1.1 mandates keyboard scroll access на legal consent text — overrides style rule
+					className="flex-1 overflow-y-auto border rounded-md p-4 text-sm whitespace-pre-line bg-muted/30 focus-visible:ring-3 focus-visible:ring-ring outline-none [scroll-margin-bottom:5rem]"
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: WCAG 2.1.1 mandates keyboard scroll access на legal consent text
 					tabIndex={0}
 					aria-label="Текст согласия на обработку персональных данных"
 				>
@@ -258,7 +251,7 @@ export function Consent152FzModal({
 				<fieldset className="mt-4 space-y-3">
 					<legend className="sr-only">Согласия на обработку данных</legend>
 
-					<div className="flex items-start gap-3 min-h-11">
+					<div className="flex items-start gap-3 min-h-11 [scroll-margin-bottom:5rem]">
 						<Checkbox
 							id={generalPdnId}
 							checked={generalPdn}
@@ -270,44 +263,11 @@ export function Consent152FzModal({
 							className="text-sm leading-snug cursor-pointer font-normal"
 						>
 							<strong>Общие персональные данные (ст.6 152-ФЗ)</strong> — даю согласие на обработку
-							ФИО, серии/номера паспорта, дат выдачи, периода пребывания.
+							ФИО, серии/номера паспорта, дат выдачи, гражданства (код страны), периода пребывания.
 						</Label>
 					</div>
 
-					{isRuStatutoryException ? (
-						/*
-						 * Round 2 Batch 8: для RU граждан ст.10 checkbox HIDDEN.
-						 * Статутное исключение (ст.10 ч.2 п.6) — миграц. законодательство
-						 * = legal basis sans consent. Tinkoff УКБО precedent: over-consent
-						 * blurs basis. Показываем notice вместо checkbox для transparency.
-						 */
-						<div className="flex items-start gap-3 min-h-11 text-xs text-muted-foreground bg-muted/30 rounded-md p-3">
-							<span>
-								<strong>Национальность (ст.10 ч.2 п.6):</strong> для граждан РФ обработка
-								национальности основана на статутном исключении (миграционное законодательство) —
-								отдельное согласие не требуется.
-							</span>
-						</div>
-					) : (
-						<div className="flex items-start gap-3 min-h-11">
-							<Checkbox
-								id={citizenshipId}
-								checked={citizenshipSpecial}
-								onCheckedChange={(v) => setCitizenshipSpecial(v === true)}
-								className="mt-0.5"
-							/>
-							<Label
-								htmlFor={citizenshipId}
-								className="text-sm leading-snug cursor-pointer font-normal"
-							>
-								<strong>Специальная категория — национальность (ст.10 152-ФЗ)</strong> — даю
-								отдельное согласие на обработку гражданства/национальности (для не-РФ граждан basis
-								= explicit consent).
-							</Label>
-						</div>
-					)}
-
-					<div className="flex items-start gap-3 min-h-11">
+					<div className="flex items-start gap-3 min-h-11 [scroll-margin-bottom:5rem]">
 						<Checkbox
 							id={biometricId}
 							checked={biometricPhoto}
@@ -318,17 +278,15 @@ export function Consent152FzModal({
 							htmlFor={biometricId}
 							className="text-sm leading-snug cursor-pointer font-normal"
 						>
-							<strong>Биометрические данные (ст.11 152-ФЗ)</strong> — даю отдельное согласие на
-							хранение фотографии страницы паспорта как documentary proof. Лицо НЕ распознаётся
-							автоматически.
+							<strong>Хранение фотографии паспорта (ст.11 152-ФЗ)</strong> — даю отдельное согласие
+							на хранение фотографии страницы паспорта как documentary proof для аудиторских
+							проверок МВД РФ. Лицо НЕ распознаётся автоматически.
 						</Label>
 					</div>
 				</fieldset>
 				{/*
-				 * Round 2 self-review A11y P0-5 fix: Review-before-Submit summary.
-				 * WCAG 3.3.4 Error Prevention (Legal/Financial) — 152-ФЗ consent =
-				 * legal commitment. Live region announces к screen readers что
-				 * именно guest about to sign. Visible для sighted users too.
+				 * Review-before-Submit summary (WCAG 3.3.4 Error Prevention Legal/Financial).
+				 * 152-ФЗ consent = legal commitment. Live region announces к screen readers.
 				 */}
 				<output
 					aria-live="polite"
@@ -337,14 +295,13 @@ export function Consent152FzModal({
 				>
 					{allChecked ? (
 						<span>
-							<strong>Готово к подтверждению:</strong> вы согласны на (1) общие ПДн ст.6, (2)
-							гражданство ст.10 ч.2 п.6, (3) хранение фотографии паспорта ст.11.
+							<strong>Готово к подтверждению:</strong> вы согласны на (1) обработку общих ПДн ст.6 и
+							(2) хранение фотографии паспорта ст.11.
 						</span>
 					) : (
 						<span>
-							Отметьте все 3 категории согласия (выше) для активации кнопки «Подтвердить».
-							Подтверждено сейчас:{' '}
-							{[generalPdn, citizenshipSpecial, biometricPhoto].filter(Boolean).length} из 3.
+							Отметьте оба согласия (выше) для активации кнопки «Подтвердить». Подтверждено сейчас:{' '}
+							{[generalPdn, biometricPhoto].filter(Boolean).length} из 2.
 						</span>
 					)}
 				</output>
@@ -353,7 +310,7 @@ export function Consent152FzModal({
 						Отклонить
 					</Button>
 					<Button onClick={handleAccept} disabled={!allChecked} variant="default">
-						Подтвердить все 3 согласия
+						Подтвердить оба согласия
 					</Button>
 				</DialogFooter>
 			</DialogContent>

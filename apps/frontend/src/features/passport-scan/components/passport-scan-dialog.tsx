@@ -260,7 +260,10 @@ export function PassportScanDialog({
 				guestId,
 				consent152fzVersion: CONSENT_152FZ_VERSION,
 				consent152fzTextSnapshot: lastConsentTextSnapshot.current,
-				separateConsents: { generalPdn: true, citizenshipSpecial: true, biometricPhoto: true },
+				// Sprint C+ legal audit 2026-05-23d: 2-checkbox model — citizenshipSpecial
+				// dropped per ст.10 ч.1 verbatim (ethnic origin only; citizenship = ст.6).
+				// Backend accepts citizenshipSpecial as `.optional()` for backward-compat.
+				separateConsents: { generalPdn: true, biometricPhoto: true },
 				consent152fzAccepted: true,
 				idempotencyKey,
 			})
@@ -397,21 +400,20 @@ export function PassportScanDialog({
 						{stage === 'initial' ? (
 							<div className="space-y-4">
 								{/*
-								 * Sprint C+1 self-review L1 hard-gate: 152-ФЗ ст.9 ч.4 requires
-								 * оператор идентифицируется в consent тексте. Без legalName operator
-								 * identity is void (Tinkoff УКБО precedent 2025) — block scan flow
-								 * entirely и направить operator к onboarding settings заполнить.
-								 *
-								 * Соглашение для unit-tests / Storybook: identity optional, modal
-								 * renders generic placeholder. Real product UI uses gate ниже.
+								 * Sprint C+ legal-expert audit 2026-05-23d: 152-ФЗ ст.9 ч.4 verbatim
+								 * требует «наименование или ФИО и адрес оператора». ИНН + DPO contact
+								 * рекомендованы РКН practice, но НЕ statutory mandate. Gate blocks scan
+								 * только когда legalName empty (без identity = void consent, Tinkoff УКБО
+								 * precedent 2025). Address recommended, fallback consent text handles
+								 * missing address gracefully.
 								 */}
 								{operatorIdentity === undefined || operatorIdentity.legalName.length === 0 ? (
 									<Alert variant="destructive" role="alert">
 										<AlertTitle>Сканирование заблокировано (152-ФЗ ст.9 ч.4)</AlertTitle>
 										<AlertDescription>
-											Оператор не идентифицирован — обязательно укажите юридическое название и ИНН в
-											настройках организации. Без идентификации оператора согласие 152-ФЗ юридически
-											ничтожно.
+											Оператор не идентифицирован — укажите юридическое название организации в её
+											настройках. Юридический адрес и ИНН рекомендуются (повышают защиту согласия от
+											оспаривания), но не обязательны для запуска сканирования.
 										</AlertDescription>
 									</Alert>
 								) : null}
@@ -565,11 +567,6 @@ export function PassportScanDialog({
 			<Consent152FzModal
 				open={consentOpen}
 				{...(operatorIdentity ? { operatorIdentity } : {})}
-				// Round 2 Batch 8: identity method → citizenshipBasis для ст.10 conditional.
-				// passport_paper = RF internal паспорт = RU citizen (статутное исключение).
-				// passport_zagran / driver_license могут быть RU OR foreign — defensive «foreign»
-				// показывает checkbox, оператор всегда может accept если citizen is RU foreign.
-				citizenshipBasis={selectedIdentityMethod === 'passport_paper' ? 'ru' : 'foreign'}
 				onAccept={(payload) => {
 					// Sprint C: capture timestamp at moment of click (not mount) +
 					// textSnapshot для backend tamper-proof proof (152-ФЗ ст.9 ч.4).

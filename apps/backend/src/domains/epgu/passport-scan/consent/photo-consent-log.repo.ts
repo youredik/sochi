@@ -22,20 +22,23 @@ type SqlInstance = typeof SQL
 export type ConsentScope = 'passport_ocr'
 
 /**
- * Multi-checkbox state — per 152-ФЗ ст.10/ст.11 separate consents.
+ * Multi-checkbox state — per 152-ФЗ ст.6/ст.11 separate consents.
  *
- * Defensive over-consent (Sprint C): даже если passport photo storage-only ≠
- * biometric per Roskomnadzor 2022 guidance (legalacts.ru/doc/razjasnenija-roskomnadzora),
- * мы collect'им 3 checkboxes для insurance против 2026 enforcement-year surprises.
+ * Sprint C+ legal-expert audit (2026-05-23d): 2-checkbox model.
+ * `citizenshipSpecial` retained as optional for backward-compat with
+ * Round 4 photoConsentLog rows that wrote 3 fields. New rows write 2.
  *
- * - `generalPdn` — ст.6 общие ПДн (ФИО, паспорт)
- * - `citizenshipSpecial` — ст.10 ч.2 национальность (foreign citizens)
- * - `biometricPhoto` — ст.11 фото паспорта (defensive)
+ *   - `generalPdn` — ст.6 ч.1 общие ПДн (ФИО, паспорт, гражданство)
+ *   - `biometricPhoto` — ст.11 ч.1 фото паспорта как documentary proof
+ *   - `citizenshipSpecial` (LEGACY) — Round 4 mis-labeling: ст.10 ч.1 verbatim
+ *     covers ethnic origin, not citizenship code. Field kept readable to не
+ *     break старые DSAR exports.
  */
 export interface SeparateConsents {
 	readonly generalPdn: boolean
-	readonly citizenshipSpecial: boolean
 	readonly biometricPhoto: boolean
+	/** Legacy field — Round 4 only. Round 5+ omits. */
+	readonly citizenshipSpecial?: boolean
 }
 
 export interface PhotoConsentLogInsert {
@@ -112,12 +115,17 @@ function parseSeparateConsents(raw: string | object | null): SeparateConsents | 
 	} else {
 		obj = raw as Partial<SeparateConsents>
 	}
-	// Defensive: ensure all 3 fields present, falsy если missing
-	return {
+	// Defensive: required fields generalPdn + biometricPhoto.
+	// citizenshipSpecial is LEGACY optional (Round 4 schema): preserve if present
+	// for DSAR/audit fidelity, otherwise undefined for Round 5+ rows.
+	const out: SeparateConsents = {
 		generalPdn: obj.generalPdn === true,
-		citizenshipSpecial: obj.citizenshipSpecial === true,
 		biometricPhoto: obj.biometricPhoto === true,
 	}
+	if (obj.citizenshipSpecial !== undefined) {
+		return { ...out, citizenshipSpecial: obj.citizenshipSpecial === true }
+	}
+	return out
 }
 
 function rowToConsent(row: DbRow): PhotoConsentLogRow {
@@ -188,7 +196,10 @@ export function createPhotoConsentLogRepo(sql: SqlInstance) {
 		},
 
 		/**
-		 * Soft revoke — right-to-be-forgotten 152-ФЗ ст.20 (10 рабочих дней).
+		 * Soft revoke — 152-ФЗ ст.20 (право отзыва согласия). Destruction
+		 * timer per ст.21 ч.5 = 30 дней (NOT 10 — 10 raб.дней is ст.14 DSAR /
+		 * ст.21 ч.3 неправомерная обработка scenarios).
+		 *
 		 * Atomic UPDATE sets revokedAt + revokedReason. Caller pre-generates
 		 * timestamp via `revokeAt` for single-clock canon.
 		 *

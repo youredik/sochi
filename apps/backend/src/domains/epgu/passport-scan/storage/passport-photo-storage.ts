@@ -38,7 +38,8 @@ export interface PassportPhotoStorage {
 	/**
 	 * Delete object by key. Used for:
 	 *   1. Compensating delete if audit INSERT fails (orphan PII prevention)
-	 *   2. RTBF cascade — 152-ФЗ ст.20 (10 рабочих дней) immediate deletion
+	 *   2. RTBF cascade — 152-ФЗ ст.20 (право отзыва) + ст.21 ч.5 (30-day
+	 *      destruction SLA). Our cascade runs immediately << SLA.
 	 *
 	 * Idempotent — non-existent key returns void (S3 DELETE is idempotent).
 	 * Throws на network / auth failure — caller logs but не cascade-fail main flow
