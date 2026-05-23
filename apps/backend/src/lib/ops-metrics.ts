@@ -21,6 +21,8 @@
  * mutex wrap.
  */
 
+import { logger } from '../logger.ts'
+
 /** Metric event — minimal canonical shape для YC DGAUGE/DCOUNTER mapping. */
 export interface OpsMetricEvent {
 	/** Dot-separated name canon, e.g. `passport_scan.attempts_total`. */
@@ -191,19 +193,32 @@ export function emitPassportScanMetric(input: {
 		labels,
 		value: input.value,
 	})
-	// Self-review H7: monitor sustained load. console.warn intentionally —
-	// no Pino logger access here (lib/ vs domain dependency). Production
-	// console.warn surfaces в YC Cloud Logging stderr stream.
-	if (opsMetricsBuffer.droppedCount >= OPS_METRICS_DROP_WARN_THRESHOLD) {
-		console.warn(
-			JSON.stringify({
+	// Round 2 self-review YDB P1 fix: use Pino logger instead of console.warn
+	// for proper YC Cloud Logging severity mapping (formatters.level uppercase
+	// canon). console.warn writes к stderr БЕЗ `{level:"WARN"}` field → YC
+	// indexes at INFO severity → alarms ignored. logger.ts lives в same parent
+	// dir — no domain dependency violation.
+	//
+	// Round 2 Senior P1-9 fix: per-process rate limit (1 warn per 60s) prevents
+	// log amplification под sustained burst (30 scans/sec × N tenants).
+	if (
+		opsMetricsBuffer.droppedCount >= OPS_METRICS_DROP_WARN_THRESHOLD &&
+		Date.now() - lastWarnLogTime > WARN_LOG_THROTTLE_MS
+	) {
+		lastWarnLogTime = Date.now()
+		logger.warn(
+			{
 				event: 'ops_metrics.buffer_overflow',
 				droppedCount: opsMetricsBuffer.droppedCount,
 				capacity: opsMetricsBuffer.capacity,
 				size: opsMetricsBuffer.size,
-				msg: 'ops-metrics buffer dropped events — wire YC Monitoring exporter (M11+)',
-			}),
+			},
+			'ops-metrics buffer dropped events — wire YC Monitoring exporter (M11+)',
 		)
 		opsMetricsBuffer.resetDroppedCount()
 	}
 }
+
+// Round 2 Senior P1-9: throttle warn-log emission (60s window).
+let lastWarnLogTime = 0
+const WARN_LOG_THROTTLE_MS = 60_000

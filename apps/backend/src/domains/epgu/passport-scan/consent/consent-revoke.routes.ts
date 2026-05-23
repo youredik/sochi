@@ -48,9 +48,24 @@ import { tenantMiddleware } from '../../../../middleware/tenant.ts'
 import type { PassportScanFactory } from '../passport-scan.factory.ts'
 import type { PassportPhotoStorage } from '../storage/passport-photo-storage.ts'
 
-const revokeBodySchema = z.object({
-	reason: z.enum(['user_request', 'gdpr_export', 'mistake', 'other']).default('user_request'),
-})
+/**
+ * Round 2 self-review Legal P0-5 fix: removed `gdpr_export` enum value —
+ * GDPR неприменимо в РФ jurisdiction. Tinkoff УКБО 2025 precedent — РКН
+ * рассматривает GDPR-terminology как «оператор не разбирается в применимом
+ * законе» → дополнительные questions при inspection. Replaced с
+ * `dsar_152fz` (статья 14, право доступа). `reasonText` required if
+ * `reason === 'other'` per Legal P1-9 fix.
+ */
+const revokeBodySchema = z
+	.object({
+		reason: z.enum(['user_request', 'dsar_152fz', 'mistake', 'other']).default('user_request'),
+		reasonText: z.string().min(10).max(2000).optional(),
+	})
+	.refine((b) => b.reason !== 'other' || (b.reasonText !== undefined && b.reasonText.length > 0), {
+		message:
+			'reasonText (10-2000 chars) обязателен когда reason="other" — 152-ФЗ ст.21 ч.4 audit canon',
+		path: ['reasonText'],
+	})
 
 /**
  * Sprint C Day 3+: rate limit 60 revoke/min/tenant. Even с RBAC, compromised
@@ -70,7 +85,7 @@ export interface ConsentRevokeRoutesDeps {
 
 export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 	const { passportScanFactory, photoStorage, idempotency } = deps
-	const { consentRepo, auditRepo, cascadeRtbfRevoke } = passportScanFactory
+	const { consentRepo, cascadeRtbfRevoke } = passportScanFactory
 
 	return new Hono<AppEnv>().post(
 		'/passport-scan/consent/:consentId/revoke',
@@ -120,19 +135,17 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 				)
 			}
 
-			// (3) Find inputObjectKeys BEFORE cascade nullify (which wipes inputObjectKey).
-			// Self-review C3+L10 fix: order changed — used to delete S3 first.
-			const objectKeys = await auditRepo.findObjectKeysByConsentId(tenantId, consentId)
-
-			// (4) Atomic DB cascade: audit nullify + consent revoke с shared timestamp.
-			// Throws → 500 + S3 objects still intact (operator can retry, lifecycle
-			// 90-day backstop). Better than partial state «S3 gone, audit claims
-			// still there» from previous order.
+			// (3+4) Atomic DB cascade: audit nullify + guestDocument scrub +
+			// consent revoke с shared timestamp. ROUND 2 P0-1 fix: objectKeys
+			// collected INSIDE the tx snapshot — race-free vs concurrent scan
+			// writing новый inputObjectKey. Throws → 500 + S3 objects still
+			// intact (operator can retry, lifecycle 90-day backstop).
 			const result = await cascadeRtbfRevoke({
 				tenantId,
 				consentId,
 				reason: body.reason,
 			})
+			const objectKeys = result.objectKeysToDelete
 
 			// (5) AFTER DB tx commits, delete S3 objects. Storage failures не блокируют —
 			// audit rows already scrubbed (no PII linkage). Lifecycle 90d backstop

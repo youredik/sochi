@@ -493,15 +493,33 @@ export function PassportScanDialog({
 						) : null}
 
 						{stage === 'confirm' && recognizedEntities && recognized ? (
-							<ConfirmStage
-								entities={recognizedEntities}
-								confidenceHeuristic={recognized.confidenceHeuristic}
-								outcome={recognized.outcome}
-								rklStatus={recognized.rklStatus}
-								identityMethod={selectedIdentityMethod}
-								onChange={setRecognizedEntities}
-								validationError={validationError}
-							/>
+							<>
+								{/*
+								 * Round 2 self-review A11y P0-1 fix: status announce
+								 * на processing→confirm transition. WCAG 4.1.3 — screen
+								 * reader gets explicit message что OCR завершилось.
+								 * `key` prop forces re-mount per new scan = re-announce.
+								 */}
+								<div
+									className="sr-only"
+									role="status"
+									aria-live="polite"
+									key={recognized.latencyMs}
+								>
+									Распознавание завершено за {(recognized.latencyMs / 1000).toFixed(1)} секунд.
+									Уверенность {(recognized.confidenceHeuristic * 100).toFixed(0)} процентов.
+									Проверьте поля ниже перед сохранением.
+								</div>
+								<ConfirmStage
+									entities={recognizedEntities}
+									confidenceHeuristic={recognized.confidenceHeuristic}
+									outcome={recognized.outcome}
+									rklStatus={recognized.rklStatus}
+									identityMethod={selectedIdentityMethod}
+									onChange={setRecognizedEntities}
+									validationError={validationError}
+								/>
+							</>
 						) : null}
 
 						{stage === 'confirm' && validationError !== null ? (
@@ -892,9 +910,13 @@ function EntityRow({
 				placeholder={placeholder}
 				onChange={(e) => onChange(e.target.value)}
 				onBlur={() => setTouched(true)}
-				className="mt-1"
+				// Round 2 A11y P0-3: scroll-margin-bottom prevents iOS sticky-footer
+				// overlap при focused input на mobile keyboard. WCAG 2.4.11 Focus
+				// Not Obscured (NEW 2.2 AA). 5rem = footer height + gap.
+				className="mt-1 [scroll-margin-bottom:5rem]"
 				autoComplete={autoComplete}
 				inputMode={inputMode}
+				required={required === true ? true : undefined}
 				aria-required={required === true ? true : undefined}
 				aria-invalid={shouldHighlight ? true : undefined}
 				aria-describedby={showError ? errorId : undefined}

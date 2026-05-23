@@ -60,6 +60,15 @@ const REDACT_PATHS = [
 	'*.phone',
 	'*.inn',
 	'*.snils',
+	// 152-ФЗ Round 2 self-review P1-10: IP address = ПДн per Roskomnadzor
+	// разъяснение от 14.07.2009 + повторное подтверждение 2022. Все logged
+	// paths uniformly redact.
+	'*.ipAddress',
+	'*.ip_address',
+	// YDB Cloud Logging cost: guestId high-cardinality (1 unique per real
+	// guest) blows up filter index. Redact в logs; structured query через
+	// operatorUserId + tenantId которые stay searchable.
+	'*.guestId',
 	// PCI: receipt PII at line level
 	'*.receipt.customer.email',
 	'*.receipt.customer.phone',

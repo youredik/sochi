@@ -110,17 +110,24 @@ function makeStubFactory(opts: StubFactoryOpts = {}) {
 				nullifyEntitiesByConsentId: async () => undefined,
 				findObjectKeysByConsentId: async () => opts.objectKeys ?? [],
 			},
-			recordConsentAndAuditAtomic: async () => ({ success: true, consentId: null }),
+			recordConsentAndAuditAtomic: async () => ({
+				success: true,
+				consentId: null,
+				errName: null,
+			}),
 			cascadeRtbfRevoke: async (input: { tenantId: string; consentId: string; reason: string }) => {
 				if (opts.cascadeShouldThrow === true) throw new Error('cascade failed')
 				cascadeCalls.push(input)
-				// Sprint C self-review: shape now { revokedAt, alreadyRevoked, revokedReason }
+				// Round 2 self-review P0-1: objectKeysToDelete теперь returned из factory
+				// (collected inside cascade tx, race-free)
 				return {
 					revokedAt: new Date('2026-05-23T12:00:00Z'),
 					alreadyRevoked: false,
 					revokedReason: input.reason,
+					objectKeysToDelete: opts.objectKeys ?? [],
 				}
 			},
+			listGuestDocumentsForExport: async () => [],
 		} as unknown,
 		cascadeCalls,
 	}
@@ -191,10 +198,11 @@ describe('consent-revoke.routes — RTBF endpoint', () => {
 			consentFound: 'active',
 			objectKeys,
 		})
+		// Round 2 self-review: enum `gdpr_export` renamed → `dsar_152fz` (RU jurisdiction)
 		const res = await app.request('/api/v1/passport-scan/consent/cns_active/revoke', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ reason: 'gdpr_export' }),
+			body: JSON.stringify({ reason: 'dsar_152fz' }),
 		})
 		expect(res.status).toBe(200)
 		const body = (await res.json()) as {
@@ -202,13 +210,13 @@ describe('consent-revoke.routes — RTBF endpoint', () => {
 		}
 		expect(body.data.alreadyRevoked).toBe(false)
 		expect(body.data.deletedObjects).toBe(2)
-		expect(body.data.revokedReason).toBe('gdpr_export')
+		expect(body.data.revokedReason).toBe('dsar_152fz')
 		expect(deleteCalls.length).toBe(2)
 		expect(deleteCalls).toEqual([...objectKeys])
 		expect(cascadeCalls.length).toBe(1)
 		expect(cascadeCalls[0]?.tenantId).toBe('org-test')
 		expect(cascadeCalls[0]?.consentId).toBe('cns_active')
-		expect(cascadeCalls[0]?.reason).toBe('gdpr_export')
+		expect(cascadeCalls[0]?.reason).toBe('dsar_152fz')
 	})
 
 	test('[R6] staff role → 200 (guest:update permission satisfied)', async () => {

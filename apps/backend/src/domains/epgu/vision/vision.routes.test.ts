@@ -46,8 +46,18 @@ function makeStubPassportScanFactory(): unknown {
 			nullifyEntitiesByConsentId: async () => undefined,
 			findObjectKeysByConsentId: async () => [],
 		},
-		recordConsentAndAuditAtomic: async () => ({ success: true, consentId: 'cns_stub' }),
-		cascadeRtbfRevoke: async () => undefined,
+		recordConsentAndAuditAtomic: async () => ({
+			success: true,
+			consentId: 'cns_stub',
+			errName: null,
+		}),
+		cascadeRtbfRevoke: async () => ({
+			revokedAt: new Date('2026-05-23T12:00:00Z'),
+			alreadyRevoked: false,
+			revokedReason: 'user_request',
+			objectKeysToDelete: [],
+		}),
+		listGuestDocumentsForExport: async () => [],
 	}
 }
 

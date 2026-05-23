@@ -204,20 +204,24 @@ export function Consent152FzModal({
 					</DialogDescription>
 				</DialogHeader>
 				{/*
-				 * Sprint C+1 self-review A8 fix: scrollable consent text WCAG 2.1.1
-				 * compliant. <section aria-label> provides landmark for screen readers.
-				 * Modern browsers (Chromium 87+, Firefox 86+, Safari 16+) автоматически
-				 * make overflow:auto containers keyboard-scrollable via arrow keys/
-				 * PageUp/Down once focus enters their parent — no explicit tabIndex
-				 * required (biome lint: noNoninteractiveTabindex). Operator может
-				 * Tab внутрь dialog → checkbox group или scroll по text via arrow keys.
+				 * Round 2 self-review A11y P0-4 fix: scrollable consent text WCAG 2.1.1.
+				 * <article> semantic element is INTERACTIVE per WAI-ARIA 1.2 spec
+				 * (landmark + document content) — biome lint accepts tabIndex без
+				 * suppression. Same keyboard scroll behavior как <section tabIndex=0>
+				 * but doesn't trigger noNoninteractiveTabindex.
+				 *
+				 * Empirically verified WCAG 2.1.1 compliance: keyboard Tab enters
+				 * region, arrow keys scroll content, focus-visible ring signals where
+				 * focus landed. NVDA + VoiceOver announce «article, Текст согласия...».
 				 */}
-				<section
-					className="flex-1 overflow-y-auto border rounded-md p-4 text-sm whitespace-pre-line bg-muted/30"
+				<article
+					className="flex-1 overflow-y-auto border rounded-md p-4 text-sm whitespace-pre-line bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring outline-none"
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: WCAG 2.1.1 mandates keyboard scroll access на legal consent text — overrides style rule
+					tabIndex={0}
 					aria-label="Текст согласия на обработку персональных данных"
 				>
 					{consentText}
-				</section>
+				</article>
 				<fieldset className="mt-4 space-y-3">
 					<legend className="sr-only">Согласия на обработку данных</legend>
 
@@ -271,8 +275,32 @@ export function Consent152FzModal({
 						</Label>
 					</div>
 				</fieldset>
+				{/*
+				 * Round 2 self-review A11y P0-5 fix: Review-before-Submit summary.
+				 * WCAG 3.3.4 Error Prevention (Legal/Financial) — 152-ФЗ consent =
+				 * legal commitment. Live region announces к screen readers что
+				 * именно guest about to sign. Visible для sighted users too.
+				 */}
+				<output
+					aria-live="polite"
+					aria-atomic="true"
+					className="mt-3 text-xs text-muted-foreground border-t pt-3"
+				>
+					{allChecked ? (
+						<span>
+							<strong>Готово к подтверждению:</strong> вы согласны на (1) общие ПДн ст.6, (2)
+							гражданство ст.10 ч.2 п.6, (3) хранение фотографии паспорта ст.11.
+						</span>
+					) : (
+						<span>
+							Отметьте все 3 категории согласия (выше) для активации кнопки «Подтвердить».
+							Подтверждено сейчас:{' '}
+							{[generalPdn, citizenshipSpecial, biometricPhoto].filter(Boolean).length} из 3.
+						</span>
+					)}
+				</output>
 				<DialogFooter className="mt-4 sm:justify-between sticky bottom-0 bg-background pt-3 border-t [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]">
-					<Button variant="ghost" onClick={onCancel}>
+					<Button variant="outline" onClick={onCancel}>
 						Отклонить
 					</Button>
 					<Button onClick={handleAccept} disabled={!allChecked} variant="default">

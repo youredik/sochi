@@ -99,8 +99,19 @@ function makeStubFactory(opts: StubFactoryOpts = {}) {
 			nullifyEntitiesByConsentId: async () => undefined,
 			findObjectKeysByConsentId: async () => [],
 		},
-		recordConsentAndAuditAtomic: async () => ({ success: true, consentId: 'cns_stub' }),
-		cascadeRtbfRevoke: async () => undefined,
+		recordConsentAndAuditAtomic: async () => ({
+			success: true,
+			consentId: 'cns_stub',
+			errName: null,
+		}),
+		cascadeRtbfRevoke: async () => ({
+			revokedAt: new Date('2026-05-23T12:00:00Z'),
+			alreadyRevoked: false,
+			revokedReason: 'user_request',
+			objectKeysToDelete: [],
+		}),
+		// Round 2: new DSAR helper для guestDocument
+		listGuestDocumentsForExport: async () => [],
 	}
 }
 
@@ -256,8 +267,17 @@ describe('passport-data-export.routes — 152-ФЗ ст.14 DSAR', () => {
 		const res = await app.request('/api/v1/guests/gst-1/passport-data-export')
 		const body = (await res.json()) as { data: Record<string, unknown> }
 		const keys = Object.keys(body.data).sort()
+		// Round 2 self-review Legal P0-1: documents leg added для ст.14 полноты
 		expect(keys).toEqual(
-			['consents', 'dataSubjectRights', 'exportedAt', 'guestId', 'scans', 'tenantId'].sort(),
+			[
+				'consents',
+				'dataSubjectRights',
+				'documents',
+				'exportedAt',
+				'guestId',
+				'scans',
+				'tenantId',
+			].sort(),
 		)
 		// exportedAt — ISO 8601
 		expect(

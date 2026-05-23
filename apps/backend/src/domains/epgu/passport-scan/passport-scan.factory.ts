@@ -9,6 +9,17 @@
  * Pattern aligned с `booking.factory.ts`, `room.factory.ts`, etc. (15+
  * existing factory call sites в codebase).
  *
+ * Self-review Round 2 (2026-05-23 evening) — closes Senior P0-1, Senior P0-2,
+ * Legal P0-1, Legal P0-2, Legal P0-4:
+ *   - **objectKeys inside cascade tx** — was: route fetched keys outside tx,
+ *     allowing concurrent scan to write fresh inputObjectKey мы missed.
+ *     Now: tx returns canonical key set от same snapshot.
+ *   - **`recordConsentAndAuditAtomic` no longer swallows errors** — caller gets
+ *     err.message в result. 152-ФЗ ст.21 ч.4 forensic trail preserved.
+ *   - **guestDocument cascade** — RTBF now nullifies guestDocument PII
+ *     (was only audit + consent → stranded ст.20 violation).
+ *   - **guestDocument list для DSAR** — list helper added на factory.
+ *
  * Self-review Sprint C fix 2026-05-23 (Y3 + H3 + H5):
  *   - ID generation HOISTED outside `sql.begin({idempotent:true})` — idempotent
  *     retry replays the callback; in-callback `newId()` would mint fresh IDs
@@ -23,6 +34,7 @@
 
 import { newId } from '@horeca/shared'
 import type { sql as SQL } from '../../../db/index.ts'
+import { textOpt, timestampOpt, toTs } from '../../../db/ydb-helpers.ts'
 import {
 	createPassportOcrAuditRepo,
 	type PassportOcrAuditRepo,
@@ -32,6 +44,43 @@ import {
 	type PhotoConsentLogRepo,
 } from './consent/photo-consent-log.repo.ts'
 
+/**
+ * Slim guestDocument shape для DSAR export. Round 2 self-review Legal P0-1 —
+ * 152-ФЗ ст.14 requires «обрабатываемые персональные данные» полный объём.
+ * До Round 2 guestDocument silently не включался в DSAR.
+ */
+export interface GuestDocumentExportRow {
+	readonly id: string
+	readonly identityMethod: string
+	readonly documentSeries: string | null
+	readonly documentNumber: string
+	readonly documentIssuedBy: string | null
+	readonly documentIssuedDate: Date | null
+	readonly documentExpiryDate: Date | null
+	readonly citizenshipIso3: string
+	readonly objectStoragePath: string | null
+	readonly createdAt: Date
+	readonly entitiesAnonymizedAt: Date | null
+}
+
+interface GuestDocumentDbRow {
+	id: string
+	identityMethod: string
+	documentSeries: string | null
+	documentNumber: string
+	documentIssuedBy: string | null
+	documentIssuedDate: Date | null
+	documentExpiryDate: Date | null
+	citizenshipIso3: string
+	objectStoragePath: string | null
+	createdAt: Date
+	entitiesAnonymizedAt: Date | null
+}
+
+interface GuestDocumentObjectKeyRow {
+	objectStoragePath: string | null
+}
+
 export interface PassportScanFactory {
 	readonly consentRepo: PhotoConsentLogRepo
 	readonly auditRepo: PassportOcrAuditRepo
@@ -39,6 +88,11 @@ export interface PassportScanFactory {
 	readonly recordConsentAndAuditAtomic: (input: AtomicWriteInput) => Promise<AtomicWriteResult>
 	/** RTBF cascade — used by consent-revoke routes. nullify audit + revoke consent. */
 	readonly cascadeRtbfRevoke: (input: RtbfRevokeInput) => Promise<RtbfRevokeResult>
+	/** DSAR helper — guestDocument list. Round 2 P0-1 fix. */
+	readonly listGuestDocumentsForExport: (
+		tenantId: string,
+		guestId: string,
+	) => Promise<readonly GuestDocumentExportRow[]>
 }
 
 interface AtomicWriteInput {
@@ -51,6 +105,8 @@ interface AtomicWriteInput {
 interface AtomicWriteResult {
 	readonly success: boolean
 	readonly consentId: string | null
+	/** Round 2 P0-2 fix: error name surfaced для forensic logging. Empty when success. */
+	readonly errName: string | null
 }
 
 interface RtbfRevokeInput {
@@ -66,6 +122,12 @@ export interface RtbfRevokeResult {
 	readonly alreadyRevoked: boolean
 	/** Server-stored reason verbatim (нашу call's reason ИЛИ pre-existing one). */
 	readonly revokedReason: string
+	/**
+	 * Round 2 P0-1 fix: object keys гарантированно captured INSIDE the tx
+	 * (was: route fetched outside tx → race window allowed concurrent scan
+	 * write новый inputObjectKey untracked). Caller uses этот list для S3 delete.
+	 */
+	readonly objectKeysToDelete: readonly string[]
 }
 
 export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory {
@@ -93,9 +155,13 @@ export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory 
 					photoConsentLogId: consentId,
 				})
 			})
-			return { success: true, consentId }
-		} catch {
-			return { success: false, consentId: null }
+			return { success: true, consentId, errName: null }
+		} catch (err) {
+			// Round 2 P0-2 fix: surface error name к caller для forensic logging.
+			// 152-ФЗ ст.21 ч.4 demands «возможность установления содержания» —
+			// silent failure = forensic blackout.
+			const errName = err instanceof Error ? err.name : 'UnknownError'
+			return { success: false, consentId: null, errName }
 		}
 	}
 
@@ -117,15 +183,88 @@ export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory 
 				revokedAt: existing.revokedAt,
 				alreadyRevoked: true,
 				revokedReason: existing.revokedReason ?? '',
+				objectKeysToDelete: [],
 			}
 		}
+		// Round 2 P0-1 fix: collect object keys INSIDE tx (was: route fetched
+		// outside → race window). Audit + guestDocument both contribute.
+		// Round 2 Legal P0-2: guestDocument cascade — nullify PII + scrub.
+		let objectKeysToDelete: readonly string[] = []
 		await sql.begin({ idempotent: true }, async (tx) => {
-			const auditRepoTx = createPassportOcrAuditRepo(tx as unknown as typeof SQL)
-			const consentRepoTx = createPhotoConsentLogRepo(tx as unknown as typeof SQL)
+			const txSql = tx as unknown as typeof SQL
+			const auditRepoTx = createPassportOcrAuditRepo(txSql)
+			const consentRepoTx = createPhotoConsentLogRepo(txSql)
+			// 1) Collect inputObjectKey from audit table BEFORE nullify.
+			const auditKeys = await auditRepoTx.findObjectKeysByConsentId(input.tenantId, input.consentId)
+			// 2) Collect objectStoragePath from guestDocument linked via photoConsentLogId.
+			const [docRows = []] = await txSql<GuestDocumentObjectKeyRow[]>`
+				SELECT objectStoragePath FROM guestDocument
+				WHERE tenantId = ${input.tenantId}
+				  AND photoConsentLogId = ${input.consentId}
+				  AND objectStoragePath IS NOT NULL
+			`.idempotent(true)
+			const docKeys = docRows
+				.map((row) => row.objectStoragePath)
+				.filter((path): path is string => path !== null)
+			objectKeysToDelete = [...auditKeys, ...docKeys]
+
+			// 3) Nullify audit PII.
 			await auditRepoTx.nullifyEntitiesByConsentId(input.tenantId, input.consentId)
+			// 4) Nullify guestDocument PII (Round 2 Legal P0-2). All structured PII
+			//    columns → NULL except (tenantId, id, identityMethod, citizenshipIso3,
+			//    createdAt) which stay для accountability trail. Mark entitiesAnonymizedAt.
+			//    NB: documentNumber NOT NULL в schema — wipe to placeholder вместо NULL.
+			//    citizenshipIso3 NOT NULL аналогично — keep как proof of ст.10 ч.2 basis.
+			await txSql`
+				UPDATE guestDocument
+				SET documentSeries = ${textOpt(null)},
+				    documentNumber = '[scrubbed-rtbf]',
+				    documentIssuedBy = ${textOpt(null)},
+				    documentIssuedDate = ${timestampOpt(null)},
+				    documentExpiryDate = ${timestampOpt(null)},
+				    objectStoragePath = ${textOpt(null)},
+				    objectMimeType = ${textOpt(null)},
+				    entitiesAnonymizedAt = ${toTs(revokedAt)}
+				WHERE tenantId = ${input.tenantId}
+				  AND photoConsentLogId = ${input.consentId}
+			`
+			// 5) Revoke consent with shared timestamp.
 			await consentRepoTx.revokeAt(input.tenantId, input.consentId, input.reason, revokedAt)
 		})
-		return { revokedAt, alreadyRevoked: false, revokedReason: input.reason }
+		return {
+			revokedAt,
+			alreadyRevoked: false,
+			revokedReason: input.reason,
+			objectKeysToDelete,
+		}
+	}
+
+	const listGuestDocumentsForExport = async (
+		tenantId: string,
+		guestId: string,
+	): Promise<readonly GuestDocumentExportRow[]> => {
+		const [rows = []] = await sql<GuestDocumentDbRow[]>`
+			SELECT id, identityMethod, documentSeries, documentNumber,
+			       documentIssuedBy, documentIssuedDate, documentExpiryDate,
+			       citizenshipIso3, objectStoragePath, createdAt, entitiesAnonymizedAt
+			FROM guestDocument
+			WHERE tenantId = ${tenantId} AND guestId = ${guestId}
+			ORDER BY createdAt DESC
+			LIMIT 1000
+		`.idempotent(true)
+		return rows.map((row) => ({
+			id: row.id,
+			identityMethod: row.identityMethod,
+			documentSeries: row.documentSeries,
+			documentNumber: row.documentNumber,
+			documentIssuedBy: row.documentIssuedBy,
+			documentIssuedDate: row.documentIssuedDate,
+			documentExpiryDate: row.documentExpiryDate,
+			citizenshipIso3: row.citizenshipIso3,
+			objectStoragePath: row.objectStoragePath,
+			createdAt: row.createdAt,
+			entitiesAnonymizedAt: row.entitiesAnonymizedAt,
+		}))
 	}
 
 	return {
@@ -133,5 +272,6 @@ export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory 
 		auditRepo,
 		recordConsentAndAuditAtomic,
 		cascadeRtbfRevoke,
+		listGuestDocumentsForExport,
 	}
 }

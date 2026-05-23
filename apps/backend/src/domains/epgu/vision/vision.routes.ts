@@ -196,7 +196,24 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 			const tenantId = c.var.tenantId
 			const operatorUserId = c.var.session?.userId ?? c.var.user?.id ?? 'unknown'
 
-			// (a) Decode base64 — guard empty.
+			// (a) Decode base64 — strict validation + guard empty.
+			// Round 2 self-review Senior P0-5: Buffer.from(s, 'base64') silently
+			// drops invalid characters per RFC 4648 lenient mode. Adversarial
+			// `////` decodes к 3 bytes, passes length check, fails magic-sniff
+			// — но counts к rate-limit budget. Strict pre-check rejects garbage
+			// payloads до decoding.
+			if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body.imageBase64)) {
+				return c.json(
+					{
+						error: {
+							code: 'BAD_REQUEST',
+							message:
+								'imageBase64 содержит недопустимые символы (RFC 4648 base64-canonical strict mode)',
+						},
+					},
+					400,
+				)
+			}
 			const archive = Uint8Array.from(Buffer.from(body.imageBase64, 'base64'))
 			if (archive.length === 0) {
 				return c.json(
@@ -359,10 +376,41 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 					apiConfidenceRaw: visionResult?.apiConfidenceRaw ?? null,
 					confidenceHeuristic: visionResult?.confidenceHeuristic ?? null,
 					outcome: visionResult?.outcome ?? 'api_error',
-					rawResponseJson: null,
+					// Round 2 self-review Legal P0-4 fix: persist Vision response shape
+					// для ст.21 ч.4 «возможность установления содержания обработанных
+					// данных». Снэпшот ВКЛЮЧАЕТ entities (PII), но это уже стораджед
+					// в той же таблице в structured columns — `rawResponseJson` =
+					// redundant proof для ML decision review (ст.16 automated processing
+					// challenge canon). RTBF cascade nullifies этот column too.
+					rawResponseJson:
+						visionResult === null
+							? null
+							: {
+									detectedCountryIso3: visionResult.detectedCountryIso3,
+									isCountryWhitelisted: visionResult.isCountryWhitelisted,
+									entities: visionResult.entities,
+									apiConfidenceRaw: visionResult.apiConfidenceRaw,
+									confidenceHeuristic: visionResult.confidenceHeuristic,
+									outcome: visionResult.outcome,
+									latencyMs: visionResult.latencyMs,
+									httpStatus: visionResult.httpStatus,
+								},
 				},
 			})
 			const auditWriteFailed = !atomicResult.success
+			// Round 2 self-review Senior P0-2 fix: surface atomic write failure
+			// reason. Was: caller see `auditWriteFailed=true` but root cause lost.
+			if (auditWriteFailed) {
+				c.var.logger.error(
+					{
+						event: 'passport_scan.atomic_write_failed',
+						tenantId,
+						guestId: body.guestId,
+						errName: atomicResult.errName,
+					},
+					'consent+audit atomic write failed — 152-ФЗ ст.21 ч.4 forensic gap',
+				)
+			}
 
 			// (g.5) Compensating delete для S3 object если audit/consent write failed —
 			// иначе orphan PII в bucket без audit row (152-ФЗ ст.21 ч.4 violation).
