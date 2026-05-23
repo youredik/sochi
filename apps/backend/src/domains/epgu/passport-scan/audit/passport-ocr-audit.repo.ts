@@ -277,6 +277,28 @@ export function createPassportOcrAuditRepo(sql: SqlInstance) {
 		},
 
 		/**
+		 * Sprint C+ Senior P0-2 fix (2026-05-23d): set inputObjectKey on existing
+		 * audit row AFTER successful S3 upload. Used by reverse-order vision flow:
+		 *   1. atomic consent+audit write with inputObjectKey=null
+		 *   2. upload bytes to S3
+		 *   3. setObjectKey() to attach key к audit row
+		 *
+		 * Idempotent via `WHERE inputObjectKey IS NULL` — re-running cannot mutate
+		 * existing non-null value (defense-in-depth vs idempotent-retry double-fire).
+		 *
+		 * If audit row not found OR already has objectKey OR row scrubbed → no-op
+		 * (no error thrown). Caller relies on AFFECTED-ROW count via subsequent
+		 * SELECT if forensic verification required.
+		 */
+		async setObjectKey(tenantId: string, id: string, objectKey: string): Promise<void> {
+			await sql`
+				UPDATE passportOcrAudit
+				SET inputObjectKey = ${objectKey}
+				WHERE tenantId = ${tenantId} AND id = ${id} AND inputObjectKey IS NULL
+			`.idempotent(true)
+		},
+
+		/**
 		 * Find all audit rows linked к consent (для RTBF cascade — find objectKeys
 		 * to delete из storage перед nullify).
 		 */

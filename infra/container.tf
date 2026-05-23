@@ -105,6 +105,18 @@ resource "yandex_serverless_container" "backend" {
       S3_BUCKET_PASSPORT_SCANS = yandex_storage_bucket.demo_passport_scans.bucket
       # Passport photo storage режим. Demo = mock (no real upload — saves quota).
       # Production swap = "yandex" → real PUT в demo_passport_scans bucket.
+      #
+      # **Sprint C+ Senior P1-2 audit 2026-05-23d (deferred flip)**: legal-expert
+      # confirmed: mock storage + consent text claiming «загружается в Yandex Object
+      # Storage» = misrepresentation under 152-ФЗ ст.10 ч.2. Two fixes pending:
+      #   1. Flip к "yandex" — real S3 PUT (Terraform-provisioned bucket ready);
+      #      requires user-approved production infra change.
+      #   2. Revised consent text — applied 2026-05-23d (see consent-152fz-modal.tsx
+      #      buildConsentText section 3): qualified phrasing «загружается в
+      #      объектное хранилище в РФ» — no longer asserts «Yandex Object Storage»
+      #      brand specifically, accurate for both mock + yandex states.
+      # Bucket + creds wired (S3_BUCKET_PASSPORT_SCANS + Lockbox creds), ready
+      # for flip when user authorizes prod infra change.
       PASSPORT_PHOTO_STORAGE = "mock"
 
       # Email — Phase 2 dual-write: DemoInboxAdapter captures + PostboxAdapter

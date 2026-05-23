@@ -232,7 +232,12 @@ export function createPassportDataExportRoutesInner(deps: PassportDataExportRout
 					confidenceHeuristic: scan.confidenceHeuristic,
 					entitiesAnonymizedAt: scan.entitiesAnonymizedAt?.toISOString() ?? null,
 				})),
-				// Round 2 Legal P0-1 fix: guestDocument PII included per ст.14.
+				// **HONESTY (Sprint C+ Senior P0-1 audit 2026-05-23d, M9-deferred)**:
+				// guestDocument INSERT path не существует в current production code. This
+				// array is currently always `[]`. Real passport PII lives в `scans[].entities`
+				// (above), which IS scrubbed via RTBF cascade. Map preserved defensively
+				// for когда M9 ships the INSERT path. See passport-scan.factory.ts
+				// GuestDocumentExportRow doc comment для full architectural trail.
 				documents: documents.map((doc) => ({
 					id: doc.id,
 					identityMethod: doc.identityMethod,

@@ -328,40 +328,6 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 						latencyMs: 0,
 					}
 
-			// (f.5) Photo storage upload — ТОЛЬКО для successful Vision results.
-			// 90-day retention в Object Storage для МВД-аудита (152-ФЗ ст.21 ч.4 +
-			// bucket lifecycle policy native YC). Failure НЕ блокирует scan —
-			// audit row пишется с inputObjectKey=null.
-			let inputObjectKey: string | null = null
-			if (
-				photoStorage.mode !== 'disabled' &&
-				visionResult !== null &&
-				visionResult.outcome !== 'api_error'
-			) {
-				try {
-					inputObjectKey = await photoStorage.put({
-						tenantId,
-						bytes: archive,
-						contentType: body.mimeType,
-					})
-				} catch {
-					// Storage failure — audit row пишется без objectKey. Operator
-					// видит OCR result, но photo не retrieved для МВД re-audit.
-					// Logged через handler ниже (audit log captures inputObjectKey=null).
-					inputObjectKey = null
-				}
-			}
-
-			// (g) ATOMIC consent + audit write per Sprint C — sql.begin canon
-			// (18+ existing call sites: booking, compliance, magic-link, payment).
-			// Если audit INSERT fails → consent INSERT rolls back → нет orphan
-			// rows. Plus compensating delete для S3 object below.
-			//
-			// 152-ФЗ ст.21 ч.4 atomicity: consent + audit MUST be both present OR
-			// both absent. До Sprint C — non-transactional → orphan consent
-			// possible на audit DB failure (worst-case compliance scenario).
-			//
-			// Factory layer encapsulates sql.begin — routes don't import db/ directly.
 			// Sprint C+ legal audit 2026-05-23d: normalize separateConsents to drop
 			// optional legacy `citizenshipSpecial` field when undefined. Required because
 			// tsconfig.exactOptionalPropertyTypes=true forbids passing `{key: undefined}`
@@ -379,6 +345,23 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 							citizenshipSpecial: body.separateConsents.citizenshipSpecial,
 						}
 
+			// (f.5+g) ATOMIC consent + audit write FIRST, upload AFTER (Sprint C+
+			// Senior P0-2 fix 2026-05-23d). Round 4 had reverse order — upload before
+			// atomic write — which produced this orphan-PII failure mode:
+			//   1. upload bytes к S3 → objectKey X
+			//   2. atomic consent+audit insert fails (transient YDB error)
+			//   3. compensating S3 delete of X attempted
+			//   4. compensating delete ALSO fails (e.g. S3 rate-limit)
+			//   5. result: S3 object X exists with PII, NO audit row points to it,
+			//      RTBF cascade cannot find it. 90-day lifecycle is last-resort backstop
+			//      but есть window of 152-ФЗ ст.21 ч.4 forensic gap.
+			// Reversed order eliminates this race entirely: NO upload happens until
+			// audit row is committed. If subsequent upload fails, audit row stays
+			// with inputObjectKey=null — no orphan possible.
+			//
+			// 152-ФЗ ст.21 ч.4 atomicity: consent + audit MUST be both present OR
+			// both absent. Factory's sql.begin guarantees this. Routes don't import
+			// db/ directly per depcruise canon.
 			const atomicResult = await passportScanFactory.recordConsentAndAuditAtomic({
 				consent: {
 					tenantId,
@@ -399,7 +382,9 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 					documentId: null,
 					inputMimeType: body.mimeType,
 					inputSizeBytes: archive.length,
-					inputObjectKey,
+					// Sprint C+ Senior P0-2: always null initially — set via repo.setObjectKey
+					// AFTER successful S3 upload (next step). Prevents orphan PII.
+					inputObjectKey: null,
 					apiEndpoint: VISION_API_ENDPOINT,
 					apiModel,
 					httpStatus: visionResult?.httpStatus ?? 0,
@@ -410,12 +395,8 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 					apiConfidenceRaw: visionResult?.apiConfidenceRaw ?? null,
 					confidenceHeuristic: visionResult?.confidenceHeuristic ?? null,
 					outcome: visionResult?.outcome ?? 'api_error',
-					// Round 2 self-review Legal P0-4 fix: persist Vision response shape
-					// для ст.21 ч.4 «возможность установления содержания обработанных
-					// данных». Снэпшот ВКЛЮЧАЕТ entities (PII), но это уже стораджед
-					// в той же таблице в structured columns — `rawResponseJson` =
-					// redundant proof для ML decision review (ст.16 automated processing
-					// challenge canon). RTBF cascade nullifies этот column too.
+					// Round 2 Legal P0-4 fix: persist Vision response shape для ст.21 ч.4
+					// «возможность установления содержания обработанных данных».
 					rawResponseJson:
 						visionResult === null
 							? null
@@ -432,8 +413,6 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 				},
 			})
 			const auditWriteFailed = !atomicResult.success
-			// Round 2 self-review Senior P0-2 fix: surface atomic write failure
-			// reason. Was: caller see `auditWriteFailed=true` but root cause lost.
 			if (auditWriteFailed) {
 				c.var.logger.error(
 					{
@@ -446,16 +425,54 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 				)
 			}
 
-			// (g.5) Compensating delete для S3 object если audit/consent write failed —
-			// иначе orphan PII в bucket без audit row (152-ФЗ ст.21 ч.4 violation).
-			// Lifecycle policy 90-day GC = last-resort backstop, но мы delete immediately.
-			let compensationFailed = false
-			if (auditWriteFailed && inputObjectKey !== null) {
+			// (g.5) Photo storage upload — ONLY after atomic write succeeded.
+			// Two failure modes are now safe:
+			//   (a) Upload fails → audit row stays with inputObjectKey=null. No orphan
+			//       in S3. Operator sees OCR result; logged warning for forensic trail.
+			//   (b) Upload succeeds but PATCH `setObjectKey` fails (rare — UPDATE with
+			//       `WHERE inputObjectKey IS NULL` is idempotent) → orphan possible.
+			//       Mitigation: lifecycle policy 90-day GC catches это. Empirically rare
+			//       because PATCH is single-row UPDATE on PK (no contention).
+			// Storage mode 'disabled' = skip upload entirely (test/dev fixtures).
+			// 90-day retention в Object Storage для МВД-аудита (152-ФЗ ст.21 ч.4 +
+			// bucket lifecycle policy native YC).
+			let inputObjectKey: string | null = null
+			let uploadFailed = false
+			if (
+				!auditWriteFailed &&
+				atomicResult.auditId !== null &&
+				photoStorage.mode !== 'disabled' &&
+				visionResult !== null &&
+				visionResult.outcome !== 'api_error'
+			) {
 				try {
-					await photoStorage.delete(inputObjectKey)
-				} catch {
-					// Forensic preservation — orphan persists, lifecycle 90d backstop.
-					compensationFailed = true
+					inputObjectKey = await photoStorage.put({
+						tenantId,
+						bytes: archive,
+						contentType: body.mimeType,
+					})
+					// PATCH audit row to attach uploaded objectKey. Idempotent via
+					// `WHERE inputObjectKey IS NULL` — repeat call cannot mutate.
+					await passportScanFactory.auditRepo.setObjectKey(
+						tenantId,
+						atomicResult.auditId,
+						inputObjectKey,
+					)
+				} catch (err) {
+					// Storage failure → audit row stays with inputObjectKey=null. Operator
+					// видит OCR result, но photo не retrievable для МВД re-audit. Logged
+					// here для forensic trail. No orphan possible (nothing committed pre-fail).
+					uploadFailed = true
+					c.var.logger.warn(
+						{
+							event: 'passport_scan.storage_upload_failed',
+							tenantId,
+							guestId: body.guestId,
+							auditId: atomicResult.auditId,
+							err: err instanceof Error ? err.message : String(err),
+						},
+						'photo storage upload failed AFTER audit committed — audit row preserved with null objectKey',
+					)
 				}
 			}
 
@@ -487,7 +504,7 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 					rklMatchType: rklEval.matchType,
 					inputObjectKeySet: inputObjectKey !== null,
 					atomicWriteFailed: auditWriteFailed,
-					compensationFailed,
+					uploadFailed,
 					visionError: visionError === null ? null : visionError.name,
 				},
 				'passport_scan',
@@ -530,9 +547,12 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 					}
 				}
 			}
-			if (auditWriteFailed && compensationFailed) {
+			// Sprint C+ Senior P0-2: replaced `orphan_compensation_failed` metric with
+			// `upload_failed`. Reverse-order flow means no compensating delete needed —
+			// upload failures don't create orphans (audit row stays valid с null key).
+			if (uploadFailed) {
 				emitPassportScanMetric({
-					kind: 'orphan_compensation_failed',
+					kind: 'upload_failed',
 					outcome: outcomeForMetric,
 					identityMethod,
 					apiModel,

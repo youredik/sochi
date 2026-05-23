@@ -45,9 +45,27 @@ import {
 } from './consent/photo-consent-log.repo.ts'
 
 /**
- * Slim guestDocument shape для DSAR export. Round 2 self-review Legal P0-1 —
- * 152-ФЗ ст.14 requires «обрабатываемые персональные данные» полный объём.
- * До Round 2 guestDocument silently не включался в DSAR.
+ * Slim guestDocument shape для DSAR export.
+ *
+ * **HONESTY GAP (Sprint C+ Senior P0-1 audit 2026-05-23d, deferred to M9)**:
+ * NO production code path currently INSERTs into guestDocument. Vision scan route
+ * writes consent + audit only (lines 100-110 are real PII storage); guestDocument
+ * insertion is deferred к M9 booking integration. Senior expert confirmed:
+ *   - `INSERT INTO guestDocument` grep returns only seed + tests + migration-
+ *     registration-enqueuer SELECT (search-only, never writes).
+ *   - migration-registration-detail-sheet.tsx:291-293 explicitly says
+ *     «Persistence в guestDocument deferred до M9 booking integration».
+ *   - Therefore: this DSAR field returns `[]` always, and the RTBF cascade UPDATE
+ *     on guestDocument matches 0 rows (no-op).
+ *
+ * **Why we keep the cascade + DSAR code defensive**: when M9 lands and starts
+ * writing guestDocument rows linked via photoConsentLogId, the cascade + DSAR
+ * will immediately start working — no code changes required at that boundary.
+ * Current behavior is HONEST: DSAR returns empty documents array (no PII to leak),
+ * RTBF cascade scrubs whatever exists (currently nothing).
+ *
+ * Real PII for passport scan lives in `passportOcrAudit.surname/name/middleName/...`
+ * which IS scrubbed by `auditRepo.nullifyEntitiesByConsentId`.
  */
 export interface GuestDocumentExportRow {
 	readonly id: string
@@ -105,6 +123,12 @@ interface AtomicWriteInput {
 interface AtomicWriteResult {
 	readonly success: boolean
 	readonly consentId: string | null
+	/**
+	 * Sprint C+ Senior P0-2 fix: audit row ID exposed so caller can PATCH
+	 * `inputObjectKey` after S3 upload completes (reverse-order flow — see
+	 * vision.routes.ts upload sequencing comment). Null when atomic write failed.
+	 */
+	readonly auditId: string | null
 	/** Round 2 P0-2 fix: error name surfaced для forensic logging. Empty when success. */
 	readonly errName: string | null
 }
@@ -155,13 +179,13 @@ export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory 
 					photoConsentLogId: consentId,
 				})
 			})
-			return { success: true, consentId, errName: null }
+			return { success: true, consentId, auditId, errName: null }
 		} catch (err) {
 			// Round 2 P0-2 fix: surface error name к caller для forensic logging.
 			// 152-ФЗ ст.21 ч.4 demands «возможность установления содержания» —
 			// silent failure = forensic blackout.
 			const errName = err instanceof Error ? err.name : 'UnknownError'
-			return { success: false, consentId: null, errName }
+			return { success: false, consentId: null, auditId: null, errName }
 		}
 	}
 

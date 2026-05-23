@@ -45,10 +45,13 @@ function makeStubPassportScanFactory(): unknown {
 			findByGuestId: async () => [],
 			nullifyEntitiesByConsentId: async () => undefined,
 			findObjectKeysByConsentId: async () => [],
+			// Sprint C+ Senior P0-2: PATCH method for reverse-order upload flow.
+			setObjectKey: async () => undefined,
 		},
 		recordConsentAndAuditAtomic: async () => ({
 			success: true,
 			consentId: 'cns_stub',
+			auditId: 'ocra_stub', // Sprint C+ Senior P0-2: returned for setObjectKey PATCH.
 			errName: null,
 		}),
 		cascadeRtbfRevoke: async () => ({

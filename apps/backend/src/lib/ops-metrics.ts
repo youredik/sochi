@@ -172,7 +172,13 @@ export function passportScanCostKopecks(apiModel: string): number | null {
 }
 
 export function emitPassportScanMetric(input: {
-	kind: 'attempts' | 'duration_ms' | 'cost_kopecks' | 'orphan_compensation_failed'
+	/**
+	 * Sprint C+ Senior P0-2 (2026-05-23d): added `upload_failed`. Replaces
+	 * `orphan_compensation_failed` (kept for callsite back-compat) — reverse-order
+	 * vision flow means no compensating delete; upload failures are tracked
+	 * separately (audit row preserved with null objectKey, no orphan).
+	 */
+	kind: 'attempts' | 'duration_ms' | 'cost_kopecks' | 'orphan_compensation_failed' | 'upload_failed'
 	outcome: string
 	identityMethod: string
 	apiModel: string
