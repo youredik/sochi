@@ -40,6 +40,7 @@ import { env } from '../../../env.ts'
 import type { AppEnv } from '../../../factory.ts'
 import { extractClientIpFromContext } from '../../../lib/net/client-ip.ts'
 import { assertMimeMatchesBytes } from '../../../lib/magic-byte-sniff.ts'
+import { emitPassportScanMetric } from '../../../lib/ops-metrics.ts'
 import { authMiddleware } from '../../../middleware/auth.ts'
 import type { IdempotencyMiddleware } from '../../../middleware/idempotency.ts'
 import { requirePermission } from '../../../middleware/require-permission.ts'
@@ -402,6 +403,48 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 				},
 				'passport_scan',
 			)
+
+			// (h.6) Sprint C: ops-metrics emission для future YC Monitoring exporter.
+			// Buffer drained M11+. Labels low-cardinality (no tenantId/guestId).
+			const outcomeForMetric = visionResult?.outcome ?? 'api_error'
+			emitPassportScanMetric({
+				kind: 'attempts',
+				outcome: outcomeForMetric,
+				identityMethod,
+				apiModel,
+				rklStatus: rklEval.status,
+				value: 1,
+			})
+			if (visionResult !== null) {
+				emitPassportScanMetric({
+					kind: 'duration_ms',
+					outcome: outcomeForMetric,
+					identityMethod,
+					apiModel,
+					rklStatus: rklEval.status,
+					value: visionResult.latencyMs,
+				})
+				// Yandex Vision pricing 0.71 ₽/call → 71 копеек (verified 2026-05-22 research).
+				// passport model только если successful — failed calls не billed per Yandex docs.
+				if (visionResult.outcome === 'success' || visionResult.outcome === 'low_confidence') {
+					emitPassportScanMetric({
+						kind: 'cost_kopecks',
+						outcome: outcomeForMetric,
+						identityMethod,
+						apiModel,
+						value: 71,
+					})
+				}
+			}
+			if (auditWriteFailed && compensationFailed) {
+				emitPassportScanMetric({
+					kind: 'orphan_compensation_failed',
+					outcome: outcomeForMetric,
+					identityMethod,
+					apiModel,
+					value: 1,
+				})
+			}
 
 			// (h) Response. Если vision throw'нул — surface as 500 с generic message
 			// (НЕ leak error.message что может содержать bytes/PII).
