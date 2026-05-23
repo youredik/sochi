@@ -49,8 +49,13 @@ import {
 } from './migration-registration.ts'
 
 describe('migration-registration — enums', () => {
-	test('[E1] identityMethod has exactly 5 values (ПП-174)', () => {
-		expect(identityMethodValues).toHaveLength(5)
+	test('[E1] identityMethod has exactly 6 values (ПП-1912 + legacy digital_id_max)', () => {
+		// Sprint C+ Legal expert audit 2026-05-23d: ПП-1912 от 27.11.2025
+		// (canonical hotel guest ID act, effective 01.03.2026, replaces ПП-1853)
+		// adds `mfsoi` (МФСОИ — Многофункциональный сервис обмена информацией)
+		// as canonical legal value for the Госуслуги/МАХ check-in flow.
+		// `digital_id_max` retained as deprecated legacy alias.
+		expect(identityMethodValues).toHaveLength(6)
 		expect([...identityMethodValues].sort()).toEqual(
 			[
 				...([
@@ -58,6 +63,7 @@ describe('migration-registration — enums', () => {
 					'passport_zagran',
 					'driver_license',
 					'ebs',
+					'mfsoi',
 					'digital_id_max',
 				] as const),
 			].sort(),

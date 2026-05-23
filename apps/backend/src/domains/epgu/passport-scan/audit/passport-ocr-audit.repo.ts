@@ -117,37 +117,46 @@ function extractExpirationDate(raw: string | object | null): string | null {
 
 function rowToExportEntity(row: DbAuditExportRow): PassportOcrAuditExportRow {
 	// Sprint C+ Senior P0-3 fix (2026-05-23 evening): use entitiesAnonymizedAt
-	// as CANONICAL scrub check, not field-by-field nullness sniffing. Previous
-	// `allFieldsNull` heuristic had two failure modes:
-	//   (a) low-quality OCR that returns surname=null but documentNumber set
-	//       would be treated as «not scrubbed» → entities leak post-revoke if
-	//       partial-write race occurred in cascade.
-	//   (b) extractExpirationDate ran regardless of scrub state → leaked
-	//       expirationDate from rawResponseJson even when entitiesAnonymizedAt
-	//       set (cascade rawResponseJson NULL fixed это, but defense-in-depth
-	//       at read layer = belt-and-suspenders per 152-ФЗ ст.20).
-	// Canonical check: row.entitiesAnonymizedAt !== null → all PII fields are
-	// definitively scrubbed per RTBF cascade contract (factory.cascadeRtbfRevoke).
+	// as PRIMARY scrub check, with all-fields-null fallback для api_error
+	// outcome где Vision returned nothing (legitimate null-entities path).
+	//
+	// Two cases produce `entities=null` в export:
+	//   (a) RTBF cascade scrubbed → `entitiesAnonymizedAt !== null` (canonical
+	//       signal per factory.cascadeRtbfRevoke contract)
+	//   (b) Original Vision call returned api_error/low_confidence с no extracted
+	//       fields → all OCR columns NULL since INSERT time (NOT scrubbed,
+	//       just empty by origin)
+	//
+	// Previous «allFieldsNull» heuristic alone had failure modes (e.g. partial-
+	// write race after scrub leaving некоторые fields populated). Combined
+	// check = belt-and-suspenders.
 	const isScrubbed = row.entitiesAnonymizedAt !== null
-	const entities: PassportEntities | null = isScrubbed
-		? null
-		: {
-				surname: row.surname,
-				name: row.name,
-				middleName: row.middleName,
-				gender: row.gender as 'male' | 'female' | null,
-				citizenshipIso3: row.citizenshipIso3,
-				birthDate: row.birthDate?.toISOString().slice(0, 10) ?? null,
-				birthPlace: row.birthPlace,
-				documentNumber: row.documentNumber,
-				issueDate: row.issueDate?.toISOString().slice(0, 10) ?? null,
-				// Sprint C+ Senior P0-3: parse expirationDate from rawResponseJson
-				// ONLY when not scrubbed. 152-ФЗ ст.14 «полный объём» for active
-				// records (загранпаспорт/ВУ have expiry); ст.20 «уничтожение» wins
-				// when entitiesAnonymizedAt set — rawResponseJson already NULL'd
-				// by cascade, but defensive read-layer guard prevents future regression.
-				expirationDate: extractExpirationDate(row.rawResponseJson),
-			}
+	const allFieldsNull =
+		row.surname === null &&
+		row.name === null &&
+		row.middleName === null &&
+		row.documentNumber === null &&
+		row.birthDate === null
+	const entities: PassportEntities | null =
+		isScrubbed || allFieldsNull
+			? null
+			: {
+					surname: row.surname,
+					name: row.name,
+					middleName: row.middleName,
+					gender: row.gender as 'male' | 'female' | null,
+					citizenshipIso3: row.citizenshipIso3,
+					birthDate: row.birthDate?.toISOString().slice(0, 10) ?? null,
+					birthPlace: row.birthPlace,
+					documentNumber: row.documentNumber,
+					issueDate: row.issueDate?.toISOString().slice(0, 10) ?? null,
+					// Sprint C+ Senior P0-3: parse expirationDate from rawResponseJson
+					// ONLY when not scrubbed. 152-ФЗ ст.14 «полный объём» for active
+					// records (загранпаспорт/ВУ have expiry); ст.20 «уничтожение» wins
+					// when entitiesAnonymizedAt set — rawResponseJson already NULL'd
+					// by cascade, but defensive read-layer guard prevents future regression.
+					expirationDate: extractExpirationDate(row.rawResponseJson),
+				}
 	return {
 		id: row.id,
 		createdAt: row.createdAt,

@@ -53,12 +53,7 @@ CREATE TABLE IF NOT EXISTS passportOcrAuditScrubLog (
     -- Index by guest для DSAR query «история scrub'ов».
     INDEX idxScrubLogTenantGuest GLOBAL SYNC ON (tenantId, guestId),
     -- Index by consent для cascade idempotency check (rare but defensive).
-    INDEX idxScrubLogTenantConsent GLOBAL SYNC ON (tenantId, photoConsentLogId),
-
-    FAMILY default (
-        DATA = "ssd",
-        COMPRESSION = "lz4"
-    )
+    INDEX idxScrubLogTenantConsent GLOBAL SYNC ON (tenantId, photoConsentLogId)
 )
 WITH (
     -- 5-year retention canon — same as photoConsentLog. Append-only event = forensic
@@ -70,3 +65,12 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
     AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 16
 );
+
+-- **NOTE on FAMILY clause omission**: Production YDB clusters have named
+-- storage pools (`ssd`, `hdd`, etc.) и FAMILY clauses route data к specific
+-- pools. Local YDB (in-memory PDisks per [[feedback_ydb_inmem_no_restart]])
+-- doesn't have these pools и REJECTS migrations с explicit FAMILY references
+-- («database doesn't have required storage pools»). Other tables в этом repo
+-- omit FAMILY entirely (rely on YDB default), so we do same here для local-dev
+-- parity. Production deploy uses YC Serverless single-tier storage — no
+-- separate pool routing needed.
