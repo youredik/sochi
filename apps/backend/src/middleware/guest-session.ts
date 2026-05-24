@@ -51,25 +51,33 @@ interface CookiePayload {
 }
 
 function parseCookiePayload(raw: string): GuestSession | null {
-	let parsed: CookiePayload
+	let parsed: unknown
 	try {
-		parsed = JSON.parse(raw) as CookiePayload
+		parsed = JSON.parse(raw)
 	} catch {
 		return null
 	}
+	// Sprint C+ Round 6 Security P2 fix 2026-05-24 — fuzz-discovered TypeError:
+	// `JSON.parse('null')` returns null, `JSON.parse('42')` returns number,
+	// `JSON.parse('[]')` returns array. Original `parsed.t` access on these
+	// crashed («null is not an object»). Strict guard: must be plain object.
+	if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+		return null
+	}
+	const obj = parsed as CookiePayload
 	if (
-		typeof parsed.t !== 'string' ||
-		typeof parsed.b !== 'string' ||
-		typeof parsed.j !== 'string' ||
-		(parsed.s !== 'view' && parsed.s !== 'mutate')
+		typeof obj.t !== 'string' ||
+		typeof obj.b !== 'string' ||
+		typeof obj.j !== 'string' ||
+		(obj.s !== 'view' && obj.s !== 'mutate')
 	) {
 		return null
 	}
 	return {
-		tenantId: parsed.t,
-		bookingId: parsed.b,
-		scope: parsed.s,
-		jti: parsed.j,
+		tenantId: obj.t,
+		bookingId: obj.b,
+		scope: obj.s,
+		jti: obj.j,
 	}
 }
 
@@ -157,4 +165,14 @@ export function guestSessionMiddleware(deps: GuestSessionMiddlewareDeps) {
 
 		return next()
 	})
+}
+
+/**
+ * Test-only export for property-based fuzz testing per [[feedback-token-bucket-
+ * upstream-canon-2026-05-24]] companion canon. Round 6 Security red team
+ * P2 (parseCookiePayload lastIndexOf split fuzz) requires direct access
+ * к parser internals для adversarial input testing.
+ */
+export const __testGuestSessionInternals = {
+	parseCookiePayload,
 }

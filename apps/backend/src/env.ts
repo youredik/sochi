@@ -159,6 +159,27 @@ export const envSchema = z.object({
 	// AND the gate refuses non-tokened requests.
 	DEMO_DEPLOYMENT: booleanEnv(false),
 
+	// Sprint C+ Round 6 P1 fix 2026-05-24 (Performance scale architect):
+	// Migration apply на cold start = 72 migrations × ~50ms checksum read = 3.6s
+	// wall-clock в best case + risk of DDL race при multi-instance scaling.
+	//
+	// Canonical 2026 pattern (Stripe / Linear / Vercel): detach migrations OUT
+	// of runtime container boot path. CI/deploy job runs `RUN_MIGRATIONS=true`
+	// applier ONCE per deploy; runtime containers boot с RUN_MIGRATIONS=false
+	// (default) и пропускают applier entirely.
+	//
+	// Behavior:
+	//   RUN_MIGRATIONS=true  — apply migrations (used by deploy job + local dev)
+	//   RUN_MIGRATIONS=false — skip migrations (default; runtime container path)
+	//
+	// Local dev: `pnpm migrate` script wraps applier с RUN_MIGRATIONS=true.
+	// Tests: setupTestDb() уже applies separately, doesn't read this env.
+	//
+	// Backward-compat: default=true сохраняет current behavior. Operator
+	// explicitly sets RUN_MIGRATIONS=false на runtime container env для cold-
+	// start cut от 3.6s к ~50ms.
+	RUN_MIGRATIONS: booleanEnv(true),
+
 	// DaData REST API token (`Token <…>` Authorization header).
 	// Optional: unset / empty / whitespace-only → onboarding identity-lookup
 	// falls back to `dadata.mock` (canonical Сочи demo set; demo tenants

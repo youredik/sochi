@@ -23,6 +23,7 @@
 
 import type { TenantCompliance, TenantCompliancePatch } from '@horeca/shared'
 import type { sql as SQL } from '../../db/index.ts'
+import { KsrRegistryNumberMissingError } from '../../errors/domain.ts'
 import {
 	boolOpt,
 	int64Opt,
@@ -50,6 +51,10 @@ type ComplianceRow = {
 	// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity.
 	legalAddress: string | null
 	dpoEmail: string | null
+	// Sprint C+ Round 6 Legal P0 fix 2026-05-24: 152-ФЗ ст.22 ч.3 п.7.1 full DPO contact.
+	dpoFullName: string | null
+	dpoPhone: string | null
+	dpoPostalAddress: string | null
 }
 
 function rowToCompliance(r: ComplianceRow): TenantCompliance {
@@ -63,8 +68,13 @@ function rowToCompliance(r: ComplianceRow): TenantCompliance {
 		ksrVerifiedAt: r.ksrVerifiedAt ? r.ksrVerifiedAt.toISOString() : null,
 		legalAddress: r.legalAddress,
 		dpoEmail: r.dpoEmail,
+		dpoFullName: r.dpoFullName,
+		dpoPhone: r.dpoPhone,
+		dpoPostalAddress: r.dpoPostalAddress,
 	}
 }
+
+export type TenantComplianceRepo = ReturnType<typeof createTenantComplianceRepo>
 
 export function createTenantComplianceRepo(sql: SqlInstance) {
 	return {
@@ -79,7 +89,7 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 				SELECT
 					ksrRegistryId, ksrCategory, legalEntityType, taxRegime,
 					annualRevenueEstimateMicroRub, guestHouseFz127Registered, ksrVerifiedAt,
-					legalAddress, dpoEmail
+					legalAddress, dpoEmail, dpoFullName, dpoPhone, dpoPostalAddress
 				FROM organizationProfile
 				WHERE organizationId = ${tenantId}
 				LIMIT 1
@@ -88,6 +98,39 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 				.idempotent(true)
 			const row = rows[0]
 			return row ? rowToCompliance(row) : null
+		},
+
+		/**
+		 * Sprint C+ Round 6 Legal P0 fix 2026-05-24 — ПП-1951 от 27.12.2024
+		 * (ред. 27.11.2025) hotel KSR (классификация средств размещения)
+		 * registry gate. Hard precondition for booking.create: tenant MUST
+		 * have non-empty `ksrRegistryId` (реестровый номер) или service
+		 * throws `KsrRegistryNumberMissingError` → HTTP 428 «Precondition
+		 * Required» с RU human-readable hint.
+		 *
+		 * Cyrillic «С» + 12 digits format (`^С\d{12}$`) NOT enforced here —
+		 * existing tenant profiles могут хранить legacy data; format check
+		 * deferred к UI-side validation + soft warning. Hard-gate refuses
+		 * only `null` / empty / whitespace.
+		 *
+		 * Demo deployment exemption: when `DEMO_DEPLOYMENT=true` env set,
+		 * seed-demo-tenant.ts должен populate ksrRegistryId с dummy `С000…`
+		 * value (FAKE registry number; legal acceptable для demo subdomain
+		 * банере «не загружайте реальные данные»).
+		 */
+		async assertKsrRegistryNumberPresent(tenantId: string): Promise<void> {
+			const [rows = []] = await sql<[{ ksrRegistryId: string | null }]>`
+				SELECT ksrRegistryId FROM organizationProfile
+				WHERE organizationId = ${tenantId}
+				LIMIT 1
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const row = rows[0]
+			const value = row?.ksrRegistryId?.trim() ?? ''
+			if (value.length === 0) {
+				throw new KsrRegistryNumberMissingError(tenantId)
+			}
 		},
 
 		/**
@@ -102,7 +145,8 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 				const [rows = []] = await tx<ComplianceRow[]>`
 					SELECT
 						ksrRegistryId, ksrCategory, legalEntityType, taxRegime,
-						annualRevenueEstimateMicroRub, guestHouseFz127Registered, ksrVerifiedAt
+						annualRevenueEstimateMicroRub, guestHouseFz127Registered, ksrVerifiedAt,
+						legalAddress, dpoEmail, dpoFullName, dpoPhone, dpoPostalAddress
 					FROM organizationProfile
 					WHERE organizationId = ${tenantId}
 					LIMIT 1
@@ -150,6 +194,17 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 							: row.legalAddress,
 					dpoEmail:
 						'dpoEmail' in patch && patch.dpoEmail !== undefined ? patch.dpoEmail : row.dpoEmail,
+					// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — 152-ФЗ ст.22 ч.3 п.7.1 full DPO.
+					dpoFullName:
+						'dpoFullName' in patch && patch.dpoFullName !== undefined
+							? patch.dpoFullName
+							: row.dpoFullName,
+					dpoPhone:
+						'dpoPhone' in patch && patch.dpoPhone !== undefined ? patch.dpoPhone : row.dpoPhone,
+					dpoPostalAddress:
+						'dpoPostalAddress' in patch && patch.dpoPostalAddress !== undefined
+							? patch.dpoPostalAddress
+							: row.dpoPostalAddress,
 				}
 
 				const ksrVerifiedAtBind = merged.ksrVerifiedAt
@@ -166,6 +221,9 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 						ksrVerifiedAt = ${ksrVerifiedAtBind},
 						legalAddress = ${textOpt(merged.legalAddress)},
 						dpoEmail = ${textOpt(merged.dpoEmail)},
+						dpoFullName = ${textOpt(merged.dpoFullName)},
+						dpoPhone = ${textOpt(merged.dpoPhone)},
+						dpoPostalAddress = ${textOpt(merged.dpoPostalAddress)},
 						updatedAt = CurrentUtcTimestamp()
 					WHERE organizationId = ${tenantId}
 				`

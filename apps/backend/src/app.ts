@@ -144,6 +144,13 @@ const bookingFactory = createBookingFactory(
 	ratePlanFactory.service,
 	// G8 (2026-05-16) — roomService wired для assign-room + auto-assign endpoints.
 	roomFactory.service,
+	// Default clock (realTimeProvider) — production runtime.
+	undefined,
+	// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — ПП-1951 КСР hard-gate.
+	// booking.service.create вызывает complianceRepo.assertKsrRegistryNumber
+	// PresentPresent перед всем остальным; throws KsrRegistryNumberMissingError
+	// → HTTP 428 для tenants без реестрового номера.
+	tenantComplianceFactory.repo,
 )
 // G9 (2026-05-16) — property-block (OOO/maintenance) domain. Depends on
 // booking.repo (block-over-booking overlap check) + roomService + property.

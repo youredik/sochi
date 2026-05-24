@@ -101,11 +101,26 @@ export const annualRevenueEstimateMicroRubSchema = int64WireSchema
 	.refine((v) => v <= 100_000_000_000_000_000n, 'Revenue exceeds sanity bound (100 trillion ₽)')
 
 /**
- * Реестр КСР id — внешний идентификатор записи в реестре. Формат: free-form
- * 1-50 chars (Минэкономразвития / региональные операторы выдают разные
- * форматы; ПП-1912 требует унификации с 01.03.2026 но переходный период).
+ * Реестр КСР id — реестровый номер из ФГИС «Гостеприимство» (Росаккредитация).
+ *
+ * Canon Q2 2026 (ПП-1951 от 27.12.2024 ред. 27.11.2025, effective 01.09.2025):
+ *   Format `^С\d{12}$` (Cyrillic С + 12 digits, e.g. `С782031059672`).
+ *   Источник истины — tourism.fsa.gov.ru ЛК отеля после самооценки.
+ *
+ * **Soft validation** here: regex applied via `.refine` warning, NOT strict
+ * reject. Existing tenant profiles могут хранить legacy free-form data из
+ * прежнего канона ПП-1912. Hard-gate в booking.service.create только проверяет
+ * non-empty. UI form validates strict format при NEW input.
  */
-export const ksrRegistryIdSchema = z.string().min(1).max(50)
+const KSR_REGISTRY_NUMBER_REGEX = /^С\d{12}$/
+export const ksrRegistryIdSchema = z
+	.string()
+	.min(1)
+	.max(50)
+	.refine(
+		(v) => KSR_REGISTRY_NUMBER_REGEX.test(v),
+		'Формат реестрового номера: С + 12 цифр (например С782031059672). Cyrillic С (русская буква).',
+	)
 
 /**
  * Полный compliance-блок профиля. Все поля nullable — заполняются поэтапно
@@ -123,6 +138,26 @@ export const ksrRegistryIdSchema = z.string().min(1).max(50)
  */
 export const legalAddressSchema = z.string().min(5).max(500)
 export const dpoEmailSchema = z.string().email().max(200)
+/**
+ * Sprint C+ Round 6 Legal P0 fix 2026-05-24 — 152-ФЗ ст.22 ч.3 п.7.1
+ * (verbatim): «фамилия, имя, отчество физического лица или наименование
+ * юридического лица, ответственного за организацию обработки персональных
+ * данных, и номера их контактных телефонов, почтовые адреса и адреса
+ * электронной почты». Email одного field недостаточно — добавлены ФИО, phone,
+ * postal address. РКН ст.22.1 + practice 2026.
+ */
+export const dpoFullNameSchema = z.string().min(3).max(200)
+// RU national либо E.164 international (`+79991234567` или `7999123456` etc.).
+// Min 7 digits после format strip, max 20 chars raw.
+export const dpoPhoneSchema = z
+	.string()
+	.min(7)
+	.max(20)
+	.refine(
+		(v) => /^[\d+()\s-]+$/.test(v) && v.replace(/[^\d]/g, '').length >= 7,
+		'Формат телефона: +7 999 123-45-67 либо 79991234567 (минимум 7 цифр)',
+	)
+export const dpoPostalAddressSchema = z.string().min(5).max(500)
 
 export const tenantComplianceSchema = z.object({
 	ksrRegistryId: ksrRegistryIdSchema.nullable(),
@@ -134,6 +169,10 @@ export const tenantComplianceSchema = z.object({
 	ksrVerifiedAt: z.string().datetime().nullable(),
 	legalAddress: legalAddressSchema.nullable(),
 	dpoEmail: dpoEmailSchema.nullable(),
+	// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — 152-ФЗ ст.22 ч.3 п.7.1 full DPO contact.
+	dpoFullName: dpoFullNameSchema.nullable(),
+	dpoPhone: dpoPhoneSchema.nullable(),
+	dpoPostalAddress: dpoPostalAddressSchema.nullable(),
 })
 export type TenantCompliance = z.infer<typeof tenantComplianceSchema>
 
@@ -154,6 +193,10 @@ export const tenantCompliancePatchSchema = z
 		// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity.
 		legalAddress: legalAddressSchema.nullable().optional(),
 		dpoEmail: dpoEmailSchema.nullable().optional(),
+		// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — 152-ФЗ ст.22 ч.3 п.7.1 full DPO contact.
+		dpoFullName: dpoFullNameSchema.nullable().optional(),
+		dpoPhone: dpoPhoneSchema.nullable().optional(),
+		dpoPostalAddress: dpoPostalAddressSchema.nullable().optional(),
 	})
 	.refine((obj) => Object.keys(obj).length > 0, 'At least one field must be provided')
 export type TenantCompliancePatch = z.infer<typeof tenantCompliancePatchSchema>

@@ -74,6 +74,27 @@ export class RatePlanNotFoundError extends NotFoundError {
 	}
 }
 
+/**
+ * ПП-1951 от 27.12.2024 (ред. 27.11.2025) hotel ID gate (Sprint C+ Round 6
+ * Legal P0 fix 2026-05-24). Hotel must be registered в Едином реестре КСР
+ * (Росаккредитация, ФГИС «Гостеприимство» tourism.fsa.gov.ru) с реестровым
+ * номером (`^С\d{12}$` формат, Cyrillic С). Действует с 01.09.2025 — без
+ * этого номера запрещено принимать брони, публиковать на каналах. КоАП ст.
+ * 14.39 = 50-450к ₽ за публикацию без реестрового номера. Hard-gate refuses
+ * `booking.create` пока tenant не заполнил `organizationProfile.ksrRegistryId`.
+ */
+export class KsrRegistryNumberMissingError extends DomainError {
+	readonly code = 'KSR_REGISTRY_NUMBER_MISSING'
+	constructor(tenantId: string) {
+		super(
+			`KSR registry number (реестровый номер) is missing on organizationProfile for tenant ${tenantId}. ` +
+				'Required per ПП-1951 от 27.12.2024 для приёма бронирований. ' +
+				'Заполните в настройках организации → ИНН и реестр КСР.',
+		)
+		this.name = 'KsrRegistryNumberMissingError'
+	}
+}
+
 /** Parent booking missing or in wrong tenant. */
 export class BookingNotFoundError extends NotFoundError {
 	constructor(bookingId: string) {

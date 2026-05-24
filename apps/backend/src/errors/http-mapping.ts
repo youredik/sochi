@@ -46,4 +46,8 @@ export const HTTP_STATUS_MAP: Record<string, ContentfulStatusCode> = {
 	PROPERTY_BLOCK_BOOKING_CONFLICT: 409,
 	PROPERTY_BLOCK_BLOCK_OVERLAP: 409,
 	PROPERTY_BLOCK_PAST_IMMUTABLE: 409,
+	// ПП-1951 КСР registry gate (Sprint C+ Round 6 Legal P0 2026-05-24).
+	// 428 Precondition Required — server insists on completing missing
+	// precondition (реестровый номер) before honoring booking.create.
+	KSR_REGISTRY_NUMBER_MISSING: 428,
 }

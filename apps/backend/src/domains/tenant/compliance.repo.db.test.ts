@@ -70,7 +70,7 @@ describe('tenant.compliance.repo', () => {
 		await teardownTestDb()
 	})
 
-	test('[I1] get: fresh org has all 7 compliance fields = null', async () => {
+	test('[I1] get: fresh org has all compliance fields = null', async () => {
 		const c = await repo.get(TENANT_A)
 		expect(c).not.toBeNull()
 		expect(c).toEqual({
@@ -83,6 +83,10 @@ describe('tenant.compliance.repo', () => {
 			ksrVerifiedAt: null,
 			legalAddress: null,
 			dpoEmail: null,
+			// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — full DPO contact.
+			dpoFullName: null,
+			dpoPhone: null,
+			dpoPostalAddress: null,
 		})
 	})
 

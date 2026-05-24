@@ -23,9 +23,15 @@ variable "container_image_tag" {
 }
 
 variable "container_memory_mb" {
-  description = "Container memory (MB). 1024 default per Stankoff canon после OOM tune."
+  description = <<-EOT
+    Container memory (MB). 2048 default per Sprint C+ Round 6 Performance scale
+    architect P1 fix (2026-05-24): 28 CDC consumers × 5-10MB gRPC buffer + Bun
+    runtime + concurrent passport uploads (base64 ×4 concurrency) ≈ 280MB CDC
+    + 8MB × 4 = 32MB transient + 700MB headroom. 1024 hit OOM в prior session
+    (stankoff canon line 26). 2048 = canonical для 17M scans/year capacity.
+  EOT
   type        = number
-  default     = 1024
+  default     = 2048
 }
 
 variable "container_concurrency" {

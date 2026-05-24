@@ -62,13 +62,21 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	`
 
 	console.log('  → Step 2/4: organizationProfile с mode=demo + ЕПГУ config')
+	// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — ksrRegistryId hard-gate.
+	// Demo subdomain MUST have a valid-shaped ksrRegistryId (Cyrillic С + 12
+	// digits per ПП-1951) чтобы booking.create не throw'ил 428. Dummy demo-
+	// only value `С000000000001` — НЕ настоящий реестровый номер; demo banner
+	// уже warns users «не загружайте реальные данные». Production tenants
+	// onboard через UI с реальным номером из tourism.fsa.gov.ru.
 	await sql`
 		UPSERT INTO organizationProfile (
 			\`organizationId\`, \`plan\`, \`createdAt\`, \`updatedAt\`, \`mode\`,
-			\`epguDefaultChannel\`, \`epguSupplierGid\`, \`epguRegionCodeFias\`
+			\`epguDefaultChannel\`, \`epguSupplierGid\`, \`epguRegionCodeFias\`,
+			\`ksrRegistryId\`
 		) VALUES (
 			${TENANT_ID}, ${'free'}, ${nowTs}, ${nowTs}, ${'demo'},
-			${'gost-tls'}, ${'demo-supplier-gid'}, ${'demo-fias-sochi'}
+			${'gost-tls'}, ${'demo-supplier-gid'}, ${'demo-fias-sochi'},
+			${'С000000000001'}
 		)
 	`
 

@@ -20,19 +20,29 @@ async function main(): Promise<void> {
 	// Apply YDB migrations as init step (Q2 2026 canon — см. db/migrate.ts).
 	// MUST run BEFORE app.ts dynamic import: app.ts side-effects (CDC consumers,
 	// demo seeding) hit YDB at module-load — would crash на empty schema.
-	const migrationResult = await applyMigrations({
-		sql,
-		log: (msg) => logger.info({ phase: 'migrate' }, msg),
-	})
-	logger.info(
-		{
-			phase: 'migrate',
-			total: migrationResult.totalMigrations,
-			newlyApplied: migrationResult.newlyApplied,
-			alreadyAtHead: migrationResult.alreadyAtHead,
-		},
-		'YDB migrations complete',
-	)
+	//
+	// Sprint C+ Round 6 P1 fix 2026-05-24 (Performance scale architect):
+	// RUN_MIGRATIONS env-gate. Runtime container can skip applier entirely
+	// (cold-start: 3.6s → ~50ms) когда деплой job уже applied migrations.
+	// Default=true сохраняет backward compat — operator explicitly sets
+	// RUN_MIGRATIONS=false на runtime container env.
+	if (env.RUN_MIGRATIONS) {
+		const migrationResult = await applyMigrations({
+			sql,
+			log: (msg) => logger.info({ phase: 'migrate' }, msg),
+		})
+		logger.info(
+			{
+				phase: 'migrate',
+				total: migrationResult.totalMigrations,
+				newlyApplied: migrationResult.newlyApplied,
+				alreadyAtHead: migrationResult.alreadyAtHead,
+			},
+			'YDB migrations complete',
+		)
+	} else {
+		logger.info({ phase: 'migrate' }, 'RUN_MIGRATIONS=false — skipping applier (detached path)')
+	}
 
 	// Dynamic import AFTER migrations — fires app.ts side-effects with schema
 	// in place. Bypasses ES module static-import ordering trap.

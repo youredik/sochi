@@ -198,7 +198,7 @@ describe('isNpdLimitExceeded (НПД 3.8M ₽ 2026 — 425-ФЗ)', () => {
 describe('tenantComplianceSchema (Zod parsing)', () => {
 	it('parses fully-populated valid object', () => {
 		const input = {
-			ksrRegistryId: 'KSR-2026-001234',
+			ksrRegistryId: 'С782031059672',
 			ksrCategory: 'guest_house' as const,
 			legalEntityType: 'ip' as const,
 			taxRegime: 'USN_DOHODY' as const,
@@ -208,6 +208,10 @@ describe('tenantComplianceSchema (Zod parsing)', () => {
 			// Sprint C+ Senior P1-5 fix 2026-05-23d: legalAddress + dpoEmail.
 			legalAddress: 'г. Сочи, Курортный пр-т, д. 1',
 			dpoEmail: 'dpo@hotel-sochi.ru',
+			// Sprint C+ Round 6 Legal P0 fix 2026-05-24: full DPO contact.
+			dpoFullName: 'Иванов Иван Иванович',
+			dpoPhone: '+79991234567',
+			dpoPostalAddress: 'г. Сочи, ул. Морская, д. 5, оф. 12',
 		}
 		const out = tenantComplianceSchema.parse(input)
 		expect(out).toEqual(input)
@@ -224,6 +228,9 @@ describe('tenantComplianceSchema (Zod parsing)', () => {
 			ksrVerifiedAt: null,
 			legalAddress: null,
 			dpoEmail: null,
+			dpoFullName: null,
+			dpoPhone: null,
+			dpoPostalAddress: null,
 		})
 		expect(out.ksrRegistryId).toBeNull()
 	})
@@ -298,10 +305,25 @@ describe('tenantComplianceSchema (Zod parsing)', () => {
 })
 
 describe('tenantCompliancePatchSchema (Zod patch)', () => {
-	it('accepts single-field patch', () => {
-		expect(tenantCompliancePatchSchema.parse({ ksrRegistryId: 'KSR-001' })).toEqual({
-			ksrRegistryId: 'KSR-001',
+	it('accepts single-field patch (canonical Cyrillic С + 12 digits)', () => {
+		expect(tenantCompliancePatchSchema.parse({ ksrRegistryId: 'С100000000001' })).toEqual({
+			ksrRegistryId: 'С100000000001',
 		})
+	})
+
+	it('rejects ksrRegistryId not matching ^С\\d{12}$ (Cyrillic С + 12 digits)', () => {
+		// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — ПП-1951 canonical format.
+		expect(() => tenantCompliancePatchSchema.parse({ ksrRegistryId: 'KSR-001' })).toThrow(
+			/реестрового номера.*Cyrillic/,
+		)
+		// Latin C looks identical but wrong character — must reject.
+		expect(() => tenantCompliancePatchSchema.parse({ ksrRegistryId: 'C123456789012' })).toThrow(
+			/реестрового номера.*Cyrillic/,
+		)
+		// 11 digits — too short.
+		expect(() => tenantCompliancePatchSchema.parse({ ksrRegistryId: 'С12345678901' })).toThrow(
+			/реестрового номера.*Cyrillic/,
+		)
 	})
 
 	it('accepts explicit null to clear a field', () => {

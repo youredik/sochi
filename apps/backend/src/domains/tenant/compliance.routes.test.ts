@@ -46,7 +46,7 @@ function ctxFor(role: MemberRole): TestContext {
 }
 
 const FAKE_COMPLIANCE: TenantCompliance = {
-	ksrRegistryId: 'KSR-001',
+	ksrRegistryId: 'С782031059672',
 	ksrCategory: 'guest_house',
 	legalEntityType: 'ip',
 	taxRegime: 'USN_DOHODY',
@@ -55,6 +55,9 @@ const FAKE_COMPLIANCE: TenantCompliance = {
 	ksrVerifiedAt: '2026-04-27T10:00:00.000Z',
 	legalAddress: null,
 	dpoEmail: null,
+	dpoFullName: null,
+	dpoPhone: null,
+	dpoPostalAddress: null,
 }
 
 interface FakeRepoOpts {
@@ -67,6 +70,9 @@ function buildFactory(opts: FakeRepoOpts = {}): TenantComplianceFactory {
 	return {
 		repo: {
 			get: async () => ('getReturns' in opts ? (opts.getReturns ?? null) : FAKE_COMPLIANCE),
+			// Round 6 ksrRegistryId hard-gate (2026-05-24) — test stub passes
+			// through (gate logic unit-tested separately в booking-tests).
+			assertKsrRegistryNumberPresent: async () => {},
 			patch: async (_t, patch) => {
 				opts.patchSpy?.(patch)
 				return 'patchReturns' in opts ? (opts.patchReturns ?? null) : FAKE_COMPLIANCE
@@ -94,7 +100,7 @@ describe('compliance routes — RBAC matrix', () => {
 		const res = await buildApp('staff').request('/api/v1/me/compliance', {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ksrRegistryId: 'X' }),
+			body: JSON.stringify({ ksrRegistryId: 'С100000000001' }),
 		})
 		expect(res.status).toBe(403)
 	})
@@ -108,7 +114,7 @@ describe('compliance routes — RBAC matrix', () => {
 		const res = await buildApp('manager').request('/api/v1/me/compliance', {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ksrRegistryId: 'X' }),
+			body: JSON.stringify({ ksrRegistryId: 'С100000000001' }),
 		})
 		expect(res.status).toBe(403)
 	})
@@ -118,7 +124,7 @@ describe('compliance routes — RBAC matrix', () => {
 		const patch = await buildApp('owner').request('/api/v1/me/compliance', {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ksrRegistryId: 'X' }),
+			body: JSON.stringify({ ksrRegistryId: 'С100000000001' }),
 		})
 		expect(get.status).toBe(200)
 		expect(patch.status).toBe(200)
@@ -130,7 +136,7 @@ describe('compliance routes — GET /me/compliance', () => {
 		const res = await buildApp('owner').request('/api/v1/me/compliance')
 		expect(res.status).toBe(200)
 		const body = (await res.json()) as { data: TenantCompliance }
-		expect(body.data.ksrRegistryId).toBe('KSR-001')
+		expect(body.data.ksrRegistryId).toBe('С782031059672')
 		expect(body.data.ksrCategory).toBe('guest_house')
 	})
 
@@ -150,10 +156,10 @@ describe('compliance routes — PATCH /me/compliance', () => {
 		}).request('/api/v1/me/compliance', {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ksrRegistryId: 'NEW' }),
+			body: JSON.stringify({ ksrRegistryId: 'С200000000002' }),
 		})
 		expect(res.status).toBe(200)
-		expect(captured).toEqual({ ksrRegistryId: 'NEW' })
+		expect(captured).toEqual({ ksrRegistryId: 'С200000000002' })
 	})
 
 	test('[P2] empty patch → 400 (Zod refine "at least one field")', async () => {
@@ -187,7 +193,7 @@ describe('compliance routes — PATCH /me/compliance', () => {
 		const res = await buildApp('owner', { patchReturns: null }).request('/api/v1/me/compliance', {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ksrRegistryId: 'X' }),
+			body: JSON.stringify({ ksrRegistryId: 'С100000000001' }),
 		})
 		expect(res.status).toBe(404)
 	})
@@ -238,7 +244,7 @@ describe('compliance routes — PATCH /me/compliance', () => {
 		const res = await buildApp('owner').request('/api/v1/me/compliance', {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ksrRegistryId: 'X' }),
+			body: JSON.stringify({ ksrRegistryId: 'С100000000001' }),
 		})
 		expect(res.status).toBe(200)
 		const body = (await res.json()) as { data: TenantCompliance; warnings: string[] }

@@ -127,6 +127,10 @@ function renderWithCompliance(partial: Partial<TenantCompliance>): void {
 		ksrVerifiedAt: null,
 		legalAddress: null,
 		dpoEmail: null,
+		// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — full DPO contact.
+		dpoFullName: null,
+		dpoPhone: null,
+		dpoPostalAddress: null,
 		...partial,
 	}
 	mockedUseCompliance.mockReturnValue({
@@ -210,7 +214,7 @@ describe('<ComplianceStep> — branches', () => {
 
 	test('[B4] data row — fields hydrated from server', () => {
 		const row: TenantCompliance = {
-			ksrRegistryId: 'KSR-X-42',
+			ksrRegistryId: 'С782031059672',
 			ksrCategory: 'aparthotel',
 			legalEntityType: 'ooo',
 			taxRegime: 'OSN',
@@ -219,6 +223,9 @@ describe('<ComplianceStep> — branches', () => {
 			ksrVerifiedAt: null,
 			legalAddress: null,
 			dpoEmail: null,
+			dpoFullName: null,
+			dpoPhone: null,
+			dpoPostalAddress: null,
 		}
 		mockedUseCompliance.mockReturnValue({
 			data: row,

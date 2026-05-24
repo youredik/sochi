@@ -5,6 +5,7 @@ import type { RateRepo } from '../rate/rate.repo.ts'
 import type { RatePlanService } from '../ratePlan/ratePlan.service.ts'
 import type { RoomService } from '../room/room.service.ts'
 import type { RoomTypeService } from '../roomType/roomType.service.ts'
+import type { TenantComplianceRepo } from '../tenant/compliance.repo.ts'
 import { createBookingRepo } from './booking.repo.ts'
 import { createBookingService } from './booking.service.ts'
 
@@ -25,6 +26,10 @@ export function createBookingFactory(
 	// integration tests pass `frozenTimeProvider(date)` for determinism.
 	// Per Stripe Test Clocks canon — clock-at-boundary, not global mock.
 	clock?: TimeProvider,
+	// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — ПП-1951 КСР hard-gate.
+	// Optional с default undefined for backward-compat tests; production
+	// app.ts wires it. Когда unset, service.create skips gate (test mode).
+	complianceRepo?: TenantComplianceRepo,
 ) {
 	const repo = createBookingRepo(sql, clock)
 	const service = createBookingService(
@@ -34,6 +39,7 @@ export function createBookingFactory(
 		roomTypeService,
 		ratePlanService,
 		roomService,
+		complianceRepo,
 	)
 	return { repo, service }
 }

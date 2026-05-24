@@ -36,6 +36,7 @@ import type { RateRepo } from '../rate/rate.repo.ts'
 import type { RatePlanService } from '../ratePlan/ratePlan.service.ts'
 import type { RoomService } from '../room/room.service.ts'
 import type { RoomTypeService } from '../roomType/roomType.service.ts'
+import type { TenantComplianceRepo } from '../tenant/compliance.repo.ts'
 import { __bookingRepoInternals, type BookingRepo } from './booking.repo.ts'
 
 const { nightsBetween } = __bookingRepoInternals
@@ -169,6 +170,10 @@ export function createBookingService(
 	// Backward-compat undefined для legacy callers (returns 501 at runtime
 	// if endpoints invoked sans wiring).
 	roomService?: RoomService,
+	// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — ПП-1951 КСР registry hard-
+	// gate. Optional с default undefined для backward-compat tests. Production
+	// app.ts always wires it. Undefined → gate skipped (test mode only).
+	complianceRepo?: TenantComplianceRepo,
 ) {
 	return {
 		getById: (tenantId: string, id: string) => repo.getById(tenantId, id),
@@ -189,6 +194,15 @@ export function createBookingService(
 			input: BookingCreateInput,
 			actorUserId: string,
 		) => {
+			// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — ПП-1951 от 27.12.2024
+			// (ред. 27.11.2025) hard-gate. Hotel MUST have реестровый номер
+			// (Росаккредитация ФГИС «Гостеприимство») чтобы принимать брони
+			// после 01.09.2025. Throws `KsrRegistryNumberMissingError` → 428.
+			// Gate skipped когда complianceRepo undefined (test mode).
+			if (complianceRepo) {
+				await complianceRepo.assertKsrRegistryNumberPresent(tenantId)
+			}
+
 			const prop = await propertyService.getById(tenantId, propertyId)
 			if (!prop) throw new PropertyNotFoundError(propertyId)
 

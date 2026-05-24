@@ -1,0 +1,21 @@
+-- 0073_drop_idx_ocr_audit_created_at.sql — Performance scale architect P1 fix 2026-05-24.
+--
+-- Sprint C+ Round 6 5-expert audit (Performance dimension):
+--   `idxOcrAuditCreatedAt` is a GLOBAL SYNC index keyed ONLY by `createdAt`
+--   (no tenantId prefix). At 17M scans/year scale this becomes a write hot-tail:
+--   every insert writes to the same partition tail of the global index = cross-
+--   tenant write contention + amplified IO per insert.
+--
+-- Evidence index is unused в application code:
+--   `grep -rn "FROM passportOcrAudit" apps/backend/src/`
+--   All queries are tenant-prefixed:
+--     SELECT … FROM passportOcrAudit WHERE tenantId = ? AND guestId = ?
+--     SELECT inputObjectKey FROM passportOcrAudit WHERE tenantId = ? AND photoConsentLogId = ?
+--     SELECT COUNT(*) FROM passportOcrAudit WHERE tenantId = ? AND photoConsentLogId = ?
+--   None range-scan по createdAt directly. YDB native TTL sweep `TTL = Interval("P90D")
+--   ON createdAt` operates на physical row organization, NOT on this secondary index.
+--
+-- Safe drop — no data loss (indexes are derived); future query needing createdAt
+-- range scan should be tenant-prefixed compound index `(tenantId, createdAt)`.
+
+ALTER TABLE passportOcrAudit DROP INDEX idxOcrAuditCreatedAt;
