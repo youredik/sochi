@@ -32,6 +32,40 @@ resource "yandex_storage_bucket" "demo_backend_files" {
   versioning {
     enabled = true
   }
+
+  # Round 7 v3 2026-05-25 — SSE-KMS canon для PII-bearing bucket per
+  # 152-ФЗ ст.19 «меры безопасности при обработке ПДн». Gap analysis agent
+  # caught this: passport-scans bucket уже encrypted, но general backend files
+  # bucket (где prod будет load guest documents + property photos) был
+  # plaintext. Mirror passport_scans pattern с dedicated KMS key для blast-
+  # radius isolation. См. [[feedback_round_7_v3_sws_canon_2026_05_25]].
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        kms_master_key_id = yandex_kms_symmetric_key.backend_files_encryption.id
+        sse_algorithm     = "aws:kms"
+      }
+    }
+  }
+}
+
+# Dedicated KMS key для backend files bucket SSE.
+resource "yandex_kms_symmetric_key" "backend_files_encryption" {
+  folder_id           = yandex_resourcemanager_folder.demo.id
+  name                = "backend-files-encryption"
+  description         = "KMS key для SSE на demo_backend_files bucket (152-ФЗ ст.19 PII encryption at rest)"
+  default_algorithm   = "AES_256"
+  rotation_period     = "2160h" # 90 дней rotation
+  deletion_protection = true    # PII encryption key — always-on protection
+}
+
+# Runtime SA needs kms.keys.encrypterDecrypter на key для bucket SSE writes.
+resource "yandex_kms_symmetric_key_iam_binding" "backend_files_encrypter" {
+  symmetric_key_id = yandex_kms_symmetric_key.backend_files_encryption.id
+  role             = "kms.keys.encrypterDecrypter"
+  members = [
+    "serviceAccount:${yandex_iam_service_account.sochi_backend_runtime.id}",
+  ]
 }
 
 # Runtime SA gets storage.editor on backend files bucket

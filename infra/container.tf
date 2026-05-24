@@ -212,37 +212,23 @@ resource "yandex_serverless_container" "backend" {
     }
   }
 
-  # Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass (SUPERSEDES v1
-  # SMOKE_BYPASS_TOKEN shared-secret canon).
+  # Round 7 v3 2026-05-25 — canonical Yandex SWS bypass token (SUPERSEDES v2
+  # SA-JWT). Two-layer canon: SWS edge allow-rule (sws.tf) + this backend env
+  # for app-layer timing-safe compare в captcha-gate.ts.
   #
-  # Lockbox `sepshn-agent-verifier-public` mounts 3 env vars:
-  #   - AGENT_VERIFIER_SA_PUBLIC_KEY (PEM, RSA-2048)
-  #   - AGENT_VERIFIER_SA_ID         (aje...)
-  #   - AGENT_VERIFIER_KEY_ID        (aje... — для audit, не used by gate)
+  # Same Lockbox `sepshn-sws-bypass-token` feeds both layers — single rotation
+  # source. См. [[feedback_round_7_v3_sws_canon_2026_05_25]] для full lifecycle.
   #
-  # captcha-gate verifies `Authorization: Bearer <PS256-jwt>` offline using
-  # public key. Smoke/AI agent signs JWT с private key (SC secret
-  # YC_AGENT_VERIFIER_SA_KEY_JSON, never в backend). См. [[round_7_v2_sa_jwt
-  # _canon_2026_05_24]].
-  #
-  # Default empty → block skipped → bypass disabled (real captcha enforced
-  # for everyone). Unset is safe — just means smoke/AI verify cannot bypass.
+  # Default empty → block skipped → backend has no SWS_BYPASS_TOKEN env → app
+  # bypass disabled (real captcha enforced for всех; SWS edge может ещё пропускать
+  # X-Bypass-Token но backend всё равно срежет — defense-in-depth fail-safe).
   dynamic "secrets" {
-    for_each = var.agent_verifier_lockbox_secret_id != "" ? [1] : []
+    for_each = var.sws_bypass_lockbox_secret_id != "" ? [1] : []
     content {
-      id                   = var.agent_verifier_lockbox_secret_id
-      version_id           = var.agent_verifier_lockbox_version_id
-      key                  = "AGENT_VERIFIER_SA_PUBLIC_KEY"
-      environment_variable = "AGENT_VERIFIER_SA_PUBLIC_KEY"
-    }
-  }
-  dynamic "secrets" {
-    for_each = var.agent_verifier_lockbox_secret_id != "" ? [1] : []
-    content {
-      id                   = var.agent_verifier_lockbox_secret_id
-      version_id           = var.agent_verifier_lockbox_version_id
-      key                  = "AGENT_VERIFIER_SA_ID"
-      environment_variable = "AGENT_VERIFIER_SA_ID"
+      id                   = var.sws_bypass_lockbox_secret_id
+      version_id           = var.sws_bypass_lockbox_version_id
+      key                  = "SWS_BYPASS_TOKEN"
+      environment_variable = "SWS_BYPASS_TOKEN"
     }
   }
 

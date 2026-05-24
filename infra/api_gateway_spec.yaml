@@ -1,4 +1,13 @@
 openapi: 3.0.0
+
+# Round 7 v3 2026-05-25 — Yandex Smart Web Security edge integration.
+# Root-level extension applies SWS profile к ALL paths (DDoS L7 + ARL + Smart
+# Protection bot ML + WAF when flipped). См. infra/sws.tf для rule config.
+# Reference: yandex.cloud/en/docs/api-gateway/concepts/extensions/sws
+x-yc-apigateway:
+  smartWebSecurity:
+    securityProfileId: ${sws_security_profile_id}
+
 info:
   title: Sochi HoReCa Demo Gateway
   description: |

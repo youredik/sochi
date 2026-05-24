@@ -39,9 +39,10 @@ postbox_dkim_public_key        = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqm
 dadata_lockbox_secret_id  = "e6q3ug4k0m9eobgstvv2" # sepshn-dadata-api-key в infra folder
 dadata_lockbox_version_id = "e6q96288msve5pnu3rvo" # initial version с DADATA_API_KEY
 
-# Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass (auto-managed)
-# SA `sepshn-agent-verifier` (aje54tid7ibbh6ci70bl), RSA-2048 key
-# (aje79gn7ph2hjl552s3p). SUPERSEDES v1 smoke_bypass_lockbox_* (removed
-# в migration 2026-05-24 — Lockbox secret sepshn-smoke-bypass deleted via yc).
-agent_verifier_lockbox_secret_id  = "e6q44ri93qd8f5trbkgu"
-agent_verifier_lockbox_version_id = "e6qiskh93d8nto26a3h0"
+# Round 7 v3 2026-05-25 — canonical Yandex SWS bypass token (SUPERSEDES v2 SA-JWT)
+# Lockbox `sepshn-sws-bypass-token` в demo folder. 32-byte hex token, two-layer
+# canon: SWS edge allow-rule (priority 8500) + backend timing-safe compare.
+# Old SA-JWT v2 stack (sepshn-agent-verifier SA + key + Lockbox sepshn-agent-
+# verifier-public + SC secret YC_AGENT_VERIFIER_SA_KEY_JSON) removed via cleanup.
+sws_bypass_lockbox_secret_id  = "e6q7smlofm4eft1sp1ll"
+sws_bypass_lockbox_version_id = "e6qclc038p7gkl6ajvrp"

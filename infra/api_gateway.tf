@@ -21,6 +21,11 @@ resource "yandex_api_gateway" "demo" {
     container_id            = yandex_serverless_container.backend.id
     runtime_service_account = yandex_iam_service_account.sochi_backend_runtime.id
     frontend_bucket         = yandex_storage_bucket.demo_frontend.bucket
+    # Round 7 v3 2026-05-25 — Yandex SWS edge security profile.
+    # Root-level `x-yc-apigateway.smartWebSecurity.securityProfileId` extension
+    # makes ALL paths go через ARL + Smart Protection + (когда flipped) WAF
+    # ДО reaching backend container. См. infra/sws.tf для rule config.
+    sws_security_profile_id = yandex_sws_security_profile.demo.id
   })
 
   # Custom domains via nested blocks (Q2 2026 canon — separate resource
@@ -45,7 +50,11 @@ resource "yandex_api_gateway" "demo" {
     environment = "demo"
   }
 
-  depends_on = [yandex_serverless_container.backend]
+  depends_on = [
+    yandex_serverless_container.backend,
+    # SWS profile must exist before gateway references it via securityProfileId.
+    yandex_sws_security_profile.demo,
+  ]
 }
 
 output "gateway_domain" {

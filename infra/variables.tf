@@ -133,31 +133,8 @@ variable "dadata_lockbox_version_id" {
   default     = ""
 }
 
-# Round 7 v2 2026-05-24 — Canonical Yandex SA JWT bypass Lockbox vars.
-# SUPERSEDES v1 smoke_bypass_lockbox_* (shared-secret canon).
-#
-# Bootstrap (one-time, automated via yc CLI):
-#   yc iam service-account create --name sepshn-agent-verifier ...
-#   yc iam key create --service-account-id ... --algorithm rsa-2048 ...
-#   yc lockbox secret create --name sepshn-agent-verifier-public \
-#     --payload '[{"key":"AGENT_VERIFIER_SA_PUBLIC_KEY","text_value":"<PEM>"},
-#                 {"key":"AGENT_VERIFIER_SA_ID","text_value":"<aje...>"},
-#                 {"key":"AGENT_VERIFIER_KEY_ID","text_value":"<aje...>"}]'
-#
-# SA private key (full JSON from yc iam key create) stored как SC secret
-# `YC_AGENT_VERIFIER_SA_KEY_JSON` — used by smoke spec/AI agent to sign JWT.
-# Public key + SA ID mounted в backend container via this Lockbox.
-#
-# Empty → container.tf block skipped → SA JWT bypass disabled (real captcha
-# enforced для всех; smoke runner with token cannot bypass).
-variable "agent_verifier_lockbox_secret_id" {
-  description = "Lockbox secret ID containing AGENT_VERIFIER_SA_PUBLIC_KEY + _SA_ID + _KEY_ID (Round 7 v2 2026-05-24, canonical Yandex SA JWT bypass)."
-  type        = string
-  default     = ""
-}
-
-variable "agent_verifier_lockbox_version_id" {
-  description = "Lockbox version ID. Update при SA key rotation (yc iam key create new + add-version)."
-  type        = string
-  default     = ""
-}
+# Round 7 v3 2026-05-25 — SUPERSEDED v2 SA-JWT.
+# Yandex SWS bypass token vars (`sws_bypass_lockbox_*`) declared в sws.tf
+# alongside data resource that reads token value для use в SWS rule.
+# Container.tf также mounts SWS_BYPASS_TOKEN к backend env (two-layer canon).
+# См. [[feedback_round_7_v3_sws_canon_2026_05_25]].
