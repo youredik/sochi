@@ -74,6 +74,7 @@ import {
 import { generateUuid } from '../../../lib/uuid-fallback.ts'
 import { type ScanPassportResult, useScanPassport } from '../hooks/use-scan-passport.ts'
 import { CONSENT_152FZ_VERSION } from '../lib/consent-version.ts'
+import { isDemoDeployment } from '../../auth/lib/demo-deployment.ts'
 import { ddmmyyyyToIso } from '../../../lib/format-ru.ts'
 import { fileToBase64, transcodeToJpegForVision } from '../lib/transcode-image.ts'
 import { Consent152FzModal, type OperatorIdentity } from './consent-152fz-modal.tsx'
@@ -453,13 +454,31 @@ export function PassportScanDialog({
 						{stage === 'initial' ? (
 							<div className="space-y-4">
 								{/*
-								 * Sprint C+ legal-expert audit 2026-05-23d: 152-ФЗ ст.9 ч.4 verbatim
-								 * требует «наименование или ФИО и адрес оператора». ИНН + DPO contact
-								 * рекомендованы РКН practice, но НЕ statutory mandate. Gate blocks scan
-								 * только когда legalName empty (без identity = void consent, Tinkoff УКБО
-								 * precedent 2025). Address recommended, fallback consent text handles
-								 * missing address gracefully.
+								 * Sprint C+ Round 5 5-expert audit fix 2026-05-24 (Legal Q4/Q5 + Senior P0 #3):
+								 * Demo subdomain banner — required pre-form per 152-ФЗ ст.9 ч.4
+								 * disclosure obligations + ст.5 ч.2 legitimate-purpose limitation.
+								 * Без этого baner ст.13.11 ч.1 КоАП fine до 700k₽. Shows ONLY when
+								 * VITE_DEMO_DEPLOYMENT=true (paired с backend demo-inbox shield).
+								 * Production app.sepshn.ru deployments don't render это.
 								 */}
+								{isDemoDeployment ? (
+									<Alert
+										role="note"
+										className="border-amber-500/40 bg-amber-50 dark:bg-amber-950/30"
+									>
+										<AlertTitle>Демонстрационная среда</AlertTitle>
+										<AlertDescription className="text-xs space-y-1 mt-1">
+											<div>
+												<strong>Не загружайте документы третьих лиц.</strong> Используйте только
+												тестовые или собственные документы с осознанным согласием.
+											</div>
+											<div>
+												Данные демо-среды очищаются каждые 6 часов. Для реальной работы с гостями
+												используйте <code>app.sepshn.ru</code> с верифицированной организацией.
+											</div>
+										</AlertDescription>
+									</Alert>
+								) : null}
 								{operatorIdentity === undefined || operatorIdentity.legalName.length === 0 ? (
 									<Alert variant="destructive" role="alert">
 										<AlertTitle>Сканирование заблокировано (152-ФЗ ст.9 ч.4)</AlertTitle>
