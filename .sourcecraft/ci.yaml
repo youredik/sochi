@@ -496,6 +496,12 @@ tasks:
           # Rotation: новый captcha resource → operator updates this value AND
           # обновляет Lockbox sepshn-smartcaptcha-server-key version (см. bootstrap.md).
           VITE_YANDEX_CAPTCHA_SITE_KEY: 'ysc1_JiHqDVfZbBORsLm51BCjrgdM2oYfUHGalDDVQoqeb8dc30f0'
+          # Sprint C+ Round 6 self-review fix 2026-05-24 (build-verify agent P0):
+          # Yandex.Metrika counter ID — public per project_landing_phase1_done.
+          # Без этого counterId resolves к undefined в build → init body
+          # eliminated by minifier → cookie banner «Аналитика» opt-in does
+          # nothing (silent regression). User clicks Accept, NO tracking fires.
+          VITE_YANDEX_METRIKA_ID: '109307396'
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm install --frozen-lockfile

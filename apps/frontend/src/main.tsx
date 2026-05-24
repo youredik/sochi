@@ -9,6 +9,11 @@ import { broadcastQueryClient } from '@tanstack/query-broadcast-client-experimen
 import { CookieBanner } from './components/cookie-banner.tsx'
 import { OfflineBanner } from './components/offline-banner'
 import { SwUpdatePrompt } from './components/sw-update-prompt'
+// cookie-consent статически imported здесь (а не dynamic) per build-verify
+// agent finding 2 2026-05-24: dynamic import не lazy-loads chunk потому
+// что cookie-banner.tsx уже static-imports тот же модуль. Static usage
+// keeps single source — avoids INEFFECTIVE_DYNAMIC_IMPORT bundle warning.
+import { isGranted as consentIsGranted, onConsentChange } from './lib/cookie-consent.ts'
 import { i18n, setupI18n } from './features/i18n/setup.ts'
 import { setupOtel } from './features/observability/setup-otel.ts'
 import { ErrorBoundary } from './lib/error-boundary.tsx'
@@ -43,19 +48,17 @@ reportWebVitals()
 // RUM ships UA + URL + IP-derived metrics к /api/rum/v1/web-vitals. Под 152-ФЗ
 // ст.6 + ст.18 это identifiable analytics → ОБЯЗАТЕЛЬНО за consent gate same
 // как Yandex Metrika. Без gate то же violation 150-300к ₽ КоАП ст.13.11 ч.3.
-void Promise.all([import('./lib/rum/index.ts'), import('./lib/cookie-consent.ts')]).then(
-	([rumMod, consent]) => {
-		let started = false
-		function maybeStartRum(): void {
-			if (started) return
-			if (!consent.isGranted('analytics')) return
-			started = true
-			rumMod.startRum()
-		}
-		maybeStartRum()
-		consent.onConsentChange(maybeStartRum)
-	},
-)
+void import('./lib/rum/index.ts').then((rumMod) => {
+	let started = false
+	function maybeStartRum(): void {
+		if (started) return
+		if (!consentIsGranted('analytics')) return
+		started = true
+		rumMod.startRum()
+	}
+	maybeStartRum()
+	onConsentChange(maybeStartRum)
+})
 
 // G11 (2026-05-16) — TanStack Query offline canon (R1+R2 ≥ 2026-05-16):
 //   - networkMode: 'offlineFirst' (createPersister default — fires request
@@ -141,30 +144,28 @@ declare module '@tanstack/react-router' {
 // Metrika init теперь GATED за `cookie-consent.isGranted('analytics')`. До
 // user explicit accept Метрика не загружается. После accept — subscribe to
 // consent state и init deferred. SPA pageview tracking тоже gated.
-void Promise.all([import('./lib/yandex-metrika.ts'), import('./lib/cookie-consent.ts')]).then(
-	([metrika, consent]) => {
-		const rawId = import.meta.env.VITE_YANDEX_METRIKA_ID
-		const counterId = rawId ? Number(rawId) : undefined
-		if (counterId === undefined) return
+void import('./lib/yandex-metrika.ts').then((metrika) => {
+	const rawId = import.meta.env.VITE_YANDEX_METRIKA_ID
+	const counterId = rawId ? Number(rawId) : undefined
+	if (counterId === undefined) return
 
-		let initialized = false
-		function maybeInit(): void {
-			if (initialized) return
-			if (!consent.isGranted('analytics')) return
-			initialized = true
-			metrika.initYandexMetrikaDeferred(counterId)
-			router.subscribe('onResolved', ({ toLocation }) => {
-				// `.href` = pathname + searchStr + hash для Метрики 'hit'.
-				metrika.trackPageView(toLocation.href)
-			})
-		}
+	let initialized = false
+	function maybeInit(): void {
+		if (initialized) return
+		if (!consentIsGranted('analytics')) return
+		initialized = true
+		metrika.initYandexMetrikaDeferred(counterId)
+		router.subscribe('onResolved', ({ toLocation }) => {
+			// `.href` = pathname + searchStr + hash для Метрики 'hit'.
+			metrika.trackPageView(toLocation.href)
+		})
+	}
 
-		// 1. Try init immediately — user уже decided ранее (return visitor)
-		maybeInit()
-		// 2. Subscribe to consent changes — fires когда user accepts на banner
-		consent.onConsentChange(maybeInit)
-	},
-)
+	// 1. Try init immediately — user уже decided ранее (return visitor)
+	maybeInit()
+	// 2. Subscribe to consent changes — fires когда user accepts на banner
+	onConsentChange(maybeInit)
+})
 
 const rootEl = document.getElementById('root')
 if (!rootEl) throw new Error('Root element #root not found')
