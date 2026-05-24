@@ -57,6 +57,7 @@
 	"devDependencies": {
 		"@axe-core/playwright": "4.11.3",
 		"@biomejs/biome": "^2.4.15",
+		"@browserbasehq/stagehand": "^3.4.0",
 		"@horeca/shared": "workspace:*",
 		"@lhci/cli": "0.15.1",
 		"@playwright/test": "1.60.0",

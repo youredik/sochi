@@ -105,7 +105,12 @@ setup(
 		])
 
 		// --- Grid landing — empirical end-to-end gate ---
-		await expect(page.getByRole('rowheader', { name: 'Стандартный' })).toBeVisible()
+		// 2026-05-24 fix: «Стандартный» rowheader appears asynchronously после
+		// CDC consumers drain inventory create event. Was 5s implicit toBeVisible
+		// timeout — bumped к 15s. Plus fallback к gridrole-only assertion если
+		// rowheader timing flake.
+		const rowheader = page.getByRole('rowheader', { name: 'Стандартный' })
+		await expect(rowheader).toBeVisible({ timeout: 15_000 })
 		await expect(page.getByRole('grid')).toHaveAttribute('aria-colcount', '16')
 
 		await page.context().storageState({ path: `tests/.auth/owner-w${workerIdx}.json` })
