@@ -108,7 +108,7 @@ export const auth = betterAuth({
 		 */
 		before: createAuthMiddleware(async (ctx) => {
 			const clientIp = ctx.request ? extractClientIp(ctx.request.headers) : undefined
-			// Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass.
+			// Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass (deploy-trigger ccc50bf+).
 			// Authorization: Bearer <PS256-jwt> verified offline against
 			// SA public key (Lockbox-mounted). See [[round_7_v2_sa_jwt_canon]].
 			const authHeader = ctx.request?.headers.get('authorization')
