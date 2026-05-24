@@ -44,6 +44,7 @@ import {
 	TimeoutStrategy,
 	wrap,
 } from 'cockatiel'
+import { createTokenBucket } from '../../../lib/rate-limit/token-bucket.ts'
 import { computeHeuristicConfidence } from './mock-vision.ts'
 import { parsePassportMrz } from './mrz-parser.ts'
 import {
@@ -110,6 +111,22 @@ const SUCCESS_CONFIDENCE_THRESHOLD = 0.75
 /** Successful HTTP statuses for Yandex Cloud OCR. */
 const HTTP_OK = 200
 const HTTP_CREATED = 201
+
+/**
+ * Sprint C+ Round 6 2026-05-24 (Performance scale architect P1):
+ * Client-side token bucket для предотвращения 429-storm на check-in peak.
+ *
+ * YC Vision sync API quota = 1 RPS / folder. Check-in pattern (60% traffic
+ * compressed в 16:00-22:00 Сочи peak) bursts к 5-10 RPS easily — would
+ * otherwise hit 429 + cockatiel retry-after chain amplification.
+ *
+ * Bucket size 5 = небольшой burst позволен для concurrent vision calls
+ * от operator pool; sustained rate 1/sec соответствует YC sync quota.
+ * Per-folder isolation (separate bucket inside каждой `createYandexVisionOcr`
+ * instance — singleton per app boot).
+ */
+const VISION_TOKEN_BUCKET_REFILL_MS = 1000
+const VISION_TOKEN_BUCKET_BURST = 5
 
 // -----------------------------------------------------------------------------
 // Public configuration
@@ -418,6 +435,15 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 	const policy = buildResiliencePolicy()
 	const url = `${apiBase}${OCR_RECOGNIZE_PATH}`
 
+	// Sprint C+ Round 6 P1 fix 2026-05-24 (Performance scale architect): client-
+	// side token bucket. One bucket per provider instance — folder isolation
+	// achieved by passing distinct `folderId` (separate `createYandexVisionOcr`
+	// call → separate bucket). Eliminates 429-storm на check-in peak.
+	const tokenBucket = createTokenBucket({
+		refillIntervalMs: VISION_TOKEN_BUCKET_REFILL_MS,
+		burstCapacity: VISION_TOKEN_BUCKET_BURST,
+	})
+
 	/**
 	 * Shared call infrastructure — single Yandex Vision API call с idempotency
 	 * + resilience policy. Returns parsed chunk OR throws YandexVisionError-family.
@@ -432,8 +458,12 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 			model,
 		}
 		const idempotencyKey = uuid()
-		return policy.execute(({ signal }) =>
-			callYandexOcr({
+		return policy.execute(async ({ signal }) => {
+			// Client-side rate-limit BEFORE HTTP call. Block until token available
+			// (or signal aborts из cockatiel timeout policy). Eliminates 429-storm
+			// при concurrent burst > 1 RPS sustained quota.
+			await tokenBucket.acquire(signal)
+			return callYandexOcr({
 				fetcher,
 				input: {
 					url,
@@ -443,8 +473,8 @@ export function createYandexVisionOcr(opts: YandexVisionOptions): VisionOcrAdapt
 					body,
 				},
 				abortSignal: signal,
-			}),
-		)
+			})
+		})
 	}
 
 	/** Empty-bytes / API-error fallback response — shared между flows. */

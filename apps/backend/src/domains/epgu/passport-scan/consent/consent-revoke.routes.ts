@@ -95,7 +95,7 @@ export interface ConsentRevokeRoutesDeps {
 
 export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 	const { passportScanFactory, photoStorage, idempotency } = deps
-	const { consentRepo, cascadeRtbfRevoke } = passportScanFactory
+	const { consentRepo, cascadeRtbfRevoke, updateScrubLogS3Counts } = passportScanFactory
 
 	return new Hono<AppEnv>().post(
 		'/passport-scan/consent/:consentId/revoke',
@@ -165,11 +165,13 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 			// audit rows already scrubbed (no PII linkage). Lifecycle 90d backstop
 			// catches stragglers per 152-ФЗ ст.21 ч.7 «не дольше необходимого».
 			let deletedObjects = 0
+			let failedObjects = 0
 			for (const key of objectKeys) {
 				try {
 					await photoStorage.delete(key)
 					deletedObjects++
 				} catch (err) {
+					failedObjects++
 					c.var.logger.warn(
 						{
 							event: 'consent_revoke.storage_delete_failed',
@@ -183,7 +185,36 @@ export function createConsentRevokeRoutesInner(deps: ConsentRevokeRoutesDeps) {
 				}
 			}
 
-			// Sprint C: structured log для RTBF audit trail. Roskomnadzor inspection
+			// (6) Sprint C+ Round 6 P1 fix 2026-05-24 (Performance scale architect):
+			// Update scrubLog row с финальными S3-delete counts. Без этого row
+			// forever shows objectKeysDeleted=0 + objectKeysFailed=0 → forensic
+			// count permanently wrong. Skip когда scrubLogId is null (alreadyRevoked
+			// path — no new event row created).
+			if (result.scrubLogId !== null) {
+				try {
+					await updateScrubLogS3Counts({
+						tenantId,
+						scrubLogId: result.scrubLogId,
+						objectKeysDeleted: deletedObjects,
+						objectKeysFailed: failedObjects,
+					})
+				} catch (err) {
+					// Non-fatal — log warn так как row уже committed с zero counts,
+					// real audit trail still preserved (через структурированный лог
+					// в (7) ниже + YC Audit Trails data events на bucket).
+					c.var.logger.warn(
+						{
+							event: 'consent_revoke.scrub_log_count_update_failed',
+							scrubLogId: result.scrubLogId,
+							tenantId,
+							err: err instanceof Error ? err.message : String(err),
+						},
+						'scrubLog S3-counts update failed — structured log preserves count integrity',
+					)
+				}
+			}
+
+			// (7) Sprint C: structured log для RTBF audit trail. Roskomnadzor inspection
 			// может requested «покажите когда + сколько данных удалено для consent X».
 			c.var.logger.info(
 				{

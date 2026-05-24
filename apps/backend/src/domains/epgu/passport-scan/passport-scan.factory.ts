@@ -106,11 +106,28 @@ export interface PassportScanFactory {
 	readonly recordConsentAndAuditAtomic: (input: AtomicWriteInput) => Promise<AtomicWriteResult>
 	/** RTBF cascade — used by consent-revoke routes. nullify audit + revoke consent. */
 	readonly cascadeRtbfRevoke: (input: RtbfRevokeInput) => Promise<RtbfRevokeResult>
+	/**
+	 * Sprint C+ Round 6 2026-05-24 (Performance scale architect P1):
+	 * Update scrubLog row с финальными S3-delete counts. Called by consent-revoke
+	 * route AFTER S3 delete loop completes (out-of-tx side-effect — storage
+	 * not transactional с DB). Без этого update, scrubLog forever shows
+	 * `objectKeysDeleted=0` + `objectKeysFailed=0` regardless of real outcome →
+	 * forensic count permanently wrong → 152-ФЗ ст.21 ч.4 «возможность
+	 * установления содержания» partial violation.
+	 */
+	readonly updateScrubLogS3Counts: (input: ScrubLogCountsUpdate) => Promise<void>
 	/** DSAR helper — guestDocument list. Round 2 P0-1 fix. */
 	readonly listGuestDocumentsForExport: (
 		tenantId: string,
 		guestId: string,
 	) => Promise<readonly GuestDocumentExportRow[]>
+}
+
+interface ScrubLogCountsUpdate {
+	readonly tenantId: string
+	readonly scrubLogId: string
+	readonly objectKeysDeleted: number
+	readonly objectKeysFailed: number
 }
 
 interface AtomicWriteInput {
@@ -349,11 +366,28 @@ export function createPassportScanFactory(sql: typeof SQL): PassportScanFactory 
 		}))
 	}
 
+	const updateScrubLogS3Counts = async (input: ScrubLogCountsUpdate): Promise<void> => {
+		// Sprint C+ Round 6 P1 fix 2026-05-24 (Performance scale architect):
+		// Single-row UPDATE на (tenantId, scrubLogId) PK. Scope NARROWED — only
+		// touches objectKeys* columns, leaves rest of scrubLog row immutable
+		// (forensic invariant per ст.21 ч.4 «защита от несанкционированных
+		// изменений»; UPDATE-by-PK semantics not bulk overwrite). idempotent
+		// because S3-delete loop deterministic given same input objectKeys.
+		await sql`
+			UPDATE passportOcrAuditScrubLog
+			SET objectKeysDeleted = ${BigInt(input.objectKeysDeleted)},
+			    objectKeysFailed = ${BigInt(input.objectKeysFailed)}
+			WHERE tenantId = ${input.tenantId}
+			  AND id = ${input.scrubLogId}
+		`.idempotent(true)
+	}
+
 	return {
 		consentRepo,
 		auditRepo,
 		recordConsentAndAuditAtomic,
 		cascadeRtbfRevoke,
+		updateScrubLogS3Counts,
 		listGuestDocumentsForExport,
 	}
 }
