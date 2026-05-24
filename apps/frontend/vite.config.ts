@@ -5,13 +5,42 @@ import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+/**
+ * Strip CSP meta tag in dev mode only (Sprint C+ Round 6 2026-05-24).
+ *
+ * Vite dev injects React Fast Refresh inline preamble script which strict
+ * CSP (`script-src 'self'`) would block — HMR breaks, console errors. Prod
+ * builds (`vite build`) emit purely external-script bundles so CSP enforces
+ * cleanly. This plugin runs ONLY when `command === 'serve'` (dev server) и
+ * strips the meta тэг before browser sees it.
+ *
+ * Canon: production gets ZERO CSP relaxation; dev mode losses are local-
+ * only convenience trade-off (no security surface in dev).
+ */
+function devOnlyStripCsp(): Plugin {
+	return {
+		name: 'sepshn-csp-dev-strip',
+		apply: 'serve',
+		transformIndexHtml: {
+			order: 'pre',
+			handler(html) {
+				return html.replace(
+					/<meta[^>]*http-equiv="Content-Security-Policy"[^>]*>\s*/i,
+					'<!-- CSP stripped in dev mode (vite.config.ts devOnlyStripCsp) -->',
+				)
+			},
+		},
+	}
+}
+
 export default defineConfig({
 	plugins: [
+		devOnlyStripCsp(),
 		tanstackRouter({
 			target: 'react',
 			autoCodeSplitting: true,

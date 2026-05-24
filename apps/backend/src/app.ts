@@ -41,6 +41,7 @@ import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
 import { createDemoInboxRoutes } from './domains/demo/inbox.routes.ts'
 import { createDemoSmsInboxRoutes } from './domains/demo/sms-inbox.routes.ts'
 import { demoInboxRateLimiter } from './middleware/demo-inbox-rate-limit.ts'
+import { magicLinkRateLimit, orgCreateRateLimit } from './middleware/auth-signup-rate-limit.ts'
 import { initDemoInboxSms } from './workers/lib/demo-inbox-sms-adapter.ts'
 import { createIdentityRoutes } from './domains/identity/identity.routes.ts'
 import { createOnboardingFactory } from './domains/onboarding/onboarding.factory.ts'
@@ -841,6 +842,16 @@ app.onError(onError)
 // Better Auth mounts its own router at /api/auth/** (sign-up/email, sign-in/email,
 // sign-out, get-session, organization/create, organization/invite, etc.).
 // We proxy all /api/auth/* requests to auth.handler; it handles method and body parsing.
+//
+// Sprint C+ Round 6 2026-05-24 — Security red team P0 vector #2:
+//   Edge-level rate-limit BEFORE BA handler. Captcha gate (in auth.ts hooks)
+//   only fires after BA reaches the endpoint; floods at the URL шарик level
+//   bypass captcha pipeline economics. Per-IP throttle drops 100-email-bot
+//   tenant-creation attack before Vision/Postbox cost-burn accrues.
+//     - POST /api/auth/sign-in/magic-link: 5/10min/IP
+//     - POST /api/auth/organization/create: 3/hour/IP
+app.use('/api/auth/sign-in/magic-link', magicLinkRateLimit)
+app.use('/api/auth/organization/create', orgCreateRateLimit)
 app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
 const otelIngest = createOtelIngest()

@@ -16,19 +16,29 @@ import { resolveClientIpSync } from '../net/client-ip.ts'
  * shift per `[[auth-passwordless-canon]]` 2026-05-13):
  *   - POST /sign-in/magic-link   (BA magic-link plugin — JIT signup + sign-in)
  *
- * Activation canon — ONE short-circuit (dev), captcha enforced иначе:
- *   1. `nodeEnv !== 'production'` → captcha is ALWAYS skipped on localhost /
- *      CI / test. Hard rule per `[[no_half_measures]]` — even if an engineer
- *      pastes a real server key into local `.env`, dev requests still bypass.
- *      No surprise friction; pairs symmetrically с frontend widget which only
- *      renders when `VITE_YANDEX_CAPTCHA_SITE_KEY` is baked into the build.
+ * Activation canon (2026-05-24 hardened — security red team Round 6):
+ *   Single signal — `serverKey` presence.
+ *     - serverKey unset/blank → `'disabled'` (covers local dev + CI/test
+ *       where engineers don't set the key)
+ *     - serverKey set → captcha enforced full validation
+ *
+ *   PREVIOUS canon (refuted): `nodeEnv !== 'production'` blanket short-
+ *   circuit. Red team identified: YC Serverless Container can boot с
+ *   `NODE_ENV=development` even в demo/production builds (typical
+ *   misconfig per [[feedback_demo_inbox_panel_ci_canon_2026_05_21]]).
+ *   That short-circuit silently disabled captcha entirely → email
+ *   enumeration + DemoInbox flood + Vision cost-burn vector.
+ *
+ *   Local DX impact: engineers без real key пишут в `.env` blank →
+ *   `'disabled'` bypass. Engineer тестирующий captcha-flow локально
+ *   с реальным key получает full validation (canonical desired flow).
  *
  * **2026-05-22 demoDeployment bypass УБРАН** — раньше демо deployment
  * пропускал captcha (canonical «убрать friction для prospects»), но эмпирически
  * боты могут flood'ить DemoInbox (MAX_TOTAL_RECIPIENTS=500), ломая demo для
  * других prospects. Captcha enforced даже в demo если `SMARTCAPTCHA_SERVER_
  * KEY` set. Если key пустой → fallback `'disabled'` (config-drift safety
- * net, но startup guard в `index.ts` refuses to boot prod without key).
+ * net, но startup guard в `index.ts` refuses to boot prod без key).
  * Frontend canon `[[captcha_localhost_canon]]` updated same date.
  *
  * Token transport: body field `captchaToken`. Following stankoff pattern
@@ -48,7 +58,7 @@ const captchaBodySchema = z.object({
 export type CaptchaGateResult =
 	| {
 			pass: true
-			reason: 'non-production' | 'disabled' | 'not-applicable' | 'validated'
+			reason: 'disabled' | 'not-applicable' | 'validated'
 	  }
 	| { pass: false; reason: 'missing_token' | CaptchaValidationResult['reason'] }
 
@@ -61,13 +71,6 @@ export interface CaptchaGateContext {
 
 export interface CaptchaGateDeps {
 	serverKey?: string
-	/**
-	 * Node runtime mode. Anything except `'production'` short-circuits the
-	 * gate before any other check — localhost / CI / test never pay captcha
-	 * friction. Defaults to `'production'` so callers that forget to wire
-	 * env get the strict path, not the bypass.
-	 */
-	nodeEnv?: 'development' | 'production' | 'test'
 	validate?: typeof validateCaptcha
 }
 
@@ -81,11 +84,7 @@ export async function evaluateCaptchaGate(
 	ctx: CaptchaGateContext,
 	deps: CaptchaGateDeps,
 ): Promise<CaptchaGateResult> {
-	const nodeEnv = deps.nodeEnv ?? 'production'
-	if (nodeEnv !== 'production') {
-		return { pass: true, reason: 'non-production' }
-	}
-	const serverKey = deps.serverKey
+	const serverKey = deps.serverKey?.trim()
 	if (!serverKey) {
 		return { pass: true, reason: 'disabled' }
 	}

@@ -23,7 +23,9 @@ const META_DARK = '#0a0a0a'
  * НЕ через JS `style.colorScheme` (избегаем дублирования каскад/JS,
  * Round 3 self-audit fix W1).
  *
- * FOUC: prevented by inline-script в index.html `<head>` ПЕРЕД React mount.
+ * FOUC: prevented by /public/theme-init.js loaded sync в `<head>` ПЕРЕД React
+ * mount. Sprint C+ Round 6 2026-05-24 — script extracted из inline к external
+ * для strict CSP (`script-src 'self'` без inline-hash maintenance).
  * ThemeProvider только синхронизирует на theme changes after mount.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {

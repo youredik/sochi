@@ -3,6 +3,31 @@
 	<head>
 		<meta charset="UTF-8" />
 		<!--
+			Content-Security-Policy (Sprint C+ Round 6 2026-05-24 — Security red team P0):
+			Closes stored-XSS → account-takeover vector. Без CSP attacker может plant
+			XSS payload в org name / property name → exfil DSAR PII через authenticated
+			fetch (credentials:include).
+
+			Modern strict CSP — no 'unsafe-inline' for scripts. Inline FOUC script
+			extracted к /theme-init.js (script-src 'self' suffices).
+
+			Trusted origins:
+			  - Yandex Metrika (mc.yandex.ru/mc.webvisor.com): analytics 109307396
+			  - Yandex SmartCaptcha (smartcaptcha.yandexcloud.net): captcha widget
+			  - YC Object Storage (storage.yandexcloud.net): direct image fetch
+			  - *.sepshn.ru: API + WebSocket для demo realtime
+
+			'unsafe-inline' для style-src обязателен — Tailwind 4 + React 19 inject
+			dynamic styles. styles less XSS-impactful (no script execution surface).
+
+			Note: frame-ancestors 'none' ignored в meta-CSP (must be HTTP header).
+			Future: move к API Gateway response_overrides когда YC поддержит.
+		-->
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://mc.yandex.ru https://mc.webvisor.com https://smartcaptcha.yandexcloud.net; script-src-elem 'self' 'wasm-unsafe-eval' https://mc.yandex.ru https://mc.webvisor.com https://smartcaptcha.yandexcloud.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mc.yandex.ru https://*.yandex.net https://*.storage.yandexcloud.net https://storage.yandexcloud.net; font-src 'self' data:; connect-src 'self' https://*.sepshn.ru wss://*.sepshn.ru https://mc.yandex.ru https://mc.webvisor.com https://yandex.ru https://smartcaptcha.yandexcloud.net https://storage.yandexcloud.net; frame-src https://smartcaptcha.yandexcloud.net; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'; upgrade-insecure-requests"
+		/>
+		<!--
 			interactive-widget=resizes-content (M9.1):
 			required чтобы на iOS Safari layout сжимался под virtual keyboard,
 			иначе svh/dvh units на формы не реагируют (Round 4 self-audit finding).
@@ -59,23 +84,12 @@
 		<meta name="twitter:image" content="/pwa-512x512.png" />
 		<!--
 			FOUC-prevention script (M9.1):
-			Apply'ит .dark класс ПЕРЕД React mount чтобы избежать flash при reload
-			на dark-странице. Storage key 'horeca-theme' match'ится с useThemeStore
-			(src/lib/theme-store.ts) — НЕ менять без одновременного обновления.
-			color-scheme управляется CSS-каскадом (:root + .dark), не JS-style.
+			Extracted to /theme-init.js (Sprint C+ Round 6 — strict CSP enables
+			`script-src 'self'` без inline-hash maintenance overhead). Loaded
+			synchronously в <head> чтобы apply '.dark' класс ПЕРЕД React mount.
+			Source: /public/theme-init.js
 		-->
-		<script>
-			;(() => {
-				try {
-					const t = localStorage.getItem('horeca-theme')
-					const stored = t ? JSON.parse(t).state.theme : 'system'
-					const d =
-						stored === 'dark' ||
-						(stored === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
-					if (d) document.documentElement.classList.add('dark')
-				} catch {}
-			})()
-		</script>
+		<script src="/theme-init.js"></script>
 	</head>
 	<body>
 		<div id="root"></div>

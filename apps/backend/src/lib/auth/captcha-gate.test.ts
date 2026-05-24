@@ -58,64 +58,41 @@ function mockValidate(result: CaptchaValidationResult): {
 }
 
 describe('evaluateCaptchaGate', () => {
-	/*  ─── nodeEnv short-circuit — localhost / CI / test always bypass ──── */
+	/*  ─── Activation gating (Round 6 hardening — serverKey ONLY) ─────── */
 
-	test('[N1] nodeEnv=development → non-production (bypass)', async () => {
-		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {} },
-			{ nodeEnv: 'development', serverKey: 'ysc2_real_key' },
-		)
-		expect(res).toEqual({ pass: true, reason: 'non-production' })
-	})
-
-	test('[N2] nodeEnv=test → non-production (bypass)', async () => {
-		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {} },
-			{ nodeEnv: 'test', serverKey: 'ysc2_real_key' },
-		)
-		expect(res).toEqual({ pass: true, reason: 'non-production' })
-	})
-
-	test('[N3] nodeEnv=development wins over serverKey', async () => {
-		// Hard rule per `[[no_half_measures]]`: localhost never pays captcha
-		// friction, even if engineer accidentally configures a real server
-		// key в local .env.
-		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: { captchaToken: 'ignored' } },
-			{ nodeEnv: 'development', serverKey: 'ysc2_real_key' },
-		)
-		expect(res).toEqual({ pass: true, reason: 'non-production' })
-	})
-
-	test('[N4] nodeEnv omitted defaults to production (strict path)', async () => {
-		// Safety canon: missing nodeEnv must NOT silently bypass. Default
-		// to strict so an integrator who forgets to wire env hits the
-		// captcha rather than skipping it.
-		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: { captchaToken: '' } },
-			{ serverKey: 'ysc2_real_key' },
-		)
-		expect(res).toEqual({ pass: false, reason: 'missing_token' })
-	})
-
-	test('[N5] nodeEnv=production + no serverKey → disabled (existing safety net)', async () => {
-		// Distinct from N1: in production, missing serverKey still passes as
-		// 'disabled' (config-drift safety net). The hard prod guard lives
-		// at startup in index.ts (assertProductionCaptchaConfigured),
-		// not here.
-		const res = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: { captchaToken: 'x' } },
-			{ nodeEnv: 'production' },
-		)
-		expect(res).toEqual({ pass: true, reason: 'disabled' })
-	})
-
-	test('[A1] serverKey unset → disabled', async () => {
+	test('[A1] serverKey unset → disabled (local dev / CI no-key path)', async () => {
+		// Round 6 2026-05-24: previously `nodeEnv !== 'production'` blanket
+		// bypass. Removed — security red team identified that NODE_ENV can
+		// leak `development` even в production-mode containers, silently
+		// disabling captcha entirely. Now единственный bypass = serverKey
+		// missing/blank (local dev, CI without secret).
 		const res = await evaluateCaptchaGate(
 			{ path: '/sign-in/magic-link', body: { captchaToken: 'x' } },
 			{},
 		)
 		expect(res).toEqual({ pass: true, reason: 'disabled' })
+	})
+
+	test('[A1.blank] serverKey whitespace-only → disabled (trim defence)', async () => {
+		// Secret manager misconfig sometimes substitutes blank as "   " (CI
+		// YAML heredoc trim issue). Symmetric с production-guards trim canon.
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: { captchaToken: 'x' } },
+			{ serverKey: '   ' },
+		)
+		expect(res).toEqual({ pass: true, reason: 'disabled' })
+	})
+
+	test('[A2] serverKey set + missing token → missing_token (no nodeEnv escape hatch)', async () => {
+		// Critical regression guard: previously nodeEnv=development would
+		// silently pass даже с serverKey set. Round 6 hardening — serverKey
+		// presence alone gates validation. Engineer тестирующий captcha
+		// локально с реальным key получает full enforcement.
+		const res = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {} },
+			{ serverKey: 'ysc2_real_key' },
+		)
+		expect(res).toEqual({ pass: false, reason: 'missing_token' })
 	})
 
 	test('[D1] 2026-05-22 — captcha enforced even в demo (decouple от DEMO_DEPLOYMENT)', async () => {

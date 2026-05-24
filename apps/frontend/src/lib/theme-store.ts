@@ -18,8 +18,9 @@ interface ThemeState {
  *   - Persist round-trip без бойлерплейта — native localStorage с partialize
  *     для transient-free serialization.
  *
- * Storage key `horeca-theme` — match'ится с inline FOUC-script в index.html.
- * НЕ менять без одновременного обновления script (silent FOUC regression).
+ * Storage key `horeca-theme` — match'ится с /public/theme-init.js (FOUC-script
+ * extracted из inline 2026-05-24 для strict CSP). НЕ менять без одновременного
+ * обновления script (silent FOUC regression).
  *
  * Race-fix v5.0.10+ verified (concurrent rehydrate → no double-init);
  * наш zustand 5.0.12 — выше floor.
