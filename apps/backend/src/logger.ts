@@ -22,8 +22,34 @@ const REDACT_PATHS = [
 	'req.headers.Authorization',
 	'req.headers["x-folder-id"]',
 	'req.headers["X-Folder-Id"]',
+	'req.headers["idempotency-key"]',
+	'req.headers["Idempotency-Key"]',
 	'*.apiKey',
 	'*.secretKey',
+	// Sprint C+ Round 5 5-expert security audit fix 2026-05-24 (T3 + T7):
+	// extend redact paths к env-keyed secret names. Accidental `logger.info({env})`
+	// would otherwise leak Vision API key + S3 creds + Postbox creds + magic-link
+	// HMAC secret. Pino's path syntax matches exact dot-paths AND wildcards;
+	// these cover both `env.YC_VISION_API_KEY` direct access и `*.YC_VISION_API_KEY`
+	// для nested object containing env snapshot.
+	'env.YC_VISION_API_KEY',
+	'*.YC_VISION_API_KEY',
+	'env.YC_VISION_FOLDER_ID',
+	'*.YC_VISION_FOLDER_ID',
+	'env.S3_ACCESS_KEY_ID',
+	'*.S3_ACCESS_KEY_ID',
+	'env.S3_SECRET_ACCESS_KEY',
+	'*.S3_SECRET_ACCESS_KEY',
+	'env.POSTBOX_ACCESS_KEY_ID',
+	'*.POSTBOX_ACCESS_KEY_ID',
+	'env.POSTBOX_SECRET_ACCESS_KEY',
+	'*.POSTBOX_SECRET_ACCESS_KEY',
+	'env.BETTER_AUTH_SECRET',
+	'*.BETTER_AUTH_SECRET',
+	'env.SMARTCAPTCHA_SERVER_KEY',
+	'*.SMARTCAPTCHA_SERVER_KEY',
+	'env.INTERNAL_OPS_TOKEN',
+	'*.INTERNAL_OPS_TOKEN',
 	// PCI: payment method PAN / CVV (last4 OK to keep, full PAN must NEVER appear)
 	'*.payment_method_data.card.number',
 	'*.payment_method_data.card.cvc',

@@ -456,6 +456,18 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	await sql`DELETE FROM folio WHERE tenantId = ${TENANT_ID}`
 	await sql`DELETE FROM booking WHERE tenantId = ${TENANT_ID}`
 	await sql`DELETE FROM guest WHERE tenantId = ${TENANT_ID}`
+	// Sprint C+ Round 5 5-expert security audit fix 2026-05-24 (T5):
+	// Demo refresh was leaving passport-related tables with orphan PII —
+	// guest row vanished но photoConsentLog/passportOcrAudit/guestDocument
+	// rows persisted, breaking RTBF cascade (by-guestId returns nothing)
+	// и 152-ФЗ ст.21 ч.4 «возможность установления содержания» integrity.
+	// Now scrubbed in same batch для clean demo-refresh boundary.
+	await sql`DELETE FROM photoConsentLog WHERE tenantId = ${TENANT_ID}`
+	await sql`DELETE FROM passportOcrAudit WHERE tenantId = ${TENANT_ID}`
+	await sql`DELETE FROM guestDocument WHERE tenantId = ${TENANT_ID}`
+	await sql`DELETE FROM passportOcrAuditScrubLog WHERE tenantId = ${TENANT_ID}`
+	// Idempotency keys могут reference scan events что только удалили — wipe тоже.
+	await sql`DELETE FROM idempotencyKey WHERE tenantId = ${TENANT_ID}`
 
 	// Deterministic surname / first-name pool (fixed lookup, NO Math.random).
 	// Common Russian surnames; matches realistic demo without hitting actual people.

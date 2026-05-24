@@ -86,16 +86,42 @@ resource "yandex_storage_bucket" "demo_passport_scans" {
     }
   }
 
-  # Sprint C+ post-deploy fix 2026-05-24: removed `abort_incomplete_multipart_upload`
-  # block + `server_side_encryption_configuration` block — Yandex provider v0.204.0
-  # rejects both («Unsupported block type» and «kms_master_key_id required»).
-  # Web research May 2026 expert: Yandex Object Storage SSE only supports `aws:kms`
-  # algorithm с customer-managed KMS key (NOT bare AES256 server-side default).
-  # Application-level adapter передаёт `ServerSideEncryption: 'AES256'` per-object
-  # (passport-photo-storage.ts createYandexS3PassportStorage) — this provides
-  # per-object encryption without provider-block; defense-in-depth remains via
-  # bucket private ACL + IAM allow-list narrowing. Future: add `aws:kms` block
-  # с Yandex KMS key when SSE-KMS budget approved.
+  # Sprint C+ Round 5 5-expert audit fix 2026-05-24 (Web research P0):
+  # SSE-KMS canonical для passport PII bucket per 152-ФЗ ст.18 + 19.
+  # Yandex Object Storage только supports `aws:kms` algorithm с customer-managed
+  # KMS key (нет AES256 default option per cloud.yandex.com/ru/docs/storage/operations/buckets/encrypt).
+  # Earlier today I dropped the entire SSE block после tf provider error
+  # «kms_master_key_id required» — wrong fix (block IS supported, just needs
+  # correct key reference). Restored с dedicated `passport_scans_encryption`
+  # KMS key (separate от lockbox_encryption для blast-radius isolation).
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        kms_master_key_id = yandex_kms_symmetric_key.passport_scans_encryption.id
+        sse_algorithm     = "aws:kms"
+      }
+    }
+  }
+}
+
+# Dedicated KMS key для passport-scans bucket SSE — separate blast radius vs
+# Lockbox encryption key (lockbox.tf), 90-day rotation per Q2 2026 canon.
+resource "yandex_kms_symmetric_key" "passport_scans_encryption" {
+  folder_id         = yandex_resourcemanager_folder.demo.id
+  name              = "passport-scans-encryption"
+  description       = "KMS key для SSE на demo_passport_scans bucket (152-ФЗ ст.18 + 19 PII encryption at rest)"
+  default_algorithm = "AES_256"
+  rotation_period   = "2160h" # 90 дней rotation
+}
+
+# IAM: bucket SSE requires that the SA writing objects has kms.keys.encrypterDecrypter
+# на the KMS key. Sochi backend runtime SA uploads passport scans → needs encrypt grant.
+resource "yandex_kms_symmetric_key_iam_binding" "passport_scans_encrypter" {
+  symmetric_key_id = yandex_kms_symmetric_key.passport_scans_encryption.id
+  role             = "kms.keys.encrypterDecrypter"
+  members = [
+    "serviceAccount:${yandex_iam_service_account.sochi_backend_runtime.id}",
+  ]
 }
 
 # Backend runtime SA — storage.editor на passport scans bucket.

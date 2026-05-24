@@ -64,6 +64,21 @@ resource "yandex_audit_trails_trail" "demo_trail" {
         resource_type = "resource-manager.cloud"
       }
     }
+
+    # Sprint C+ Round 5 5-expert security audit fix 2026-05-24 (T4):
+    # Round 2 memo CLAIMED audit_trails data events были on passport-scans bucket —
+    # security pentester verified это was FALSE (only management_events_filter
+    # existed). Без data events РКН inspection cannot reconstruct «кто получил
+    # доступ к какой scan когда» — ст.21 ч.4 forensic gap.
+    # Now S3 GetObject/PutObject/DeleteObject events surface в YC Cloud Logging
+    # с full request context (SA + IP + timestamp + objectKey).
+    data_events_filter {
+      service = "storage"
+      resource_scope {
+        resource_id   = yandex_storage_bucket.demo_passport_scans.id
+        resource_type = "storage.bucket"
+      }
+    }
   }
 
   depends_on = [
