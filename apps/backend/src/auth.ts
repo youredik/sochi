@@ -108,31 +108,22 @@ export const auth = betterAuth({
 		 */
 		before: createAuthMiddleware(async (ctx) => {
 			const clientIp = ctx.request ? extractClientIp(ctx.request.headers) : undefined
-			// Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass (deploy-trigger ccc50bf+).
-			// Authorization: Bearer <PS256-jwt> verified offline against
-			// SA public key (Lockbox-mounted). See [[round_7_v2_sa_jwt_canon]].
-			const authHeader = ctx.request?.headers.get('authorization')
-			const saJwt = authHeader?.toLowerCase().startsWith('bearer ')
-				? authHeader.slice(7).trim()
-				: undefined
-			const saJwtConfig =
-				env.AGENT_VERIFIER_SA_PUBLIC_KEY && env.AGENT_VERIFIER_SA_ID
-					? {
-							publicKeyPem: env.AGENT_VERIFIER_SA_PUBLIC_KEY,
-							serviceAccountId: env.AGENT_VERIFIER_SA_ID,
-							audience: env.AGENT_VERIFIER_AUDIENCE,
-						}
-					: undefined
+			// Round 7 v3 2026-05-25 — canonical Yandex SWS bypass token.
+			// SUPERSEDES v2 SA-JWT (5-place rotation burden + Yandex no IAM
+			// introspect). v3 = shared 32-byte token, timing-safe compare in
+			// captcha-gate. Two-layer: SWS edge allow-rule (sws.tf) +
+			// this app-layer check. См. [[round_7_v3_sws_canon]].
+			const swsBypassToken = ctx.request?.headers.get('x-bypass-token')?.trim() ?? undefined
 			const decision = await evaluateCaptchaGate(
 				{
 					path: ctx.path,
 					body: ctx.body,
 					...(clientIp ? { clientIp } : {}),
-					...(saJwt ? { saJwt } : {}),
+					...(swsBypassToken ? { swsBypassToken } : {}),
 				},
 				{
 					...(env.SMARTCAPTCHA_SERVER_KEY ? { serverKey: env.SMARTCAPTCHA_SERVER_KEY } : {}),
-					...(saJwtConfig ? { saJwtConfig } : {}),
+					...(env.SWS_BYPASS_TOKEN ? { swsBypassToken: env.SWS_BYPASS_TOKEN } : {}),
 				},
 			)
 			if (!decision.pass) {

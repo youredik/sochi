@@ -26,51 +26,27 @@ import { expect, test } from '@playwright/test'
 const PROD_BASE = 'https://demo.sepshn.ru'
 
 /**
- * Round 7 v2 2026-05-24 — canonical Yandex SA JWT captcha bypass.
+ * Round 7 v3 2026-05-25 — canonical Yandex SWS bypass token.
  *
- * SUPERSEDES v1 `SMOKE_BYPASS_TOKEN` shared-secret canon (not cloud-native).
- * v2 = PS256 JWT signed by Yandex SA RSA key, verified offline backend-side.
+ * SUPERSEDES v2 SA-JWT canon (5-place rotation burden, custom verifier non-
+ * canonical для 2026 RU SaaS). v3 = shared 32-byte token, validated at two
+ * layers: SWS edge allow-rule + backend timing-safe compare. Single Lockbox
+ * source feeds оба слоя. См. [[round_7_v3_sws_canon_2026_05_25]].
  *
  * Flow:
- *   1. SC secret `YC_AGENT_VERIFIER_SA_KEY_JSON` = full SA key JSON
- *      (created via `yc iam key create --service-account-id ... --algorithm
- *      rsa-2048 --output ...`). Includes id, service_account_id, private_key.
- *   2. Spec deserializes JSON → signs PS256 JWT с claims {iss, sub: SA_ID,
- *      aud: 'demo.sepshn.ru', iat, exp: iat+30min} using `jose@6`.
- *   3. Sends `Authorization: Bearer <jwt>` header on each request.
- *   4. Backend `captcha-gate.ts` verifies offline → bypass + audit-log.
+ *   1. SC secret `SWS_BYPASS_TOKEN` (mirror of Lockbox `sepshn-sws-bypass-
+ *      token`) provides the token к CI smoke runner.
+ *   2. Spec sends `X-Bypass-Token: <token>` header on each request.
+ *   3. SWS edge: allow-rule priority 8500 skips Smart Protection + ARL.
+ *   4. Backend captcha-gate.ts: timing-safe compare → skips SmartCaptcha gate.
  *
  * Empty env → header omitted → smoke gets `CAPTCHA_REQUIRED` 403 (canonical
- * fallback). Both SC secret + backend Lockbox public key must be wired.
+ * fallback). Production rotation: yc lockbox secret add-version + SC PUT.
  */
-const SA_KEY_JSON = process.env.YC_AGENT_VERIFIER_SA_KEY_JSON ?? ''
-const SA_JWT_AUDIENCE = 'demo.sepshn.ru'
+const SWS_BYPASS_TOKEN = process.env.SWS_BYPASS_TOKEN ?? ''
 
-async function mintSaJwt(): Promise<string | null> {
-	if (SA_KEY_JSON.length === 0) return null
-	const { SignJWT, importPKCS8 } = await import('jose')
-	const keyData = JSON.parse(SA_KEY_JSON) as {
-		service_account_id: string
-		private_key: string
-	}
-	const privateKey = await importPKCS8(keyData.private_key, 'PS256')
-	const now = Math.floor(Date.now() / 1000)
-	return await new SignJWT({})
-		.setProtectedHeader({ alg: 'PS256' })
-		.setIssuer(keyData.service_account_id)
-		.setSubject(keyData.service_account_id)
-		.setAudience(SA_JWT_AUDIENCE)
-		.setIssuedAt(now)
-		.setExpirationTime(now + 1800)
-		.sign(privateKey)
-}
-
-let cachedJwt: string | null | undefined
-async function getSmokeHeaders(): Promise<Record<string, string>> {
-	if (cachedJwt === undefined) {
-		cachedJwt = await mintSaJwt()
-	}
-	return cachedJwt ? { Authorization: `Bearer ${cachedJwt}` } : {}
+function getSmokeHeaders(): Record<string, string> {
+	return SWS_BYPASS_TOKEN ? { 'X-Bypass-Token': SWS_BYPASS_TOKEN } : {}
 }
 
 test.describe('Demo funnel — empirical против prod', () => {
@@ -137,7 +113,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		for (let attempt = 0; attempt < 5; attempt++) {
 			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 				data: { email, callbackURL },
-				headers: await getSmokeHeaders(),
+				headers: getSmokeHeaders(),
 			})
 			if (signupRes.status() === 200) break
 			await new Promise((r) => setTimeout(r, 3000))
@@ -224,7 +200,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		const callbackURL1 = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName1)}`
 		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 			data: { email, callbackURL: callbackURL1 },
-			headers: await getSmokeHeaders(),
+			headers: getSmokeHeaders(),
 		})
 		const magicLink1 = await fetchMagicLink(request, email)
 		expect(magicLink1, 'First visit: magic-link не captured').toBeTruthy()
@@ -246,7 +222,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		const callbackURL2 = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName2)}`
 		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 			data: { email, callbackURL: callbackURL2 },
-			headers: await getSmokeHeaders(),
+			headers: getSmokeHeaders(),
 		})
 		const magicLink2 = await fetchMagicLink(request, email, magicLink1)
 		expect(magicLink2, 'Return visit: second magic-link не captured').toBeTruthy()
@@ -325,7 +301,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		for (let attempt = 0; attempt < 5; attempt++) {
 			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 				data: { email, callbackURL },
-				headers: await getSmokeHeaders(),
+				headers: getSmokeHeaders(),
 			})
 			if (signupRes.status() === 200) break
 			await new Promise((r) => setTimeout(r, 3000))

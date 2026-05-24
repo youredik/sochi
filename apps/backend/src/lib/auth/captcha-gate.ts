@@ -1,9 +1,9 @@
+import { timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import { env } from '../../env.ts'
 import { logger } from '../../logger.ts'
 import { type CaptchaValidationResult, validateCaptcha } from '../captcha/validate.ts'
 import { resolveClientIpSync } from '../net/client-ip.ts'
-import { verifyServiceAccountJwt } from './sa-jwt-verify.ts'
 
 /**
  * Captcha gate for Better Auth endpoints — canonical 2026 pattern.
@@ -59,7 +59,7 @@ const captchaBodySchema = z.object({
 export type CaptchaGateResult =
 	| {
 			pass: true
-			reason: 'disabled' | 'not-applicable' | 'validated' | 'sa-jwt'
+			reason: 'disabled' | 'not-applicable' | 'validated' | 'sws-bypass'
 	  }
 	| { pass: false; reason: 'missing_token' | CaptchaValidationResult['reason'] }
 
@@ -69,32 +69,31 @@ export interface CaptchaGateContext {
 	/** Best-effort source IP — leftmost X-Forwarded-For else X-Real-IP. */
 	clientIp?: string
 	/**
-	 * Round 7 v2 2026-05-24 — canonical Yandex SA JWT from
-	 * `Authorization: Bearer <jwt>` header. PS256-signed by SA private key,
-	 * verified offline against public key. Replaces v1 shared static
-	 * `smokeBypassToken` canon — cloud-native canonical 2026.
+	 * Round 7 v3 2026-05-25 — canonical Yandex SWS bypass token из
+	 * `X-Bypass-Token` header. Same token as SWS edge allow-rule (sws.tf
+	 * priority 8500) — two-layer защита, single Lockbox source.
 	 *
-	 * Backend auth.ts extracts header value; gate verifies via
-	 * `verifyServiceAccountJwt`. On pass → reason 'sa-jwt' + audit log.
+	 * 32-byte hex string (256 bits entropy). Backend auth.ts extracts header
+	 * value; gate compares timing-safe против env.SWS_BYPASS_TOKEN. On pass
+	 * → reason 'sws-bypass' + audit log.
+	 *
+	 * SUPERSEDES Round 7 v2 PS256 SA-JWT — research показал SA-JWT custom
+	 * verifier non-canonical для 2026 RU SaaS (5-place rotation burden +
+	 * Yandex не имеет public IAM introspect). SWS allow-rule + shared token
+	 * = native canonical pattern. См. [[round_7_v3_sws_canon]].
 	 */
-	saJwt?: string
+	swsBypassToken?: string
 }
 
 export interface CaptchaGateDeps {
 	serverKey?: string
 	validate?: typeof validateCaptcha
 	/**
-	 * Round 7 v2 2026-05-24 — SA JWT verification config from env.
-	 * All 3 fields must be present for bypass; missing any → bypass disabled.
-	 * - publicKeyPem: SA's RSA public key (from Lockbox)
-	 * - serviceAccountId: trusted SA's `aje...` ID
-	 * - audience: expected JWT `aud` claim (binds token к deployment)
+	 * Round 7 v3 2026-05-25 — expected SWS bypass token from
+	 * env.SWS_BYPASS_TOKEN (Lockbox-mounted). Missing/empty → bypass disabled,
+	 * real captcha enforced. Compared timing-safe против ctx.swsBypassToken.
 	 */
-	saJwtConfig?: {
-		publicKeyPem: string
-		serviceAccountId: string
-		audience: string
-	}
+	swsBypassToken?: string
 }
 
 /**
@@ -115,38 +114,37 @@ export async function evaluateCaptchaGate(
 		return { pass: true, reason: 'not-applicable' }
 	}
 
-	// Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass.
-	// SUPERSEDES Round 7 v1 shared-token canon (insecure: rotation burden,
-	// timing-attack surface). v2 uses PS256-signed JWT verified offline
-	// against SA public key — cryptographic, audience-bound, short-lived.
-	if (deps.saJwtConfig && ctx.saJwt) {
-		const result = await verifyServiceAccountJwt(ctx.saJwt, {
-			publicKeyPem: deps.saJwtConfig.publicKeyPem,
-			expectedServiceAccountId: deps.saJwtConfig.serviceAccountId,
-			expectedAudience: deps.saJwtConfig.audience,
-		})
-		if (result.ok) {
+	// Round 7 v3 2026-05-25 — canonical Yandex SWS bypass token.
+	// SUPERSEDES Round 7 v2 SA-JWT canon (5-place rotation burden, custom
+	// verifier non-canonical для 2026 RU SaaS). v3 = shared 32-byte token,
+	// timing-safe compare. Two-layer защита: SWS edge allow-rule (sws.tf
+	// priority 8500) + this app-layer check. Same Lockbox source feeds оба.
+	//
+	// Timing-safe compare обязателен для shared-secret канона (защита от
+	// remote timing attack). Lengths must match before timingSafeEqual (it
+	// throws on mismatch); explicit length-check ДО compare.
+	if (deps.swsBypassToken && ctx.swsBypassToken) {
+		const expected = Buffer.from(deps.swsBypassToken, 'utf8')
+		const provided = Buffer.from(ctx.swsBypassToken, 'utf8')
+		const match = expected.length === provided.length && timingSafeEqual(expected, provided)
+		if (match) {
 			logger.warn(
 				{
 					path: ctx.path,
-					event: 'captcha.sa_jwt_bypass',
-					serviceAccountId: result.serviceAccountId,
-					expiresAt: result.expiresAt.toISOString(),
+					event: 'captcha.sws_bypass',
 				},
-				'Captcha gate bypassed via Yandex SA JWT — audit',
+				'Captcha gate bypassed via SWS_BYPASS_TOKEN — audit (verified caller: CI smoke / AI agent)',
 			)
-			return { pass: true, reason: 'sa-jwt' }
+			return { pass: true, reason: 'sws-bypass' }
 		}
-		// JWT presented but verification failed — log + fall through к captcha.
-		// Don't 401: legitimate clients should fall back к real captcha if their
-		// token is malformed/expired (e.g. during key rotation grace window).
+		// Token presented but mismatch — log + fall through к captcha (no 401:
+		// legitimate clients fall back к captcha during rotation grace window).
 		logger.warn(
 			{
 				path: ctx.path,
-				event: 'captcha.sa_jwt_invalid',
-				reason: result.reason,
+				event: 'captcha.sws_bypass_mismatch',
 			},
-			'SA JWT presented but invalid — falling through к captcha',
+			'X-Bypass-Token presented but did not match — falling through к captcha',
 		)
 	}
 

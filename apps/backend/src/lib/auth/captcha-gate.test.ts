@@ -206,114 +206,53 @@ describe('evaluateCaptchaGate', () => {
 		expect(calls).toEqual([['ysc2_x', 'tok', '198.51.100.7']])
 	})
 
-	// ─── Round 7 v2 2026-05-24: Yandex SA JWT bypass ─────────────────
-	// SUPERSEDES Round 7 v1 shared-token canon. Verifies integration с
-	// sa-jwt-verify.ts (which has its own unit test suite). These tests
-	// exercise gate's wiring + fallthrough behavior.
-	const SA_ID = 'aje54tid7ibbh6ci70blTEST'
-	const AUDIENCE = 'demo.sepshn.ru'
+	// ─── Round 7 v3 2026-05-25: Yandex SWS bypass token (app-layer) ─────
+	// SUPERSEDES Round 7 v2 SA-JWT canon. Two-layer защита: edge SWS allow-rule
+	// (sws.tf) + this app-layer timing-safe compare. Same 32-byte token из
+	// Lockbox `sepshn-sws-bypass-token` feeds оба слоя.
+	const SWS_TOKEN = 'a'.repeat(64) // 64-char hex placeholder (32 bytes entropy)
+	const SWS_WRONG = 'b'.repeat(64)
 
-	test('[J1] valid SA JWT → pass с reason sa-jwt (no validate call)', async () => {
-		const { generateKeyPair, exportSPKI, SignJWT } = await import('jose')
-		const { publicKey, privateKey } = await generateKeyPair('PS256', { extractable: true })
-		const publicKeyPem = await exportSPKI(publicKey)
-		const jwt = await new SignJWT({})
-			.setProtectedHeader({ alg: 'PS256' })
-			.setIssuer(SA_ID)
-			.setSubject(SA_ID)
-			.setAudience(AUDIENCE)
-			.setIssuedAt()
-			.setExpirationTime('5m')
-			.sign(privateKey)
-
+	test('[B1] valid SWS_BYPASS_TOKEN match → pass with reason sws-bypass (no validate)', async () => {
 		const { fn, calls } = mockValidate({ ok: true })
 		const r = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {}, saJwt: jwt },
-			{
-				serverKey: 'ysc2_x',
-				saJwtConfig: { publicKeyPem, serviceAccountId: SA_ID, audience: AUDIENCE },
-				validate: fn,
-			},
+			{ path: '/sign-in/magic-link', body: {}, swsBypassToken: SWS_TOKEN },
+			{ serverKey: 'ysc2_x', swsBypassToken: SWS_TOKEN, validate: fn },
 		)
-		expect(r).toEqual({ pass: true, reason: 'sa-jwt' })
+		expect(r).toEqual({ pass: true, reason: 'sws-bypass' })
 		expect(calls).toHaveLength(0)
 	})
 
-	test('[J2] wrong-signed JWT → falls through к captcha (missing_token)', async () => {
-		const { generateKeyPair, exportSPKI, SignJWT } = await import('jose')
-		const attacker = await generateKeyPair('PS256', { extractable: true })
-		const trusted = await generateKeyPair('PS256', { extractable: true })
-		const publicKeyPem = await exportSPKI(trusted.publicKey)
-		const jwt = await new SignJWT({})
-			.setProtectedHeader({ alg: 'PS256' })
-			.setIssuer(SA_ID)
-			.setSubject(SA_ID)
-			.setAudience(AUDIENCE)
-			.setIssuedAt()
-			.setExpirationTime('5m')
-			.sign(attacker.privateKey)
-
+	test('[B2] mismatched token → fall through к captcha (missing_token)', async () => {
 		const r = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {}, saJwt: jwt },
-			{
-				serverKey: 'ysc2_x',
-				saJwtConfig: { publicKeyPem, serviceAccountId: SA_ID, audience: AUDIENCE },
-			},
+			{ path: '/sign-in/magic-link', body: {}, swsBypassToken: SWS_WRONG },
+			{ serverKey: 'ysc2_x', swsBypassToken: SWS_TOKEN },
 		)
 		expect(r).toEqual({ pass: false, reason: 'missing_token' })
 	})
 
-	test('[J3] saJwtConfig unset → bypass disabled even с valid JWT', async () => {
-		const { generateKeyPair, SignJWT } = await import('jose')
-		const { privateKey } = await generateKeyPair('PS256', { extractable: true })
-		const jwt = await new SignJWT({})
-			.setProtectedHeader({ alg: 'PS256' })
-			.setIssuer(SA_ID)
-			.setSubject(SA_ID)
-			.setAudience(AUDIENCE)
-			.setIssuedAt()
-			.setExpirationTime('5m')
-			.sign(privateKey)
-
+	test('[B3] backend env unset → bypass disabled even с valid header', async () => {
 		const r = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {}, saJwt: jwt },
+			{ path: '/sign-in/magic-link', body: {}, swsBypassToken: SWS_TOKEN },
 			{ serverKey: 'ysc2_x' },
 		)
 		expect(r).toEqual({ pass: false, reason: 'missing_token' })
 	})
 
-	test('[J4] saJwt absent + config present → falls through (real user)', async () => {
-		const { generateKeyPair, exportSPKI } = await import('jose')
-		const { publicKey } = await generateKeyPair('PS256', { extractable: true })
-		const publicKeyPem = await exportSPKI(publicKey)
+	test('[B4] header absent + env set → falls through (real user без token)', async () => {
 		const r = await evaluateCaptchaGate(
 			{ path: '/sign-in/magic-link', body: {} },
-			{
-				serverKey: 'ysc2_x',
-				saJwtConfig: { publicKeyPem, serviceAccountId: SA_ID, audience: AUDIENCE },
-			},
+			{ serverKey: 'ysc2_x', swsBypassToken: SWS_TOKEN },
 		)
 		expect(r).toEqual({ pass: false, reason: 'missing_token' })
 	})
 
-	test('[J5] valid JWT, wrong audience → fall-through (token не bound к этому deployment)', async () => {
-		const { generateKeyPair, exportSPKI, SignJWT } = await import('jose')
-		const { publicKey, privateKey } = await generateKeyPair('PS256', { extractable: true })
-		const publicKeyPem = await exportSPKI(publicKey)
-		const jwt = await new SignJWT({})
-			.setProtectedHeader({ alg: 'PS256' })
-			.setIssuer(SA_ID)
-			.setSubject(SA_ID)
-			.setAudience('app.sepshn.ru') // wrong deployment target
-			.setIssuedAt()
-			.setExpirationTime('5m')
-			.sign(privateKey)
+	test('[B5] length-mismatched tokens → timing-safe compare returns false, не throws', async () => {
+		// timingSafeEqual throws on length mismatch — gate must pre-check length.
+		// Provided token length differs от env → fall-through, не uncaught exception.
 		const r = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {}, saJwt: jwt },
-			{
-				serverKey: 'ysc2_x',
-				saJwtConfig: { publicKeyPem, serviceAccountId: SA_ID, audience: AUDIENCE },
-			},
+			{ path: '/sign-in/magic-link', body: {}, swsBypassToken: 'too-short' },
+			{ serverKey: 'ysc2_x', swsBypassToken: SWS_TOKEN },
 		)
 		expect(r).toEqual({ pass: false, reason: 'missing_token' })
 	})

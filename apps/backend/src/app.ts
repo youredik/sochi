@@ -829,10 +829,23 @@ app.use(
 	}),
 )
 
+// Round 7 v3 2026-05-25 — CORS P0 fix per gap-analysis empirical finding.
+// Previously `origin: trustedOrigins | env.BETTER_AUTH_URL` (mixed array | string)
+// returned `access-control-allow-origin: *` для untrusted Origin (verified
+// empirically against demo.sepshn.ru — see [[feedback_round_7_v3_sws_canon_
+// 2026_05_25]]). Wildcard + credentials=true is invalid CORS (browsers reject)
+// but signals misconfig. Function-style origin returns matched value or null
+// → Hono omits ACAO header entirely → preflight fails for untrusted origins.
+// Defense-in-depth canon.
+export const corsAllowlist = trustedOrigins.length > 0 ? trustedOrigins : [env.BETTER_AUTH_URL]
+export function resolveCorsOrigin(origin: string): string | null {
+	return corsAllowlist.includes(origin) ? origin : null
+}
+
 app.use(
 	'*',
 	cors({
-		origin: trustedOrigins.length > 0 ? trustedOrigins : env.BETTER_AUTH_URL,
+		origin: resolveCorsOrigin,
 		credentials: true,
 		allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 		// `traceparent`/`tracestate` prepare us for OpenTelemetry W3C context propagation;
@@ -840,6 +853,7 @@ app.use(
 		allowHeaders: [
 			'Content-Type',
 			'Authorization',
+			'X-Bypass-Token',
 			'x-request-id',
 			'traceparent',
 			'tracestate',
