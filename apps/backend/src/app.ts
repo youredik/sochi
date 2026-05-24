@@ -760,9 +760,11 @@ export async function stopApp(): Promise<void> {
 	await channelFactory.stopDispatcher()
 }
 
-const trustedOrigins = env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
-	.map((o) => o.trim())
-	.filter((o) => o.length > 0)
+// Round 7 v3 2026-05-25 — CORS resolver moved к ./cors.ts для pure-function
+// isolation. cors.test.ts imports от cors.ts напрямую → не triggerит CDC
+// consumer side-effects во время parallel bun test. Was causing test-fast
+// cube fail в Run #97 + #98.
+import { resolveCorsOrigin } from './cors.ts'
 
 // contextStorage MUST be the very first middleware — it snapshots `c.var` into
 // an AsyncLocalStorage so deeply-nested code (repos, background tasks spawned
@@ -829,18 +831,9 @@ app.use(
 	}),
 )
 
-// Round 7 v3 2026-05-25 — CORS P0 fix per gap-analysis empirical finding.
-// Previously `origin: trustedOrigins | env.BETTER_AUTH_URL` (mixed array | string)
-// returned `access-control-allow-origin: *` для untrusted Origin (verified
-// empirically against demo.sepshn.ru — see [[feedback_round_7_v3_sws_canon_
-// 2026_05_25]]). Wildcard + credentials=true is invalid CORS (browsers reject)
-// but signals misconfig. Function-style origin returns matched value or null
-// → Hono omits ACAO header entirely → preflight fails for untrusted origins.
-// Defense-in-depth canon.
-export const corsAllowlist = trustedOrigins.length > 0 ? trustedOrigins : [env.BETTER_AUTH_URL]
-export function resolveCorsOrigin(origin: string): string | null {
-	return corsAllowlist.includes(origin) ? origin : null
-}
+// Round 7 v3 2026-05-25 — CORS resolver imported from ./cors.ts (см. comment
+// at top of file). Function-style origin returns matched value or null;
+// Hono omits ACAO header entirely для untrusted origins → preflight fails.
 
 app.use(
 	'*',

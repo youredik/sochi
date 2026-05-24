@@ -18,7 +18,7 @@
  *   [C5] trailing slash differs → null (canonical CORS — no normalization)
  */
 import { describe, expect, test } from 'bun:test'
-import { corsAllowlist, resolveCorsOrigin } from './app.ts'
+import { corsAllowlist, resolveCorsOrigin } from './cors.ts'
 
 describe('resolveCorsOrigin — function-style canonical allowlist', () => {
 	test('[C1] origin in allowlist → echoed', () => {
