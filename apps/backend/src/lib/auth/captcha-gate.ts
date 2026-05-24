@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import { env } from '../../env.ts'
 import { logger } from '../../logger.ts'
@@ -50,6 +51,14 @@ import { resolveClientIpSync } from '../net/client-ip.ts'
 
 export const CAPTCHA_PATHS = new Set<string>(['/sign-in/magic-link'])
 
+// Round 7 2026-05-24 — captcha-gate smoke bypass HEADER name canonical
+// reference, only used by auth.ts call-site via `ctx.request.headers.get(...)`
+// literal string. NOT exported (knip-clean) — single producer + single
+// consumer; if a third caller emerges, promote to const.
+//
+// Pattern: `auth.ts` reads `x-internal-smoke-bypass` header → passes value
+// в `ctx.smokeBypassToken`. captcha-gate (this file) compares vs env.
+
 const captchaBodySchema = z.object({
 	captchaToken: z.string().min(1).optional(),
 })
@@ -58,7 +67,7 @@ const captchaBodySchema = z.object({
 export type CaptchaGateResult =
 	| {
 			pass: true
-			reason: 'disabled' | 'not-applicable' | 'validated'
+			reason: 'disabled' | 'not-applicable' | 'validated' | 'smoke-bypass'
 	  }
 	| { pass: false; reason: 'missing_token' | CaptchaValidationResult['reason'] }
 
@@ -67,11 +76,26 @@ export interface CaptchaGateContext {
 	body: unknown
 	/** Best-effort source IP — leftmost X-Forwarded-For else X-Real-IP. */
 	clientIp?: string
+	/**
+	 * Round 7 2026-05-24 — `x-internal-smoke-bypass` header value, extracted
+	 * by caller. If present + matches `deps.smokeBypassToken` via
+	 * `timingSafeEqual`, gate returns `'smoke-bypass'` pass. Enables CI
+	 * playwright-smoke tests против prod-mode captcha без вытягивая real
+	 * Yandex SmartCaptcha widget tokens.
+	 */
+	smokeBypassToken?: string
 }
 
 export interface CaptchaGateDeps {
 	serverKey?: string
 	validate?: typeof validateCaptcha
+	/**
+	 * Round 7 2026-05-24 — server-side smoke-bypass secret from env. When unset
+	 * (dev/local — no smoke), bypass disabled entirely. Min 32 chars enforced
+	 * via env schema. Token comparison via `timingSafeEqual` to prevent
+	 * char-by-char enumeration attacks.
+	 */
+	smokeBypassToken?: string
 }
 
 /**
@@ -90,6 +114,25 @@ export async function evaluateCaptchaGate(
 	}
 	if (!CAPTCHA_PATHS.has(ctx.path)) {
 		return { pass: true, reason: 'not-applicable' }
+	}
+
+	// Round 7 2026-05-24 — smoke-bypass header check BEFORE token validation.
+	// Both server-side env token + request header must be present и timing-safe
+	// equal. Unequal lengths short-circuit via length check (Buffer construction
+	// сначала checks length to avoid pathological 1-char comparisons leaking).
+	// Logged at warn level — `smoke-bypass` events should be rare и audit-visible.
+	const expected = deps.smokeBypassToken?.trim()
+	const supplied = ctx.smokeBypassToken?.trim()
+	if (expected && supplied && expected.length === supplied.length) {
+		const expectedBuf = Buffer.from(expected, 'utf8')
+		const suppliedBuf = Buffer.from(supplied, 'utf8')
+		if (expectedBuf.length === suppliedBuf.length && timingSafeEqual(expectedBuf, suppliedBuf)) {
+			logger.warn(
+				{ path: ctx.path, event: 'captcha.smoke_bypass' },
+				'Captcha gate bypassed via smoke header — audit',
+			)
+			return { pass: true, reason: 'smoke-bypass' }
+		}
 	}
 
 	const parsed = captchaBodySchema.safeParse(ctx.body)

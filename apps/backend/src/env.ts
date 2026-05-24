@@ -150,6 +150,23 @@ export const envSchema = z.object({
 	// Turnstile) for 152-ФЗ data localization.
 	SMARTCAPTCHA_SERVER_KEY: z.string().optional(),
 
+	// Sprint C+ Round 7 P0 fix 2026-05-24 — canonical smoke-test bypass header.
+	// Setup: SC CI стores random 32+ char secret as `SMOKE_BYPASS_TOKEN` SC env
+	// var (gitignored); YC container reads same env via Lockbox/secrets binding.
+	// Smoke test sends `X-Internal-Smoke-Bypass: <token>` header → captcha-gate
+	// timing-safe-compares → bypass.
+	//
+	// Security rationale (Stripe-webhook pattern):
+	//   - Token never в repo (only deployed env)
+	//   - timingSafeEqual prevents char-by-char enumeration
+	//   - Min 32 chars (entropy >= 192 bits)
+	//   - Logged event when used (audit trail для невидимого bypass)
+	//   - Unset (dev/local) → bypass disabled completely
+	//
+	// Without this canon: deploy-verify playwright-smoke can NEVER pass
+	// (Round 6 captcha-gate blocks even server-side smoke). Forever-red CI.
+	SMOKE_BYPASS_TOKEN: z.string().min(32).optional(),
+
 	// Demo deployment flag — when `true`, captcha-gate bypasses validation
 	// EVEN IF `SMARTCAPTCHA_SERVER_KEY` is set. Per `[[demo_strategy]]`:
 	// public hosted demo (e.g. demo.sochi.ru) runs friction-free for

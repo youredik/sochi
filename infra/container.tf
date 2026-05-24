@@ -212,6 +212,23 @@ resource "yandex_serverless_container" "backend" {
     }
   }
 
+  # SMOKE_BYPASS_TOKEN (Round 7 2026-05-24) — secret для CI deploy-verify
+  # playwright-smoke. captcha-gate sees matching `X-Internal-Smoke-Bypass`
+  # header → bypasses captcha validation (timing-safe compare). Без этой
+  # переменной — deploy-verify forever-red после Round 6 captcha canon.
+  # Lockbox secret created вне TF (bootstrap.md шаг 5), var.smoke_bypass_
+  # lockbox_secret_id + _version_id filled afterwards. Default empty → block
+  # skipped → smoke bypass disabled (still secure, just blocks CI smoke).
+  dynamic "secrets" {
+    for_each = var.smoke_bypass_lockbox_secret_id != "" ? [1] : []
+    content {
+      id                   = var.smoke_bypass_lockbox_secret_id
+      version_id           = var.smoke_bypass_lockbox_version_id
+      key                  = "SMOKE_BYPASS_TOKEN"
+      environment_variable = "SMOKE_BYPASS_TOKEN"
+    }
+  }
+
   # Postbox sender AWS-style creds (2026-05-22 Phase 2 activated).
   # Reuses `backend` Lockbox bundle — TF auto-derives current version_id
   # via `yandex_lockbox_secret_version_hashed.backend.id`. CI deploy-backend

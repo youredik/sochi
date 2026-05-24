@@ -588,6 +588,14 @@ tasks:
         env:
           PLAYWRIGHT_BASE_URL: 'https://demo.sepshn.ru'
           PLAYWRIGHT_API_URL: 'https://demo.sepshn.ru'
+          # Round 7 2026-05-24 — captcha-gate smoke bypass header secret.
+          # Same value also stored в YC Lockbox + mounted в backend container
+          # via var.smoke_bypass_lockbox_*. demo-funnel-smoke.spec reads
+          # `process.env.SMOKE_BYPASS_TOKEN` → `X-Internal-Smoke-Bypass`
+          # header. captcha-gate timing-safe-compares → bypass. Без этого
+          # секрета Round 6 captcha canon = forever-red deploy-verify.
+          # Secret bootstrap: `openssl rand -hex 24` → SC secrets + YC Lockbox.
+          SMOKE_BYPASS_TOKEN: ${{ secrets.SMOKE_BYPASS_TOKEN }}
         script:
           - corepack enable && corepack prepare pnpm@10.33.4 --activate
           - pnpm install --frozen-lockfile

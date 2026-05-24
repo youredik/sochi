@@ -25,6 +25,21 @@ import { expect, test } from '@playwright/test'
 
 const PROD_BASE = 'https://demo.sepshn.ru'
 
+/**
+ * Round 7 2026-05-24 — server-side smoke bypass header.
+ *
+ * SC env var `SMOKE_BYPASS_TOKEN` matches YC container env через Lockbox.
+ * captcha-gate сравнивает timing-safe → bypass без real captcha widget
+ * token (которого playwright fetch API не может получить — нет browser
+ * context для Yandex iframe).
+ *
+ * Empty token → header omitted → smoke gets `CAPTCHA_REQUIRED` 403 (canonical
+ * Round 6 enforcement). Both sides must be wired для green deploy-verify.
+ */
+const SMOKE_BYPASS_TOKEN = process.env.SMOKE_BYPASS_TOKEN ?? ''
+const smokeHeaders: Record<string, string> =
+	SMOKE_BYPASS_TOKEN.length > 0 ? { 'x-internal-smoke-bypass': SMOKE_BYPASS_TOKEN } : {}
+
 test.describe('Demo funnel — empirical против prod', () => {
 	test.use({
 		storageState: { cookies: [], origins: [] },
@@ -89,6 +104,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		for (let attempt = 0; attempt < 5; attempt++) {
 			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 				data: { email, callbackURL },
+				headers: smokeHeaders,
 			})
 			if (signupRes.status() === 200) break
 			await new Promise((r) => setTimeout(r, 3000))
@@ -175,6 +191,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		const callbackURL1 = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName1)}`
 		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 			data: { email, callbackURL: callbackURL1 },
+			headers: smokeHeaders,
 		})
 		const magicLink1 = await fetchMagicLink(request, email)
 		expect(magicLink1, 'First visit: magic-link не captured').toBeTruthy()
@@ -196,6 +213,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		const callbackURL2 = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName2)}`
 		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 			data: { email, callbackURL: callbackURL2 },
+			headers: smokeHeaders,
 		})
 		const magicLink2 = await fetchMagicLink(request, email, magicLink1)
 		expect(magicLink2, 'Return visit: second magic-link не captured').toBeTruthy()
@@ -274,6 +292,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		for (let attempt = 0; attempt < 5; attempt++) {
 			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 				data: { email, callbackURL },
+				headers: smokeHeaders,
 			})
 			if (signupRes.status() === 200) break
 			await new Promise((r) => setTimeout(r, 3000))

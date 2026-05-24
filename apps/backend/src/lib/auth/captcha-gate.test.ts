@@ -205,6 +205,67 @@ describe('evaluateCaptchaGate', () => {
 		)
 		expect(calls).toEqual([['ysc2_x', 'tok', '198.51.100.7']])
 	})
+
+	// ─── Round 7 2026-05-24: smoke-bypass header ─────────────────────
+	const SMOKE_TOKEN = 'sm0k3-bypass-token-12345678901234567890' // ≥32 chars
+	test('[S1] matching smoke header + env → pass с reason smoke-bypass (no validate call)', async () => {
+		const { fn, calls } = mockValidate({ ok: true })
+		const r = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {}, smokeBypassToken: SMOKE_TOKEN },
+			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN, validate: fn },
+		)
+		expect(r).toEqual({ pass: true, reason: 'smoke-bypass' })
+		expect(calls).toHaveLength(0)
+	})
+
+	test('[S2] mismatched smoke header → falls through к captcha validation (missing_token)', async () => {
+		const r = await evaluateCaptchaGate(
+			{
+				path: '/sign-in/magic-link',
+				body: {},
+				smokeBypassToken: 'wrong-token-1234567890123456789012',
+			},
+			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN },
+		)
+		expect(r).toEqual({ pass: false, reason: 'missing_token' })
+	})
+
+	test('[S3] smoke header present but env unset → falls through (env unset = bypass disabled)', async () => {
+		const r = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {}, smokeBypassToken: SMOKE_TOKEN },
+			{ serverKey: 'ysc2_x' /* smokeBypassToken not set */ },
+		)
+		expect(r).toEqual({ pass: false, reason: 'missing_token' })
+	})
+
+	test('[S4] env set but header absent → falls through (real user flow)', async () => {
+		const r = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {} /* smokeBypassToken not set */ },
+			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN },
+		)
+		expect(r).toEqual({ pass: false, reason: 'missing_token' })
+	})
+
+	test('[S5] length-mismatch tokens → no false match (timing-safe canon)', async () => {
+		const r = await evaluateCaptchaGate(
+			{
+				path: '/sign-in/magic-link',
+				body: {},
+				// Same prefix, different length — common timing attack vector.
+				smokeBypassToken: 'sm0k3-bypass-token-1234567890123456',
+			},
+			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN },
+		)
+		expect(r).toEqual({ pass: false, reason: 'missing_token' })
+	})
+
+	test('[S6] empty-string smoke header → no bypass (defence-in-depth)', async () => {
+		const r = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {}, smokeBypassToken: '' },
+			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN },
+		)
+		expect(r).toEqual({ pass: false, reason: 'missing_token' })
+	})
 })
 
 describe('extractClientIp — right-most-trusted-proxy canon (B11)', () => {

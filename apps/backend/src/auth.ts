@@ -108,14 +108,19 @@ export const auth = betterAuth({
 		 */
 		before: createAuthMiddleware(async (ctx) => {
 			const clientIp = ctx.request ? extractClientIp(ctx.request.headers) : undefined
+			// Round 7 2026-05-24 — smoke-bypass header (case-insensitive lookup).
+			// `ctx.request.headers` is Web Fetch Headers — `.get()` is case-insensitive.
+			const smokeBypassToken = ctx.request?.headers.get('x-internal-smoke-bypass') ?? undefined
 			const decision = await evaluateCaptchaGate(
 				{
 					path: ctx.path,
 					body: ctx.body,
 					...(clientIp ? { clientIp } : {}),
+					...(smokeBypassToken ? { smokeBypassToken } : {}),
 				},
 				{
 					...(env.SMARTCAPTCHA_SERVER_KEY ? { serverKey: env.SMARTCAPTCHA_SERVER_KEY } : {}),
+					...(env.SMOKE_BYPASS_TOKEN ? { smokeBypassToken: env.SMOKE_BYPASS_TOKEN } : {}),
 				},
 			)
 			if (!decision.pass) {
