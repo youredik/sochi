@@ -1,5 +1,6 @@
 import type { sql as SQL } from '../../db/index.ts'
 import type { TimeProvider } from '../../lib/time-provider.ts'
+import type { GuestDocumentRepo } from '../guest/guest-document.repo.ts'
 import type { PropertyService } from '../property/property.service.ts'
 import type { RateRepo } from '../rate/rate.repo.ts'
 import type { RatePlanService } from '../ratePlan/ratePlan.service.ts'
@@ -30,6 +31,10 @@ export function createBookingFactory(
 	// Optional с default undefined for backward-compat tests; production
 	// app.ts wires it. Когда unset, service.create skips gate (test mode).
 	complianceRepo?: TenantComplianceRepo,
+	// Sprint C+ Round 7 Senior P0 fix 2026-05-24 — 109-ФЗ ст. 22 passport-scan
+	// hard-gate. Optional default undefined for tests; production app.ts wires.
+	// Когда unset, service.checkIn skips gate (test mode only).
+	guestDocumentRepo?: GuestDocumentRepo,
 ) {
 	const repo = createBookingRepo(sql, clock)
 	const service = createBookingService(
@@ -40,6 +45,7 @@ export function createBookingFactory(
 		ratePlanService,
 		roomService,
 		complianceRepo,
+		guestDocumentRepo,
 	)
 	return { repo, service }
 }

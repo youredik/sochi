@@ -25,12 +25,14 @@ import { decimalToMicros } from '../../db/ydb-helpers.ts'
 import {
 	InvalidBookingAmendStateError,
 	NoInventoryError,
+	PassportScanRequiredError,
 	PropertyNotFoundError,
 	RatePlanNotFoundError,
 	RoomAssignmentConflictError,
 	RoomTypeNotFoundError,
 } from '../../errors/domain.ts'
 import { planAutoAssign } from './auto-assign.ts'
+import type { GuestDocumentRepo } from '../guest/guest-document.repo.ts'
 import type { PropertyService } from '../property/property.service.ts'
 import type { RateRepo } from '../rate/rate.repo.ts'
 import type { RatePlanService } from '../ratePlan/ratePlan.service.ts'
@@ -174,6 +176,14 @@ export function createBookingService(
 	// gate. Optional с default undefined для backward-compat tests. Production
 	// app.ts always wires it. Undefined → gate skipped (test mode only).
 	complianceRepo?: TenantComplianceRepo,
+	// Sprint C+ Round 7 Senior P0 fix 2026-05-24 — server-side mirror of
+	// booking-edit-sheet hard-gate. Throws `PassportScanRequiredError` (HTTP
+	// 428) для foreign-citizen check-in без active guestDocument. Per 109-ФЗ
+	// ст. 22 ч. 3 + ПП РФ № 9 — уведомление в МВД ОВМ в течение 1 рабочего
+	// дня → штраф 400-500k ₽ ст. 18.9 КоАП. Frontend gate ≠ enough; direct
+	// API POST bypass = legal liability. Optional → test mode skip; production
+	// app.ts always wires.
+	guestDocumentRepo?: GuestDocumentRepo,
 ) {
 	return {
 		getById: (tenantId: string, id: string) => repo.getById(tenantId, id),
@@ -268,13 +278,38 @@ export function createBookingService(
 			id: string,
 			input: BookingCheckInInput,
 			actorUserId: string,
-		) =>
-			repo.checkIn(
+		) => {
+			// Sprint C+ Round 7 Senior P0 fix 2026-05-24 — server-side mirror of
+			// booking-edit-sheet hard-gate. Foreign-citizen check-in without active
+			// guestDocument → 428 PassportScanRequiredError. Defence-in-depth: UI
+			// gate prevents button click, this prevents direct curl POST bypass.
+			//
+			// Per 109-ФЗ ст. 22 ч. 3 + ПП РФ № 9 от 15.01.2007: middle размещения
+			// обязано подать уведомление о прибытии в МВД ОВМ в течение 1 рабочего
+			// дня. Document scan = canonical prerequisite (migration_registration_
+			// enqueuer CDC handler reads guestDocument для XML archive). Штраф ст.
+			// 18.9 КоАП: 400-500 тыс. ₽ per violation (юр. лицо).
+			//
+			// Gate skipped когда guestDocumentRepo undefined (test mode only).
+			if (guestDocumentRepo) {
+				const current = await repo.getById(tenantId, id)
+				if (current && !isRussianCitizenship(current.guestSnapshot.citizenship)) {
+					const active = await guestDocumentRepo.findActiveForGuest(
+						tenantId,
+						current.primaryGuestId,
+					)
+					if (active === null) {
+						throw new PassportScanRequiredError(current.primaryGuestId)
+					}
+				}
+			}
+			return repo.checkIn(
 				tenantId,
 				id,
 				'assignedRoomId' in input ? { assignedRoomId: input.assignedRoomId ?? null } : {},
 				actorUserId,
-			),
+			)
+		},
 
 		checkOut: async (tenantId: string, id: string, actorUserId: string) =>
 			repo.checkOut(tenantId, id, actorUserId),

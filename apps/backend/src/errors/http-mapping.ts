@@ -50,4 +50,8 @@ export const HTTP_STATUS_MAP: Record<string, ContentfulStatusCode> = {
 	// 428 Precondition Required — server insists on completing missing
 	// precondition (реестровый номер) before honoring booking.create.
 	KSR_REGISTRY_NUMBER_MISSING: 428,
+	// 109-ФЗ ст. 22 ч. 3 + ПП РФ № 9 — passport scan required before check-in
+	// для foreign citizens (Sprint C+ Round 7 Senior P0 2026-05-24). Mirrors
+	// frontend booking-edit-sheet hard-gate. Штраф ст. 18.9 КоАП 400-500k ₽.
+	PASSPORT_SCAN_REQUIRED: 428,
 }

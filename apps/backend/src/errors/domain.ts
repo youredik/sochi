@@ -95,6 +95,41 @@ export class KsrRegistryNumberMissingError extends DomainError {
 	}
 }
 
+/**
+ * **2026-05-24** — server-side mirror of booking-edit-sheet hard-gate.
+ *
+ * Per 109-ФЗ ст. 22 ч. 3 (миграционный учёт иностранных граждан) + ПП РФ № 9
+ * от 15.01.2007 «о миграционном учёте»: middle размещения **обязано** подать
+ * уведомление о прибытии в МВД ОВМ **в течение 1 рабочего дня** для иностранных
+ * граждан. Document scan (passport_zagran / driver_license) — предусловие
+ * canonical CDC pipeline (`migration_registration_enqueuer` requires
+ * guestDocument row reference, M8.A.5.archive XMLфайл use scan'ed entities).
+ *
+ * Frontend hard-gate (booking-edit-sheet PassportScanSection 2026-05-24)
+ * disables Заезд CTA — server-side mirror prevents direct API bypass
+ * (curl POST /api/v1/bookings/:id/check-in без scan).
+ *
+ * Штраф ст. 18.9 КоАП: 400 000 – 500 000 ₽ per violation (юридическое лицо).
+ *
+ * HTTP 428 Precondition Required (canonical для «client должен сначала
+ * complete prerequisite»). Mirrors KsrRegistryNumberMissingError mapping.
+ */
+export class PassportScanRequiredError extends DomainError {
+	readonly code = 'PASSPORT_SCAN_REQUIRED'
+	readonly guestId: string
+	constructor(guestId: string) {
+		super(
+			`Scan document is required before check-in для foreign guest (guestId=${guestId}). ` +
+				'Per 109-ФЗ ст. 22 ч. 3 + ПП РФ № 9 от 15.01.2007 уведомление в МВД ОВМ ' +
+				'должно быть подано в течение 1 рабочего дня после прибытия. ' +
+				'Откройте booking → «Сканировать паспорт» до Заезда. ' +
+				'Штраф ст. 18.9 КоАП: 400-500 тыс. ₽.',
+		)
+		this.guestId = guestId
+		this.name = 'PassportScanRequiredError'
+	}
+}
+
 /** Parent booking missing or in wrong tenant. */
 export class BookingNotFoundError extends NotFoundError {
 	constructor(bookingId: string) {

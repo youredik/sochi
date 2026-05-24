@@ -136,6 +136,10 @@ const roomFactory = createRoomFactory(sql, propertyFactory.service, roomTypeFact
 const ratePlanFactory = createRatePlanFactory(sql, propertyFactory.service, roomTypeFactory.service)
 const rateFactory = createRateFactory(sql, ratePlanFactory.service)
 const availabilityFactory = createAvailabilityFactory(sql, roomTypeFactory.service)
+// guestFactory создаётся ДО bookingFactory — booking.service.checkIn (Sprint C+
+// Round 7 2026-05-24) wants guestDocumentRepo для 109-ФЗ ст. 22 hard-gate.
+// guestFactory deps = только sql, безопасно поднять выше.
+const guestFactory = createGuestFactory(sql)
 const bookingFactory = createBookingFactory(
 	sql,
 	rateFactory.repo,
@@ -151,6 +155,11 @@ const bookingFactory = createBookingFactory(
 	// PresentPresent перед всем остальным; throws KsrRegistryNumberMissingError
 	// → HTTP 428 для tenants без реестрового номера.
 	tenantComplianceFactory.repo,
+	// Sprint C+ Round 7 Senior P0 fix 2026-05-24 — 109-ФЗ ст. 22 hard-gate.
+	// booking.service.checkIn rejects foreign-citizen check-in без active
+	// guestDocument → throws PassportScanRequiredError → HTTP 428. Mirrors
+	// frontend booking-edit-sheet hard-gate против direct API bypass.
+	guestFactory.documentRepo,
 )
 // G9 (2026-05-16) — property-block (OOO/maintenance) domain. Depends on
 // booking.repo (block-over-booking overlap check) + roomService + property.
@@ -162,7 +171,6 @@ const propertyBlockFactory = createPropertyBlockFactory(
 )
 const activityFactory = createActivityFactory(sql)
 const notificationFactory = createNotificationFactory(sql, activityFactory.repo)
-const guestFactory = createGuestFactory(sql)
 const folioFactory = createFolioFactory(sql)
 // M9.widget.1 — public booking widget read surface (no auth, no tenant
 // middleware — slug-resolved tenant per request).

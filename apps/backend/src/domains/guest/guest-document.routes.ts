@@ -80,61 +80,127 @@ export interface GuestDocumentRoutesDeps {
  */
 export function createGuestDocumentRoutesInner(deps: GuestDocumentRoutesDeps) {
 	const { guestRepo, documentRepo } = deps
-	return new Hono<AppEnv>().post(
-		'/guests/:guestId/documents/from-scan',
-		requirePermission({ guest: ['update'] }),
-		zValidator('json', fromScanBodySchema),
-		async (c) => {
-			const guestId = c.req.param('guestId')
-			const tenantId = c.var.tenantId
-			const body = c.req.valid('json')
-			const operatorUserId = c.var.session?.userId ?? c.var.user?.id ?? 'unknown'
+	return (
+		new Hono<AppEnv>()
+			.post(
+				'/guests/:guestId/documents/from-scan',
+				requirePermission({ guest: ['update'] }),
+				zValidator('json', fromScanBodySchema),
+				async (c) => {
+					const guestId = c.req.param('guestId')
+					const tenantId = c.var.tenantId
+					const body = c.req.valid('json')
+					const operatorUserId = c.var.session?.userId ?? c.var.user?.id ?? 'unknown'
 
-			// Cross-tenant ownership — 404 если guest не в текущем тенант-контексте.
-			const guest = await guestRepo.getById(tenantId, guestId)
-			if (guest === null) {
-				return c.json(
-					{ error: { code: 'NOT_FOUND', message: 'Гость не найден в текущем тенант-контексте' } },
-					404,
-				)
-			}
+					// Cross-tenant ownership — 404 если guest не в текущем тенант-контексте.
+					const guest = await guestRepo.getById(tenantId, guestId)
+					if (guest === null) {
+						return c.json(
+							{
+								error: { code: 'NOT_FOUND', message: 'Гость не найден в текущем тенант-контексте' },
+							},
+							404,
+						)
+					}
 
-			const documentId = await documentRepo.createFromScan({
-				tenantId,
-				guestId,
-				identityMethod: body.identityMethod,
-				documentSeries: body.documentSeries ?? null,
-				documentNumber: body.documentNumber,
-				documentIssuedBy: body.documentIssuedBy ?? null,
-				documentIssuedDate: body.documentIssuedDate ?? null,
-				documentExpiryDate: body.documentExpiryDate ?? null,
-				citizenshipIso3: body.citizenshipIso3,
-				objectStoragePath: body.objectStoragePath ?? null,
-				objectMimeType: body.objectMimeType ?? null,
-				objectSizeBytes: body.objectSizeBytes ?? null,
-				ocrConfidenceHeuristic: body.ocrConfidenceHeuristic ?? null,
-				ocrSource: body.ocrSource,
-				photoConsentLogId: body.photoConsentLogId,
-				createdBy: operatorUserId,
-			})
+					const documentId = await documentRepo.createFromScan({
+						tenantId,
+						guestId,
+						identityMethod: body.identityMethod,
+						documentSeries: body.documentSeries ?? null,
+						documentNumber: body.documentNumber,
+						documentIssuedBy: body.documentIssuedBy ?? null,
+						documentIssuedDate: body.documentIssuedDate ?? null,
+						documentExpiryDate: body.documentExpiryDate ?? null,
+						citizenshipIso3: body.citizenshipIso3,
+						objectStoragePath: body.objectStoragePath ?? null,
+						objectMimeType: body.objectMimeType ?? null,
+						objectSizeBytes: body.objectSizeBytes ?? null,
+						ocrConfidenceHeuristic: body.ocrConfidenceHeuristic ?? null,
+						ocrSource: body.ocrSource,
+						photoConsentLogId: body.photoConsentLogId,
+						createdBy: operatorUserId,
+					})
 
-			c.var.logger.info(
-				{
-					event: 'guest_document.from_scan_created',
-					tenantId,
-					guestId,
-					documentId,
-					identityMethod: body.identityMethod,
-					photoConsentLogId: body.photoConsentLogId,
-					operatorUserId,
-					hasObjectStoragePath:
-						body.objectStoragePath !== null && body.objectStoragePath !== undefined,
+					c.var.logger.info(
+						{
+							event: 'guest_document.from_scan_created',
+							tenantId,
+							guestId,
+							documentId,
+							identityMethod: body.identityMethod,
+							photoConsentLogId: body.photoConsentLogId,
+							operatorUserId,
+							hasObjectStoragePath:
+								body.objectStoragePath !== null && body.objectStoragePath !== undefined,
+						},
+						'guestDocument INSERTed from scan — RTBF cascade now linkable',
+					)
+
+					return c.json({ data: { documentId } }, 201)
 				},
-				'guestDocument INSERTed from scan — RTBF cascade now linkable',
 			)
+			/**
+			 * **2026-05-24** — Active guest-document lookup endpoint.
+			 *
+			 * Powers booking-edit-sheet hard-gate Заезд CTA per canonical May 2026 PMS
+			 * UX (Stayntouch / Mews / Cloudbeds): check-in button is **disabled** when
+			 * foreign-citizen guest lacks scanned passport row (ПП-1912 от 27.11.2025
+			 * 24-hour МВД-учёт deadline + до 500k₽ КоАП — soft-warning = legal
+			 * exposure).
+			 *
+			 * Returns ONLY presence indicator + last-4 of documentNumber +
+			 * identityMethod badge. **No full PII** в response — operator UI doesn't
+			 * need it для gating decision, and 152-ФЗ ст.18 minimization canon forbids
+			 * over-fetch. Full document data flows via separate authenticated paths
+			 * (DSAR export, scan dialog confirm-form re-entry).
+			 *
+			 * RBAC: `guest:read` (lighter than `update` since this is read-only).
+			 *
+			 * Returns `{ data: null }` when no active document exists — каноничный
+			 * 200-with-null shape (НЕ 404, чтобы UI мог отличить «нет документа» от
+			 * «guest не существует» — последнее = 404 cross-tenant guard).
+			 */
+			.get(
+				'/guests/:guestId/documents/active',
+				requirePermission({ guest: ['read'] }),
+				async (c) => {
+					const guestId = c.req.param('guestId')
+					const tenantId = c.var.tenantId
 
-			return c.json({ data: { documentId } }, 201)
-		},
+					const guest = await guestRepo.getById(tenantId, guestId)
+					if (guest === null) {
+						return c.json(
+							{
+								error: { code: 'NOT_FOUND', message: 'Гость не найден в текущем тенант-контексте' },
+							},
+							404,
+						)
+					}
+
+					const row = await documentRepo.findActiveForGuest(tenantId, guestId)
+					if (row === null) {
+						return c.json({ data: null }, 200)
+					}
+
+					// 152-ФЗ ст.18 minimization — repo уже masked документ; handler
+					// никогда не видит full PII (defence-in-depth). scannedAt =
+					// photoConsentLog.acceptedAt per ПП РФ № 9 audit canon — 24-hour
+					// countdown стартует от оператор-clicked consent, NOT INSERT.
+					return c.json(
+						{
+							data: {
+								id: row.id,
+								identityMethod: row.identityMethod,
+								documentNumberMaskedTail: row.documentNumberMaskedTail,
+								citizenshipIso3: row.citizenshipIso3,
+								scannedAt: row.scannedAt.toISOString(),
+							},
+						},
+						200,
+					)
+				},
+			)
 	)
 }
 

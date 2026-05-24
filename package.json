@@ -77,7 +77,8 @@
 		"oxlint-tsgolint": "^0.22.1",
 		"sherif": "^1.11.1",
 		"size-limit": "^12.1.0",
-		"typescript": "^6.0.3"
+		"typescript": "^6.0.3",
+		"zod": "4.5.0-canary.20260504T180558"
 	},
 	"engines": {
 		"node": ">=24.0.0"

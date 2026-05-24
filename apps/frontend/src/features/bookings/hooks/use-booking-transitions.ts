@@ -45,8 +45,12 @@ type BookingShape = {
 	// G8 (2026-05-16) — assignedRoomId needed для unassigned-list filter и
 	// «Назначить номер» dialog. Server already serializes на every Booking row.
 	assignedRoomId?: string | null
+	// 2026-05-24 — primaryGuestId для passport-scan flow в BookingEditSheet
+	// (canonical pre-check-in scan trigger). Server already serializes (booking.repo.ts:278).
+	primaryGuestId?: string
 	// G8 — guestSnapshot нужен для UnassignedPanel list 152-ФЗ mask (per
-	// G4 canon). Server already serializes на every Booking row.
+	// G4 canon) + booking-edit-sheet passport-scan citizenship gating. Server
+	// already serializes на every Booking row.
 	guestSnapshot?: BookingGuestSnapshot
 	cancelReason?: string | null
 	cancelledAt?: string | null

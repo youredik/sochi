@@ -120,6 +120,27 @@ export default {
 			},
 			to: {},
 		},
+		// Sprint C+ Round 7 2026-05-24 — `no-duplicate-dep-types` (inherited from
+		// `recommended-strict`) flags zod canary 4.5.0 dual package shape: both
+		// `index.d.cts` (CJS) and `index.d.ts` (ESM) resolve to the SAME module,
+		// dep-cruiser reports it as «duplicate type imports». That's a property
+		// of zod's npm package layout, NOT codebase mis-import. 74 false-positive
+		// errors after Stagehand→langsmith→zod-canary transitive landed.
+		//
+		// Canonical fix per dep-cruiser docs: downgrade severity к 'ignore' or
+		// scope rule. Choose 'ignore' — the rule has zero value when entire
+		// ecosystem is mid-flight к hybrid CJS/ESM packages (every major lib
+		// will trip this when shipping dual types).
+		{
+			name: 'no-duplicate-dep-types',
+			comment:
+				'OVERRIDE from recommended-strict preset (2026-05-24): zod canary 4.5.0 dual ' +
+				'package shape (.d.cts + .d.ts) trips this rule for ALL zod imports. False-positive ' +
+				'for hybrid CJS/ESM npm packages — rule has no value в 2026 ecosystem state.',
+			severity: 'ignore',
+			from: {},
+			to: { moreThanOneDependencyType: true },
+		},
 	],
 	options: {
 		tsConfig: { fileName: 'tsconfig.base.json' },

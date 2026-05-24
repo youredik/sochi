@@ -392,9 +392,14 @@ describe('<ComplianceStep> — submit serialization', () => {
 				taxRegime: null,
 				annualRevenueEstimateMicroRub: null,
 				guestHouseFz127Registered: null,
-				// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity fields.
+				// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 operator identity.
 				legalAddress: null,
 				dpoEmail: null,
+				// Sprint C+ Round 6 half-measure fix (task #109, 2026-05-24): canonical
+				// DPO contact triplet per Роскомнадзор форма реестра (ст.22 ч.3 п.7.1).
+				dpoFullName: null,
+				dpoPhone: null,
+				dpoPostalAddress: null,
 			},
 			idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
 		})
