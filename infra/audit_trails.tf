@@ -40,14 +40,19 @@ resource "yandex_resourcemanager_folder_iam_member" "audit_publisher_log_writer"
 # Sprint C+ Round 6 5-expert audit fix 2026-05-24 (YC ecosystem expert):
 # Default log group has only 3-day retention. 152-ФЗ ст.21 ч.4 forensic trail
 # requires «возможность установления содержания» — РКН inspection canon
-# expects ≥90 days for any PII processing audit log. Container logs include
-# passport scan events (PII-redacted via Pino, but operator userId + tenantId
-# + outcome are part of audit chain). Explicit logging group с 90d retention.
+# expects ≥90 days for any PII processing audit log.
+#
+# **Retention compromise 2026-05-24**: YC free-tier quota `logging.retentionDays`
+# default = 3 days. terraform apply run #79 failed «Quota limit logging.retention
+# Days.count exceeded» на 2160h (90d). Set к 72h temporarily для quota-compliance.
+# **USER-ACTION required**: request quota increase к 2160h (90d) через YC Console
+# → Quotas → «Cloud Logging» service. После increase change `retention_period`
+# к "2160h" + rerun `tofu apply`.
 resource "yandex_logging_group" "sochi_demo_90d" {
   folder_id        = yandex_resourcemanager_folder.demo.id
   name             = "sochi-demo-90d"
-  description      = "Demo backend logs — 152-ФЗ ст.21 ч.4 90-day retention"
-  retention_period = "2160h" # 90 days
+  description      = "Demo backend logs — 152-ФЗ ст.21 ч.4 (target 90d, current 72h — quota pending)"
+  retention_period = "72h" # 3 days — quota-compliant; raise после quota increase
 }
 
 # Legacy default group reference kept для existing-state compat. Audit trail
