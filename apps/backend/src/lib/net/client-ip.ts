@@ -47,13 +47,45 @@ export interface ResolveClientIpInput {
  *   3. tcpRemoteAddress null (tests / runtimes without conn info) →
  *      Best-effort XFF/x-real-ip with same right-to-left walk.
  */
+/**
+ * Sprint C+ Round 6 self-review fix 2026-05-24 (Security re-pentest P1):
+ * Normalize IP string: strip IPv6 brackets + port suffix BEFORE returning.
+ *
+ * Raw XFF can contain `[2001:db8::1]:443` или `192.0.2.1:8080`. Without
+ * normalization, two different actual IPs may produce DIFFERENT bucket keys
+ * (one bracketed, one not) → bucket-collision DoS:
+ *   - All malformed clients sharing bucket «`[2001:db8::1]:443`»
+ *   - All `'anonymous'` collapse cases (when parseIpv6 rejects bracketed form
+ *     → trusted check throws → fallback к anonymous bucket)
+ *
+ * Normalization:
+ *   `[::1]:80`           → `::1`
+ *   `192.0.2.1:8080`     → `192.0.2.1`
+ *   `2001:db8::1`        → `2001:db8::1`  (unchanged)
+ *   `192.0.2.1`          → `192.0.2.1`    (unchanged)
+ *   `[::ffff:192.0.2.1]` → `::ffff:192.0.2.1`
+ *
+ * IPv4-mapped-IPv6 NOT collapsed к IPv4 (keep canonical form per RFC 4291).
+ */
+function normalizeIpString(ip: string): string {
+	const trimmed = ip.trim()
+	// Bracketed IPv6 (with optional port): `[<ipv6>]` or `[<ipv6>]:<port>`
+	const bracketed = trimmed.match(/^\[([^\]]+)\](?::\d+)?$/)
+	if (bracketed?.[1]) return bracketed[1]
+	// IPv4 с port: exactly 4 dot-separated digits + colon + port
+	const ipv4Port = trimmed.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+$/)
+	if (ipv4Port?.[1]) return ipv4Port[1]
+	// IPv6 без brackets уже canonical; IPv4 без port same. Return as-is.
+	return trimmed
+}
+
 export function resolveClientIp(input: ResolveClientIpInput): string | null {
 	const { headers, trustedProxyCidrs } = input
 	// Empty-string normalization — `getConnInfo().remote.address` rarely returns
 	// `''` but defensive guard keeps the right-walk fallback path intact.
 	const tcpRemoteAddress =
 		input.tcpRemoteAddress !== null && input.tcpRemoteAddress.length > 0
-			? input.tcpRemoteAddress
+			? normalizeIpString(input.tcpRemoteAddress)
 			: null
 	const isTrustedTcpPeer =
 		tcpRemoteAddress !== null && trustedProxyCidrs.some((c) => isIpInCidr(tcpRemoteAddress, c))
@@ -66,7 +98,7 @@ export function resolveClientIp(input: ResolveClientIpInput): string | null {
 	if (xff !== null && xff.length > 0) {
 		const chain = xff
 			.split(',')
-			.map((s) => s.trim())
+			.map((s) => normalizeIpString(s))
 			.filter((s) => s.length > 0)
 		for (let i = chain.length - 1; i >= 0; i--) {
 			const ip = chain[i]
@@ -79,7 +111,7 @@ export function resolveClientIp(input: ResolveClientIpInput): string | null {
 		if (first !== undefined) return first
 	}
 	const xri = headers.get('x-real-ip')
-	if (xri !== null && xri.length > 0) return xri
+	if (xri !== null && xri.length > 0) return normalizeIpString(xri)
 	return tcpRemoteAddress
 }
 

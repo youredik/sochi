@@ -279,3 +279,71 @@ describe('extractClientIpFromContext — Hono Context wrapper', () => {
 		expect(extractClientIpFromContext(ctx3, [])).toBe('203.0.113.1')
 	})
 })
+
+describe('IP string normalization — Round 6 self-review fix (bucket-collision DoS)', () => {
+	test('IPv6 brackets + port stripped: `[2001:db8::1]:443` → `2001:db8::1`', () => {
+		const ip = resolveClientIp({
+			headers: new Headers({ 'x-forwarded-for': '[2001:db8::1]:443' }),
+			tcpRemoteAddress: null,
+			trustedProxyCidrs: TRUSTED,
+		})
+		expect(ip).toBe('2001:db8::1')
+	})
+
+	test('IPv6 brackets без порта: `[::1]` → `::1`', () => {
+		const ip = resolveClientIp({
+			headers: new Headers({ 'x-forwarded-for': '[::1]' }),
+			tcpRemoteAddress: null,
+			trustedProxyCidrs: TRUSTED,
+		})
+		expect(ip).toBe('::1')
+	})
+
+	test('IPv4 + port stripped: `192.0.2.1:8080` → `192.0.2.1`', () => {
+		const ip = resolveClientIp({
+			headers: new Headers({ 'x-forwarded-for': '192.0.2.1:8080' }),
+			tcpRemoteAddress: null,
+			trustedProxyCidrs: TRUSTED,
+		})
+		expect(ip).toBe('192.0.2.1')
+	})
+
+	test('IPv6 без brackets unchanged: `2001:db8::1` → `2001:db8::1`', () => {
+		const ip = resolveClientIp({
+			headers: new Headers({ 'x-forwarded-for': '2001:db8::1' }),
+			tcpRemoteAddress: null,
+			trustedProxyCidrs: TRUSTED,
+		})
+		expect(ip).toBe('2001:db8::1')
+	})
+
+	test('TCP remote address normalized: `[::1]:1234` → `::1`', () => {
+		const ip = resolveClientIp({
+			headers: new Headers(),
+			tcpRemoteAddress: '[2001:db8::5]:8443',
+			trustedProxyCidrs: TRUSTED,
+		})
+		// 2001:db8::5 NOT в trusted CIDRs → returned directly
+		expect(ip).toBe('2001:db8::5')
+	})
+
+	test('regression: bracket-collapse bucket DoS would have given identical "[::1]:port" keys', () => {
+		// Pre-fix: extractClientIp returned bracketed form verbatim → bucket key
+		// = `[::1]:80`. Different real IPs sharing bracketed format produced
+		// SAME bucket key → DoS lockout. Post-fix: normalize strips brackets
+		// before bucket gen, so distinct real IPs → distinct keys.
+		const a = resolveClientIp({
+			headers: new Headers({ 'x-forwarded-for': '[2001:db8::1]:443' }),
+			tcpRemoteAddress: null,
+			trustedProxyCidrs: TRUSTED,
+		})
+		const b = resolveClientIp({
+			headers: new Headers({ 'x-forwarded-for': '[2001:db8::2]:443' }),
+			tcpRemoteAddress: null,
+			trustedProxyCidrs: TRUSTED,
+		})
+		expect(a).toBe('2001:db8::1')
+		expect(b).toBe('2001:db8::2')
+		expect(a).not.toBe(b) // bucket keys are NOT identical после fix
+	})
+})

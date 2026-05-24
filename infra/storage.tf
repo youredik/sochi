@@ -130,6 +130,13 @@ resource "yandex_kms_symmetric_key" "passport_scans_encryption" {
   description       = "KMS key для SSE на demo_passport_scans bucket (152-ФЗ ст.18 + 19 PII encryption at rest)"
   default_algorithm = "AES_256"
   rotation_period   = "2160h" # 90 дней rotation
+  # Sprint C+ Round 6 self-review fix 2026-05-24 (Terraform state verify P1):
+  # WITHOUT deletion_protection, accidental `terraform destroy` OR misconfigured
+  # tfstate diff = key destroyed → ALL passport scans encrypted under it become
+  # PERMANENTLY UNREADABLE (Object Lock COMPLIANCE keeps the objects but без
+  # KMS key они дешифровать невозможно). 152-ФЗ ст.21 ч.4 audit retention contract
+  # broken. Always-on for PII encryption keys per canon.
+  deletion_protection = true
 }
 
 # IAM: bucket SSE requires that the SA writing objects has kms.keys.encrypterDecrypter

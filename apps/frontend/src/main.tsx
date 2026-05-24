@@ -39,7 +39,23 @@ reportWebVitals()
 // us back under the 180 KB SPA-index budget (M9.widget.7 / A5.1). web-vitals
 // callbacks are async by design (PerformanceObserver-driven) — нет смысла
 // блокировать LCP-критический путь impportom.
-void import('./lib/rum/index.ts').then((m) => m.startRum())
+// Sprint C+ Round 6 self-review fix 2026-05-24 (Adversarial code review P0):
+// RUM ships UA + URL + IP-derived metrics к /api/rum/v1/web-vitals. Под 152-ФЗ
+// ст.6 + ст.18 это identifiable analytics → ОБЯЗАТЕЛЬНО за consent gate same
+// как Yandex Metrika. Без gate то же violation 150-300к ₽ КоАП ст.13.11 ч.3.
+void Promise.all([import('./lib/rum/index.ts'), import('./lib/cookie-consent.ts')]).then(
+	([rumMod, consent]) => {
+		let started = false
+		function maybeStartRum(): void {
+			if (started) return
+			if (!consent.isGranted('analytics')) return
+			started = true
+			rumMod.startRum()
+		}
+		maybeStartRum()
+		consent.onConsentChange(maybeStartRum)
+	},
+)
 
 // G11 (2026-05-16) — TanStack Query offline canon (R1+R2 ≥ 2026-05-16):
 //   - networkMode: 'offlineFirst' (createPersister default — fires request
