@@ -66,6 +66,14 @@ resource "yandex_serverless_container" "backend" {
 
   provision_policy {
     min_instances = var.container_provisioned
+    # Sprint C+ Round 6 5-expert audit fix 2026-05-24 (SRE P0-2):
+    # WITHOUT max_instances cap = YC default 100 instances × `concurrency=4`
+    # = 400 concurrent in-flight requests. Each Vision OCR ≈ 0.71 ₽, Postbox
+    # email ≈ 0.5 ₽, S3 PUT ≈ 0.01 ₽. Single attacker burst — unbounded ₽ burn.
+    # Even с current `vision.mock`, Postbox is LIVE (POSTBOX_ENABLED=true) →
+    # cost vector still hot. Cap к 3 для demo (single Сочи hotel handles 5-10
+    # check-ins/час max — 3 instances headroom).
+    max_instances = 3
   }
 
   image {

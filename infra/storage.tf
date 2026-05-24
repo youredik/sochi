@@ -59,10 +59,28 @@ resource "yandex_storage_bucket" "demo_passport_scans" {
   # PII bucket MUST never anonymous-readable.
   acl = "private"
 
-  # Versioning DISABLED — privacy canon. Once deleted, no recoverable copy.
-  # 152-ФЗ data minimization: previous versions = retention contract violation.
+  # Sprint C+ Round 6 5-expert audit fix 2026-05-24 (YC ecosystem #19):
+  # Object Lock COMPLIANCE mode + 90-day retention = legally-immutable objects.
+  # Without это, operator с storage.editor может overwrite / delete scans mid-
+  # retention-window — opens forensic-tampering vector (152-ФЗ ст.21 ч.4
+  # «возможность установления содержания» violated если scan tampered).
+  #
+  # Object Lock requires `versioning.enabled = true` (Yandex provider canon
+  # AWS-compat). Sets per-object retention enforced даже against root user —
+  # ONLY waits for retention_until_date наступает then lifecycle_rule deletes.
+  # Effect: passport scan immutable + cannot delete EARLIER than 90 days +
+  # auto-cleanup at 90 days.
   versioning {
-    enabled = false
+    enabled = true
+  }
+  object_lock_configuration {
+    object_lock_enabled = "Enabled"
+    rule {
+      default_retention {
+        mode = "COMPLIANCE"
+        days = 90
+      }
+    }
   }
 
   # Native YC bucket lifecycle: 90-day auto-delete без application cron.

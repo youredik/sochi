@@ -13,5 +13,11 @@ resource "yandex_ydb_database_serverless" "demo" {
   name        = "demo"
   description = "Demo deployment YDB Serverless — Track A (DEMO_DEPLOYMENT=true)"
 
-  deletion_protection = false
+  # Sprint C+ Round 6 5-expert audit fix 2026-05-24 (SRE P0-4):
+  # Single accidental `terraform destroy` OR misconfigured tfstate diff = entire
+  # database wipe. Audit data, consent log, guest documents, scrub log — all
+  # gone. 152-ФЗ ст.21 ч.4 audit retention contract = unrecoverable violation.
+  # YDB Serverless built-in PITR = 7 days (free), но this guards against the
+  # «human error / TF state drift» layer above PITR.
+  deletion_protection = true
 }

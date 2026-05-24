@@ -37,8 +37,22 @@ resource "yandex_resourcemanager_folder_iam_member" "audit_publisher_log_writer"
   member    = "serviceAccount:${yandex_iam_service_account.audit_trails_publisher.id}"
 }
 
-# Default log group в demo folder создаётся automatically YC при first container
-# log emit (revision deploy уже triggered это).
+# Sprint C+ Round 6 5-expert audit fix 2026-05-24 (YC ecosystem expert):
+# Default log group has only 3-day retention. 152-ФЗ ст.21 ч.4 forensic trail
+# requires «возможность установления содержания» — РКН inspection canon
+# expects ≥90 days for any PII processing audit log. Container logs include
+# passport scan events (PII-redacted via Pino, but operator userId + tenantId
+# + outcome are part of audit chain). Explicit logging group с 90d retention.
+resource "yandex_logging_group" "sochi_demo_90d" {
+  folder_id        = yandex_resourcemanager_folder.demo.id
+  name             = "sochi-demo-90d"
+  description      = "Demo backend logs — 152-ФЗ ст.21 ч.4 90-day retention"
+  retention_period = "2160h" # 90 days
+}
+
+# Legacy default group reference kept для existing-state compat. Audit trail
+# теперь uses explicit 90d group. Future: migrate container's log_options
+# к new group via terraform apply (container.tf needs log_options block).
 data "yandex_logging_group" "default" {
   folder_id = yandex_resourcemanager_folder.demo.id
   name      = "default"
@@ -52,7 +66,8 @@ resource "yandex_audit_trails_trail" "demo_trail" {
   service_account_id = yandex_iam_service_account.audit_trails_publisher.id
 
   logging_destination {
-    log_group_id = data.yandex_logging_group.default.id
+    # Sprint C+ Round 6 fix: 90-day retention group (ст.21 ч.4 canon).
+    log_group_id = yandex_logging_group.sochi_demo_90d.id
   }
 
   filtering_policy {
