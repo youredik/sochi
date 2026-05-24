@@ -73,13 +73,13 @@ resource "yandex_serverless_container" "backend" {
   provision_policy {
     min_instances = var.container_provisioned
     # Sprint C+ Round 6 5-expert audit fix 2026-05-24 (SRE P0-2):
-    # WITHOUT max_instances cap = YC default 100 instances × `concurrency=4`
-    # = 400 concurrent in-flight requests. Each Vision OCR ≈ 0.71 ₽, Postbox
-    # email ≈ 0.5 ₽, S3 PUT ≈ 0.01 ₽. Single attacker burst — unbounded ₽ burn.
-    # Even с current `vision.mock`, Postbox is LIVE (POSTBOX_ENABLED=true) →
-    # cost vector still hot. Cap к 3 для demo (single Сочи hotel handles 5-10
-    # check-ins/час max — 3 instances headroom).
-    max_instances = 3
+    # Yandex provider v0.204 НЕ exposes `max_instances` (refuted 2026-05-24
+    # apply attempt — «Unsupported argument»). Max instances controlled
+    # на folder-quota level via:
+    #   yc quotas set --service=serverless-containers \
+    #     --metric=concurrent-instances --limit=3
+    # OR через YC Console → Quotas. Documented as user-action в handover
+    # 2026-05-24 (terraform не supports quota CRUD).
   }
 
   image {
