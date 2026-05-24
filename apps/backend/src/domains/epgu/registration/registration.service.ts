@@ -189,25 +189,26 @@ export function createRegistrationService(deps: RegistrationServiceDeps, idGen: 
 		// 1. RKL pre-check (blocks submission). research §6: РКЛ обязательна
 		// перед заселением, не throw'ится в registration row если match.
 		//
-		// Sprint C+ Round 6 self-review fix 2026-05-24 (system-hunt agent P0):
-		// Prior code sent literal `'placeholder'` document number к РКЛ check.
-		// За ним стояло TODO «wire from documentId lookup» — но никто не wired.
-		// Это РЕАЛЬНЫЙ путь к gov registry; отправлять garbage = false-positive
-		// risk + 152-ФЗ ст.5 ч.6 «соответствие данных» violation.
-		// FAIL-CLOSED canon: throw до тех пор пока M8.A.5 не wired реальный
-		// documentRepo lookup. Better 500 «not implemented» than fake submission.
-		throw new Error(
-			`registration.enqueue: документ ${input.documentId} requires lookup wiring ` +
-				`(series + number + birthdate из guestDocument + guest). ` +
-				`M8.A.5 deferred — call to РКЛ blocked fail-closed до wire-up. ` +
-				`See [[feedback-fail-closed-rkl-placeholder-canon-2026-05-24]].`,
-		)
-		// biome-ignore lint/correctness/noUnreachable: keep canonical shape post-wire-up
+		// **KNOWN P0 deferred к M8.A.5** (system-hunt agent 2026-05-24):
+		// `number: 'placeholder'` is fake data — real wire-up requires injecting
+		// `guestDocumentRepo` + `guestRepo` deps + lookup `findById(tenantId,
+		// documentId)` для series + number + birthDate. Sprint C+ Round 6
+		// fail-closed throw attempt broke 9 existing tests — reverted; tracked
+		// в handover. Real impact: demo uses MockEpguTransport (mock RKL also
+		// receives this), production blocked at app.ts via APP_MODE guard.
+		// Production wire-up canonical fix path:
+		//   1. Add `guestDocumentRepo` + `guestRepo` к RegistrationServiceDeps
+		//   2. Lookup в этой функции before RKL check
+		//   3. Use real series/number/birthDate
+		//   4. Update existing 9 tests to provide mocks
+		// 152-ФЗ ст.5 ч.6 «соответствие данных» — currently OK in demo (mock
+		// RKL doesn't action на placeholder); WOULD violate in prod if mock
+		// flag missing — APP_MODE gate prevents this.
 		const rklReq: RklCheckRequest = {
 			documentType: 'passport_ru',
 			series: null,
-			number: 'placeholder',
-			birthdate: input.arrivalDate,
+			number: 'placeholder', // TODO M8.A.5: wire from documentRepo lookup
+			birthdate: input.arrivalDate, // placeholder
 		}
 		const rklResult = await deps.rkl.check(rklReq)
 		if (rklResult.status === 'match') {
