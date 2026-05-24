@@ -526,7 +526,13 @@ tasks:
             --exclude "*"
             --include "*.png" --include "*.svg" --include "*.ico"
             --cache-control "public, max-age=86400"
-          # Pass 3: index.html + service worker + manifest — no-cache
+          # Pass 3: index.html + service worker + manifest + FOUC script — no-cache
+          # Sprint C+ Round 6 2026-05-24 — `theme-init.js` extracted из inline
+          # FOUC script (strict CSP). Public/ files copy to dist/ root via Vite —
+          # needs explicit include here (Pass 1 hashed-only, Pass 2 PWA-images).
+          # Без `theme-init.js` API Gateway error_object fallback serves index.html
+          # → MIME mismatch → browser blocks (CSP enforces script-src 'self') →
+          # FOUC dark-mode flash on every reload.
           - aws --endpoint-url=https://storage.yandexcloud.net s3 sync
             apps/frontend/dist/ s3://${S3_BUCKET}/
             --exclude "*"
@@ -535,6 +541,7 @@ tasks:
             --include "workbox-*.js"
             --include "manifest.webmanifest"
             --include "registerSW.js"
+            --include "theme-init.js"
             --cache-control "no-cache, must-revalidate"
 
   # ---------------------------------------------------------------------------
