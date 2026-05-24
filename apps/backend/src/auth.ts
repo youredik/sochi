@@ -108,7 +108,7 @@ export const auth = betterAuth({
 		 */
 		before: createAuthMiddleware(async (ctx) => {
 			const clientIp = ctx.request ? extractClientIp(ctx.request.headers) : undefined
-			// Round 7 v3 2026-05-25 — canonical Yandex SWS bypass token.
+			// Round 7 v3 2026-05-25 — canonical Yandex SWS bypass token (deploy-trigger f917ee3+).
 			// SUPERSEDES v2 SA-JWT (5-place rotation burden + Yandex no IAM
 			// introspect). v3 = shared 32-byte token, timing-safe compare in
 			// captcha-gate. Two-layer: SWS edge allow-rule (sws.tf) +
