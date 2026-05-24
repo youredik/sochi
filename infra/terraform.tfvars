@@ -38,3 +38,7 @@ postbox_dkim_public_key        = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqm
 # с префиксом `2320` lookupable). С IDs — live `suggestions.dadata.ru`.
 dadata_lockbox_secret_id  = "e6q3ug4k0m9eobgstvv2" # sepshn-dadata-api-key в infra folder
 dadata_lockbox_version_id = "e6q96288msve5pnu3rvo" # initial version с DADATA_API_KEY
+
+# Round 7 2026-05-24 — captcha-gate smoke-bypass (auto-managed, do not edit values)
+smoke_bypass_lockbox_secret_id  = "e6qdntjv7btrfpscba6e"
+smoke_bypass_lockbox_version_id = "e6qsd0ff7cnnrgfr4b6a"
