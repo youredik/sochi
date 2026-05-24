@@ -103,59 +103,21 @@ resource "yandex_sws_advanced_rate_limiter_profile" "demo" {
 }
 
 # -----------------------------------------------------------------------------
-# WAF profile — OWASP Core Rule Set 4.0.0
+# WAF profile — DEFERRED (Phase 2 — Round 7 v3 follow-up commit)
 # -----------------------------------------------------------------------------
-# CANON soak 2026-05 (yandex.cloud/docs/smartwebsecurity/operations/waf-profile):
-#   First 14 days: is_blocking=false → LOG_ONLY → metrics reveal false positive
-#   rate без user-facing impact. После audit logs clean, flip к is_blocking=true.
+# Initial attempt failed Run #95 с API error «waf profile must have at least
+# one rule set» despite passing core_rule_set + dynamic rule blocks matching
+# terraform-yc-modules pattern. Schema mismatch needs deeper research.
 #
-# paranoia_level=1 = baseline (catches obvious SQLi/XSS/LFI/RCE). Levels 2-4
-# tighter но higher FP — adopt incrementally после soak.
-# inbound_anomaly_score=25 = threshold (sum of rule weights triggering block).
-data "yandex_sws_waf_rule_set_descriptor" "owasp_crs" {
-  name    = "OWASP Core Ruleset"
-  version = "4.0.0"
-}
-
-resource "yandex_sws_waf_profile" "demo" {
-  folder_id   = yandex_resourcemanager_folder.demo.id
-  name        = "sepshn-demo-waf"
-  description = "OWASP CRS 4.0.0 paranoia=1 — 14-day LOG_ONLY soak, then flip is_blocking=true"
-
-  core_rule_set {
-    inbound_anomaly_score = 25
-    paranoia_level        = 1
-    rule_set {
-      name    = "OWASP Core Ruleset"
-      version = "4.0.0"
-    }
-  }
-
-  analyze_request_body {
-    is_enabled        = true
-    size_limit        = 8
-    size_limit_action = "IGNORE"
-  }
-
-  # All rules в LOG_ONLY mode первые 14 дней (is_blocking=false).
-  # После soak flip к true один-line change в этом resource.
-  dynamic "rule" {
-    for_each = data.yandex_sws_waf_rule_set_descriptor.owasp_crs.rules
-    content {
-      rule_id     = rule.value.id
-      is_enabled  = true
-      is_blocking = false # 14-day LOG_ONLY soak — flip after FP review
-    }
-  }
-
-  labels = {
-    managed_by  = "opentofu"
-    environment = "demo"
-  }
-}
+# Phase 1 ships без WAF: Security Profile + ARL + bypass rule + Smart Protection.
+# Provides 80% of value (DDoS L7 + bot ML + edge throttle). WAF (OWASP CRS
+# blocking) добавится в follow-up commit после schema clarification.
+#
+# Plan: empirical sandbox WAF resource в isolated test folder → confirm schema
+# → copy к sws.tf → ship Phase 2. См. [[feedback_round_7_v3_sws_canon]].
 
 # -----------------------------------------------------------------------------
-# Security profile — main edge gate, attaches ARL + WAF + 3 rules
+# Security profile — main edge gate, attaches ARL + 3 rules
 # -----------------------------------------------------------------------------
 # Default ALLOW = demo публичный (marketing landing + signup form). Никогда
 # default-block: Smart Protection rule scoresuspicious traffic + redirects к
@@ -223,11 +185,8 @@ resource "yandex_sws_security_profile" "demo" {
     }
   }
 
-  # WAF attached as a rule (canonical per terraform-yc-modules pattern).
-  # Note: рассматриваемая waf rule structure provider 0.204+ — добавим
-  # после verifying schema на следующем apply. Сейчас WAF profile создан standalone;
-  # API Gateway integration через securityProfileId pulls весь stack.
-  # TODO Phase 2: attach WAF к security profile через security_rule { waf {} }.
+  # WAF attached as a rule — DEFERRED Phase 2 commit (schema fix pending).
+  # См. WAF block comment выше.
 
   labels = {
     managed_by  = "opentofu"
@@ -248,7 +207,4 @@ output "sws_arl_profile_id" {
   value       = yandex_sws_advanced_rate_limiter_profile.demo.id
 }
 
-output "sws_waf_profile_id" {
-  description = "WAF Profile ID (LOG_ONLY soak — flip is_blocking=true после 14 дней)."
-  value       = yandex_sws_waf_profile.demo.id
-}
+# WAF profile output deferred (см. WAF block comment).
