@@ -233,7 +233,9 @@ describe('<ComplianceStep> — branches', () => {
 			error: null,
 		} as unknown as ReturnType<typeof useCompliance>)
 		render(<ComplianceStep />)
-		expect((screen.getByLabelText(/Идентификатор КСР/) as HTMLInputElement).value).toBe('KSR-X-42')
+		expect((screen.getByLabelText(/Идентификатор КСР/) as HTMLInputElement).value).toBe(
+			'С782031059672',
+		)
 		expect((screen.getByLabelText(/Годовая выручка/) as HTMLInputElement).value).toBe('5000000')
 	})
 })
