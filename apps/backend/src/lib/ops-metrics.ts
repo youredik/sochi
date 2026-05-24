@@ -156,9 +156,19 @@ const OPS_METRICS_DROP_WARN_THRESHOLD = 100
  * Self-review H7 fix: if buffer crosses drop threshold (capacity full + N
  * silent drops), emit warning log so operator can detect sustained load.
  */
+/**
+ * Sprint C+ Round 5 verification (2026-05-24, YC infra expert audit):
+ * empirically verified per yandex.cloud Vision pricing (aistudio.yandex.ru/docs/ru/vision/pricing.html):
+ *   - Template docs (passport, driver-license-*, vehicle-registration-*): 0.71 ₽
+ *   - Text models (page, page-column-sort, license-plates): 0.1321 ₽ ≈ 13 копеек
+ *   - Table model: 1.22 ₽; Handwritten: 1.52 ₽
+ *
+ * Round 4 hardcoded flat 71 для всех — overstated `page` model (which is used for
+ * загранпаспорт MRZ recognition) by 5.4×. Corrected к per-model lookup.
+ */
 const PASSPORT_SCAN_COST_KOPECKS_BY_MODEL: Readonly<Record<string, number>> = {
 	passport: 71,
-	page: 71,
+	page: 13, // ~13.21 копеек, rounded к int для metric (audit doesn't need sub-копейка precision)
 	'driver-license-front': 71,
 	'driver-license-back': 71,
 }

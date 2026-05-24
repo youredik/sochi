@@ -182,10 +182,14 @@ describe('emitPassportScanMetric — convenience helper', () => {
 		])
 	})
 
-	test('[P5] passportScanCostKopecks — model-aware lookup canonical', () => {
-		// Yandex Vision pricing 2026-Q2: 0.71 ₽ per call для passport flow models
+	test('[P5] passportScanCostKopecks — model-aware lookup canonical (2026-Q2 pricing)', () => {
+		// Yandex Vision pricing per aistudio.yandex.ru/docs/ru/vision/pricing.html:
+		//   Template docs (passport, driver-license-*): 0.71 ₽ = 71 копеек
+		//   Text models (page, page-column-sort): 0.1321 ₽ ≈ 13 копеек
+		// Sprint C+ Round 5 verification 2026-05-24: page corrected от 71 (Round 4 flat
+		// assumption — overstated 5.4×) к 13 копеек per YC infra expert audit.
 		expect(passportScanCostKopecks('passport')).toBe(71)
-		expect(passportScanCostKopecks('page')).toBe(71)
+		expect(passportScanCostKopecks('page')).toBe(13)
 		expect(passportScanCostKopecks('driver-license-front')).toBe(71)
 		expect(passportScanCostKopecks('driver-license-back')).toBe(71)
 	})

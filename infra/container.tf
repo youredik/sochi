@@ -88,16 +88,22 @@ resource "yandex_serverless_container" "backend" {
       # SDK polls 169.254.169.254 при container start.
       YDB_METADATA_CREDENTIALS = "1"
       PAYMENT_PROVIDER         = "stub"
-      VISION_PROVIDER          = "yandex"
+      # Sprint C+ Round 5 5-expert audit 2026-05-24: REVERTED yandex → mock
+      # после legal/security findings: demo subdomain без cost cap + без demo-cron
+      # passport-table cleanup = ст.21 ч.4 violation + cost-burn attack vector.
+      # Re-flip только после safeguards landed:
+      #   1. disable signup на demo OR YC Billing budget alert + Vision quota
+      #   2. demo refresh cron deletes photoConsentLog/passportOcrAudit/guestDocument/scrubLog
+      #   3. pre-form banner «demo, не загружайте реальные паспорта»
+      #   4. Pino redact paths включают YC_VISION_API_KEY env name
+      #   5. audit_trails data_events on passport-scans bucket
+      VISION_PROVIDER = "mock"
       # Phase 2 2026-05-22: Postbox active для dual-write (DemoInbox capture +
       # real email через Postbox). Backend `createEmailAdapter` factory routes
       # via DEMO_DEPLOYMENT=true → DemoInboxAdapter(downstream=PostboxAdapter).
-      POSTBOX_ENABLED  = "true"
-      POSTBOX_ENDPOINT = "https://postbox.cloud.yandex.net"
-      # Sprint C+ Round 5 (2026-05-24) — `vision.mock` removed (flipped к real Yandex Vision).
-      # Mock-permitted: email demo-inbox (capture-only с RFC 2606 shield) + sms demo-inbox
-      # + payment.stub (ЮKassa not yet wired). Vision uses real `vision.yandex` adapter.
-      APP_MODE_PERMITTED_MOCK_ADAPTERS = "email.demo-inbox,sms.demo-inbox,payment.stub"
+      POSTBOX_ENABLED                  = "true"
+      POSTBOX_ENDPOINT                 = "https://postbox.cloud.yandex.net"
+      APP_MODE_PERMITTED_MOCK_ADAPTERS = "email.demo-inbox,sms.demo-inbox,payment.stub,vision.mock"
 
       # S3 non-secret: endpoint + region + bucket name (canon — secrets via Lockbox)
       S3_ENDPOINT = "https://storage.yandexcloud.net"
@@ -106,14 +112,11 @@ resource "yandex_serverless_container" "backend" {
       # Sprint B 2026-05-22 — separate bucket для passport scans с 90-day
       # lifecycle policy + versioning OFF (152-ФЗ PII isolation canon).
       S3_BUCKET_PASSPORT_SCANS = yandex_storage_bucket.demo_passport_scans.bucket
-      # Passport photo storage режим. Sprint C+ Round 5 (2026-05-24): FLIPPED
-      # mock → yandex по user explicit approval. Real S3 PUT в demo_passport_scans
-      # bucket (lifecycle 90d auto-delete + private ACL via storage.tf).
-      # Reverse-order vision flow (Senior P0-2) eliminates orphan-PII race —
-      # if S3 PUT fails, audit row stays с inputObjectKey=null, no orphan possible.
-      # Consent text (consent-152fz-modal.tsx section 3) accurately describes
-      # «загружается в объектное хранилище в РФ» (152-ФЗ ст.18 ч.5 РФ localization).
-      PASSPORT_PHOTO_STORAGE = "yandex"
+      # Sprint C+ Round 5 5-expert audit 2026-05-24: REVERTED yandex → mock
+      # paired с VISION_PROVIDER revert (см. выше). Same gating safeguards apply
+      # before re-flip. Bucket + creds остаются provisioned via Terraform —
+      # одна строка env-flip когда safeguards landed.
+      PASSPORT_PHOTO_STORAGE = "mock"
 
       # Email — Phase 2 dual-write: DemoInboxAdapter captures + PostboxAdapter
       # sends real email. From address must match Postbox identity (sepshn.ru).
