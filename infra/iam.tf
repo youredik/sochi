@@ -69,3 +69,24 @@ resource "yandex_storage_bucket_iam_binding" "frontend_runtime_editor" {
     "serviceAccount:${yandex_iam_service_account.sochi_backend_runtime.id}",
   ]
 }
+
+# Sprint C+ Round 5 (2026-05-24): Yandex Vision OCR access для passport scan flow.
+# `ai.vision.user` is the least-privilege role for calling recognizePassport / recognizeText
+# endpoints. Granted to backend runtime SA at demo folder scope (Vision API resources
+# не attached к specific resource — folder-level grant is canonical YC pattern для AI
+# services). Quota counted к folder; cost ~71 копеек/passport per Yandex AI Studio 2026-Q2.
+resource "yandex_resourcemanager_folder_iam_member" "runtime_vision_user" {
+  folder_id = yandex_resourcemanager_folder.demo.id
+  role      = "ai.vision.user"
+  member    = "serviceAccount:${yandex_iam_service_account.sochi_backend_runtime.id}"
+}
+
+# Static API key для Yandex Vision OCR. Vision API accepts API-key auth (in
+# `Authorization: Api-Key <value>` header — see vision adapter в backend).
+# Key generated server-side, value sensitive — proxied через Lockbox в lockbox.tf
+# для container injection. Rotation: terraform recreate by changing description
+# (key_id changes → new value → new Lockbox version).
+resource "yandex_iam_service_account_api_key" "backend_vision" {
+  service_account_id = yandex_iam_service_account.sochi_backend_runtime.id
+  description        = "Vision OCR API key для passport-scan (sochi-backend-runtime, Sprint C+ 2026-05-24)"
+}

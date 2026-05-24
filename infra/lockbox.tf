@@ -99,7 +99,7 @@ resource "random_password" "better_auth_secret" {
 # - version_id known at plan time → no chicken-and-egg
 resource "yandex_lockbox_secret_version_hashed" "backend" {
   secret_id   = yandex_lockbox_secret.backend.id
-  description = "v2 — BETTER_AUTH_SECRET + S3 creds + Postbox AWS-style creds (sender SA)"
+  description = "v3 — BETTER_AUTH_SECRET + S3 + Postbox + Vision OCR creds (Sprint C+ Round 5)"
 
   # BETTER_AUTH_SECRET — magic-link signing
   key_1        = "BETTER_AUTH_SECRET"
@@ -122,4 +122,15 @@ resource "yandex_lockbox_secret_version_hashed" "backend" {
 
   key_5        = "POSTBOX_SECRET_ACCESS_KEY"
   text_value_5 = yandex_iam_service_account_static_access_key.runtime_postbox_key.secret_key
+
+  # Yandex Vision OCR creds (Sprint C+ Round 5 flip 2026-05-24).
+  # API key generated server-side via yandex_iam_service_account_api_key
+  # (iam.tf — runtime SA gets ai.vision.user role). Folder ID = demo folder
+  # where Vision API quota is counted. Cost: ~71 копеек per passport scan
+  # (Yandex AI Studio 2026-Q2 pricing).
+  key_6        = "YC_VISION_API_KEY"
+  text_value_6 = yandex_iam_service_account_api_key.backend_vision.secret_key
+
+  key_7        = "YC_VISION_FOLDER_ID"
+  text_value_7 = yandex_resourcemanager_folder.demo.id
 }

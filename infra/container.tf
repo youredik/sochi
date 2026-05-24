@@ -88,13 +88,16 @@ resource "yandex_serverless_container" "backend" {
       # SDK polls 169.254.169.254 при container start.
       YDB_METADATA_CREDENTIALS = "1"
       PAYMENT_PROVIDER         = "stub"
-      VISION_PROVIDER          = "mock"
+      VISION_PROVIDER          = "yandex"
       # Phase 2 2026-05-22: Postbox active для dual-write (DemoInbox capture +
       # real email через Postbox). Backend `createEmailAdapter` factory routes
       # via DEMO_DEPLOYMENT=true → DemoInboxAdapter(downstream=PostboxAdapter).
-      POSTBOX_ENABLED                  = "true"
-      POSTBOX_ENDPOINT                 = "https://postbox.cloud.yandex.net"
-      APP_MODE_PERMITTED_MOCK_ADAPTERS = "email.demo-inbox,sms.demo-inbox,payment.stub,vision.mock"
+      POSTBOX_ENABLED  = "true"
+      POSTBOX_ENDPOINT = "https://postbox.cloud.yandex.net"
+      # Sprint C+ Round 5 (2026-05-24) — `vision.mock` removed (flipped к real Yandex Vision).
+      # Mock-permitted: email demo-inbox (capture-only с RFC 2606 shield) + sms demo-inbox
+      # + payment.stub (ЮKassa not yet wired). Vision uses real `vision.yandex` adapter.
+      APP_MODE_PERMITTED_MOCK_ADAPTERS = "email.demo-inbox,sms.demo-inbox,payment.stub"
 
       # S3 non-secret: endpoint + region + bucket name (canon — secrets via Lockbox)
       S3_ENDPOINT = "https://storage.yandexcloud.net"
@@ -103,21 +106,14 @@ resource "yandex_serverless_container" "backend" {
       # Sprint B 2026-05-22 — separate bucket для passport scans с 90-day
       # lifecycle policy + versioning OFF (152-ФЗ PII isolation canon).
       S3_BUCKET_PASSPORT_SCANS = yandex_storage_bucket.demo_passport_scans.bucket
-      # Passport photo storage режим. Demo = mock (no real upload — saves quota).
-      # Production swap = "yandex" → real PUT в demo_passport_scans bucket.
-      #
-      # **Sprint C+ Senior P1-2 audit 2026-05-23d (deferred flip)**: legal-expert
-      # confirmed: mock storage + consent text claiming «загружается в Yandex Object
-      # Storage» = misrepresentation under 152-ФЗ ст.10 ч.2. Two fixes pending:
-      #   1. Flip к "yandex" — real S3 PUT (Terraform-provisioned bucket ready);
-      #      requires user-approved production infra change.
-      #   2. Revised consent text — applied 2026-05-23d (see consent-152fz-modal.tsx
-      #      buildConsentText section 3): qualified phrasing «загружается в
-      #      объектное хранилище в РФ» — no longer asserts «Yandex Object Storage»
-      #      brand specifically, accurate for both mock + yandex states.
-      # Bucket + creds wired (S3_BUCKET_PASSPORT_SCANS + Lockbox creds), ready
-      # for flip when user authorizes prod infra change.
-      PASSPORT_PHOTO_STORAGE = "mock"
+      # Passport photo storage режим. Sprint C+ Round 5 (2026-05-24): FLIPPED
+      # mock → yandex по user explicit approval. Real S3 PUT в demo_passport_scans
+      # bucket (lifecycle 90d auto-delete + private ACL via storage.tf).
+      # Reverse-order vision flow (Senior P0-2) eliminates orphan-PII race —
+      # if S3 PUT fails, audit row stays с inputObjectKey=null, no orphan possible.
+      # Consent text (consent-152fz-modal.tsx section 3) accurately describes
+      # «загружается в объектное хранилище в РФ» (152-ФЗ ст.18 ч.5 РФ localization).
+      PASSPORT_PHOTO_STORAGE = "yandex"
 
       # Email — Phase 2 dual-write: DemoInboxAdapter captures + PostboxAdapter
       # sends real email. From address must match Postbox identity (sepshn.ru).
@@ -151,6 +147,22 @@ resource "yandex_serverless_container" "backend" {
     version_id           = yandex_lockbox_secret_version_hashed.backend.id
     key                  = "S3_SECRET_ACCESS_KEY"
     environment_variable = "S3_SECRET_ACCESS_KEY"
+  }
+
+  # Sprint C+ Round 5 (2026-05-24) — Yandex Vision OCR creds: API key + folder ID.
+  # Backend env.ts cross-field invariant: VISION_PROVIDER=yandex requires both.
+  secrets {
+    id                   = yandex_lockbox_secret.backend.id
+    version_id           = yandex_lockbox_secret_version_hashed.backend.id
+    key                  = "YC_VISION_API_KEY"
+    environment_variable = "YC_VISION_API_KEY"
+  }
+
+  secrets {
+    id                   = yandex_lockbox_secret.backend.id
+    version_id           = yandex_lockbox_secret_version_hashed.backend.id
+    key                  = "YC_VISION_FOLDER_ID"
+    environment_variable = "YC_VISION_FOLDER_ID"
   }
 
   # SmartCaptcha server-key — bootstrap'нут в отдельный Lockbox secret
