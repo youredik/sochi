@@ -68,28 +68,53 @@ locals {
 # -----------------------------------------------------------------------------
 # ARL — Advanced Rate Limiter (edge rate-limiting, free)
 # -----------------------------------------------------------------------------
-# Per-IP static quota на magic-link path: 5 запросов / 10 минут / IP.
-# Mirror existing app-layer auth-signup-rate-limit.ts (still kept as defense-
-# in-depth — app catches single-instance bursts ARL не видит).
-# Deferred WAF: dry_run=true для всех rules первые 14 дней (Yandex own canon).
+# CANON 2026-05-25 (hardened после Run #97 prod incident — initial limit
+# 5/10min/IP throttled real users from dev IP HTTP 429):
+#
+# 1. `dry_run = true` — first 14 days log-only, no DENY actions reach real
+#    users. Mirror canon WAF soak pattern (see WAF deferred block above).
+#    После audit logs clean → flip к dry_run=false.
+#
+# 2. Header-conditional bypass: ARL rule applies ONLY когда X-Bypass-Token
+#    отсутствует или mismatch. Trusted callers (CI smoke + AI agent) skip
+#    edge throttle entirely. Defense-in-depth с backend timing-safe check.
+#
+# 3. Limit raised 5 → 100 per 10min (still catches bot floods, much more
+#    forgiving для legit traffic + dev/CI iteration).
+#
+# App-layer auth-signup-rate-limit.ts retained as defense-in-depth (app
+# catches single-instance bursts ARL не видит, per [[feedback_token_bucket_
+# upstream_canon_2026_05_24]]).
 resource "yandex_sws_advanced_rate_limiter_profile" "demo" {
   folder_id   = yandex_resourcemanager_folder.demo.id
   name        = "sepshn-demo-arl"
-  description = "Edge rate-limiter для demo.sepshn.ru — magic-link IP throttle (5/10min)"
+  description = "Edge rate-limiter — magic-link 100/10min/IP (dry_run 14-day soak) + X-Bypass-Token exempt"
 
   advanced_rate_limiter_rule {
     name        = "magic-link-ip-throttle"
-    description = "5 magic-link calls per 10 minutes per source IP"
+    description = "100 magic-link calls / 10 minutes / source IP — dry_run soak first 14 days, X-Bypass-Token exempt"
     priority    = 100
-    dry_run     = false # canonical limit; loose enough not to break legit users
+    dry_run     = true # canonical soak — flip к false после 14-day audit
     static_quota {
       action = "DENY"
-      limit  = 5
+      limit  = 100
       period = 600
       condition {
         request_uri {
           path {
             exact_match = "/api/auth/sign-in/magic-link"
+          }
+        }
+        # Header-conditional exemption: rule applies ONLY когда X-Bypass-Token
+        # absent или mismatch. Trusted callers с valid token skip ARL entirely.
+        # `exact_not_match` evaluates true когда header absent OR value differs.
+        dynamic "headers" {
+          for_each = local.sws_bypass_token != "" ? [1] : []
+          content {
+            name = "X-Bypass-Token"
+            value {
+              exact_not_match = local.sws_bypass_token
+            }
           }
         }
       }
