@@ -95,6 +95,11 @@ interface FormValues {
 	// fields. legalAddress mandatory per statute; dpoEmail recommended by РКН.
 	legalAddress: string
 	dpoEmail: string
+	// Sprint C+ Round 6 Legal P0 fix 2026-05-24: 152-ФЗ ст.22 ч.3 п.7.1 full DPO contact.
+	// dpoEmail одного field недостаточно — статья требует ФИО + телефон + почтовый адрес.
+	dpoFullName: string
+	dpoPhone: string
+	dpoPostalAddress: string
 }
 
 function toMicroRub(rubInput: string): bigint | null {
@@ -144,6 +149,10 @@ export function ComplianceStep() {
 						: 'unset',
 			legalAddress: existing?.legalAddress ?? '',
 			dpoEmail: existing?.dpoEmail ?? '',
+			// Sprint C+ Round 6 Legal P0 fix 2026-05-24: ст.22 ч.3 п.7.1 full DPO contact.
+			dpoFullName: existing?.dpoFullName ?? '',
+			dpoPhone: existing?.dpoPhone ?? '',
+			dpoPostalAddress: existing?.dpoPostalAddress ?? '',
 		} satisfies FormValues,
 		onSubmit: async ({ value }) => {
 			const microRevenue = toMicroRub(value.annualRevenueRub)
@@ -161,6 +170,11 @@ export function ComplianceStep() {
 				// Sprint C+ Senior P1-5 fix 2026-05-23d: 152-ФЗ ст.9 ч.4 fields.
 				legalAddress: value.legalAddress.trim() === '' ? null : value.legalAddress.trim(),
 				dpoEmail: value.dpoEmail.trim() === '' ? null : value.dpoEmail.trim(),
+				// Sprint C+ Round 6 Legal P0 fix 2026-05-24: ст.22 ч.3 п.7.1 full DPO contact.
+				dpoFullName: value.dpoFullName.trim() === '' ? null : value.dpoFullName.trim(),
+				dpoPhone: value.dpoPhone.trim() === '' ? null : value.dpoPhone.trim(),
+				dpoPostalAddress:
+					value.dpoPostalAddress.trim() === '' ? null : value.dpoPostalAddress.trim(),
 			}
 			// Fresh key per submit click — TanStack Query auto-retry reuses
 			// the same vars (same key), so the server's idempotency middleware
@@ -433,7 +447,7 @@ export function ComplianceStep() {
 						const id = `${field.name}-id`
 						return (
 							<div className="grid gap-2">
-								<Label htmlFor={id}>Контакт DPO (рекомендовано РКН)</Label>
+								<Label htmlFor={id}>Email DPO</Label>
 								<Input
 									id={id}
 									type="email"
@@ -443,8 +457,75 @@ export function ComplianceStep() {
 									maxLength={200}
 									autoComplete="email"
 								/>
+							</div>
+						)
+					}}
+				</form.Field>
+
+				{/*
+				 * Sprint C+ Round 6 Legal P0 fix 2026-05-24 — 152-ФЗ ст.22 ч.3 п.7.1
+				 * verbatim: «фамилия, имя, отчество ... ответственного за организацию
+				 * обработки персональных данных, и номера их контактных телефонов,
+				 * почтовые адреса и адреса электронной почты». Email-only insufficient.
+				 */}
+				<form.Field name="dpoFullName">
+					{(field) => {
+						const id = `${field.name}-id`
+						return (
+							<div className="grid gap-2">
+								<Label htmlFor={id}>ФИО DPO</Label>
+								<Input
+									id={id}
+									type="text"
+									value={field.state.value}
+									onChange={(e) => field.handleChange(e.target.value)}
+									placeholder="Иванов Иван Иванович"
+									maxLength={200}
+									autoComplete="name"
+								/>
+							</div>
+						)
+					}}
+				</form.Field>
+
+				<form.Field name="dpoPhone">
+					{(field) => {
+						const id = `${field.name}-id`
+						return (
+							<div className="grid gap-2">
+								<Label htmlFor={id}>Телефон DPO</Label>
+								<Input
+									id={id}
+									type="tel"
+									value={field.state.value}
+									onChange={(e) => field.handleChange(e.target.value)}
+									placeholder="+7 999 123-45-67"
+									maxLength={20}
+									autoComplete="tel"
+								/>
+							</div>
+						)
+					}}
+				</form.Field>
+
+				<form.Field name="dpoPostalAddress">
+					{(field) => {
+						const id = `${field.name}-id`
+						return (
+							<div className="grid gap-2">
+								<Label htmlFor={id}>Почтовый адрес DPO</Label>
+								<Input
+									id={id}
+									type="text"
+									value={field.state.value}
+									onChange={(e) => field.handleChange(e.target.value)}
+									placeholder="г. Сочи, ул. Морская, д. 5, оф. 12"
+									maxLength={500}
+									autoComplete="street-address"
+								/>
 								<p className="text-xs text-muted-foreground">
-									152-ФЗ ст.22.1 — контакт для уведомлений Роскомнадзора.
+									152-ФЗ ст.22 ч.3 п.7.1 — ФИО + email + телефон + почтовый адрес ответственного за
+									обработку ПДн обязательны для уведомления РКН.
 								</p>
 							</div>
 						)
