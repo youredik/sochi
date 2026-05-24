@@ -78,7 +78,7 @@ export interface GuestDocumentRoutesDeps {
  * Inner router без auth/tenant middleware — для testing inject c.var.tenantId.
  * Production wrapper `createGuestDocumentRoutes` adds the chain.
  */
-function createGuestDocumentRoutesInner(deps: GuestDocumentRoutesDeps) {
+export function createGuestDocumentRoutesInner(deps: GuestDocumentRoutesDeps) {
 	const { guestRepo, documentRepo } = deps
 	return new Hono<AppEnv>().post(
 		'/guests/:guestId/documents/from-scan',
