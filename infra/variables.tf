@@ -133,28 +133,31 @@ variable "dadata_lockbox_version_id" {
   default     = ""
 }
 
-# Round 7 2026-05-24 — SMOKE_BYPASS_TOKEN Lockbox vars.
+# Round 7 v2 2026-05-24 — Canonical Yandex SA JWT bypass Lockbox vars.
+# SUPERSEDES v1 smoke_bypass_lockbox_* (shared-secret canon).
 #
-# Bootstrap (one-time):
-#   yc lockbox secret create --name sepshn-smoke-bypass --folder-id <infra> \
-#     --payload '[{"key":"SMOKE_BYPASS_TOKEN","text_value":"<openssl rand -hex 24>"}]'
-#   yc lockbox secret list-versions <secret-id> → version-id
-#   tofu apply with smoke_bypass_lockbox_secret_id + _version_id filled.
+# Bootstrap (one-time, automated via yc CLI):
+#   yc iam service-account create --name sepshn-agent-verifier ...
+#   yc iam key create --service-account-id ... --algorithm rsa-2048 ...
+#   yc lockbox secret create --name sepshn-agent-verifier-public \
+#     --payload '[{"key":"AGENT_VERIFIER_SA_PUBLIC_KEY","text_value":"<PEM>"},
+#                 {"key":"AGENT_VERIFIER_SA_ID","text_value":"<aje...>"},
+#                 {"key":"AGENT_VERIFIER_KEY_ID","text_value":"<aje...>"}]'
 #
-# Same secret value also stored as SC CI env var `SMOKE_BYPASS_TOKEN` —
-# smoke spec reads `process.env.SMOKE_BYPASS_TOKEN` and sends as
-# `X-Internal-Smoke-Bypass` header. Container compares timing-safe.
+# SA private key (full JSON from yc iam key create) stored как SC secret
+# `YC_AGENT_VERIFIER_SA_KEY_JSON` — used by smoke spec/AI agent to sign JWT.
+# Public key + SA ID mounted в backend container via this Lockbox.
 #
-# Empty → block in container.tf skipped → bypass disabled (deploy-verify
-# playwright-smoke continues failing on captcha, real users unaffected).
-variable "smoke_bypass_lockbox_secret_id" {
-  description = "Lockbox secret ID containing SMOKE_BYPASS_TOKEN (Round 7 2026-05-24, captcha-gate CI bypass)."
+# Empty → container.tf block skipped → SA JWT bypass disabled (real captcha
+# enforced для всех; smoke runner with token cannot bypass).
+variable "agent_verifier_lockbox_secret_id" {
+  description = "Lockbox secret ID containing AGENT_VERIFIER_SA_PUBLIC_KEY + _SA_ID + _KEY_ID (Round 7 v2 2026-05-24, canonical Yandex SA JWT bypass)."
   type        = string
   default     = ""
 }
 
-variable "smoke_bypass_lockbox_version_id" {
-  description = "Lockbox version ID для SMOKE_BYPASS_TOKEN entry. Update при rotation."
+variable "agent_verifier_lockbox_version_id" {
+  description = "Lockbox version ID. Update при SA key rotation (yc iam key create new + add-version)."
   type        = string
   default     = ""
 }

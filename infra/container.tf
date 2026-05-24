@@ -212,20 +212,37 @@ resource "yandex_serverless_container" "backend" {
     }
   }
 
-  # SMOKE_BYPASS_TOKEN (Round 7 2026-05-24) — secret для CI deploy-verify
-  # playwright-smoke. captcha-gate sees matching `X-Internal-Smoke-Bypass`
-  # header → bypasses captcha validation (timing-safe compare). Без этой
-  # переменной — deploy-verify forever-red после Round 6 captcha canon.
-  # Lockbox secret created вне TF (bootstrap.md шаг 5), var.smoke_bypass_
-  # lockbox_secret_id + _version_id filled afterwards. Default empty → block
-  # skipped → smoke bypass disabled (still secure, just blocks CI smoke).
+  # Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass (SUPERSEDES v1
+  # SMOKE_BYPASS_TOKEN shared-secret canon).
+  #
+  # Lockbox `sepshn-agent-verifier-public` mounts 3 env vars:
+  #   - AGENT_VERIFIER_SA_PUBLIC_KEY (PEM, RSA-2048)
+  #   - AGENT_VERIFIER_SA_ID         (aje...)
+  #   - AGENT_VERIFIER_KEY_ID        (aje... — для audit, не used by gate)
+  #
+  # captcha-gate verifies `Authorization: Bearer <PS256-jwt>` offline using
+  # public key. Smoke/AI agent signs JWT с private key (SC secret
+  # YC_AGENT_VERIFIER_SA_KEY_JSON, never в backend). См. [[round_7_v2_sa_jwt
+  # _canon_2026_05_24]].
+  #
+  # Default empty → block skipped → bypass disabled (real captcha enforced
+  # for everyone). Unset is safe — just means smoke/AI verify cannot bypass.
   dynamic "secrets" {
-    for_each = var.smoke_bypass_lockbox_secret_id != "" ? [1] : []
+    for_each = var.agent_verifier_lockbox_secret_id != "" ? [1] : []
     content {
-      id                   = var.smoke_bypass_lockbox_secret_id
-      version_id           = var.smoke_bypass_lockbox_version_id
-      key                  = "SMOKE_BYPASS_TOKEN"
-      environment_variable = "SMOKE_BYPASS_TOKEN"
+      id                   = var.agent_verifier_lockbox_secret_id
+      version_id           = var.agent_verifier_lockbox_version_id
+      key                  = "AGENT_VERIFIER_SA_PUBLIC_KEY"
+      environment_variable = "AGENT_VERIFIER_SA_PUBLIC_KEY"
+    }
+  }
+  dynamic "secrets" {
+    for_each = var.agent_verifier_lockbox_secret_id != "" ? [1] : []
+    content {
+      id                   = var.agent_verifier_lockbox_secret_id
+      version_id           = var.agent_verifier_lockbox_version_id
+      key                  = "AGENT_VERIFIER_SA_ID"
+      environment_variable = "AGENT_VERIFIER_SA_ID"
     }
   }
 

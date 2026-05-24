@@ -39,6 +39,9 @@ postbox_dkim_public_key        = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqm
 dadata_lockbox_secret_id  = "e6q3ug4k0m9eobgstvv2" # sepshn-dadata-api-key в infra folder
 dadata_lockbox_version_id = "e6q96288msve5pnu3rvo" # initial version с DADATA_API_KEY
 
-# Round 7 2026-05-24 — captcha-gate smoke-bypass (auto-managed, do not edit values)
-smoke_bypass_lockbox_secret_id  = "e6qdntjv7btrfpscba6e"
-smoke_bypass_lockbox_version_id = "e6qsd0ff7cnnrgfr4b6a"
+# Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass (auto-managed)
+# SA `sepshn-agent-verifier` (aje54tid7ibbh6ci70bl), RSA-2048 key
+# (aje79gn7ph2hjl552s3p). SUPERSEDES v1 smoke_bypass_lockbox_* (removed
+# в migration 2026-05-24 — Lockbox secret sepshn-smoke-bypass deleted via yc).
+agent_verifier_lockbox_secret_id  = "e6q44ri93qd8f5trbkgu"
+agent_verifier_lockbox_version_id = "e6qiskh93d8nto26a3h0"

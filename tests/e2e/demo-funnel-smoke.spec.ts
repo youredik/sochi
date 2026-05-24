@@ -26,19 +26,52 @@ import { expect, test } from '@playwright/test'
 const PROD_BASE = 'https://demo.sepshn.ru'
 
 /**
- * Round 7 2026-05-24 — server-side smoke bypass header.
+ * Round 7 v2 2026-05-24 — canonical Yandex SA JWT captcha bypass.
  *
- * SC env var `SMOKE_BYPASS_TOKEN` matches YC container env через Lockbox.
- * captcha-gate сравнивает timing-safe → bypass без real captcha widget
- * token (которого playwright fetch API не может получить — нет browser
- * context для Yandex iframe).
+ * SUPERSEDES v1 `SMOKE_BYPASS_TOKEN` shared-secret canon (not cloud-native).
+ * v2 = PS256 JWT signed by Yandex SA RSA key, verified offline backend-side.
  *
- * Empty token → header omitted → smoke gets `CAPTCHA_REQUIRED` 403 (canonical
- * Round 6 enforcement). Both sides must be wired для green deploy-verify.
+ * Flow:
+ *   1. SC secret `YC_AGENT_VERIFIER_SA_KEY_JSON` = full SA key JSON
+ *      (created via `yc iam key create --service-account-id ... --algorithm
+ *      rsa-2048 --output ...`). Includes id, service_account_id, private_key.
+ *   2. Spec deserializes JSON → signs PS256 JWT с claims {iss, sub: SA_ID,
+ *      aud: 'demo.sepshn.ru', iat, exp: iat+30min} using `jose@6`.
+ *   3. Sends `Authorization: Bearer <jwt>` header on each request.
+ *   4. Backend `captcha-gate.ts` verifies offline → bypass + audit-log.
+ *
+ * Empty env → header omitted → smoke gets `CAPTCHA_REQUIRED` 403 (canonical
+ * fallback). Both SC secret + backend Lockbox public key must be wired.
  */
-const SMOKE_BYPASS_TOKEN = process.env.SMOKE_BYPASS_TOKEN ?? ''
-const smokeHeaders: Record<string, string> =
-	SMOKE_BYPASS_TOKEN.length > 0 ? { 'x-internal-smoke-bypass': SMOKE_BYPASS_TOKEN } : {}
+const SA_KEY_JSON = process.env.YC_AGENT_VERIFIER_SA_KEY_JSON ?? ''
+const SA_JWT_AUDIENCE = 'demo.sepshn.ru'
+
+async function mintSaJwt(): Promise<string | null> {
+	if (SA_KEY_JSON.length === 0) return null
+	const { SignJWT, importPKCS8 } = await import('jose')
+	const keyData = JSON.parse(SA_KEY_JSON) as {
+		service_account_id: string
+		private_key: string
+	}
+	const privateKey = await importPKCS8(keyData.private_key, 'PS256')
+	const now = Math.floor(Date.now() / 1000)
+	return await new SignJWT({})
+		.setProtectedHeader({ alg: 'PS256' })
+		.setIssuer(keyData.service_account_id)
+		.setSubject(keyData.service_account_id)
+		.setAudience(SA_JWT_AUDIENCE)
+		.setIssuedAt(now)
+		.setExpirationTime(now + 1800)
+		.sign(privateKey)
+}
+
+let cachedJwt: string | null | undefined
+async function getSmokeHeaders(): Promise<Record<string, string>> {
+	if (cachedJwt === undefined) {
+		cachedJwt = await mintSaJwt()
+	}
+	return cachedJwt ? { Authorization: `Bearer ${cachedJwt}` } : {}
+}
 
 test.describe('Demo funnel — empirical против prod', () => {
 	test.use({
@@ -104,7 +137,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		for (let attempt = 0; attempt < 5; attempt++) {
 			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 				data: { email, callbackURL },
-				headers: smokeHeaders,
+				headers: await getSmokeHeaders(),
 			})
 			if (signupRes.status() === 200) break
 			await new Promise((r) => setTimeout(r, 3000))
@@ -191,7 +224,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		const callbackURL1 = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName1)}`
 		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 			data: { email, callbackURL: callbackURL1 },
-			headers: smokeHeaders,
+			headers: await getSmokeHeaders(),
 		})
 		const magicLink1 = await fetchMagicLink(request, email)
 		expect(magicLink1, 'First visit: magic-link не captured').toBeTruthy()
@@ -213,7 +246,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		const callbackURL2 = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName2)}`
 		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 			data: { email, callbackURL: callbackURL2 },
-			headers: smokeHeaders,
+			headers: await getSmokeHeaders(),
 		})
 		const magicLink2 = await fetchMagicLink(request, email, magicLink1)
 		expect(magicLink2, 'Return visit: second magic-link не captured').toBeTruthy()
@@ -292,7 +325,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		for (let attempt = 0; attempt < 5; attempt++) {
 			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 				data: { email, callbackURL },
-				headers: smokeHeaders,
+				headers: await getSmokeHeaders(),
 			})
 			if (signupRes.status() === 200) break
 			await new Promise((r) => setTimeout(r, 3000))

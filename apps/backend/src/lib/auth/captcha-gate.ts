@@ -1,9 +1,9 @@
-import { timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import { env } from '../../env.ts'
 import { logger } from '../../logger.ts'
 import { type CaptchaValidationResult, validateCaptcha } from '../captcha/validate.ts'
 import { resolveClientIpSync } from '../net/client-ip.ts'
+import { verifyServiceAccountJwt } from './sa-jwt-verify.ts'
 
 /**
  * Captcha gate for Better Auth endpoints — canonical 2026 pattern.
@@ -51,14 +51,6 @@ import { resolveClientIpSync } from '../net/client-ip.ts'
 
 export const CAPTCHA_PATHS = new Set<string>(['/sign-in/magic-link'])
 
-// Round 7 2026-05-24 — captcha-gate smoke bypass HEADER name canonical
-// reference, only used by auth.ts call-site via `ctx.request.headers.get(...)`
-// literal string. NOT exported (knip-clean) — single producer + single
-// consumer; if a third caller emerges, promote to const.
-//
-// Pattern: `auth.ts` reads `x-internal-smoke-bypass` header → passes value
-// в `ctx.smokeBypassToken`. captcha-gate (this file) compares vs env.
-
 const captchaBodySchema = z.object({
 	captchaToken: z.string().min(1).optional(),
 })
@@ -67,7 +59,7 @@ const captchaBodySchema = z.object({
 export type CaptchaGateResult =
 	| {
 			pass: true
-			reason: 'disabled' | 'not-applicable' | 'validated' | 'smoke-bypass'
+			reason: 'disabled' | 'not-applicable' | 'validated' | 'sa-jwt'
 	  }
 	| { pass: false; reason: 'missing_token' | CaptchaValidationResult['reason'] }
 
@@ -77,25 +69,32 @@ export interface CaptchaGateContext {
 	/** Best-effort source IP — leftmost X-Forwarded-For else X-Real-IP. */
 	clientIp?: string
 	/**
-	 * Round 7 2026-05-24 — `x-internal-smoke-bypass` header value, extracted
-	 * by caller. If present + matches `deps.smokeBypassToken` via
-	 * `timingSafeEqual`, gate returns `'smoke-bypass'` pass. Enables CI
-	 * playwright-smoke tests против prod-mode captcha без вытягивая real
-	 * Yandex SmartCaptcha widget tokens.
+	 * Round 7 v2 2026-05-24 — canonical Yandex SA JWT from
+	 * `Authorization: Bearer <jwt>` header. PS256-signed by SA private key,
+	 * verified offline against public key. Replaces v1 shared static
+	 * `smokeBypassToken` canon — cloud-native canonical 2026.
+	 *
+	 * Backend auth.ts extracts header value; gate verifies via
+	 * `verifyServiceAccountJwt`. On pass → reason 'sa-jwt' + audit log.
 	 */
-	smokeBypassToken?: string
+	saJwt?: string
 }
 
 export interface CaptchaGateDeps {
 	serverKey?: string
 	validate?: typeof validateCaptcha
 	/**
-	 * Round 7 2026-05-24 — server-side smoke-bypass secret from env. When unset
-	 * (dev/local — no smoke), bypass disabled entirely. Min 32 chars enforced
-	 * via env schema. Token comparison via `timingSafeEqual` to prevent
-	 * char-by-char enumeration attacks.
+	 * Round 7 v2 2026-05-24 — SA JWT verification config from env.
+	 * All 3 fields must be present for bypass; missing any → bypass disabled.
+	 * - publicKeyPem: SA's RSA public key (from Lockbox)
+	 * - serviceAccountId: trusted SA's `aje...` ID
+	 * - audience: expected JWT `aud` claim (binds token к deployment)
 	 */
-	smokeBypassToken?: string
+	saJwtConfig?: {
+		publicKeyPem: string
+		serviceAccountId: string
+		audience: string
+	}
 }
 
 /**
@@ -116,23 +115,39 @@ export async function evaluateCaptchaGate(
 		return { pass: true, reason: 'not-applicable' }
 	}
 
-	// Round 7 2026-05-24 — smoke-bypass header check BEFORE token validation.
-	// Both server-side env token + request header must be present и timing-safe
-	// equal. Unequal lengths short-circuit via length check (Buffer construction
-	// сначала checks length to avoid pathological 1-char comparisons leaking).
-	// Logged at warn level — `smoke-bypass` events should be rare и audit-visible.
-	const expected = deps.smokeBypassToken?.trim()
-	const supplied = ctx.smokeBypassToken?.trim()
-	if (expected && supplied && expected.length === supplied.length) {
-		const expectedBuf = Buffer.from(expected, 'utf8')
-		const suppliedBuf = Buffer.from(supplied, 'utf8')
-		if (expectedBuf.length === suppliedBuf.length && timingSafeEqual(expectedBuf, suppliedBuf)) {
+	// Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass.
+	// SUPERSEDES Round 7 v1 shared-token canon (insecure: rotation burden,
+	// timing-attack surface). v2 uses PS256-signed JWT verified offline
+	// against SA public key — cryptographic, audience-bound, short-lived.
+	if (deps.saJwtConfig && ctx.saJwt) {
+		const result = await verifyServiceAccountJwt(ctx.saJwt, {
+			publicKeyPem: deps.saJwtConfig.publicKeyPem,
+			expectedServiceAccountId: deps.saJwtConfig.serviceAccountId,
+			expectedAudience: deps.saJwtConfig.audience,
+		})
+		if (result.ok) {
 			logger.warn(
-				{ path: ctx.path, event: 'captcha.smoke_bypass' },
-				'Captcha gate bypassed via smoke header — audit',
+				{
+					path: ctx.path,
+					event: 'captcha.sa_jwt_bypass',
+					serviceAccountId: result.serviceAccountId,
+					expiresAt: result.expiresAt.toISOString(),
+				},
+				'Captcha gate bypassed via Yandex SA JWT — audit',
 			)
-			return { pass: true, reason: 'smoke-bypass' }
+			return { pass: true, reason: 'sa-jwt' }
 		}
+		// JWT presented but verification failed — log + fall through к captcha.
+		// Don't 401: legitimate clients should fall back к real captcha if their
+		// token is malformed/expired (e.g. during key rotation grace window).
+		logger.warn(
+			{
+				path: ctx.path,
+				event: 'captcha.sa_jwt_invalid',
+				reason: result.reason,
+			},
+			'SA JWT presented but invalid — falling through к captcha',
+		)
 	}
 
 	const parsed = captchaBodySchema.safeParse(ctx.body)

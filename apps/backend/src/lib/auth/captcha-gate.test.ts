@@ -206,63 +206,114 @@ describe('evaluateCaptchaGate', () => {
 		expect(calls).toEqual([['ysc2_x', 'tok', '198.51.100.7']])
 	})
 
-	// ─── Round 7 2026-05-24: smoke-bypass header ─────────────────────
-	const SMOKE_TOKEN = 'sm0k3-bypass-token-12345678901234567890' // ≥32 chars
-	test('[S1] matching smoke header + env → pass с reason smoke-bypass (no validate call)', async () => {
+	// ─── Round 7 v2 2026-05-24: Yandex SA JWT bypass ─────────────────
+	// SUPERSEDES Round 7 v1 shared-token canon. Verifies integration с
+	// sa-jwt-verify.ts (which has its own unit test suite). These tests
+	// exercise gate's wiring + fallthrough behavior.
+	const SA_ID = 'aje54tid7ibbh6ci70blTEST'
+	const AUDIENCE = 'demo.sepshn.ru'
+
+	test('[J1] valid SA JWT → pass с reason sa-jwt (no validate call)', async () => {
+		const { generateKeyPair, exportSPKI, SignJWT } = await import('jose')
+		const { publicKey, privateKey } = await generateKeyPair('PS256', { extractable: true })
+		const publicKeyPem = await exportSPKI(publicKey)
+		const jwt = await new SignJWT({})
+			.setProtectedHeader({ alg: 'PS256' })
+			.setIssuer(SA_ID)
+			.setSubject(SA_ID)
+			.setAudience(AUDIENCE)
+			.setIssuedAt()
+			.setExpirationTime('5m')
+			.sign(privateKey)
+
 		const { fn, calls } = mockValidate({ ok: true })
 		const r = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {}, smokeBypassToken: SMOKE_TOKEN },
-			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN, validate: fn },
+			{ path: '/sign-in/magic-link', body: {}, saJwt: jwt },
+			{
+				serverKey: 'ysc2_x',
+				saJwtConfig: { publicKeyPem, serviceAccountId: SA_ID, audience: AUDIENCE },
+				validate: fn,
+			},
 		)
-		expect(r).toEqual({ pass: true, reason: 'smoke-bypass' })
+		expect(r).toEqual({ pass: true, reason: 'sa-jwt' })
 		expect(calls).toHaveLength(0)
 	})
 
-	test('[S2] mismatched smoke header → falls through к captcha validation (missing_token)', async () => {
+	test('[J2] wrong-signed JWT → falls through к captcha (missing_token)', async () => {
+		const { generateKeyPair, exportSPKI, SignJWT } = await import('jose')
+		const attacker = await generateKeyPair('PS256', { extractable: true })
+		const trusted = await generateKeyPair('PS256', { extractable: true })
+		const publicKeyPem = await exportSPKI(trusted.publicKey)
+		const jwt = await new SignJWT({})
+			.setProtectedHeader({ alg: 'PS256' })
+			.setIssuer(SA_ID)
+			.setSubject(SA_ID)
+			.setAudience(AUDIENCE)
+			.setIssuedAt()
+			.setExpirationTime('5m')
+			.sign(attacker.privateKey)
+
 		const r = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {}, saJwt: jwt },
 			{
-				path: '/sign-in/magic-link',
-				body: {},
-				smokeBypassToken: 'wrong-token-1234567890123456789012',
+				serverKey: 'ysc2_x',
+				saJwtConfig: { publicKeyPem, serviceAccountId: SA_ID, audience: AUDIENCE },
 			},
-			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN },
 		)
 		expect(r).toEqual({ pass: false, reason: 'missing_token' })
 	})
 
-	test('[S3] smoke header present but env unset → falls through (env unset = bypass disabled)', async () => {
+	test('[J3] saJwtConfig unset → bypass disabled even с valid JWT', async () => {
+		const { generateKeyPair, SignJWT } = await import('jose')
+		const { privateKey } = await generateKeyPair('PS256', { extractable: true })
+		const jwt = await new SignJWT({})
+			.setProtectedHeader({ alg: 'PS256' })
+			.setIssuer(SA_ID)
+			.setSubject(SA_ID)
+			.setAudience(AUDIENCE)
+			.setIssuedAt()
+			.setExpirationTime('5m')
+			.sign(privateKey)
+
 		const r = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {}, smokeBypassToken: SMOKE_TOKEN },
-			{ serverKey: 'ysc2_x' /* smokeBypassToken not set */ },
+			{ path: '/sign-in/magic-link', body: {}, saJwt: jwt },
+			{ serverKey: 'ysc2_x' },
 		)
 		expect(r).toEqual({ pass: false, reason: 'missing_token' })
 	})
 
-	test('[S4] env set but header absent → falls through (real user flow)', async () => {
+	test('[J4] saJwt absent + config present → falls through (real user)', async () => {
+		const { generateKeyPair, exportSPKI } = await import('jose')
+		const { publicKey } = await generateKeyPair('PS256', { extractable: true })
+		const publicKeyPem = await exportSPKI(publicKey)
 		const r = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {} /* smokeBypassToken not set */ },
-			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN },
-		)
-		expect(r).toEqual({ pass: false, reason: 'missing_token' })
-	})
-
-	test('[S5] length-mismatch tokens → no false match (timing-safe canon)', async () => {
-		const r = await evaluateCaptchaGate(
+			{ path: '/sign-in/magic-link', body: {} },
 			{
-				path: '/sign-in/magic-link',
-				body: {},
-				// Same prefix, different length — common timing attack vector.
-				smokeBypassToken: 'sm0k3-bypass-token-1234567890123456',
+				serverKey: 'ysc2_x',
+				saJwtConfig: { publicKeyPem, serviceAccountId: SA_ID, audience: AUDIENCE },
 			},
-			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN },
 		)
 		expect(r).toEqual({ pass: false, reason: 'missing_token' })
 	})
 
-	test('[S6] empty-string smoke header → no bypass (defence-in-depth)', async () => {
+	test('[J5] valid JWT, wrong audience → fall-through (token не bound к этому deployment)', async () => {
+		const { generateKeyPair, exportSPKI, SignJWT } = await import('jose')
+		const { publicKey, privateKey } = await generateKeyPair('PS256', { extractable: true })
+		const publicKeyPem = await exportSPKI(publicKey)
+		const jwt = await new SignJWT({})
+			.setProtectedHeader({ alg: 'PS256' })
+			.setIssuer(SA_ID)
+			.setSubject(SA_ID)
+			.setAudience('app.sepshn.ru') // wrong deployment target
+			.setIssuedAt()
+			.setExpirationTime('5m')
+			.sign(privateKey)
 		const r = await evaluateCaptchaGate(
-			{ path: '/sign-in/magic-link', body: {}, smokeBypassToken: '' },
-			{ serverKey: 'ysc2_x', smokeBypassToken: SMOKE_TOKEN },
+			{ path: '/sign-in/magic-link', body: {}, saJwt: jwt },
+			{
+				serverKey: 'ysc2_x',
+				saJwtConfig: { publicKeyPem, serviceAccountId: SA_ID, audience: AUDIENCE },
+			},
 		)
 		expect(r).toEqual({ pass: false, reason: 'missing_token' })
 	})

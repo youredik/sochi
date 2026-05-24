@@ -150,22 +150,45 @@ export const envSchema = z.object({
 	// Turnstile) for 152-ФЗ data localization.
 	SMARTCAPTCHA_SERVER_KEY: z.string().optional(),
 
-	// Sprint C+ Round 7 P0 fix 2026-05-24 — canonical smoke-test bypass header.
-	// Setup: SC CI стores random 32+ char secret as `SMOKE_BYPASS_TOKEN` SC env
-	// var (gitignored); YC container reads same env via Lockbox/secrets binding.
-	// Smoke test sends `X-Internal-Smoke-Bypass: <token>` header → captcha-gate
-	// timing-safe-compares → bypass.
+	// Sprint C+ Round 7 v2 P0 fix 2026-05-24 — canonical Yandex SA JWT bypass.
 	//
-	// Security rationale (Stripe-webhook pattern):
-	//   - Token never в repo (only deployed env)
-	//   - timingSafeEqual prevents char-by-char enumeration
-	//   - Min 32 chars (entropy >= 192 bits)
-	//   - Logged event when used (audit trail для невидимого bypass)
-	//   - Unset (dev/local) → bypass disabled completely
+	// SUPERSEDES Round 7 v1 SMOKE_BYPASS_TOKEN canon (shared static secret —
+	// not cloud-native). v2 canon: PS256 JWT signed by Yandex SA RSA key,
+	// verified offline against SA public key (no remote IAM call).
 	//
-	// Without this canon: deploy-verify playwright-smoke can NEVER pass
-	// (Round 6 captcha-gate blocks even server-side smoke). Forever-red CI.
-	SMOKE_BYPASS_TOKEN: z.string().min(32).optional(),
+	// Setup:
+	//   - SA `sepshn-agent-verifier` (no IAM roles, identity-only)
+	//   - RSA-2048 key issued by `yc iam key create`
+	//   - Public key + SA id mounted from Lockbox `sepshn-agent-verifier-public`
+	//   - Private key (full SA key JSON) stored как SC secret
+	//     `YC_AGENT_VERIFIER_SA_KEY_JSON`, mounted into smoke-runner env
+	//
+	// Flow:
+	//   1. Smoke / AI agent signs PS256 JWT с SA private key, 1h lifetime,
+	//      claims {iss: SA_ID, sub: SA_ID, aud: "demo.sepshn.ru"}.
+	//   2. Sends `Authorization: Bearer <jwt>` к backend (alongside body).
+	//   3. captcha-gate verifies offline via `sa-jwt-verify.ts` + jose@6.
+	//   4. Pass → reason 'sa-jwt' + audit log.
+	//
+	// Security wins vs Round 7 v1:
+	//   - No shared static secret → no rotation burden (SA key rotates по `yc`)
+	//   - Cryptographic (RSA-2048 PS256) instead of timing-safe-string-compare
+	//   - Audience claim binds token к specific deployment (defence-in-depth)
+	//   - Short lifetime (1h max), backend rejects > 1h tokens
+	//   - Offline verify → no Yandex IAM latency / availability dependency
+	//
+	// Unset (dev/local) → bypass disabled completely. Production has fields
+	// set via Lockbox; demo тоже set (smoke target).
+	AGENT_VERIFIER_SA_PUBLIC_KEY: z.string().optional(),
+	AGENT_VERIFIER_SA_ID: z
+		.string()
+		.regex(/^aj[a-z0-9]+$/, 'Yandex SA ID format aj[a-z0-9]+')
+		.optional(),
+	/**
+	 * Audience claim expected в JWT — usually deployment hostname.
+	 * Default `demo.sepshn.ru` covers demo; prod override через env.
+	 */
+	AGENT_VERIFIER_AUDIENCE: z.string().default('demo.sepshn.ru'),
 
 	// Demo deployment flag — when `true`, captcha-gate bypasses validation
 	// EVEN IF `SMARTCAPTCHA_SERVER_KEY` is set. Per `[[demo_strategy]]`:

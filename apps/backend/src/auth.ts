@@ -108,19 +108,31 @@ export const auth = betterAuth({
 		 */
 		before: createAuthMiddleware(async (ctx) => {
 			const clientIp = ctx.request ? extractClientIp(ctx.request.headers) : undefined
-			// Round 7 2026-05-24 — smoke-bypass header (case-insensitive lookup).
-			// `ctx.request.headers` is Web Fetch Headers — `.get()` is case-insensitive.
-			const smokeBypassToken = ctx.request?.headers.get('x-internal-smoke-bypass') ?? undefined
+			// Round 7 v2 2026-05-24 — canonical Yandex SA JWT bypass.
+			// Authorization: Bearer <PS256-jwt> verified offline against
+			// SA public key (Lockbox-mounted). See [[round_7_v2_sa_jwt_canon]].
+			const authHeader = ctx.request?.headers.get('authorization')
+			const saJwt = authHeader?.toLowerCase().startsWith('bearer ')
+				? authHeader.slice(7).trim()
+				: undefined
+			const saJwtConfig =
+				env.AGENT_VERIFIER_SA_PUBLIC_KEY && env.AGENT_VERIFIER_SA_ID
+					? {
+							publicKeyPem: env.AGENT_VERIFIER_SA_PUBLIC_KEY,
+							serviceAccountId: env.AGENT_VERIFIER_SA_ID,
+							audience: env.AGENT_VERIFIER_AUDIENCE,
+						}
+					: undefined
 			const decision = await evaluateCaptchaGate(
 				{
 					path: ctx.path,
 					body: ctx.body,
 					...(clientIp ? { clientIp } : {}),
-					...(smokeBypassToken ? { smokeBypassToken } : {}),
+					...(saJwt ? { saJwt } : {}),
 				},
 				{
 					...(env.SMARTCAPTCHA_SERVER_KEY ? { serverKey: env.SMARTCAPTCHA_SERVER_KEY } : {}),
-					...(env.SMOKE_BYPASS_TOKEN ? { smokeBypassToken: env.SMOKE_BYPASS_TOKEN } : {}),
+					...(saJwtConfig ? { saJwtConfig } : {}),
 				},
 			)
 			if (!decision.pass) {
