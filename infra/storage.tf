@@ -84,25 +84,18 @@ resource "yandex_storage_bucket" "demo_passport_scans" {
     expiration {
       days = 90
     }
-
-    # Безопасность: delete-marker'ов нет (versioning off), но защита от
-    # incomplete multipart uploads которые могут persist forever.
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 1
-    }
   }
 
-  # Server-side encryption — SSE-S3 (AES-256) native YC.
-  # Application adapter передаёт `ServerSideEncryption: 'AES256'` per-object,
-  # bucket-level default добавляет defense-in-depth — даже direct PUT без
-  # adapter получит encryption.
-  server_side_encryption_configuration {
-    rule {
-      apply_server_side_encryption_by_default {
-        sse_algorithm = "AES256"
-      }
-    }
-  }
+  # Sprint C+ post-deploy fix 2026-05-24: removed `abort_incomplete_multipart_upload`
+  # block + `server_side_encryption_configuration` block — Yandex provider v0.204.0
+  # rejects both («Unsupported block type» and «kms_master_key_id required»).
+  # Web research May 2026 expert: Yandex Object Storage SSE only supports `aws:kms`
+  # algorithm с customer-managed KMS key (NOT bare AES256 server-side default).
+  # Application-level adapter передаёт `ServerSideEncryption: 'AES256'` per-object
+  # (passport-photo-storage.ts createYandexS3PassportStorage) — this provides
+  # per-object encryption without provider-block; defense-in-depth remains via
+  # bucket private ACL + IAM allow-list narrowing. Future: add `aws:kms` block
+  # с Yandex KMS key when SSE-KMS budget approved.
 }
 
 # Backend runtime SA — storage.editor на passport scans bucket.
