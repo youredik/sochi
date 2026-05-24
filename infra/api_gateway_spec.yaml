@@ -86,7 +86,45 @@ paths:
         object: index.html
         service_account_id: ${runtime_service_account}
 
-  # 4. SPA static assets + client-side router fallback.
+  # 4a. Hashed Vite assets — NO SPA fallback. Missing keys → real 404.
+  #     Sprint C+ Round 6 self-review fix 2026-05-24 (user-journey agent F1):
+  #     Without this scoped route, `/assets/old-hash.js` (cached browser требует
+  #     pre-deploy chunk after CSS-Vite hash bump) hit greedy `{file+}` → SPA
+  #     `error_object` overrode 404 к index.html с HTML MIME → browser nosniff
+  #     refuses to execute → blank page для users with stale tabs. Real 404
+  #     теперь surfaces chunk-load error → vite-plugin-pwa autoUpdate triggers
+  #     reload. Distinct from generic `/{file+}` route (which keeps SPA-fallback
+  #     для client-side TanStack Router paths like `/booking/abc-123`).
+  /assets/{file+}:
+    get:
+      operationId: spaHashedAsset
+      summary: Serve hashed Vite chunks (NO SPA fallback — real 404 on stale)
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: ${frontend_bucket}
+        object: 'assets/{file}'
+        service_account_id: ${runtime_service_account}
+    head:
+      operationId: spaHashedAssetHead
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: ${frontend_bucket}
+        object: 'assets/{file}'
+        service_account_id: ${runtime_service_account}
+
+  # 4b. SPA static assets + client-side router fallback.
   #    Greedy `{file+}` matches multi-segment paths (e.g. `/booking/abc-123`).
   #    `error_object` canon: any missing key (or 4xx from S3) falls back к
   #    `index.html` с statusCode override 200 → client-side router resolves.
