@@ -6,6 +6,7 @@ import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { Toaster } from 'sonner'
 import { broadcastQueryClient } from '@tanstack/query-broadcast-client-experimental'
+import { CookieBanner } from './components/cookie-banner.tsx'
 import { OfflineBanner } from './components/offline-banner'
 import { SwUpdatePrompt } from './components/sw-update-prompt'
 import { i18n, setupI18n } from './features/i18n/setup.ts'
@@ -119,18 +120,35 @@ declare module '@tanstack/react-router' {
 // router.subscribe('onResolved') — tracking каждой client-side
 // route-change (initial pageview fires автоматически тегом-script'ом).
 // Code-split via dynamic import keeps initial SPA bundle clean.
-void import('./lib/yandex-metrika.ts').then(({ initYandexMetrikaDeferred, trackPageView }) => {
-	const rawId = import.meta.env.VITE_YANDEX_METRIKA_ID
-	const counterId = rawId ? Number(rawId) : undefined
-	initYandexMetrikaDeferred(counterId)
-	router.subscribe('onResolved', ({ toLocation }) => {
-		// `toLocation.search` это parsed object (зorm-shape), НЕ string. Concat
-		// с pathname приводит к `TypeError: Cannot convert object to primitive value`.
-		// `.href` — full URL string (pathname + searchStr + hash), что и нужно
-		// для Я.Метрики 'hit' canonical signature.
-		trackPageView(toLocation.href)
-	})
-})
+//
+// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — 152-ФЗ cookie opt-in:
+// Metrika init теперь GATED за `cookie-consent.isGranted('analytics')`. До
+// user explicit accept Метрика не загружается. После accept — subscribe to
+// consent state и init deferred. SPA pageview tracking тоже gated.
+void Promise.all([import('./lib/yandex-metrika.ts'), import('./lib/cookie-consent.ts')]).then(
+	([metrika, consent]) => {
+		const rawId = import.meta.env.VITE_YANDEX_METRIKA_ID
+		const counterId = rawId ? Number(rawId) : undefined
+		if (counterId === undefined) return
+
+		let initialized = false
+		function maybeInit(): void {
+			if (initialized) return
+			if (!consent.isGranted('analytics')) return
+			initialized = true
+			metrika.initYandexMetrikaDeferred(counterId)
+			router.subscribe('onResolved', ({ toLocation }) => {
+				// `.href` = pathname + searchStr + hash для Метрики 'hit'.
+				metrika.trackPageView(toLocation.href)
+			})
+		}
+
+		// 1. Try init immediately — user уже decided ранее (return visitor)
+		maybeInit()
+		// 2. Subscribe to consent changes — fires когда user accepts на banner
+		consent.onConsentChange(maybeInit)
+	},
+)
 
 const rootEl = document.getElementById('root')
 if (!rootEl) throw new Error('Root element #root not found')
@@ -167,6 +185,7 @@ createRoot(rootEl, {
 							<OfflineBanner />
 							<RouterProvider router={router} />
 							<SwUpdatePrompt />
+							<CookieBanner />
 							<Toaster
 								position="top-right"
 								richColors
