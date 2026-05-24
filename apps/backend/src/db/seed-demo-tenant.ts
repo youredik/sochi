@@ -456,18 +456,28 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	await sql`DELETE FROM folio WHERE tenantId = ${TENANT_ID}`
 	await sql`DELETE FROM booking WHERE tenantId = ${TENANT_ID}`
 	await sql`DELETE FROM guest WHERE tenantId = ${TENANT_ID}`
-	// Sprint C+ Round 5 5-expert security audit fix 2026-05-24 (T5):
-	// Demo refresh was leaving passport-related tables with orphan PII —
-	// guest row vanished но photoConsentLog/passportOcrAudit/guestDocument
-	// rows persisted, breaking RTBF cascade (by-guestId returns nothing)
-	// и 152-ФЗ ст.21 ч.4 «возможность установления содержания» integrity.
-	// Now scrubbed in same batch для clean demo-refresh boundary.
-	await sql`DELETE FROM photoConsentLog WHERE tenantId = ${TENANT_ID}`
-	await sql`DELETE FROM passportOcrAudit WHERE tenantId = ${TENANT_ID}`
-	await sql`DELETE FROM guestDocument WHERE tenantId = ${TENANT_ID}`
-	await sql`DELETE FROM passportOcrAuditScrubLog WHERE tenantId = ${TENANT_ID}`
-	// Idempotency keys могут reference scan events что только удалили — wipe тоже.
-	await sql`DELETE FROM idempotencyKey WHERE tenantId = ${TENANT_ID}`
+	// Sprint C+ Round 5 5-expert audit re-framing 2026-05-24:
+	//
+	// **Passport-related tables (photoConsentLog/passportOcrAudit/guestDocument/
+	// passportOcrAuditScrubLog) intentionally NOT deleted here** — native YDB TTL
+	// handles retention canonically per migration 0037/0066/0067/0071:
+	//   - passportOcrAudit: TTL P90D ON createdAt (90-day МВД-аудит canon)
+	//   - guestDocument:    TTL P1825D ON createdAt (5y NK ст.23 первичка)
+	//   - photoConsentLog:  TTL P1825D ON createdAt (5y ст.21 ч.4 audit proof)
+	//   - passportOcrAuditScrubLog: TTL P1825D ON createdAt
+	//
+	// Initial Security expert T5 framing «orphan PII indefinitely» был partial —
+	// TTL guarantees max 90d window (audit) / 5y (consent log) auto-cleanup
+	// regardless of guest row deletion. Demo tenant accumulates a few mock-Vision
+	// rows per 6h cycle = trivial volume, native TTL handles all of it.
+	//
+	// `guest` table HAS no TTL (live operator data, no auto-expiry) — hence
+	// explicit DELETE here is correct для demo state refresh semantic (each 6h
+	// cycle = fresh canonical golden state). Passport tables don't need explicit
+	// DELETE since TTL already does this work passively.
+	//
+	// Canon: leverage native YC services (YDB TTL, S3 lifecycle, KMS, Lockbox,
+	// Audit Trails) BEFORE writing custom cleanup cron / app-level retention logic.
 
 	// Deterministic surname / first-name pool (fixed lookup, NO Math.random).
 	// Common Russian surnames; matches realistic demo without hitting actual people.
