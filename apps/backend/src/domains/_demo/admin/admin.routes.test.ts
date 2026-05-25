@@ -210,4 +210,45 @@ describe('demo OTA admin routes', () => {
 		}
 		expect(body.seeded.availabilityDates.length).toBe(5)
 	})
+
+	// ── Round 11 P1-B2 — admin session token gate ─────────────────────────
+	describe('Round 11 P1-B2 — session token gating', () => {
+		it('[ADM11] sessionToken empty → unauthenticated request passes (test mode)', async () => {
+			const router = createDemoAdminRoutes() // no token
+			const app = new Hono().route('/admin', router)
+			const res = await app.request('/admin/reset', { method: 'POST' })
+			expect(res.status).toBe(200)
+		})
+
+		it('[ADM12] sessionToken set + missing header → 401', async () => {
+			const router = createDemoAdminRoutes({ sessionToken: 'demo_admin_abc123' })
+			const app = new Hono().route('/admin', router)
+			const res = await app.request('/admin/reset', { method: 'POST' })
+			expect(res.status).toBe(401)
+			const body = (await res.json()) as { error: string }
+			expect(body.error).toBe('UNAUTHORIZED')
+		})
+
+		it('[ADM13] sessionToken set + wrong header → 401', async () => {
+			const router = createDemoAdminRoutes({ sessionToken: 'demo_admin_abc123' })
+			const app = new Hono().route('/admin', router)
+			const res = await app.request('/admin/reset', {
+				method: 'POST',
+				headers: { 'x-demo-session-token': 'wrong_token' },
+			})
+			expect(res.status).toBe(401)
+		})
+
+		it('[ADM14] sessionToken set + correct header → 200', async () => {
+			const router = createDemoAdminRoutes({ sessionToken: 'demo_admin_abc123' })
+			const app = new Hono().route('/admin', router)
+			const res = await app.request('/admin/reset', {
+				method: 'POST',
+				headers: { 'x-demo-session-token': 'demo_admin_abc123' },
+			})
+			expect(res.status).toBe(200)
+			const body = (await res.json()) as { ok: boolean }
+			expect(body.ok).toBe(true)
+		})
+	})
 })

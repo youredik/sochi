@@ -139,12 +139,21 @@ if (env.APP_MODE !== 'production') {
 	const demoWebhookSecret = 'demo-mock-ota-webhook-secret-do-not-use-in-prod'
 	const demoTenantId = 'demo-tenant'
 	const demoPropertyId = 'demo-hotel-sochi'
+	// Round 11 P1-B2 — per-process admin session token. Printed at boot;
+	// regenerated на каждый restart → previous demos invalidated. Presenter
+	// copies token into showcase UI / curl X-Demo-Session-Token header.
+	const adminSessionToken = `demo_admin_${crypto.randomUUID().slice(0, 16)}`
+	logger.info(
+		{ token: adminSessionToken },
+		'Round 11 P1-B2 — demo admin session token (use as X-Demo-Session-Token header)',
+	)
 	registerDemoRoutes(app, {
 		tenantId: demoTenantId,
 		yandexPropertyId: demoPropertyId,
 		ostrovokPropertyId: demoPropertyId,
 		webhookTargetBaseUrl: 'http://localhost:8787',
 		webhookSecret: demoWebhookSecret,
+		adminSessionToken,
 	})
 	// Round 10 P0-1 + P0-2 fix — env-gated idempotent seed для demo webhook loop.
 	// Без этого: cold-start receiver→401 (no webhookSecret) или 403 (no

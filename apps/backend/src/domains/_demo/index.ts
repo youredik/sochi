@@ -35,6 +35,12 @@ export interface RegisterDemoRoutesOptions {
 	readonly ostrovokPropertyId: string
 	readonly webhookTargetBaseUrl: string
 	readonly webhookSecret: string
+	/**
+	 * Round 11 P1-B2 — per-process session token gating admin endpoints.
+	 * Generated at backend boot + printed to log so presenter copies into
+	 * showcase UI. Prevents multi-tenant cross-reset attacks.
+	 */
+	readonly adminSessionToken?: string
 }
 
 /**
@@ -67,7 +73,9 @@ export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOp
 		webhookTargetUrl: `${opts.webhookTargetBaseUrl}/api/channel/webhooks/ETG`,
 		webhookSecret: opts.webhookSecret,
 	})
-	const adminRouter = createDemoAdminRoutes()
+	const adminRouter = createDemoAdminRoutes({
+		...(opts.adminSessionToken !== undefined && { sessionToken: opts.adminSessionToken }),
+	})
 
 	app.route('/api/_mock-ota/yandex/v1', yandexRouter)
 	app.route('/api/_mock-ota/ostrovok/v1', ostrovokRouter)

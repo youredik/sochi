@@ -276,10 +276,8 @@ function pushAriResultToHttpAttempt(result: AriPushResult): HttpAttemptResult {
 		return {
 			ok: false,
 			httpStatus,
-			errorMessage: `[category=${category}] ${firstError?.message ?? 'rejected'}`.slice(
-				0,
-				ERROR_MESSAGE_MAX_LENGTH,
-			),
+			errorCategory: category,
+			errorMessage: (firstError?.message ?? 'rejected').slice(0, ERROR_MESSAGE_MAX_LENGTH),
 			responseBody: {
 				accepted: 0,
 				rejected: result.rejected,
@@ -310,7 +308,8 @@ async function dispatchBookingCreated(
 		return {
 			ok: false,
 			httpStatus: 400,
-			errorMessage: '[category=invalid_payload] booking.created payload missing required fields',
+			errorCategory: 'invalid_payload',
+			errorMessage: 'booking.created payload missing required fields',
 		}
 	}
 	const verify = await adapter.verifyBooking({
@@ -342,7 +341,8 @@ async function dispatchBookingCancelled(
 		return {
 			ok: false,
 			httpStatus: 400,
-			errorMessage: '[category=invalid_payload] booking.cancelled payload missing externalId',
+			errorCategory: 'invalid_payload',
+			errorMessage: 'booking.cancelled payload missing externalId',
 		}
 	}
 	const result = await adapter.cancelReservation({
@@ -354,7 +354,8 @@ async function dispatchBookingCancelled(
 		return {
 			ok: false,
 			httpStatus: 404,
-			errorMessage: '[category=not_found] reservation not found',
+			errorCategory: 'not_found',
+			errorMessage: 'reservation not found',
 			responseBody: { status: 'not_found' },
 		}
 	}
@@ -375,7 +376,8 @@ async function dispatchAriDelta(
 		return {
 			ok: false,
 			httpStatus: 400,
-			errorMessage: '[category=invalid_payload] ari payload missing deltas[]',
+			errorCategory: 'invalid_payload',
+			errorMessage: 'ari payload missing deltas[]',
 		}
 	}
 	const result = await adapter.pushAri(deltas)
@@ -428,6 +430,7 @@ export function registerYandexTravelWithChannelFactory(
 						return {
 							ok: false,
 							httpStatus: 400,
+							errorCategory: 'invalid_payload',
 							errorMessage: `unknown_event_type: ${eventType}`,
 						}
 				}
@@ -452,10 +455,8 @@ export function registerYandexTravelWithChannelFactory(
 				return {
 					ok: false,
 					httpStatus,
-					errorMessage: `[category=${sanitized.errCategory}] ${sanitized.errMessage}`.slice(
-						0,
-						ERROR_MESSAGE_MAX_LENGTH,
-					),
+					errorCategory: sanitized.errCategory,
+					errorMessage: sanitized.errMessage.slice(0, ERROR_MESSAGE_MAX_LENGTH),
 				}
 			}
 		},

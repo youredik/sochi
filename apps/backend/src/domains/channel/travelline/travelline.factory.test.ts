@@ -509,10 +509,16 @@ describe('TL factory — Round 8 error paths + sanitized logging (TL-F9..TL-F14)
 				guestCount: 1,
 			},
 		})
-		const r = result as { ok: boolean; httpStatus: number | null; errorMessage?: string }
+		const r = result as {
+			ok: boolean
+			httpStatus: number | null
+			errorMessage?: string
+			errorCategory?: string
+		}
 		expect(r.ok).toBe(false)
 		expect(r.httpStatus).toBe(500) // unknown category default
-		expect(r.errorMessage?.startsWith('[category=unknown]')).toBe(true)
+		// Round 11 P1-B — errorCategory now structural field.
+		expect(r.errorCategory).toBe('unknown')
 		// errorMessage MUST be ≤ 200 chars (canon sanitization cap).
 		expect(r.errorMessage?.length).toBeLessThanOrEqual(200)
 	})
@@ -543,10 +549,11 @@ describe('TL factory — Round 8 error paths + sanitized logging (TL-F9..TL-F14)
 				checkOut: '2027-06-17',
 				guestCount: 1,
 			},
-		})) as { ok: boolean; httpStatus: number; errorMessage?: string }
+		})) as { ok: boolean; httpStatus: number; errorMessage?: string; errorCategory?: string }
 		expect(r.ok).toBe(false)
 		expect(r.httpStatus).toBe(409) // TL's own httpStatus preserved
-		expect(r.errorMessage?.startsWith('[category=invalid_payload]')).toBe(true)
+		// Round 11 P1-B — errorCategory structural.
+		expect(r.errorCategory).toBe('invalid_payload')
 	})
 
 	it('[TL-F12] adapter throws TravellineRateLimitError → 429 + rate_limited category', async () => {
@@ -576,10 +583,11 @@ describe('TL factory — Round 8 error paths + sanitized logging (TL-F9..TL-F14)
 					},
 				],
 			},
-		})) as { ok: boolean; httpStatus: number; errorMessage?: string }
+		})) as { ok: boolean; httpStatus: number; errorMessage?: string; errorCategory?: string }
 		expect(r.ok).toBe(false)
 		expect(r.httpStatus).toBe(429)
-		expect(r.errorMessage?.startsWith('[category=rate_limited]')).toBe(true)
+		// Round 11 P1-B — errorCategory structural.
+		expect(r.errorCategory).toBe('rate_limited')
 	})
 
 	it('[TL-F13] adapter pushAri returns rejected>0 → handler reports rejected count', async () => {
@@ -614,10 +622,17 @@ describe('TL factory — Round 8 error paths + sanitized logging (TL-F9..TL-F14)
 				],
 			},
 		})
-		const out = r as { ok: boolean; httpStatus: number | null; errorMessage?: string }
+		const out = r as {
+			ok: boolean
+			httpStatus: number | null
+			errorMessage?: string
+			errorCategory?: string
+		}
 		expect(out.ok).toBe(false)
 		expect(out.httpStatus).toBe(422)
-		expect(out.errorMessage).toContain('invalid_payload')
+		// Round 11 P1-B — errorCategory structural.
+		expect(out.errorCategory).toBe('invalid_payload')
+		expect(out.errorMessage).toBe('out_of_order_sequence')
 	})
 
 	it('[TL-F14] booking.cancelled.v1 with missing externalId → ok:false 400 invalid_payload', async () => {

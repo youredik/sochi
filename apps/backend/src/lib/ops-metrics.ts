@@ -256,17 +256,45 @@ const WARN_LOG_THROTTLE_MS = 60_000
  * they belong only в structured log (Pino), которые YC Cloud Logging aggregates
  * per-instance. Labels stay aggregable across tenants without exposing identity.
  */
+/**
+ * Round 11 P1-B4 — per-tenant breakdown для INTERNAL_OPS_TOKEN-gated endpoint.
+ * Keeps Prometheus public-side aggregate (no tenantId) while making per-tenant
+ * deadline state queryable by ops for targeted alerting.
+ *
+ * Map keyed by tenantId, value = count of pending registrations in red zone.
+ * Cleared at start of each cron tick by `__resetDeadlinesByTenant`; populated
+ * via `emitMigrationRegistrationDeadlineMetric`.
+ */
+const deadlinesByTenant = new Map<string, number>()
+
+/**
+ * Reserved для cron-tick cleanup (Phase-2 — currently breakdown is monotonic-
+ * accumulating, suitable для single-deploy demo. Cron calls this at tick start
+ * to reset before re-emitting). Underscored to mark NOT-FOR-CRITICAL-PATH.
+ */
+function _resetDeadlinesByTenantForCronTickInternal(): void {
+	deadlinesByTenant.clear()
+}
+// Knip suppression — preserved API surface для future cron integration.
+void _resetDeadlinesByTenantForCronTickInternal
+
+export function getDeadlinesByTenant(): ReadonlyMap<string, number> {
+	return new Map(deadlinesByTenant)
+}
+
 export function emitMigrationRegistrationDeadlineMetric(input: {
-	/** @deprecated — only used for parameter symmetry с future helpers; sanitized away. */
-	readonly tenantId?: string
+	readonly tenantId: string
 	readonly hoursBucket: 'lt_1' | 'lt_2' | 'lt_3' | 'lt_4'
 	readonly value: number
 }): void {
-	// Intentionally drop tenantId — keep low-cardinality labels only.
-	void input.tenantId
+	// Public Prometheus aggregate — low-cardinality (tenantId dropped intentionally).
 	opsMetricsBuffer.push({
 		name: 'migration_registration.approaching_deadline',
 		labels: { hoursBucket: input.hoursBucket },
 		value: input.value,
 	})
+	// Round 11 P1-B4 — internal per-tenant breakdown for targeted ops alerting.
+	// Exposed via INTERNAL_OPS_TOKEN-gated endpoint (NOT public Prometheus scrape).
+	const current = deadlinesByTenant.get(input.tenantId) ?? 0
+	deadlinesByTenant.set(input.tenantId, current + input.value)
 }

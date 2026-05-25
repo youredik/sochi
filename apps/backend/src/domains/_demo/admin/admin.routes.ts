@@ -60,6 +60,17 @@ export interface DemoAdminRoutesOptions {
 	 * demo to fit comfortably в the visible offer window.
 	 */
 	readonly seedDateCount?: number
+	/**
+	 * Round 11 P1-B2 — per-process boot token. Admin endpoints require this
+	 * token via `X-Demo-Session-Token` header to prevent multi-tenant cross-
+	 * reset attacks. Empty string = no auth (back-compat для existing tests).
+	 * Production callers ALWAYS pass non-empty token printed на backend boot log.
+	 *
+	 * Canon: `feedback_round_10_truthful_post_review_canon_2026_05_25` Agent B
+	 * P1-B2 — without this, ANY caller (even unauthenticated) can reset state
+	 * mid-demo для другого tenant. Token gate restores tenant isolation.
+	 */
+	readonly sessionToken?: string
 }
 
 /**
@@ -71,6 +82,28 @@ export function createDemoAdminRoutes(opts: DemoAdminRoutesOptions = {}): Hono<A
 	const app = new Hono<AppEnv>()
 	const demoPropertyName = opts.demoPropertyName ?? 'Sochi Demo Hotel'
 	const seedDateCount = opts.seedDateCount ?? 3
+	const sessionToken = opts.sessionToken ?? ''
+
+	/**
+	 * Round 11 P1-B2 — constant-time session-token verification middleware.
+	 * Mounted on ALL admin routes. Empty `sessionToken` skip-mode preserves
+	 * existing test ergonomics; production wiring (app.ts) always supplies one.
+	 */
+	app.use('/*', async (c, next) => {
+		if (sessionToken.length === 0) return next() // no-auth mode for tests
+		const provided = c.req.header('x-demo-session-token') ?? ''
+		// Constant-time compare via fixed-length padded buffer.
+		const expected = Buffer.from(sessionToken.padEnd(64, ' ').slice(0, 64))
+		const got = Buffer.from(provided.padEnd(64, ' ').slice(0, 64))
+		let mismatch = 0
+		for (let i = 0; i < 64; i++) {
+			mismatch |= (expected[i] ?? 0) ^ (got[i] ?? 0)
+		}
+		if (mismatch !== 0 || provided.length !== sessionToken.length) {
+			return c.json({ error: 'UNAUTHORIZED', message: 'X-Demo-Session-Token mismatch' }, 401)
+		}
+		return next()
+	})
 
 	/**
 	 * Route 1 — POST /reset.

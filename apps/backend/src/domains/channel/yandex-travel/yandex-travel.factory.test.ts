@@ -461,6 +461,7 @@ describe('YT factory — Round 8 error paths + sanitized logging (YT-F9..YT-F12)
 		expect(r).toEqual({
 			ok: false,
 			httpStatus: 400,
+			errorCategory: 'invalid_payload',
 			errorMessage: 'unknown_event_type: app.sochi.channel.bogus.v9',
 		})
 	})
@@ -494,10 +495,16 @@ describe('YT factory — Round 8 error paths + sanitized logging (YT-F9..YT-F12)
 				guestCount: 1,
 			},
 		})
-		const r = result as { ok: boolean; httpStatus: number | null; errorMessage?: string }
+		const r = result as {
+			ok: boolean
+			httpStatus: number | null
+			errorMessage?: string
+			errorCategory?: string
+		}
 		expect(r.ok).toBe(false)
 		expect(r.httpStatus).toBe(500) // unknown category default
-		expect(r.errorMessage?.startsWith('[category=unknown]')).toBe(true)
+		// Round 11 P1-B — errorCategory now structural field, не string prefix.
+		expect(r.errorCategory).toBe('unknown')
 		// errorMessage is capped at 200 chars (canon sanitization)
 		expect(r.errorMessage?.length).toBeLessThanOrEqual(200)
 	})
@@ -535,10 +542,17 @@ describe('YT factory — Round 8 error paths + sanitized logging (YT-F9..YT-F12)
 			},
 		})
 		// When all rejected, treat as 4xx for caller routing.
-		const out = r as { ok: boolean; httpStatus: number | null; errorMessage?: string }
+		const out = r as {
+			ok: boolean
+			httpStatus: number | null
+			errorMessage?: string
+			errorCategory?: string
+		}
 		expect(out.ok).toBe(false)
 		expect(out.httpStatus).toBe(422)
-		expect(out.errorMessage).toContain('invalid_payload')
+		// Round 11 P1-B — errorCategory now structural field.
+		expect(out.errorCategory).toBe('invalid_payload')
+		expect(out.errorMessage).toBe('out_of_order_sequence')
 	})
 
 	it('[YT-F12] booking.cancelled.v1 with missing externalId → ok:false 400 invalid_payload', async () => {
