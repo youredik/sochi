@@ -47,7 +47,7 @@ const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000
 // Module-level email adapter: dual-mode transport (Mailpit dev / Postbox prod)
 // picked once from env. Same instance reused for magic-link, invitation,
 // password-reset emails — keeps SES/SMTP client connection warm.
-// Round 7 v3 2026-05-25 — pass sql so DemoInboxAdapter persists к YDB
+// Round 7 v3 2026-05-25 (deploy retrigger Run #102) — pass sql so DemoInboxAdapter persists к YDB
 // (eliminates multi-instance race). См. migration 0075 + adapter sql branch.
 const emailAdapter = createEmailAdapter(env, logger, sql)
 const emailFromAddress = `"${env.EMAIL_FROM_NAME}" <${env.EMAIL_FROM_ADDRESS}>`
