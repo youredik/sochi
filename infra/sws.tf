@@ -165,6 +165,13 @@ resource "yandex_sws_waf_profile" "demo" {
       inbound_anomaly_score = 25
       paranoia_level        = 1
       rule_set {
+        # Run #100 fix: API requires `id` field IN ADDITION TO name/version/type.
+        # Provider's official example examples/sws_waf_profile/r_sws_waf_profile_1.tf
+        # is INCOMPLETE (omits id) — would fail same API check. Authoritative source
+        # is provider's acceptance test (resource_yandex_sws_waf_profile_test.go
+        # testAccSmartwebsecurityWafProfileBasic lines 109-145).
+        # Resolves to literal "OWASP_CRS_4_0_0".
+        id      = data.yandex_sws_waf_rule_set_descriptor.owasp4.id
         name    = "OWASP Core Ruleset"
         version = "4.0.0"
         type    = "CORE"

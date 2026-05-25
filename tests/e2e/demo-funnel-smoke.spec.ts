@@ -87,7 +87,13 @@ test.describe('Demo funnel — empirical против prod', () => {
 		email: string,
 		since?: string,
 	): Promise<{ url: string; capturedAt: string } | undefined> {
-		for (let i = 0; i < 20; i++) {
+		// 40 iter × 500ms = 20s budget. Was 10s но CI runs показывают async BA
+		// send pipeline затягивается на slow runs (Postbox dual-write retry или
+		// container cold-start instance handoff). Real-user empirical 2026-05-25
+		// showed 5s wait sufficient (signup → capture in iter 3-5); 20s gives
+		// 4× margin для tail-latency. Playwright test timeout is 30s default
+		// → 20s polling leaves 10s для navigation.
+		for (let i = 0; i < 40; i++) {
 			const params = new URLSearchParams({ email })
 			if (since) params.set('since', since)
 			const res = await request.get(`${PROD_BASE}/api/public/demo/inbox?${params.toString()}`)
