@@ -128,18 +128,73 @@ resource "yandex_sws_advanced_rate_limiter_profile" "demo" {
 }
 
 # -----------------------------------------------------------------------------
-# WAF profile — DEFERRED (Phase 2 — Round 7 v3 follow-up commit)
+# WAF profile — OWASP Core Rule Set 4.0.0 (provider v0.150.0+ canonical schema)
 # -----------------------------------------------------------------------------
-# Initial attempt failed Run #95 с API error «waf profile must have at least
-# one rule set» despite passing core_rule_set + dynamic rule blocks matching
-# terraform-yc-modules pattern. Schema mismatch needs deeper research.
+# Root cause Run #95 fail: provider v0.150.0 (2025-08-12) introduced new
+# top-level `rule_set { action priority core_rule_set {...} }` shape AND
+# DEPRECATED the legacy top-level `core_rule_set` block. terraform-yc-modules
+# wrapper still uses deprecated shape → empty `rule_sets` field → API rejects
+# с «must have at least one rule set».
 #
-# Phase 1 ships без WAF: Security Profile + ARL + bypass rule + Smart Protection.
-# Provides 80% of value (DDoS L7 + bot ML + edge throttle). WAF (OWASP CRS
-# blocking) добавится в follow-up commit после schema clarification.
+# Canonical config (verbatim mirror of official provider example
+# examples/sws_waf_profile/r_sws_waf_profile_1.tf):
+#   - Top-level `rule_set` block с action=DENY (required enum), priority, etc.
+#   - `core_rule_set` NESTED inside rule_set
+#   - `type = "CORE"` inside innermost rule_set descriptor
+#   - Per-rule `is_blocking = false` for 14-day soak (NOT resource-level —
+#     schema doesn't have profile-wide blocking toggle)
+#   - paranoia_level <= filter (NOT >= as terraform-yc-modules uses; module
+#     bug — official semantic is "enable all rules with paranoia ≤ this")
 #
-# Plan: empirical sandbox WAF resource в isolated test folder → confirm schema
-# → copy к sws.tf → ship Phase 2. См. [[feedback_round_7_v3_sws_canon]].
+# Reference: yandex-cloud/terraform-provider-yandex master HEAD 2026-05-25.
+data "yandex_sws_waf_rule_set_descriptor" "owasp4" {
+  name    = "OWASP Core Ruleset"
+  version = "4.0.0"
+}
+
+resource "yandex_sws_waf_profile" "demo" {
+  folder_id   = yandex_resourcemanager_folder.demo.id
+  name        = "sepshn-demo-waf"
+  description = "OWASP CRS 4.0.0 paranoia=1 — 14-day soak (per-rule is_blocking=false), then flip per audit logs"
+
+  rule_set {
+    action     = "DENY"
+    is_enabled = true
+    priority   = 1
+    core_rule_set {
+      inbound_anomaly_score = 25
+      paranoia_level        = 1
+      rule_set {
+        name    = "OWASP Core Ruleset"
+        version = "4.0.0"
+        type    = "CORE"
+      }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = [
+      for r in data.yandex_sws_waf_rule_set_descriptor.owasp4.rules : r
+      if r.paranoia_level <= 1
+    ]
+    content {
+      rule_id     = rule.value.id
+      is_enabled  = true
+      is_blocking = false # 14-day LOG_ONLY soak — flip after FP review
+    }
+  }
+
+  analyze_request_body {
+    is_enabled        = true
+    size_limit        = 8
+    size_limit_action = "IGNORE" # canonical soak; "DENY" would block oversize bodies даже в dry-run
+  }
+
+  labels = {
+    managed_by  = "opentofu"
+    environment = "demo"
+  }
+}
 
 # -----------------------------------------------------------------------------
 # Security profile — main edge gate, attaches ARL + 3 rules
@@ -210,8 +265,18 @@ resource "yandex_sws_security_profile" "demo" {
     }
   }
 
-  # WAF attached as a rule — DEFERRED Phase 2 commit (schema fix pending).
-  # См. WAF block comment выше.
+  # WAF attached as security_rule per canon (priority < smart_protection
+  # 999900 → WAF runs first on signature checks, Smart Protection scores after).
+  # Mode API: returns verdict, не redirects к captcha. FULL = browser redirect.
+  security_rule {
+    name        = "waf-owasp"
+    description = "OWASP CRS 4.0.0 WAF — paranoia=1, all rules dry-run первые 14 дней"
+    priority    = 888800
+    waf {
+      mode           = "API"
+      waf_profile_id = yandex_sws_waf_profile.demo.id
+    }
+  }
 
   labels = {
     managed_by  = "opentofu"
@@ -232,4 +297,7 @@ output "sws_arl_profile_id" {
   value       = yandex_sws_advanced_rate_limiter_profile.demo.id
 }
 
-# WAF profile output deferred (см. WAF block comment).
+output "sws_waf_profile_id" {
+  description = "WAF Profile ID — 14-day soak с per-rule is_blocking=false. Flip after audit logs review."
+  value       = yandex_sws_waf_profile.demo.id
+}
