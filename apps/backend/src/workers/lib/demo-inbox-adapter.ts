@@ -1,5 +1,6 @@
 import { extractMagicLinkUrl } from '@horeca/shared'
 import type { sql as SQL } from '../../db/index.ts'
+import { toTs } from '../../db/ydb-helpers.ts'
 import type { EmailAdapter, SendEmailInput, SendEmailResult } from './email-adapter.types.ts'
 import { isReservedTestDomain } from './reserved-test-ranges.ts'
 
@@ -116,10 +117,13 @@ export class DemoInboxAdapter implements EmailAdapter {
 		// Round 7 v3 2026-05-25 — YDB persist eliminates multi-instance race.
 		// Когда sql provided, write к demoInboxCapture (TTL P6M auto-cleanup).
 		// All container instances share state. См. migration 0075.
+		// Note: `toTs(Date)` обязателен — без него @ydbjs/value infers Datetime
+		// (seconds), теряет ms precision + SELECT comparison ловит type mismatch
+		// (см. project_ydb_specifics.md item 10).
 		if (this.sql) {
 			await this.sql`
 				INSERT INTO demoInboxCapture (email, capturedAt, magicLinkUrl, subject)
-				VALUES (${key}, ${captured.capturedAt}, ${captured.magicLinkUrl}, ${captured.subject})
+				VALUES (${key}, ${toTs(captured.capturedAt)}, ${captured.magicLinkUrl}, ${captured.subject})
 			`
 		} else {
 			// In-process Map fallback — local dev / tests / single-instance mode.
@@ -183,24 +187,39 @@ export class DemoInboxAdapter implements EmailAdapter {
 		if (this.sql) {
 			// YDB query — TTL handles cutoff at storage layer, но also filter
 			// для defensive consistency с in-process Map semantic.
-			const [rows = []] = await this.sql<
-				Array<{
-					email: string
-					capturedAt: Date
-					magicLinkUrl: string | null
-					subject: string
-				}>
-			>`
-				SELECT email, capturedAt, magicLinkUrl, subject
-				FROM demoInboxCapture
-				WHERE email = ${key}
-				  AND capturedAt >= ${cutoff}
-				  ${after ? this.sql`AND capturedAt > ${after}` : this.sql``}
-				ORDER BY capturedAt DESC
-				LIMIT 1
-			`
-				.isolation('snapshotReadOnly')
-				.idempotent(true)
+			// `toTs()` обязателен — без него Date → Datetime (seconds) type
+			// mismatch против Timestamp column. См. project_ydb_specifics.md
+			// item 10. Conditional WHERE → две отдельных query вместо inline
+			// template fragment (не supported by @ydbjs/query template tag).
+			type CapturedRow = {
+				email: string
+				capturedAt: Date
+				magicLinkUrl: string | null
+				subject: string
+			}
+			const result = after
+				? await this.sql<CapturedRow[]>`
+					SELECT email, capturedAt, magicLinkUrl, subject
+					FROM demoInboxCapture
+					WHERE email = ${key}
+					  AND capturedAt >= ${toTs(cutoff)}
+					  AND capturedAt > ${toTs(after)}
+					ORDER BY capturedAt DESC
+					LIMIT 1
+				`
+						.isolation('snapshotReadOnly')
+						.idempotent(true)
+				: await this.sql<CapturedRow[]>`
+					SELECT email, capturedAt, magicLinkUrl, subject
+					FROM demoInboxCapture
+					WHERE email = ${key}
+					  AND capturedAt >= ${toTs(cutoff)}
+					ORDER BY capturedAt DESC
+					LIMIT 1
+				`
+						.isolation('snapshotReadOnly')
+						.idempotent(true)
+			const [rows = []] = result
 			const row = rows[0]
 			if (!row) return null
 			return {
