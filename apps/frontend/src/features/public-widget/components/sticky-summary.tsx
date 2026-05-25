@@ -286,8 +286,19 @@ function SummaryBody({
 							Отмена без штрафа до {formatMoscowDateTime(selectedRate.freeCancelDeadlineUtc)}
 						</p>
 					) : (
-						<p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-							Тариф невозвратный — отмена и изменения не разрешены
+						/*
+						 * ПП РФ № 1912 п. 16 canon (canon `feedback_pp_1912_hotel_canon_2026_05_23.md`):
+						 * cancellation rights ALWAYS exist; only refund % varies by boundary.
+						 * Legacy «Тариф невозвратный — отмена и изменения не разрешены» ELIMINATED.
+						 * Phrasing aligned with backend disclosure (`guest-portal.routes.ts:135-136`).
+						 */
+						<p
+							data-testid="summary-cancel-policy"
+							className="mt-2 text-xs text-amber-700 dark:text-amber-300"
+						>
+							{
+								'Отмена до дня заезда — возврат 100%; в день заезда или позже — удержание не более стоимости одних суток (ПП РФ 1912 п. 16).'
+							}
 						</p>
 					)}
 				</>

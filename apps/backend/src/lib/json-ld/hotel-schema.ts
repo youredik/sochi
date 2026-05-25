@@ -39,6 +39,19 @@ export interface HotelSchemaInput {
 	readonly checkoutTime: string
 	readonly roomTypes: ReadonlyArray<RoomTypeForJsonLd>
 	readonly canonicalUrl?: string
+	/**
+	 * Round 8 canon (P1-3, RU-unique moat #1 per
+	 * `project_2026_grade_architecture_canon_2026_05_25.md`):
+	 * OpenTravel 2.0 property code (org-internal stable identifier) для
+	 * AI-agent dereferencing. Optional; falls back to tenantSlug.
+	 */
+	readonly ota2026PropertyCode?: string
+	/**
+	 * Round 8: ISO timestamp когда schema data был last updated. Used by
+	 * `aiCompatibility.lastUpdatedIso` для агентов оценить freshness.
+	 * Defaults to render-time `new Date().toISOString()`.
+	 */
+	readonly lastUpdatedIso?: string
 }
 
 /**
@@ -73,12 +86,34 @@ function escapeForHtmlScript(json: string): string {
 export function buildHotelJsonLd(input: HotelSchemaInput): Record<string, unknown> {
 	const url =
 		input.canonicalUrl ?? `https://${input.tenantSlug}.sochi.app/widget/${input.tenantSlug}`
+	const lastUpdated = input.lastUpdatedIso ?? new Date().toISOString()
+	const propertyCode = input.ota2026PropertyCode ?? input.tenantSlug
 	const obj: Record<string, unknown> = {
 		'@context': 'https://schema.org',
 		'@type': 'Hotel',
 		'@id': `${url}#hotel`,
+		/**
+		 * Round 8 P1 (Lake.com AI-readable canon, RU moat #1):
+		 * OpenTravel 2.0 additional type для agentic discoverability.
+		 * Apaleo Sept 2025 + Hospitable Apr 2026 + SiteMinder Apr 2026
+		 * all moved этом направлении.
+		 */
+		additionalType: ['https://opentravel.org/2026/LodgingBusiness'],
+		identifier: [
+			{
+				'@type': 'PropertyValue',
+				name: 'OTA2026.PropertyCode',
+				value: propertyCode,
+			},
+			{
+				'@type': 'PropertyValue',
+				name: 'OTA2026.TenantSlug',
+				value: input.tenantSlug,
+			},
+		],
 		name: input.name,
 		url,
+		mainEntityOfPage: url,
 		description: input.description,
 		telephone: input.telephone,
 		priceRange: input.priceRange,
@@ -103,18 +138,40 @@ export function buildHotelJsonLd(input: HotelSchemaInput): Record<string, unknow
 			{ '@type': 'Language', name: 'Russian', alternateName: 'ru' },
 			{ '@type': 'Language', name: 'English', alternateName: 'en' },
 		],
-		potentialAction: {
-			'@type': 'ReserveAction',
-			target: {
-				'@type': 'EntryPoint',
-				urlTemplate: url,
-				actionPlatform: [
-					'http://schema.org/DesktopWebPlatform',
-					'http://schema.org/MobileWebPlatform',
-				],
-			},
-			result: { '@type': 'LodgingReservation', name: 'Бронирование номера' },
+		/**
+		 * Round 8 P1 (Lake.com canon — empirically 47% AI mention share):
+		 * AI-discoverability hints для Yandex Алиса, OpenAI Apps SDK
+		 * (Booking/Expedia partnered Oct 2025), MCP-discovering agents.
+		 * Non-standard but documented в `project_2026_grade_architecture_canon`.
+		 */
+		aiCompatibility: {
+			alisaSearchable: true,
+			openAiAppsSDK: true,
+			mcpDiscoverable: true,
+			lastUpdatedIso: lastUpdated,
 		},
+		potentialAction: [
+			{
+				'@type': 'ReserveAction',
+				target: {
+					'@type': 'EntryPoint',
+					urlTemplate: url,
+					actionPlatform: [
+						'http://schema.org/DesktopWebPlatform',
+						'http://schema.org/MobileWebPlatform',
+					],
+				},
+				result: { '@type': 'LodgingReservation', name: 'Бронирование номера' },
+			},
+			{
+				'@type': 'SearchAction',
+				target: {
+					'@type': 'EntryPoint',
+					urlTemplate: `${url}/search?q={search_term_string}`,
+				},
+				'query-input': 'required name=search_term_string',
+			},
+		],
 	}
 	if (input.images.length > 0) obj.image = [...input.images]
 	if (input.roomTypes.length > 0) {

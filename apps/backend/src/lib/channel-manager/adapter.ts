@@ -35,8 +35,43 @@ export interface ChannelMetadata {
 }
 
 /**
+ * Canonical error categories returned from adapter operations.
+ * Round 8 canon (per `feedback_round_8_strict_sweep_canon_2026_05_25.md`):
+ * adapters MUST classify failures into one of these categories so callers
+ * (dispatcher, MCP layer, ops alerts) can route correctly.
+ */
+export type ChannelErrorCategory =
+	| 'rate_limited' // 429-style; retry with backoff
+	| 'invalid_credentials' // 401/403; alert ops, no retry
+	| 'cross_border_blocked' // 152-ФЗ ст.18 ч.5 photo residency / sanctions shield
+	| 'consent_missing' // 152-ФЗ granular 3-checkbox gap
+	| 'reserved_test_range' // outbound shield short-circuit (RFC 2606/6761 / ITU-T E.164.3)
+	| 'duplicate_idempotency_key' // already-seen — idempotent ack
+	| 'invalid_payload' // schema/validation failure
+	| 'not_found' // entity does not exist
+	| 'transient' // transient upstream error; retry
+	| 'unknown' // catch-all; alert ops
+
+export interface ChannelAdapterError {
+	readonly category: ChannelErrorCategory
+	readonly message: string
+	/** Index of the failed item in the input array (для batch operations). */
+	readonly itemIndex?: number
+	/** Originating channel's error code/key для debugging (NOT logged раw — sanitized). */
+	readonly upstreamCode?: string
+}
+
+/**
  * Outbound ARI delta (push from PMS). Channels that pull-not-push (TravelLine)
  * may treat this as a no-op + return success synchronously.
+ *
+ * `sequenceNumber` (Round 8 canon): per-resource monotonic ordering signal —
+ * каждое изменение для конкретной комбинации (tenant, property, roomType,
+ * ratePlan, date) получает strictly-increasing sequence из nextSequenceNumber()
+ * generator (typically `bigint` epoch-microseconds or DB-generated). Consumers
+ * use it to detect gaps + drop out-of-order updates. Naш architectural leapfrog
+ * vs Apaleo/Mews/Cloudbeds/Hostaway (memory canon
+ * `project_2026_grade_architecture_canon_2026_05_25.md`).
  */
 export interface AriDelta {
 	readonly tenantId: string
@@ -47,6 +82,7 @@ export interface AriDelta {
 	readonly availability: number
 	readonly rateMicros: bigint
 	readonly currency: 'RUB'
+	readonly sequenceNumber: bigint
 	readonly restrictions?: {
 		readonly minLengthOfStay?: number
 		readonly maxLengthOfStay?: number
@@ -97,6 +133,14 @@ export interface ChannelReservation {
 	readonly currency: 'RUB'
 	readonly status: 'confirmed' | 'cancelled'
 	readonly lastModificationUtc: string
+	/**
+	 * Per-resource monotonic sequence number (Round 8 canon). Каждая
+	 * модификация конкретного externalId получает strictly-increasing
+	 * sequence. Consumers detect gaps + drop out-of-order updates.
+	 * Channels that don't expose native sequence — derive from
+	 * `lastModificationUtc` epoch-microseconds + tiebreaker.
+	 */
+	readonly sequenceNumber: bigint
 	readonly guest: {
 		readonly firstName: string
 		readonly lastName: string
@@ -145,11 +189,21 @@ export interface CreateBookingInput {
 	readonly idempotencyKey: string
 }
 
+/**
+ * Batch operation result with canonical error reporting.
+ * Round 8 canon: `errors[]` enables ops triage + dispatcher routing.
+ */
+export interface AriPushResult {
+	readonly accepted: number
+	readonly rejected: number
+	readonly errors: ReadonlyArray<ChannelAdapterError>
+}
+
 export interface ChannelManagerAdapter {
 	readonly metadata: ChannelMetadata
 
-	pushAri(delta: ReadonlyArray<AriDelta>): Promise<{ accepted: number; rejected: number }>
-	pushAriFull(snapshot: ReadonlyArray<AriDelta>): Promise<{ accepted: number; rejected: number }>
+	pushAri(delta: ReadonlyArray<AriDelta>): Promise<AriPushResult>
+	pushAriFull(snapshot: ReadonlyArray<AriDelta>): Promise<AriPushResult>
 	searchAvailability(query: AvailabilityQuery): Promise<ReadonlyArray<AvailabilityRow>>
 	readReservations(cursor: ReservationReadCursor): Promise<{
 		readonly reservations: ReadonlyArray<ChannelReservation>
@@ -161,6 +215,12 @@ export interface ChannelManagerAdapter {
 	cancelReservation(input: {
 		readonly tenantId: string
 		readonly externalId: string
+		/**
+		 * Idempotency key (Round 8 canon). Repeated calls with same key MUST be
+		 * no-ops returning `already_cancelled`. Caller generates UUID + retains
+		 * 24h для retry safety.
+		 */
+		readonly idempotencyKey: string
 	}): Promise<{ readonly status: 'cancelled' | 'not_found' | 'already_cancelled' }>
 	calculateCancellationPenalty(input: {
 		readonly tenantId: string

@@ -30,14 +30,28 @@
  *
  * **Photo refs canon**: `rg_ext` field (NOT deprecated `images`). Mock fixture
  * uses `rg_ext` shape exclusively.
+ *
+ * **Round 8 canon (2026-05-25)**:
+ *   - Per-resource `sequenceNumber: bigint` on every `ChannelReservation` +
+ *     `AriDelta`. Monotonicity enforced на pushAri/pushAriFull — out-of-order
+ *     deltas rejected via `errors[{ category: 'invalid_payload', ... }]`.
+ *   - `cancelReservation` accepts `idempotencyKey: string`; repeat-call с
+ *     same key → `already_cancelled` (no-op retry safety).
+ *   - `verifyBooking` validates `tenantId === opts.tenantId` (cross-tenant
+ *     leak guard per Round 8 audit).
+ *   - `prebook` derives `checkIn/checkOut/guestCount` от input (no hardcoded
+ *     fixture — behaviour-faithfulness canon).
+ *   - `pushAri` returns canonical `AriPushResult { accepted, rejected, errors }`.
  */
 
 import { createHash, randomUUID } from 'node:crypto'
 import type {
 	AriDelta,
+	AriPushResult,
 	AvailabilityQuery,
 	AvailabilityRow,
 	CancellationPolicy,
+	ChannelAdapterError,
 	ChannelManagerAdapter,
 	ChannelMetadata,
 	ChannelReservation,
@@ -52,6 +66,7 @@ import {
 	buildSourceUrn,
 	type SochiCloudEvent,
 } from '../../../lib/channel-manager/cloud-events.ts'
+import { nextSequenceNumber } from '../../../lib/channel-manager/sequence.ts'
 
 export type EtgBookingStage = 'search' | 'prebook' | 'book' | 'start' | 'check'
 
@@ -83,6 +98,10 @@ interface EtgBookingState {
 	terminalState: 'confirmed' | 'failed' | null
 	cancellationPolicy: CancellationPolicy
 	rgExt: ReadonlyArray<{ readonly category: string; readonly url: string }>
+	/** Monotonic sequence number for inner state mutations (Round 8 canon). */
+	sequenceNumber: bigint
+	/** Idempotency keys observed for cancelReservation (Round 8). */
+	cancellationIdempotencyKeys: Set<string>
 }
 
 const DEFAULT_CANCELLATION_POLICY: CancellationPolicy = {
@@ -117,6 +136,9 @@ export interface OstrovokEtgMockHandle extends ChannelManagerAdapter {
 	readonly prebook: (input: {
 		readonly hid: number
 		readonly searchId: string
+		readonly checkIn: string
+		readonly checkOut: string
+		readonly guestCount: number
 		readonly brand?: EtgBrand
 		readonly commercialModel?: EtgCommercialModel
 	}) => Promise<{ readonly partnerOrderId: string; readonly bookHash: string }>
@@ -174,6 +196,14 @@ export function buildEtgBasicAuthHeader(input: { id: string; uuid: string }): st
 	return `Basic ${token}`
 }
 
+/**
+ * Per-resource ARI monotonicity key (Round 8 canon). Sequence numbers
+ * MUST be strictly increasing per (tenant, property, roomType, ratePlan, date).
+ */
+function ariResourceKey(d: AriDelta): string {
+	return `${d.tenantId}:${d.propertyId}:${d.roomTypeId}:${d.ratePlanId}:${d.date}`
+}
+
 export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtgMockHandle {
 	const now = opts.nowMs ?? (() => Date.now())
 	const mode = opts.mode ?? 'sandbox'
@@ -185,6 +215,9 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 	const bookings = new Map<string, EtgBookingState>()
 	const collisionFlags = new Set<string>()
 	const partnerOrderIdGlobalIndex = new Set<string>()
+	/** Round 8: per-resource highest accepted sequenceNumber для monotonicity guard. */
+	const ariHighestSeq = new Map<string, bigint>()
+	const ariAcceptedLog: Array<{ key: string; delta: AriDelta; acceptedAtMs: number }> = []
 
 	function buildSearchId(hid: number): string {
 		return `search-${hid}-${createHash('sha256').update(`${hid}:${now()}`).digest('hex').slice(0, 12)}`
@@ -201,16 +234,68 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 		displayName: `Ostrovok ETG (${mode}) — 4-brand fan-out`,
 	}
 
+	function applyAriOne(d: AriDelta): { accepted: boolean; error?: ChannelAdapterError } {
+		const key = ariResourceKey(d)
+		const prev = ariHighestSeq.get(key)
+		if (prev !== undefined && d.sequenceNumber <= prev) {
+			return {
+				accepted: false,
+				error: {
+					category: 'invalid_payload',
+					message: `out_of_order_sequence: resource=${key} got=${d.sequenceNumber.toString()} highestAccepted=${prev.toString()}`,
+				},
+			}
+		}
+		ariHighestSeq.set(key, d.sequenceNumber)
+		ariAcceptedLog.push({ key, delta: d, acceptedAtMs: now() })
+		return { accepted: true }
+	}
+
 	const adapter: ChannelManagerAdapter = {
 		metadata,
 
-		async pushAri(_delta: ReadonlyArray<AriDelta>) {
-			// ETG supports ARI push via separate API; Mock no-op success.
-			return { accepted: 0, rejected: 0 }
+		async pushAri(delta: ReadonlyArray<AriDelta>): Promise<AriPushResult> {
+			let accepted = 0
+			let rejected = 0
+			const errors: ChannelAdapterError[] = []
+			for (let i = 0; i < delta.length; i++) {
+				const d = delta[i]
+				if (d === undefined) continue
+				const r = applyAriOne(d)
+				if (r.accepted) {
+					accepted++
+				} else {
+					rejected++
+					if (r.error) {
+						errors.push({ ...r.error, itemIndex: i })
+					}
+				}
+			}
+			return { accepted, rejected, errors }
 		},
 
-		async pushAriFull(_snapshot: ReadonlyArray<AriDelta>) {
-			return { accepted: 0, rejected: 0 }
+		async pushAriFull(snapshot: ReadonlyArray<AriDelta>): Promise<AriPushResult> {
+			// Full snapshot: clear monotonicity state + re-apply in input order.
+			// Per-resource sequence MUST still be monotone WITHIN snapshot.
+			ariHighestSeq.clear()
+			ariAcceptedLog.length = 0
+			let accepted = 0
+			let rejected = 0
+			const errors: ChannelAdapterError[] = []
+			for (let i = 0; i < snapshot.length; i++) {
+				const d = snapshot[i]
+				if (d === undefined) continue
+				const r = applyAriOne(d)
+				if (r.accepted) {
+					accepted++
+				} else {
+					rejected++
+					if (r.error) {
+						errors.push({ ...r.error, itemIndex: i })
+					}
+				}
+			}
+			return { accepted, rejected, errors }
 		},
 
 		async searchAvailability(_query: AvailabilityQuery): Promise<ReadonlyArray<AvailabilityRow>> {
@@ -241,6 +326,7 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 						currency: 'RUB',
 						status: b.terminalState === 'confirmed' ? 'confirmed' : 'cancelled',
 						lastModificationUtc: new Date(b.createdAtMs).toISOString(),
+						sequenceNumber: b.sequenceNumber,
 						guest: { firstName: 'ETG', lastName: 'Guest' },
 					}),
 				),
@@ -249,6 +335,13 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 		},
 
 		async verifyBooking(input: VerifyBookingInput): Promise<VerifyBookingResult> {
+			// Cross-tenant guard (Round 8 audit): mis-cached adapter MUST refuse
+			// foreign tenantId to prevent cross-tenant leak.
+			if (input.tenantId !== opts.tenantId) {
+				throw new Error(
+					`cross_tenant_refused: adapter bound to ${opts.tenantId} got ${input.tenantId}`,
+				)
+			}
 			const arrival = new Date(input.checkIn).getTime()
 			const departure = new Date(input.checkOut).getTime()
 			const nights = Math.max(1, Math.round((departure - arrival) / (24 * 60 * 60 * 1000)))
@@ -268,13 +361,27 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 			throw new Error('ETG createBooking: use 5-stage SM (prebook→book→start→check) per D8')
 		},
 
-		async cancelReservation(input: { readonly tenantId: string; readonly externalId: string }) {
+		async cancelReservation(input: {
+			readonly tenantId: string
+			readonly externalId: string
+			readonly idempotencyKey: string
+		}) {
+			// Cross-tenant guard (Round 8 audit).
 			if (input.tenantId !== opts.tenantId) return { status: 'not_found' as const }
 			const b = bookings.get(input.externalId)
 			if (!b) return { status: 'not_found' as const }
-			if (b.terminalState === 'failed') return { status: 'already_cancelled' as const }
+			// Idempotent retry: same key → already-cancelled (no-op safety).
+			if (b.cancellationIdempotencyKeys.has(input.idempotencyKey)) {
+				return { status: 'already_cancelled' as const }
+			}
+			if (b.terminalState === 'failed') {
+				b.cancellationIdempotencyKeys.add(input.idempotencyKey)
+				return { status: 'already_cancelled' as const }
+			}
 			b.terminalState = 'failed'
 			b.stage = 'check'
+			b.sequenceNumber = nextSequenceNumber()
+			b.cancellationIdempotencyKeys.add(input.idempotencyKey)
 			return { status: 'cancelled' as const }
 		},
 
@@ -366,11 +473,18 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 		},
 
 		async prebook(input) {
+			// Round 8 P0-3: derive checkIn/checkOut/guestCount от input, NOT fixture.
+			// Behaviour-faithfulness canon — fake-fixture hardcoded values violate
+			// the "Mock = canonical interface полнофункциональный" rule
+			// (`feedback_behaviour_faithful_mock_canon.md`).
 			const partnerOrderId = randomUUID()
 			partnerOrderIdGlobalIndex.add(partnerOrderId)
 			const brand = input.brand ?? defaultBrand
 			const commercialModel = input.commercialModel ?? defaultCommercialModel
 			const bookHash = buildBookHash(input.searchId)
+			const arrival = new Date(input.checkIn).getTime()
+			const departure = new Date(input.checkOut).getTime()
+			const nights = Math.max(1, Math.round((departure - arrival) / (24 * 60 * 60 * 1000)))
 			bookings.set(partnerOrderId, {
 				partnerOrderId,
 				stage: 'prebook',
@@ -378,11 +492,11 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 				brand,
 				source: BRAND_TO_SOURCE[brand],
 				commercialModel,
-				priceMicros: 7_000_000n,
+				priceMicros: 7_000_000n * BigInt(nights) * BigInt(input.guestCount),
 				currency: 'RUB',
-				checkIn: '2027-06-15',
-				checkOut: '2027-06-17',
-				guestCount: 1,
+				checkIn: input.checkIn,
+				checkOut: input.checkOut,
+				guestCount: input.guestCount,
 				rotationAttempts: 0,
 				createdAtMs: now(),
 				bookStartedAtMs: null,
@@ -390,6 +504,8 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 				terminalState: null,
 				cancellationPolicy: DEFAULT_CANCELLATION_POLICY,
 				rgExt: [{ category: 'main', url: 'https://cdn.ostrovok.ru/h/8473727/m1.jpg' }],
+				sequenceNumber: nextSequenceNumber(),
+				cancellationIdempotencyKeys: new Set<string>(),
 			})
 			return { partnerOrderId, bookHash }
 		},
@@ -416,12 +532,14 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 					...b,
 					partnerOrderId: newId,
 					rotationAttempts: b.rotationAttempts + 1,
+					sequenceNumber: nextSequenceNumber(),
 				})
 				return { stage: 'book', partnerOrderIdRotated: newId }
 			}
 
 			b.stage = 'book'
 			b.bookStartedAtMs = now()
+			b.sequenceNumber = nextSequenceNumber()
 			return { stage: 'book' }
 		},
 
@@ -429,6 +547,7 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 			const b = bookings.get(input.partnerOrderId)
 			if (!b) throw new Error(`partner_order_id not found: ${input.partnerOrderId}`)
 			b.stage = 'start'
+			b.sequenceNumber = nextSequenceNumber()
 			return { stage: 'start' }
 		},
 
@@ -443,6 +562,7 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 				if (elapsed > timeout) {
 					b.terminalState = 'failed'
 					b.stage = 'check'
+					b.sequenceNumber = nextSequenceNumber()
 					return {
 						stage: 'check',
 						terminal: 'failed',
@@ -464,6 +584,7 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 			if (!b) throw new Error(`partner_order_id not found: ${input.partnerOrderId}`)
 			b.terminalState = input.outcome
 			b.stage = 'check'
+			b.sequenceNumber = nextSequenceNumber()
 		},
 
 		extractBrandFromSource(source: string): EtgBrand | null {

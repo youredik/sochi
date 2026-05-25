@@ -997,6 +997,7 @@ function ActionView(props: {
 					}}
 					guestAlreadyConsentedToVersion={null}
 					guestId={booking.primaryGuestId}
+					bookingCheckOut={booking.checkOut}
 					{...(operatorIdentity ? { operatorIdentity } : {})}
 				/>
 			) : null}

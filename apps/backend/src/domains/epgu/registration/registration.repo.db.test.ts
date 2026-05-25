@@ -305,6 +305,304 @@ describe('migrationRegistration.repo — listPendingPoll', () => {
 	})
 })
 
+describe('migrationRegistration.repo — getApproachingDeadline (Round 8 P1-4)', () => {
+	// 109-ФЗ ст.22: hotel must transmit guest data to МВД ГИС МУ within 24h
+	// (1 рабочий день). Default threshold = 4h → alert fires when row has
+	// been pending ≥20h (24h - 4h) with status NOT in safe-set.
+	//
+	// Safe-set codes (excluded from alert; semantic from task spec literal
+	// 'submitted'/'accepted'/'failed_permanent'):
+	//   1  — registered (СМЭВ-accepted, formal RUS-side ack)
+	//   2  — sent_to_authority (МВД ведомство received)
+	//   3  — executed [FINAL]
+	//   4  — refused [FINAL]
+	//   10 — cancelled [FINAL]
+	//   17 — submitted (transport pushArchive ack, task literal)
+	//
+	// Alert-eligible (still-pending) codes: {0, 5, 9, 14, 15, 21, 22, 24}.
+	//
+	// Anchor: `submittedAt` (set when transport.pushArchive ack'd). If
+	// submittedAt IS NULL → row never reached transport — excluded from this
+	// query (different concern: pre-submission stuck draft).
+	test('[DL1] row submitted 21h ago + status=21 → returned (past 20h gate, 4h threshold)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const now = new Date()
+		// submittedAt: 21h ago — past 20h cliff (now - 20h = cutoff)
+		// Spec note: per `now() - submittedAt > (24h - thresholdHours)` formula
+		// с threshold=4 → cutoff at 20h; we use 21h-ago to ensure strict-greater.
+		const submittedAt = new Date(now.getTime() - 21 * 60 * 60 * 1000)
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: `order-dl1-${input.id}`,
+			statusCode: 21, // acknowledged — non-safe
+			submittedAt,
+		})
+		await repo.updateAfterPoll(TENANT_A, input.id, {
+			statusCode: 21,
+			isFinal: false,
+			reasonRefuse: null,
+			errorCategory: null,
+			retryCount: 5,
+			lastPolledAt: now,
+			nextPollAt: new Date(now.getTime() + 60_000),
+			finalizedAt: null,
+		})
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).not.toBeUndefined()
+		expect(ours?.statusCode).toBe(21)
+	})
+
+	test('[DL2] row submitted 23h59m ago + status=22 → returned (red zone)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const now = new Date()
+		const submittedAt = new Date(now.getTime() - (23 * 60 + 59) * 60 * 1000)
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: `order-dl2-${input.id}`,
+			statusCode: 22, // delivery_error
+			submittedAt,
+		})
+		await repo.updateAfterPoll(TENANT_A, input.id, {
+			statusCode: 22,
+			isFinal: false,
+			reasonRefuse: 'transient transport error',
+			errorCategory: 'service_temporarily_unavailable',
+			retryCount: 12,
+			lastPolledAt: now,
+			nextPollAt: new Date(now.getTime() + 5 * 60_000),
+			finalizedAt: null,
+		})
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).not.toBeUndefined()
+		expect(ours?.statusCode).toBe(22)
+	})
+
+	test('[DL3] row submitted 5h ago + status=21 → NOT returned (well-before threshold)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const now = new Date()
+		const submittedAt = new Date(now.getTime() - 5 * 60 * 60 * 1000)
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: `order-dl3-${input.id}`,
+			statusCode: 21,
+			submittedAt,
+		})
+		await repo.updateAfterPoll(TENANT_A, input.id, {
+			statusCode: 21,
+			isFinal: false,
+			reasonRefuse: null,
+			errorCategory: null,
+			retryCount: 1,
+			lastPolledAt: now,
+			nextPollAt: new Date(now.getTime() + 60_000),
+			finalizedAt: null,
+		})
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).toBeUndefined()
+	})
+
+	test('[DL4] row submitted 19h ago + status=17 (transport-submitted, task-safe) → NOT returned', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const now = new Date()
+		const submittedAt = new Date(now.getTime() - 19 * 60 * 60 * 1000)
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: `order-dl4-${input.id}`,
+			statusCode: 17, // submitted (safe)
+			submittedAt,
+		})
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).toBeUndefined()
+	})
+
+	test('[DL5] row submitted 19h ago + status=3 (executed FINAL) → NOT returned', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const now = new Date()
+		const submittedAt = new Date(now.getTime() - 19 * 60 * 60 * 1000)
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: `order-dl5-${input.id}`,
+			statusCode: 17,
+			submittedAt,
+		})
+		await repo.updateAfterPoll(TENANT_A, input.id, {
+			statusCode: 3, // executed
+			isFinal: true,
+			reasonRefuse: null,
+			errorCategory: null,
+			retryCount: 3,
+			lastPolledAt: now,
+			nextPollAt: null,
+			finalizedAt: now,
+		})
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).toBeUndefined()
+	})
+
+	test('[DL6] row submitted 19h ago + status=1 (registered, СМЭВ accepted) → NOT returned', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const now = new Date()
+		const submittedAt = new Date(now.getTime() - 19 * 60 * 60 * 1000)
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: `order-dl6-${input.id}`,
+			statusCode: 17,
+			submittedAt,
+		})
+		await repo.updateAfterPoll(TENANT_A, input.id, {
+			statusCode: 1, // registered (СМЭВ accepted, task-safe)
+			isFinal: false,
+			reasonRefuse: null,
+			errorCategory: null,
+			retryCount: 1,
+			lastPolledAt: now,
+			nextPollAt: new Date(now.getTime() + 60_000),
+			finalizedAt: null,
+		})
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).toBeUndefined()
+	})
+
+	test('[DL7] boundary: 20h+1s elapsed + threshold=4 → returned (just-past 20h gate)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const now = new Date()
+		// 20h + 1s ago — just past 20h boundary. Per spec formula
+		// `now - submittedAt > (24h - threshold)` strict-greater; exactly 20h
+		// is excluded, 20h+1s is included.
+		const submittedAt = new Date(now.getTime() - (20 * 60 * 60 + 1) * 1000)
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: `order-dl7-${input.id}`,
+			statusCode: 21,
+			submittedAt,
+		})
+		await repo.updateAfterPoll(TENANT_A, input.id, {
+			statusCode: 21,
+			isFinal: false,
+			reasonRefuse: null,
+			errorCategory: null,
+			retryCount: 5,
+			lastPolledAt: now,
+			nextPollAt: new Date(now.getTime() + 60_000),
+			finalizedAt: null,
+		})
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).not.toBeUndefined()
+	})
+
+	test('[DL7b] boundary: exactly 20h elapsed → NOT returned (strict-greater formula)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const now = new Date()
+		// EXACTLY 20h ago — boundary case; per `submittedAt < cutoffTs` strict
+		// inequality, exactly-at-cutoff is excluded. Operator at edge will get
+		// alerted on next cron tick (60s later → moves past boundary).
+		const submittedAt = new Date(now.getTime() - 20 * 60 * 60 * 1000)
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: `order-dl7b-${input.id}`,
+			statusCode: 21,
+			submittedAt,
+		})
+		await repo.updateAfterPoll(TENANT_A, input.id, {
+			statusCode: 21,
+			isFinal: false,
+			reasonRefuse: null,
+			errorCategory: null,
+			retryCount: 5,
+			lastPolledAt: now,
+			nextPollAt: new Date(now.getTime() + 60_000),
+			finalizedAt: null,
+		})
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).toBeUndefined()
+	})
+
+	test('[DL8] boundary: 19h59m59s elapsed → NOT returned (just-before threshold)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		const now = new Date()
+		// 19h59m59s ago — JUST BEFORE 20h boundary
+		const submittedAt = new Date(now.getTime() - (19 * 3600 + 59 * 60 + 59) * 1000)
+		await repo.updateAfterReserve(TENANT_A, input.id, {
+			epguOrderId: `order-dl8-${input.id}`,
+			statusCode: 21,
+			submittedAt,
+		})
+		await repo.updateAfterPoll(TENANT_A, input.id, {
+			statusCode: 21,
+			isFinal: false,
+			reasonRefuse: null,
+			errorCategory: null,
+			retryCount: 5,
+			lastPolledAt: now,
+			nextPollAt: new Date(now.getTime() + 60_000),
+			finalizedAt: null,
+		})
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).toBeUndefined()
+	})
+
+	test('[DL9] row with submittedAt=NULL → NOT returned (draft path; different concern)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const input = baseInput()
+		await repo.create(input)
+		// Never call updateAfterReserve — submittedAt stays NULL
+		const now = new Date()
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const ours = approaching.find((r) => r.id === input.id)
+		expect(ours).toBeUndefined()
+	})
+
+	test('[DL10] cross-tenant rows both visible (cron-internal scan, per-row tenantId routing)', async () => {
+		const repo = createMigrationRegistrationRepo(getTestSql())
+		const now = new Date()
+		const submittedAt = new Date(now.getTime() - 22 * 60 * 60 * 1000)
+		const inputA = baseInput({ tenantId: TENANT_A })
+		const inputB = baseInput({ tenantId: TENANT_B })
+		for (const inp of [inputA, inputB]) {
+			await repo.create(inp)
+			await repo.updateAfterReserve(inp.tenantId, inp.id, {
+				epguOrderId: `order-${inp.id}`,
+				statusCode: 21,
+				submittedAt,
+			})
+			await repo.updateAfterPoll(inp.tenantId, inp.id, {
+				statusCode: 21,
+				isFinal: false,
+				reasonRefuse: null,
+				errorCategory: null,
+				retryCount: 1,
+				lastPolledAt: now,
+				nextPollAt: new Date(now.getTime() + 60_000),
+				finalizedAt: null,
+			})
+		}
+		const approaching = await repo.getApproachingDeadline(now, 4, 10_000)
+		const a = approaching.find((r) => r.id === inputA.id)
+		const b = approaching.find((r) => r.id === inputB.id)
+		expect(a?.tenantId).toBe(TENANT_A)
+		expect(b?.tenantId).toBe(TENANT_B)
+	})
+})
+
 describe('migrationRegistration.repo — updateAfterReserve + updateAfterPoll', () => {
 	test('[U1] updateAfterReserve: epguOrderId + statusCode + submittedAt записаны', async () => {
 		const repo = createMigrationRegistrationRepo(getTestSql())

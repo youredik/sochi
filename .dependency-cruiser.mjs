@@ -40,17 +40,39 @@ export default {
 		{
 			name: 'no-cross-domain',
 			comment:
-				'Domains must not import runtime code from other domains — use type-only imports for DI wiring. Integration tests (*.integration.{db.,}test.ts) are exempted.',
+				'Domains must not import runtime code from other domains — use type-only imports for DI wiring. Integration tests (*.integration.{db.,}test.ts) are exempted. `_demo/` is exempted per Round 9 canon — see `allow-demo-imports-production` rule.',
 			severity: 'error',
 			from: {
 				path: '^apps/backend/src/domains/([^/]+)/',
-				pathNot: '\\.integration\\.(db\\.)?test\\.ts$',
+				pathNot: '(\\.integration\\.(db\\.)?test\\.ts$|^apps/backend/src/domains/_demo/)',
 			},
 			to: {
 				path: '^apps/backend/src/domains/([^/]+)/',
 				pathNot: '^apps/backend/src/domains/$1/',
 				dependencyTypesNot: ['type-only'],
 			},
+		},
+
+		// === Round 9 demo isolation (canon: feedback_round_9_demo_ota_server_canon_2026_05_25) ===
+		//
+		// Hexagonal Ports-and-Adapters: `_demo/` is a special-purpose folder that
+		// LEGITIMATELY imports production code (interfaces, Mock factories, lib helpers)
+		// to HTTP-wrap them for sales-demo wow-effect. The boundary is **one-way**:
+		// production code MUST NEVER import from `_demo/` (lint-enforced below).
+		//
+		// Exit ramps for future Phase 2+: when `_demo/` graduates to its own deploy
+		// unit, just `mv apps/backend/src/domains/_demo apps/mock-ota/src/` — the
+		// folder structure mirrors a standalone app already.
+		{
+			name: 'forbid-production-to-demo',
+			comment:
+				'Production code MUST NEVER import from _demo/. The boundary is one-way per Round 9 canon. If you need shared logic, refactor it to `lib/` instead. Exemption: `app.ts` is the wiring root and may call `registerDemoRoutes()` env-gated; mounting is the only allowed cross-boundary contact.',
+			severity: 'error',
+			from: {
+				path: '^apps/backend/src/',
+				pathNot: '(^apps/backend/src/domains/_demo/|^apps/backend/src/app\\.ts$)',
+			},
+			to: { path: '^apps/backend/src/domains/_demo/' },
 		},
 
 		// === Middleware isolation ===

@@ -102,6 +102,7 @@ import { createAdminTaxRoutes } from './routes/admin/tax.ts'
 import { createBookingSseCdcHandler } from './sse/booking-cdc-projection.ts'
 import { createBookingEventBroadcaster } from './sse/booking-event-broadcaster.ts'
 import { broadcastShutdown, createSseRoutes } from './sse/sse.routes.ts'
+import { startMigrationDeadlineMonitor } from './cron/epgu-deadline-monitor.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
 import { startDemoRefreshCron } from './workers/demo-refresh.cron.ts'
 import { createCancelFeeFinalizerHandler } from './workers/handlers/cancel-fee-finalizer.ts'
@@ -113,6 +114,7 @@ import { createSlotReconciliationHandler } from './workers/handlers/slot-reconci
 import { createMigrationRegistrationEnqueuerHandler } from './workers/handlers/migration-registration-enqueuer.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
 import { createOpsMetricsRoutes } from './domains/observability/ops-metrics.routes.ts'
+import { registerDemoRoutes } from './domains/_demo/index.ts'
 import { createPassportScanAuditProjectorHandler } from './workers/handlers/passport-scan-audit-projector.ts'
 import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
 import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
@@ -126,6 +128,21 @@ import { startNotificationDispatcher } from './workers/notification-dispatcher.t
  * Export type `AppType = typeof routes` — NOT `typeof app`.
  */
 const app = new Hono<AppEnv>()
+
+// Round 9 demo OTA mock-server routes (env-gated, mounted ONLY when
+// `APP_MODE !== 'production'`). Triple defense from prod accident:
+// env-gate (here) + reserved-test-ranges shield (Round 8) + 24h YDB TTL
+// (Phase 2). Production deploys never see `/api/_mock-ota/*` paths — they
+// return 404. See `domains/_demo/README.md` for full canon.
+if (env.APP_MODE !== 'production') {
+	registerDemoRoutes(app, {
+		tenantId: 'demo-tenant',
+		yandexPropertyId: 'demo-hotel-sochi',
+		ostrovokPropertyId: 'demo-hotel-sochi',
+		webhookTargetBaseUrl: 'http://localhost:8787',
+		webhookSecret: 'demo-mock-ota-webhook-secret-do-not-use-in-prod',
+	})
+}
 
 // Domain factories (one place to wire sql → repo → service).
 const propertyFactory = createPropertyFactory(sql)
@@ -697,6 +714,23 @@ const notificationDispatcher =
 const notificationCron =
 	process.env.NODE_ENV === 'test' ? null : startNotificationCron(sql, logger, {})
 
+// Round 8 P1-4 (2026-05-25) — 109-ФЗ ст.22 24h compliance cliff monitor.
+// Scans `migrationRegistration` every 5 минут; logs warn + ops-metric per
+// row that has been pending ≥20h (default 4h threshold to 24h deadline) without
+// reaching МВД-safe-state. Operator pages on event-pattern alarm — 4-hour
+// window до штрафа ст.18.9 КоАП (400-500к ₽).
+const migrationDeadlineMonitor =
+	process.env.NODE_ENV === 'test'
+		? null
+		: startMigrationDeadlineMonitor(
+				{
+					fetchApproaching: (now, thresholdHours, limit) =>
+						migrationRegistrationFactory.repo.getApproachingDeadline(now, thresholdHours, limit),
+					log: logger,
+				},
+				{},
+			)
+
 const allCdcConsumers = [
 	bookingCdcConsumer,
 	folioActivityConsumer,
@@ -757,6 +791,7 @@ export async function stopApp(): Promise<void> {
 	if (demoRefreshCron) await demoRefreshCron.stop()
 	if (notificationDispatcher) await notificationDispatcher.stop()
 	if (notificationCron) await notificationCron.stop()
+	if (migrationDeadlineMonitor) await migrationDeadlineMonitor.stop()
 	await channelFactory.stopDispatcher()
 }
 

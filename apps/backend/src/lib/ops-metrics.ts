@@ -238,3 +238,35 @@ export function emitPassportScanMetric(input: {
 // Round 2 Senior P1-9: throttle warn-log emission (60s window).
 let lastWarnLogTime = 0
 const WARN_LOG_THROTTLE_MS = 60_000
+
+/**
+ * Round 8 P1-4 (2026-05-25) — 109-ФЗ ст.22 24h compliance cliff observability.
+ *
+ * Cron `epgu-deadline-monitor.ts` calls this for every `migrationRegistration`
+ * row that has been pending ≥(24h - thresholdHours) without reaching safe-state.
+ * Surface: YC Cloud Monitoring alarm на cumulative count > 0 = операторы
+ * получают paging within 4-hour window до штрафа ст.18.9 КоАП (400-500к ₽).
+ *
+ * Labels intentionally low-cardinality:
+ *   - `hoursBucket`: 'lt_1' | 'lt_2' | 'lt_3' | 'lt_4' (mapped from
+ *     hoursUntilDeadline by `hoursUntilDeadlineToBucket` в epgu-deadline-monitor.ts).
+ *     4 buckets = bounded; safe for Prometheus exposition format.
+ *
+ * **PII guard (Sprint C canon)**: tenantId / bookingId NEVER appear в labels —
+ * they belong only в structured log (Pino), которые YC Cloud Logging aggregates
+ * per-instance. Labels stay aggregable across tenants without exposing identity.
+ */
+export function emitMigrationRegistrationDeadlineMetric(input: {
+	/** @deprecated — only used for parameter symmetry с future helpers; sanitized away. */
+	readonly tenantId?: string
+	readonly hoursBucket: 'lt_1' | 'lt_2' | 'lt_3' | 'lt_4'
+	readonly value: number
+}): void {
+	// Intentionally drop tenantId — keep low-cardinality labels only.
+	void input.tenantId
+	opsMetricsBuffer.push({
+		name: 'migration_registration.approaching_deadline',
+		labels: { hoursBucket: input.hoursBucket },
+		value: input.value,
+	})
+}

@@ -356,6 +356,7 @@ function RescanSection({ row }: { row: MigrationRegistration }) {
 				}}
 				guestAlreadyConsentedToVersion={null}
 				guestId={row.guestId}
+				bookingCheckOut={row.departureDate}
 				{...(operatorIdentity ? { operatorIdentity } : {})}
 			/>
 			<input

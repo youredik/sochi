@@ -15,7 +15,7 @@
  *     [F2] Tax line includes percentage (200 bps → "2.0%")
  *     [F3] Tax line ABSENT когда tourismTaxRateBps = null
  *     [F4] Free-cancel deadline shown for refundable + has deadline
- *     [F5] Non-refundable badge shown for non-refundable
+ *     [F5] Non-refundable rate shows ПП-1912 disclosure (NOT legacy «невозвратный»)
  *     [F6] Continue calls onContinue when ready
  *
  *   ─── A11y ─────────────────────────────────────────────────
@@ -169,7 +169,7 @@ describe('<StickySummary>', () => {
 		expect(deadline.textContent).toContain('МСК')
 	})
 
-	test('[F5] Non-refundable rate shows warning, NOT cancel deadline', () => {
+	test('[F5] Non-refundable rate shows ПП-1912 disclosure (NOT legacy «невозвратный»), NOT cancel deadline', () => {
 		render(
 			<StickySummary
 				{...baseProps}
@@ -178,7 +178,14 @@ describe('<StickySummary>', () => {
 			/>,
 		)
 		expect(screen.queryByTestId('summary-cancel-deadline')).toBeNull()
-		expect(screen.queryByText(/Тариф невозвратный/)).not.toBe(null)
+		// Legacy «Тариф невозвратный — отмена и изменения не разрешены» eliminated per ПП-1912 п. 16.
+		expect(screen.queryByText(/Тариф невозвратный/)).toBe(null)
+		expect(screen.queryByText(/отмена и изменения не разрешены/)).toBe(null)
+		// ПП-1912 п. 16 canon: cancellation rights always exist; only refund % varies by boundary.
+		const disclosure = screen.getByTestId('summary-cancel-policy')
+		expect(disclosure.textContent).toBe(
+			'Отмена до дня заезда — возврат 100%; в день заезда или позже — удержание не более стоимости одних суток (ПП РФ 1912 п. 16).',
+		)
 	})
 
 	test('[F6] Continue calls onContinue when ready', () => {

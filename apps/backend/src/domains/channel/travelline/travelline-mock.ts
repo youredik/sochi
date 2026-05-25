@@ -36,9 +36,11 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type {
 	AriDelta,
+	AriPushResult,
 	AvailabilityQuery,
 	AvailabilityRow,
 	CancellationPolicy,
+	ChannelAdapterError,
 	ChannelManagerAdapter,
 	ChannelMetadata,
 	ChannelReservation,
@@ -53,6 +55,7 @@ import {
 	buildSourceUrn,
 	type SochiCloudEvent,
 } from '../../../lib/channel-manager/cloud-events.ts'
+import { nextSequenceNumber } from '../../../lib/channel-manager/sequence.ts'
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 const JWT_TTL_MS = 15 * 60 * 1000
@@ -74,6 +77,15 @@ interface InternalReservation {
 	readonly totalPriceMicros: bigint
 	readonly status: 'Confirmed' | 'Cancelled'
 	readonly lastModificationUtc: string
+	/**
+	 * Round 8 canon: per-resource monotonic sequence number. Каждая modification
+	 * для конкретного tlReservationId увеличивает sequence strictly. Consumers
+	 * detect gaps + drop out-of-order updates (наш architectural leapfrog vs
+	 * Apaleo/Mews/Cloudbeds/Hostaway). Derived from `nextSequenceNumber()`
+	 * (epoch-microseconds + sub-microsecond counter); on rebuild from external
+	 * timestamps Mock uses `lastModificationUtc * 1000 + tiebreaker`.
+	 */
+	readonly sequenceNumber: bigint
 	readonly guest: { firstName: string; lastName: string; email?: string; phone?: string }
 	readonly cancellationPolicy: CancellationPolicy
 }
@@ -171,6 +183,11 @@ export function createTravellineMock(opts: TravellineMockOptions): ChannelManage
 		readonly reservations: ReadonlyArray<InternalReservation>
 		readonly tokens: ReadonlyMap<string, CreateBookingTokenEntry>
 		readonly jwt: JwtTokenState | null
+		readonly ariSequenceHighWater: ReadonlyMap<string, bigint>
+		readonly cancelIdempotencyIndex: ReadonlyMap<
+			string,
+			'cancelled' | 'already_cancelled' | 'not_found'
+		>
 	}
 } {
 	const now = opts.nowMs ?? (() => Date.now())
@@ -188,6 +205,20 @@ export function createTravellineMock(opts: TravellineMockOptions): ChannelManage
 		hourCount: 0,
 		hourResetAtMs: now() + 3_600_000,
 	}
+	/**
+	 * Round 8 P1-1: per-resource ARI sequence high-water mark. Keyed by
+	 * (tenantId|propertyId|roomTypeId|ratePlanId|date) — каждое pushAri
+	 * delta MUST have strictly-increasing sequenceNumber per this key,
+	 * else rejected с `category: 'invalid_payload'`. Defense-in-depth для
+	 * out-of-order updates (CDC fan-out может deliver across-partition).
+	 */
+	const ariSequenceHighWater = new Map<string, bigint>()
+	/**
+	 * Round 8 cancelReservation idempotency: keyed by `idempotencyKey` →
+	 * cached final status. Repeated call с same key short-circuits к cached
+	 * answer (mirrors Stripe-style idempotency contract).
+	 */
+	const cancelIdempotencyIndex = new Map<string, 'cancelled' | 'already_cancelled' | 'not_found'>()
 
 	function ensureJwt(): JwtTokenState {
 		const t = now()
@@ -245,16 +276,66 @@ export function createTravellineMock(opts: TravellineMockOptions): ChannelManage
 		metadata,
 
 		// D1: PMS reads-only; pushAri is no-op success (TL ignores; PMS owns the source).
-		async pushAri(_delta: ReadonlyArray<AriDelta>) {
+		// Round 8 P1-1: even though TL is polling-based + ignores PMS pushes,
+		// the adapter MUST validate sequenceNumber monotonicity per-resource so
+		// downstream live-flip к real TL writer (or any consumer of pushAri) gets
+		// canonical gap-detection + drop-out-of-order semantics. Out-of-order
+		// deltas are REJECTED here with category 'invalid_payload'; this is
+		// canonical contract per `feedback_round_8_strict_sweep_canon_2026_05_25.md`.
+		async pushAri(delta: ReadonlyArray<AriDelta>): Promise<AriPushResult> {
 			ensureJwt()
 			consumeRateLimitOrThrow()
-			return { accepted: 0, rejected: 0 }
+			let accepted = 0
+			let rejected = 0
+			const errors: ChannelAdapterError[] = []
+			for (let i = 0; i < delta.length; i++) {
+				// biome-ignore lint/style/noNonNullAssertion: bounded loop, index in range
+				const d = delta[i]!
+				const key = ariResourceKey(d)
+				const prev = ariSequenceHighWater.get(key)
+				if (prev !== undefined && d.sequenceNumber <= prev) {
+					rejected++
+					errors.push({
+						category: 'invalid_payload',
+						message: 'sequence_number_not_monotonic',
+						itemIndex: i,
+						upstreamCode: 'TL_SEQUENCE_NOT_MONOTONIC',
+					})
+					continue
+				}
+				ariSequenceHighWater.set(key, d.sequenceNumber)
+				accepted++
+			}
+			return { accepted, rejected, errors }
 		},
 
-		async pushAriFull(_snapshot: ReadonlyArray<AriDelta>) {
+		async pushAriFull(snapshot: ReadonlyArray<AriDelta>): Promise<AriPushResult> {
 			ensureJwt()
 			consumeRateLimitOrThrow()
-			return { accepted: 0, rejected: 0 }
+			// Full-resync semantics: clear high-water + replay в order.
+			ariSequenceHighWater.clear()
+			let accepted = 0
+			let rejected = 0
+			const errors: ChannelAdapterError[] = []
+			for (let i = 0; i < snapshot.length; i++) {
+				// biome-ignore lint/style/noNonNullAssertion: bounded loop, index in range
+				const d = snapshot[i]!
+				const key = ariResourceKey(d)
+				const prev = ariSequenceHighWater.get(key)
+				if (prev !== undefined && d.sequenceNumber <= prev) {
+					rejected++
+					errors.push({
+						category: 'invalid_payload',
+						message: 'sequence_number_not_monotonic_within_snapshot',
+						itemIndex: i,
+						upstreamCode: 'TL_SEQUENCE_NOT_MONOTONIC',
+					})
+					continue
+				}
+				ariSequenceHighWater.set(key, d.sequenceNumber)
+				accepted++
+			}
+			return { accepted, rejected, errors }
 		},
 
 		// D1: Read availability from TL fixture. Filter by date range от query.
@@ -320,6 +401,10 @@ export function createTravellineMock(opts: TravellineMockOptions): ChannelManage
 					currency: 'RUB' as const,
 					status: r.status === 'Confirmed' ? ('confirmed' as const) : ('cancelled' as const),
 					lastModificationUtc: r.lastModificationUtc,
+					// Round 8 P1-1: per-resource monotonic sequence number forwarded к caller
+					// — каждое pull через polling cursor carries the same sequence so PMS
+					// can detect duplicates / out-of-order updates idempotently.
+					sequenceNumber: r.sequenceNumber,
 					guest: r.guest,
 				})),
 				hasMore,
@@ -409,26 +494,46 @@ export function createTravellineMock(opts: TravellineMockOptions): ChannelManage
 				totalPriceMicros: entry.totalPriceMicros,
 				status: 'Confirmed',
 				lastModificationUtc: created,
+				sequenceNumber: nextSequenceNumber(),
 				guest: entry.guest,
 				cancellationPolicy: entry.cancellationPolicy,
 			})
 			return { externalId: tlReservationId }
 		},
 
-		async cancelReservation(input: { readonly tenantId: string; readonly externalId: string }) {
+		async cancelReservation(input: {
+			readonly tenantId: string
+			readonly externalId: string
+			readonly idempotencyKey: string
+		}) {
 			ensureJwt()
 			consumeRateLimitOrThrow()
+			// Round 8 canon: repeated calls с same idempotencyKey MUST return cached
+			// outcome без side-effect. Cache spans all status terminals so a retry
+			// после network blip cannot accidentally double-cancel a freshly-revived
+			// booking (no-op on already-cancelled is provided separately by status).
+			const cached = cancelIdempotencyIndex.get(input.idempotencyKey)
+			if (cached !== undefined) return { status: cached }
 			if (input.tenantId !== opts.tenantId) {
+				cancelIdempotencyIndex.set(input.idempotencyKey, 'not_found')
 				return { status: 'not_found' as const }
 			}
 			const r = reservations.get(input.externalId)
-			if (!r) return { status: 'not_found' as const }
-			if (r.status === 'Cancelled') return { status: 'already_cancelled' as const }
+			if (!r) {
+				cancelIdempotencyIndex.set(input.idempotencyKey, 'not_found')
+				return { status: 'not_found' as const }
+			}
+			if (r.status === 'Cancelled') {
+				cancelIdempotencyIndex.set(input.idempotencyKey, 'already_cancelled')
+				return { status: 'already_cancelled' as const }
+			}
 			reservations.set(input.externalId, {
 				...r,
 				status: 'Cancelled',
 				lastModificationUtc: new Date(now()).toISOString(),
+				sequenceNumber: nextSequenceNumber(),
 			})
+			cancelIdempotencyIndex.set(input.idempotencyKey, 'cancelled')
 			return { status: 'cancelled' as const }
 		},
 
@@ -495,9 +600,21 @@ export function createTravellineMock(opts: TravellineMockOptions): ChannelManage
 				reservations: Array.from(reservations.values()),
 				tokens: new Map(tokens),
 				jwt,
+				ariSequenceHighWater: new Map(ariSequenceHighWater),
+				cancelIdempotencyIndex: new Map(cancelIdempotencyIndex),
 			}
 		},
 	}
+}
+
+/**
+ * Round 8 P1-1: derive per-resource ARI key for sequenceNumber monotonicity
+ * tracking. Resource identity = (tenant, property, roomType, ratePlan, date).
+ * Used by pushAri / pushAriFull to enforce strictly-increasing sequence
+ * per-resource — out-of-order updates rejected as `invalid_payload`.
+ */
+function ariResourceKey(delta: AriDelta): string {
+	return `${delta.tenantId}|${delta.propertyId}|${delta.roomTypeId}|${delta.ratePlanId}|${delta.date}`
 }
 
 function computeMockPrice(input: VerifyBookingInput): bigint {

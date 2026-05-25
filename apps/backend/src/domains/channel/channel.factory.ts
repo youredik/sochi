@@ -168,6 +168,7 @@ export function createChannelFactory(
 	const webhookRoutes = createChannelWebhookRoutes({
 		inboxRepo,
 		secretRepo,
+		connectionRepo, // Round 8 P1-6: required для cross-tenant authorization on inbound webhooks
 		...(opts.webhookIpAllowlist !== undefined ? { ipAllowlist: opts.webhookIpAllowlist } : {}),
 		...(opts.onAcceptedWebhook !== undefined ? { onAccepted: opts.onAcceptedWebhook } : {}),
 	})

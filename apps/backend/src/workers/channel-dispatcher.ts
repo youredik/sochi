@@ -30,6 +30,7 @@ import type {
 	ChannelDispatchRow,
 	createChannelDispatchRepo,
 } from '../domains/channel/dispatch.repo.ts'
+import type { ChannelErrorCategory } from '../lib/channel-manager/adapter.ts'
 import {
 	computeNextAttemptAt,
 	DISPATCH_MAX_ATTEMPTS,
@@ -44,6 +45,13 @@ export type HttpAttemptResult =
 			readonly httpStatus: number | null
 			readonly errorMessage: string
 			readonly responseBody?: unknown
+			/**
+			 * Round 8 canon (per `feedback_round_8_strict_sweep_canon_2026_05_25.md`):
+			 * adapters classify failures into a canonical category so dispatcher /
+			 * MCP layer / ops alerts can route correctly. Optional — legacy attempts
+			 * may omit and dispatcher treats as `unknown`.
+			 */
+			readonly errorCategory?: ChannelErrorCategory
 	  }
 
 export interface ChannelDispatcherDeps {

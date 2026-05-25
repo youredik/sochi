@@ -81,6 +81,12 @@ const REDACT_PATHS = [
 	'*.detectedCountryIso3',
 	'*.citizenshipIso3',
 	'*.rawResponseJson', // full Yandex Vision response may contain entities
+	// Round 8 P2-F (canon `feedback_round_8_strict_sweep_canon_2026_05_25.md`):
+	// verbatim consent text snapshots (long-form, may contain identifying context)
+	// MUST NOT leak via accidental logger.info({event:'passport_scan', body}) calls.
+	'*.textSnapshot',
+	'*.consent152fzTextSnapshot',
+	'*.consentTextSnapshot',
 	// 152-ФЗ: PII contact fields
 	'*.email',
 	'*.phone',

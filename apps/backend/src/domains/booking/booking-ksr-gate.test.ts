@@ -3,17 +3,26 @@
  * registry hard-gate в booking.service.create.
  *
  *   [K1] complianceRepo undefined → gate skipped (test-mode legacy)
- *   [K2] complianceRepo.assertKsrRegistryNumberPresent throws → error propagates
- *        BEFORE property lookup (gate fires first)
+ *   [K2] complianceRepo.assertKsrRegistryNumberPresent throws KsrRegistryNumber
+ *        MissingError → error propagates BEFORE property lookup (gate fires first)
  *   [K3] complianceRepo passes → service.create proceeds normally к property lookup
+ *   [K4] **Round 8 P0-6 2026-05-25** — complianceRepo throws GuestHouseFz127
+ *        NotRegisteredError (новая 127-ФЗ дорожка) → error propagates BEFORE
+ *        property lookup (same precedence как ПП-1951)
  *
  * Behaviour critical: hard-gate must fire BEFORE any other lookup. Otherwise
- * tenant получает PropertyNotFoundError вместо корректного KsrRegistryNumber
- * MissingError → confusing UX + legal exposure (booking-create looks healthy
- * пока property exists).
+ * tenant получает PropertyNotFoundError вместо корректного registry-missing
+ * error → confusing UX + legal exposure (booking-create looks healthy пока
+ * property exists).
+ *
+ * Branching logic itself (which error fires per ksrCategory + legalEntityType)
+ * is unit-tested в `compliance-gate.test.ts` (pure function, 19 tests).
  */
 import { describe, expect, mock, test } from 'bun:test'
-import { KsrRegistryNumberMissingError } from '../../errors/domain.ts'
+import {
+	GuestHouseFz127NotRegisteredError,
+	KsrRegistryNumberMissingError,
+} from '../../errors/domain.ts'
 import { createBookingService } from './booking.service.ts'
 
 // biome-ignore lint/suspicious/noExplicitAny: structural mocks для isolated service test
@@ -110,5 +119,38 @@ describe('KsrRegistryNumberMissingError', () => {
 		expect(err.code).toBe('KSR_REGISTRY_NUMBER_MISSING')
 		expect(err.name).toBe('KsrRegistryNumberMissingError')
 		expect(err.message).toContain('ПП-1951')
+	})
+})
+
+describe('GuestHouseFz127NotRegisteredError', () => {
+	test('error code is canonical GUEST_HOUSE_FZ127_NOT_REGISTERED', () => {
+		const err = new GuestHouseFz127NotRegisteredError('org_x')
+		expect(err.code).toBe('GUEST_HOUSE_FZ127_NOT_REGISTERED')
+		expect(err.name).toBe('GuestHouseFz127NotRegisteredError')
+		expect(err.message).toContain('127-ФЗ')
+	})
+})
+
+describe('booking.service.create — guest_house 127-ФЗ propagation', () => {
+	test('[K4] complianceRepo throws GuestHouseFz127NotRegisteredError → propagates BEFORE property lookup', async () => {
+		// biome-ignore lint/suspicious/noExplicitAny: structural mock
+		const complianceRepo: any = {
+			assertKsrRegistryNumberPresent: mock(async (tenantId: string) => {
+				throw new GuestHouseFz127NotRegisteredError(tenantId)
+			}),
+		}
+		const service = createBookingService(
+			stubRepo,
+			stubRateRepo,
+			stubPropertyService,
+			stubRoomTypeService,
+			stubRatePlanService,
+			undefined,
+			complianceRepo,
+		)
+		await expect(service.create('org_t4', 'prop_x', baseInput, 'usr_a')).rejects.toThrow(
+			GuestHouseFz127NotRegisteredError,
+		)
+		expect(complianceRepo.assertKsrRegistryNumberPresent).toHaveBeenCalledWith('org_t4')
 	})
 })

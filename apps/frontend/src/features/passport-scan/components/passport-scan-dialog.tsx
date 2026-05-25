@@ -77,6 +77,7 @@ import { CONSENT_152FZ_VERSION } from '../lib/consent-version.ts'
 import { isDemoDeployment } from '../../auth/lib/demo-deployment.ts'
 import { ddmmyyyyToIso } from '../../../lib/format-ru.ts'
 import { fileToBase64, transcodeToJpegForVision } from '../lib/transcode-image.ts'
+import { validateExpiryAgainstStay } from '../lib/validate-expiry.ts'
 import { Consent152FzModal, type OperatorIdentity } from './consent-152fz-modal.tsx'
 
 type Stage = 'initial' | 'processing' | 'confirm'
@@ -144,6 +145,7 @@ export function PassportScanDialog({
 	identityMethod: identityMethodProp = 'passport_paper',
 	guestId,
 	operatorIdentity,
+	bookingCheckOut,
 }: {
 	open: boolean
 	onClose: () => void
@@ -172,6 +174,15 @@ export function PassportScanDialog({
 	 * Caller (e.g. migration-registration-detail-sheet) injects from active org.
 	 */
 	operatorIdentity?: OperatorIdentity
+	/**
+	 * Round 8 P1-3 / Canon P0 #3 (2026-05-25): booking checkout date as ISO
+	 * YYYY-MM-DD. When provided, expiry validation requires document to be
+	 * valid until end of stay (109-ФЗ ст.22 ч.3 + ПП РФ № 9 от 15.01.2007 —
+	 * ЕПГУ отвергает регистрацию с истекающим в период проживания документом).
+	 * Optional for backward-compat: callers without booking context (e.g.
+	 * standalone rescan flow) fall back to today-only check.
+	 */
+	bookingCheckOut?: string
 }) {
 	const titleId = useId()
 	const fileInputId = useId()
@@ -345,16 +356,17 @@ export function PassportScanDialog({
 			if (normExp === null || !/^\d{4}-\d{2}-\d{2}$/.test(normExp)) {
 				return { error: 'Заполните срок действия в формате ДД.ММ.ГГГГ' }
 			}
-			const expiry = new Date(normExp)
-			const today = new Date()
-			today.setUTCHours(0, 0, 0, 0)
-			if (Number.isNaN(expiry.getTime())) {
-				return { error: 'Срок действия — некорректная дата' }
-			}
-			if (expiry < today) {
-				return {
-					error: `Документ истёк ${normExp}. Гость должен предъявить действующий документ.`,
-				}
+			// Round 8 P1-3 / Canon P0 #3: validate против stay window when caller
+			// supplies bookingCheckOut (109-ФЗ ст.22 ч.3 + ПП РФ № 9 — passport
+			// must cover entire stay). Falls back to today-only check otherwise.
+			const todayIso = new Date().toISOString().slice(0, 10)
+			const expiryCheck = validateExpiryAgainstStay({
+				expiryIso: normExp,
+				todayIso,
+				checkOutIso: bookingCheckOut ?? null,
+			})
+			if (!expiryCheck.ok) {
+				return { error: expiryCheck.error }
 			}
 			expirationDateNorm = normExp
 		} else if (entities.expirationDate !== null) {

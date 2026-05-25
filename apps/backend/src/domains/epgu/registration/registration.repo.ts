@@ -217,6 +217,60 @@ export function createMigrationRegistrationRepo(sql: SqlInstance) {
 			return rows.map(rowToDomain)
 		},
 
+		/**
+		 * Round 8 P1-4 (2026-05-25) — 109-ФЗ ст.22 24h compliance cliff monitor.
+		 *
+		 * Returns rows that are approaching the 24h transmission deadline:
+		 *   - `submittedAt IS NOT NULL` (anchor exists)
+		 *   - `now - submittedAt >= (24h - thresholdHours)` (within alert window)
+		 *   - `statusCode NOT IN safe-set` (still pending МВД ack или error state)
+		 *
+		 * **Safe-set** (excluded — task literal 'submitted'/'accepted'/'failed_permanent'):
+		 *   - 1 (registered, СМЭВ accepted)
+		 *   - 2 (sent_to_authority)
+		 *   - 3 (executed [FINAL])
+		 *   - 4 (refused [FINAL])
+		 *   - 10 (cancelled [FINAL])
+		 *   - 17 (submitted, transport pushArchive ack)
+		 *
+		 * **Alert-eligible** (still in-flight): {0, 5, 9, 14, 15, 21, 22, 24}.
+		 *
+		 * Reference: `feedback_legal_round_5_corrections_canon_2026_05_23.md` —
+		 * ст.20 + ст.22 (24h SLA) + ст.18.9 КоАП штрафы (400-500к ₽ per row).
+		 *
+		 * Cron-internal scan (NO tenantId filter — handler routes per-row).
+		 * Default ORDER BY submittedAt ASC = oldest-first (FIFO honors 24h cliff).
+		 */
+		async getApproachingDeadline(
+			now: Date,
+			thresholdHours = 4,
+			limit = 500,
+		): Promise<MigrationRegistration[]> {
+			// Formula: `now - submittedAt > (24h - thresholdHours)` (strict-greater)
+			// → `submittedAt < now - (24h - thresholdHours)` = `submittedAt < cutoffTs`
+			// Strict-less; row exactly at boundary picked on next tick (60s later).
+			const cutoffMs = now.getTime() - (24 - thresholdHours) * 60 * 60 * 1000
+			const cutoffTs = new Date(cutoffMs)
+			const [rows = []] = await sql<Row[]>`
+				SELECT
+					tenantId, id, bookingId, guestId, documentId,
+					epguChannel, epguOrderId, epguApplicationNumber,
+					serviceCode, targetCode, supplierGid, regionCode,
+					arrivalDate, departureDate,
+					statusCode, isFinal, reasonRefuse, errorCategory,
+					submittedAt, lastPolledAt, nextPollAt, finalizedAt,
+					retryCount, attemptsHistoryJson, operatorNote,
+					createdAt, updatedAt, createdBy, updatedBy
+				FROM migrationRegistration
+				WHERE submittedAt IS NOT NULL
+				  AND submittedAt < ${cutoffTs}
+				  AND statusCode NOT IN (1, 2, 3, 4, 10, 17)
+				ORDER BY submittedAt ASC
+				LIMIT ${limit}
+			`.idempotent(true)
+			return rows.map(rowToDomain)
+		},
+
 		async listPendingPoll(now: Date, limit: number): Promise<MigrationRegistration[]> {
 			// Pick non-final rows whose nextPollAt is due. Cron polls these.
 			// statusCode IN (1,2,5,17,21,22) excludes finals (3,4,10) and draft (0)

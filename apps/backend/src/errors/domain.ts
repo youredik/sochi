@@ -82,6 +82,13 @@ export class RatePlanNotFoundError extends NotFoundError {
  * этого номера запрещено принимать брони, публиковать на каналах. КоАП ст.
  * 14.39 = 50-450к ₽ за публикацию без реестрового номера. Hard-gate refuses
  * `booking.create` пока tenant не заполнил `organizationProfile.ksrRegistryId`.
+ *
+ * **Round 8 P0-6 fix 2026-05-25**: gate теперь branches by ksrCategory —
+ * fires ONLY для hotel-class категорий (hotel/aparthotel/mini_hotel/
+ * sanatorium/hostel). Guest_house использует separate 127-ФЗ path
+ * (см. `GuestHouseFz127NotRegisteredError`). НПД-self-employed apartments
+ * вне обоих реестров и gate skipped entirely. See
+ * `apps/backend/src/domains/tenant/compliance-gate.ts`.
  */
 export class KsrRegistryNumberMissingError extends DomainError {
 	readonly code = 'KSR_REGISTRY_NUMBER_MISSING'
@@ -92,6 +99,43 @@ export class KsrRegistryNumberMissingError extends DomainError {
 				'Заполните в настройках организации → ИНН и реестр КСР.',
 		)
 		this.name = 'KsrRegistryNumberMissingError'
+	}
+}
+
+/**
+ * **Round 8 P0-6 fix 2026-05-25** — 127-ФЗ от 07.06.2025 «Об эксперименте
+ * по легализации деятельности по предоставлению гостиничных услуг в гостевых
+ * домах» + ПП РФ 1345 от 30.08.2025. Эксперимент в 21 регионе + Сириус,
+ * вступил в силу 01.09.2025; реестровая запись ОБЯЗАТЕЛЬНА с 01.01.2026 для
+ * приёма бронирований в гостевом доме (ИЖС, 5-15 номеров, ≤45 гостей,
+ * ≤1000 м²).
+ *
+ * Различие от ПП-1951:
+ *   - ПП-1951 (Росаккредитация ФГИС «Гостеприимство») = гостиницы / отели /
+ *     санатории / апарт-отели / хостелы. Cyrillic-С + 12 digits.
+ *   - 127-ФЗ (региональные реестры на базе Гос. услуг) = ТОЛЬКО гостевые дома.
+ *     Регистрация через подачу заявки в орган исполнительной власти субъекта РФ.
+ *
+ * Раздельные классы ошибок — потому что:
+ *   1. Operator UX hints разные (UI ведёт в разные wizards).
+ *   2. Legal-document base разный (152-ФЗ DPA, fiscal, отчётность).
+ *   3. Region-applicability разный (127-ФЗ только 21 регион + Сириус;
+ *      ПП-1951 federal).
+ *
+ * HTTP 428 Precondition Required (mirrors ПП-1951 mapping — server insists
+ * on completing missing precondition before honoring booking.create).
+ */
+export class GuestHouseFz127NotRegisteredError extends DomainError {
+	readonly code = 'GUEST_HOUSE_FZ127_NOT_REGISTERED'
+	constructor(tenantId: string) {
+		super(
+			`Guest house tenant ${tenantId} is NOT registered в реестре 127-ФЗ от 07.06.2025. ` +
+				'Required per 127-ФЗ + ПП РФ 1345 от 30.08.2025 для приёма бронирований ' +
+				'в эксперименте (21 регион + Сириус, в силе с 01.09.2025). ' +
+				'Подайте заявку через Госуслуги → орган исполнительной власти субъекта РФ; ' +
+				'отметьте в настройках организации «зарегистрирован в эксперименте 127-ФЗ».',
+		)
+		this.name = 'GuestHouseFz127NotRegisteredError'
 	}
 }
 

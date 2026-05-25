@@ -1,0 +1,26 @@
+-- Round 8 P0-2 fix (canon `feedback_round_8_strict_sweep_canon_2026_05_25.md`)
+--
+-- channelDispatch.payloadJson хранит full booking snapshot включая
+-- guestSnapshot (ФИО + паспорт per migration 0004) для downstream adapter
+-- calls. Без TTL это нарушение 152-ФЗ ст.21 ч.4 (PII retention only-while-
+-- needed, 30-day strict limit).
+--
+-- Sibling-sweep finding (canon `feedback_self_review_finds_halfmeasure`):
+-- 0053 (channelInbox) уже имеет `WITH (TTL = Interval("P7D") ON receivedAt)`.
+-- 0052 (channelDispatch, same author, 7 дней разницы) — забыл. Round 8
+-- закрывает sibling.
+--
+-- Retention 7d:
+--   - Dispatched (status='sent') row остаётся 7d для audit forensics + ops triage
+--   - DLQ (status='dlq') row остаётся 7d для retry analytics
+--   - Pending (status='pending') — должен dispatch в течение часов; если 7d
+--     висит — это deep failure mode, alert fires
+--   - Disabled (status='disabled', circuit breaker) — same 7d cycle
+--
+-- 7d vs ст.21 ч.4 30d: conservatively shorter — менее audit-friendly но
+-- более PII-protective. Acceptable trade-off для Round 8 quick close.
+--
+-- Future P1 (deferred to Round 9): KMS-encrypt payloadJson with envelope-
+-- encryption pattern, separate retention для encrypted vs plaintext fields.
+
+ALTER TABLE channelDispatch SET (TTL = Interval("P7D") ON createdAt);

@@ -169,4 +169,24 @@ describe('PassportScanDialog — UI shape (Sprint C Day 2)', () => {
 		const fileInput = screen.getByLabelText(/Файл документа/) as HTMLInputElement
 		expect(fileInput.disabled).toBe(true)
 	})
+
+	test('[D13] bookingCheckOut prop accepted без crash (Round 8 P1-3 / Canon P0 #3)', () => {
+		// Smoke test: dialog renders с new prop. Stay-window validation logic
+		// covered exhaustively в validate-expiry.test.ts (pure-function isolation
+		// canon — Round 7 v3).
+		expect(() =>
+			renderWithQueryClient(
+				<PassportScanDialog
+					open={true}
+					onClose={mock()}
+					onSave={mock()}
+					guestId="guest_test"
+					operatorIdentity={{ legalName: 'ООО «Гостиница Сочи»', inn: '2320200001' }}
+					bookingCheckOut="2026-06-25"
+				/>,
+			),
+		).not.toThrow()
+		// Dialog still renders core surface unchanged — no regression on initial stage.
+		expect(screen.getByRole('heading', { name: /Сканирование документа гостя/ })).not.toBeNull()
+	})
 })

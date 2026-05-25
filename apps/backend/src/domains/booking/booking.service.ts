@@ -204,10 +204,14 @@ export function createBookingService(
 			input: BookingCreateInput,
 			actorUserId: string,
 		) => {
-			// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — ПП-1951 от 27.12.2024
-			// (ред. 27.11.2025) hard-gate. Hotel MUST have реестровый номер
-			// (Росаккредитация ФГИС «Гостеприимство») чтобы принимать брони
-			// после 01.09.2025. Throws `KsrRegistryNumberMissingError` → 428.
+			// Sprint C+ Round 6 Legal P0 fix 2026-05-24 — initial ПП-1951 hard-
+			// gate. **Round 8 P0-6 fix 2026-05-25**: gate теперь branches by
+			// ksrCategory + legalEntityType — 3 regulatory paths:
+			//   - НПД (квартира посуточно самозанятый) → skip
+			//   - guest_house → 127-ФЗ registry → GuestHouseFz127NotRegisteredError → 428
+			//   - hotel-class → ПП-1951 КСР registry → KsrRegistryNumberMissingError → 428
+			// См. `apps/backend/src/domains/tenant/compliance-gate.ts` для pure-
+			// function branching logic + exhaustive unit tests.
 			// Gate skipped когда complianceRepo undefined (test mode).
 			if (complianceRepo) {
 				await complianceRepo.assertKsrRegistryNumberPresent(tenantId)

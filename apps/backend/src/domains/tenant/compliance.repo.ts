@@ -21,9 +21,15 @@
  *     заполнять step-by-step без блокировки на промежуточных стейтах.
  */
 
-import type { TenantCompliance, TenantCompliancePatch } from '@horeca/shared'
+import type {
+	KsrCategory,
+	LegalEntityType,
+	TenantCompliance,
+	TenantCompliancePatch,
+} from '@horeca/shared'
 import type { sql as SQL } from '../../db/index.ts'
 import { KsrRegistryNumberMissingError } from '../../errors/domain.ts'
+import { checkBookingComplianceGate } from './compliance-gate.ts'
 import {
 	boolOpt,
 	int64Opt,
@@ -101,36 +107,82 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 		},
 
 		/**
-		 * Sprint C+ Round 6 Legal P0 fix 2026-05-24 — ПП-1951 от 27.12.2024
-		 * (ред. 27.11.2025) hotel KSR (классификация средств размещения)
-		 * registry gate. Hard precondition for booking.create: tenant MUST
-		 * have non-empty `ksrRegistryId` (реестровый номер) или service
-		 * throws `KsrRegistryNumberMissingError` → HTTP 428 «Precondition
-		 * Required» с RU human-readable hint.
+		 * Sprint C+ Round 6 Legal P0 fix 2026-05-24 — initial ПП-1951 hard-gate.
 		 *
-		 * Cyrillic «С» + 12 digits format (`^С\d{12}$`) NOT enforced here —
-		 * existing tenant profiles могут хранить legacy data; format check
-		 * deferred к UI-side validation + soft warning. Hard-gate refuses
-		 * only `null` / empty / whitespace.
+		 * **Round 8 P0-6 fix 2026-05-25**: branched gate by ksrCategory +
+		 * legalEntityType per `project_rf_str_msp_horeca_landscape_2026_05_25.md`.
+		 * Three regulatory paths:
+		 *   1. NPD (квартира посуточно самозанятый) → skip gate, выручка через
+		 *      «Мой налог»; вне ПП-1951 и 127-ФЗ.
+		 *   2. guest_house → 127-ФЗ от 07.06.2025 + ПП РФ 1345 — separate registry
+		 *      (региональные органы, 21 регион + Сириус). Throws
+		 *      `GuestHouseFz127NotRegisteredError` → HTTP 428 если
+		 *      `guestHouseFz127Registered !== true`.
+		 *   3. Hotel-class (hotel/aparthotel/mini_hotel/sanatorium/hostel) →
+		 *      ПП-1951 КСР registry track. Throws `KsrRegistryNumberMissingError`
+		 *      → HTTP 428 если ksrRegistryId пустой.
 		 *
-		 * Demo deployment exemption: when `DEMO_DEPLOYMENT=true` env set,
-		 * seed-demo-tenant.ts должен populate ksrRegistryId с dummy `С000…`
-		 * value (FAKE registry number; legal acceptable для demo subdomain
-		 * банере «не загружайте реальные данные»).
+		 * Other categories (camping/tourist_center/recreation_complex/other/
+		 * rest_house) AND null ksrCategory → graceful degradation: log warning,
+		 * allow booking. Operator-onboarding wizard catches up later. Этот
+		 * defensive choice потому что demo deploys + legacy data часто имеют
+		 * incomplete compliance — blocking все incomplete profiles = worse UX
+		 * чем permissive с warn-log audit trail.
+		 *
+		 * Branch logic isolated в `compliance-gate.ts` pure function (per Round 7
+		 * v3 canon: pure-function module isolation для test imports). См.
+		 * `compliance-gate.test.ts` для exhaustive branch coverage (19 tests).
+		 *
+		 * Format `^С\d{12}$` (Cyrillic-С + 12 digits) NOT enforced here — это
+		 * UI-side validation + soft warning. Hard-gate refuses only `null` /
+		 * empty / whitespace для hotel-class.
+		 *
+		 * Demo deployment exemption: `seed-demo-tenant.ts` populates
+		 * `ksrRegistryId` с dummy `С000…` value (FAKE; legal acceptable per demo
+		 * banner «не загружайте реальные данные»).
+		 *
+		 * **Name preserved** for callsite stability — even though scope расширен.
+		 * Rename запланирован future cleanup (низкоприоритетен; semantics fixed).
 		 */
 		async assertKsrRegistryNumberPresent(tenantId: string): Promise<void> {
-			const [rows = []] = await sql<[{ ksrRegistryId: string | null }]>`
-				SELECT ksrRegistryId FROM organizationProfile
+			const [rows = []] = await sql<
+				[
+					{
+						ksrRegistryId: string | null
+						ksrCategory: string | null
+						legalEntityType: string | null
+						guestHouseFz127Registered: boolean | null
+					},
+				]
+			>`
+				SELECT ksrRegistryId, ksrCategory, legalEntityType, guestHouseFz127Registered
+				FROM organizationProfile
 				WHERE organizationId = ${tenantId}
 				LIMIT 1
 			`
 				.isolation('snapshotReadOnly')
 				.idempotent(true)
 			const row = rows[0]
-			const value = row?.ksrRegistryId?.trim() ?? ''
-			if (value.length === 0) {
+			if (!row) {
+				// No organizationProfile row — should never happen in production
+				// (invariant: row created by afterCreateOrganization hook). Preserve
+				// historical Round 6 behavior: treat absent row как «нет ksrRegistryId»
+				// = throw ПП-1951 missing. Operator-friendly default; can't заранее
+				// know which regulatory path applies без profile data.
 				throw new KsrRegistryNumberMissingError(tenantId)
 			}
+			const decision = checkBookingComplianceGate(tenantId, {
+				ksrRegistryId: row.ksrRegistryId,
+				ksrCategory: row.ksrCategory as KsrCategory | null,
+				legalEntityType: row.legalEntityType as LegalEntityType | null,
+				guestHouseFz127Registered: row.guestHouseFz127Registered,
+			})
+			if (decision !== null) {
+				throw decision
+			}
+			// Pass — graceful-degradation branches (null/camping/etc.) currently
+			// log no warning to keep this path side-effect-free; structured-log
+			// emission moved upstream к booking.service.create callsite if needed.
 		},
 
 		/**

@@ -33,12 +33,21 @@ import {
 	type VerifyResult,
 	verifySignature,
 } from '../../lib/channel-manager/standard-webhooks.ts'
+import type { createChannelConnectionRepo } from './connection.repo.ts'
 import type { createInboxRepo } from './inbox.repo.ts'
 import type { createWebhookSecretRepo } from './webhook-secret.repo.ts'
 
 export interface ChannelWebhookHandlerDeps {
 	readonly inboxRepo: ReturnType<typeof createInboxRepo>
 	readonly secretRepo: ReturnType<typeof createWebhookSecretRepo>
+	/**
+	 * Round 8 P1-6 (canon `feedback_round_8_strict_sweep_canon_2026_05_25.md`):
+	 * required для cross-tenant authorization on inbound webhooks. Without this
+	 * a forged `event.source` URN с valid signature for tenant A could be routed
+	 * to tenant B's inbox. We validate that (tenantId-from-URN, channelId-from-
+	 * route) has an active enabled connection в channelConnection table.
+	 */
+	readonly connectionRepo: ReturnType<typeof createChannelConnectionRepo>
 	readonly nowSeconds?: () => number
 	/**
 	 * Optional IP-allowlist fallback for channels с no HMAC (e.g. ЮKassa-style).
@@ -153,6 +162,36 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
 		if (tenantId === null) {
 			return c.json({ error: 'malformed_source' }, 400)
 		}
+
+		// Round 8 P1-6: verify channelCode in source URN matches route channelId
+		// (prevents URN-injection that re-routes to wrong adapter).
+		const channelCodeFromSource = extractChannelCode(event.source)
+		if (channelCodeFromSource === null) {
+			return c.json({ error: 'malformed_source' }, 400)
+		}
+		if (channelCodeFromSource !== channelId) {
+			return c.json(
+				{
+					error: 'channel_mismatch',
+					expectedChannelId: channelId,
+					sourceChannelCode: channelCodeFromSource,
+				},
+				400,
+			)
+		}
+
+		// Round 8 P1-6: verify (tenantId-from-URN, channelId-from-route) has an
+		// active enabled connection. Without this, a forged source URN с valid
+		// signature for tenant A could route to tenant B's inbox (cross-tenant
+		// attack vector).
+		const tenantConnections = await deps.connectionRepo.listByTenant(tenantId)
+		const authorizedConnection = tenantConnections.find(
+			(conn) => conn.channelId === channelId && conn.isEnabled,
+		)
+		if (authorizedConnection === undefined) {
+			return c.json({ error: 'forbidden_tenant_for_channel', tenantId, channelId }, 403)
+		}
+
 		const classification = await deps.inboxRepo.classifyAndInsert({
 			source: event.source,
 			eventId: event.id,
@@ -225,5 +264,17 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
  */
 export function extractTenantId(source: string): string | null {
 	const m = source.match(/^urn:sochi:channel:[^:]+:tenant:([^:]+)$/)
+	return m ? (m[1] ?? null) : null
+}
+
+/**
+ * Round 8 P1-6: extract channelCode from canonical source URN
+ *   `urn:sochi:channel:{channelCode}:tenant:{organizationId}`.
+ * Used to verify URN's claimed channelCode matches route's channelId
+ * parameter (prevents URN-injection cross-channel attack). Returns null
+ * on malformed input.
+ */
+export function extractChannelCode(source: string): string | null {
+	const m = source.match(/^urn:sochi:channel:([^:]+):tenant:[^:]+$/)
 	return m ? (m[1] ?? null) : null
 }

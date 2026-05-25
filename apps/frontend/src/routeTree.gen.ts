@@ -13,20 +13,30 @@ import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as DemoRouteImport } from './routes/demo'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WidgetTenantSlugRouteImport } from './routes/widget.$tenantSlug'
+import { Route as DemoShowcaseRouteImport } from './routes/demo.showcase'
 import { Route as BookingJwtRouteImport } from './routes/booking.$jwt'
 import { Route as AppOSelectRouteImport } from './routes/_app.o-select'
 import { Route as WidgetTenantSlugPropertyIdRouteImport } from './routes/widget.$tenantSlug_.$propertyId'
 import { Route as BookingGuestPortalBookingIdRouteImport } from './routes/booking.guest-portal.$bookingId'
 import { Route as AppOOrgSlugRouteImport } from './routes/_app.o.$orgSlug'
+import { Route as DemoOtaYandexIndexRouteImport } from './routes/demo.ota.yandex.index'
+import { Route as DemoOtaOstrovokIndexRouteImport } from './routes/demo.ota.ostrovok.index'
 import { Route as AppOOrgSlugIndexRouteImport } from './routes/_app.o.$orgSlug.index'
 import { Route as WidgetTenantSlugPropertyIdGuestAndPayRouteImport } from './routes/widget.$tenantSlug_.$propertyId_.guest-and-pay'
 import { Route as WidgetTenantSlugPropertyIdExtrasRouteImport } from './routes/widget.$tenantSlug_.$propertyId_.extras'
 import { Route as AppOOrgSlugSetupRouteImport } from './routes/_app.o.$orgSlug.setup'
 import { Route as AppOOrgSlugReceivablesRouteImport } from './routes/_app.o.$orgSlug.receivables'
 import { Route as AppOOrgSlugGridRouteImport } from './routes/_app.o.$orgSlug.grid'
+import { Route as DemoOtaYandexSuccessOrderIdRouteImport } from './routes/demo.ota.yandex.success.$orderId'
+import { Route as DemoOtaYandexPropertyIdRouteImport } from './routes/demo.ota.yandex.property.$id'
+import { Route as DemoOtaYandexBookingBookingTokenRouteImport } from './routes/demo.ota.yandex.booking.$bookingToken'
+import { Route as DemoOtaOstrovokSuccessOrderIdRouteImport } from './routes/demo.ota.ostrovok.success.$orderId'
+import { Route as DemoOtaOstrovokPropertyIdRouteImport } from './routes/demo.ota.ostrovok.property.$id'
+import { Route as DemoOtaOstrovokBookingPartnerOrderIdRouteImport } from './routes/demo.ota.ostrovok.booking.$partnerOrderId'
 import { Route as AppOOrgSlugAdminTaxRouteImport } from './routes/_app.o.$orgSlug.admin.tax'
 import { Route as AppOOrgSlugAdminNotificationsRouteImport } from './routes/_app.o.$orgSlug.admin.notifications'
 import { Route as AppOOrgSlugAdminMigrationRegistrationsRouteImport } from './routes/_app.o.$orgSlug.admin.migration-registrations'
@@ -59,6 +69,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoRoute = DemoRouteImport.update({
+  id: '/demo',
+  path: '/demo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
@@ -72,6 +87,11 @@ const WidgetTenantSlugRoute = WidgetTenantSlugRouteImport.update({
   id: '/widget/$tenantSlug',
   path: '/widget/$tenantSlug',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DemoShowcaseRoute = DemoShowcaseRouteImport.update({
+  id: '/showcase',
+  path: '/showcase',
+  getParentRoute: () => DemoRoute,
 } as any)
 const BookingJwtRoute = BookingJwtRouteImport.update({
   id: '/booking/$jwt',
@@ -99,6 +119,16 @@ const AppOOrgSlugRoute = AppOOrgSlugRouteImport.update({
   id: '/o/$orgSlug',
   path: '/o/$orgSlug',
   getParentRoute: () => AppRoute,
+} as any)
+const DemoOtaYandexIndexRoute = DemoOtaYandexIndexRouteImport.update({
+  id: '/ota/yandex/',
+  path: '/ota/yandex/',
+  getParentRoute: () => DemoRoute,
+} as any)
+const DemoOtaOstrovokIndexRoute = DemoOtaOstrovokIndexRouteImport.update({
+  id: '/ota/ostrovok/',
+  path: '/ota/ostrovok/',
+  getParentRoute: () => DemoRoute,
 } as any)
 const AppOOrgSlugIndexRoute = AppOOrgSlugIndexRouteImport.update({
   id: '/',
@@ -132,6 +162,41 @@ const AppOOrgSlugGridRoute = AppOOrgSlugGridRouteImport.update({
   path: '/grid',
   getParentRoute: () => AppOOrgSlugRoute,
 } as any)
+const DemoOtaYandexSuccessOrderIdRoute =
+  DemoOtaYandexSuccessOrderIdRouteImport.update({
+    id: '/ota/yandex/success/$orderId',
+    path: '/ota/yandex/success/$orderId',
+    getParentRoute: () => DemoRoute,
+  } as any)
+const DemoOtaYandexPropertyIdRoute = DemoOtaYandexPropertyIdRouteImport.update({
+  id: '/ota/yandex/property/$id',
+  path: '/ota/yandex/property/$id',
+  getParentRoute: () => DemoRoute,
+} as any)
+const DemoOtaYandexBookingBookingTokenRoute =
+  DemoOtaYandexBookingBookingTokenRouteImport.update({
+    id: '/ota/yandex/booking/$bookingToken',
+    path: '/ota/yandex/booking/$bookingToken',
+    getParentRoute: () => DemoRoute,
+  } as any)
+const DemoOtaOstrovokSuccessOrderIdRoute =
+  DemoOtaOstrovokSuccessOrderIdRouteImport.update({
+    id: '/ota/ostrovok/success/$orderId',
+    path: '/ota/ostrovok/success/$orderId',
+    getParentRoute: () => DemoRoute,
+  } as any)
+const DemoOtaOstrovokPropertyIdRoute =
+  DemoOtaOstrovokPropertyIdRouteImport.update({
+    id: '/ota/ostrovok/property/$id',
+    path: '/ota/ostrovok/property/$id',
+    getParentRoute: () => DemoRoute,
+  } as any)
+const DemoOtaOstrovokBookingPartnerOrderIdRoute =
+  DemoOtaOstrovokBookingPartnerOrderIdRouteImport.update({
+    id: '/ota/ostrovok/booking/$partnerOrderId',
+    path: '/ota/ostrovok/booking/$partnerOrderId',
+    getParentRoute: () => DemoRoute,
+  } as any)
 const AppOOrgSlugAdminTaxRoute = AppOOrgSlugAdminTaxRouteImport.update({
   id: '/admin/tax',
   path: '/admin/tax',
@@ -200,12 +265,14 @@ const AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/demo': typeof DemoRouteWithChildren
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/welcome': typeof WelcomeRoute
   '/o-select': typeof AppOSelectRoute
   '/booking/$jwt': typeof BookingJwtRoute
+  '/demo/showcase': typeof DemoShowcaseRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
   '/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
@@ -216,11 +283,19 @@ export interface FileRoutesByFullPath {
   '/widget/$tenantSlug/$propertyId/extras': typeof WidgetTenantSlugPropertyIdExtrasRoute
   '/widget/$tenantSlug/$propertyId/guest-and-pay': typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
   '/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
+  '/demo/ota/ostrovok/': typeof DemoOtaOstrovokIndexRoute
+  '/demo/ota/yandex/': typeof DemoOtaYandexIndexRoute
   '/o/$orgSlug/account/security': typeof AppOOrgSlugAccountSecurityRoute
   '/o/$orgSlug/admin/channels': typeof AppOOrgSlugAdminChannelsRoute
   '/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   '/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
+  '/demo/ota/ostrovok/booking/$partnerOrderId': typeof DemoOtaOstrovokBookingPartnerOrderIdRoute
+  '/demo/ota/ostrovok/property/$id': typeof DemoOtaOstrovokPropertyIdRoute
+  '/demo/ota/ostrovok/success/$orderId': typeof DemoOtaOstrovokSuccessOrderIdRoute
+  '/demo/ota/yandex/booking/$bookingToken': typeof DemoOtaYandexBookingBookingTokenRoute
+  '/demo/ota/yandex/property/$id': typeof DemoOtaYandexPropertyIdRoute
+  '/demo/ota/yandex/success/$orderId': typeof DemoOtaYandexSuccessOrderIdRoute
   '/o/$orgSlug/properties/$propertyId/content': typeof AppOOrgSlugPropertiesPropertyIdContentRoute
   '/o/$orgSlug/properties/$propertyId/inventory': typeof AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren
   '/o/$orgSlug/bookings/$bookingId/folios/$folioId': typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
@@ -230,12 +305,14 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/demo': typeof DemoRouteWithChildren
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/welcome': typeof WelcomeRoute
   '/o-select': typeof AppOSelectRoute
   '/booking/$jwt': typeof BookingJwtRoute
+  '/demo/showcase': typeof DemoShowcaseRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
@@ -245,11 +322,19 @@ export interface FileRoutesByTo {
   '/widget/$tenantSlug/$propertyId/extras': typeof WidgetTenantSlugPropertyIdExtrasRoute
   '/widget/$tenantSlug/$propertyId/guest-and-pay': typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
   '/o/$orgSlug': typeof AppOOrgSlugIndexRoute
+  '/demo/ota/ostrovok': typeof DemoOtaOstrovokIndexRoute
+  '/demo/ota/yandex': typeof DemoOtaYandexIndexRoute
   '/o/$orgSlug/account/security': typeof AppOOrgSlugAccountSecurityRoute
   '/o/$orgSlug/admin/channels': typeof AppOOrgSlugAdminChannelsRoute
   '/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   '/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
+  '/demo/ota/ostrovok/booking/$partnerOrderId': typeof DemoOtaOstrovokBookingPartnerOrderIdRoute
+  '/demo/ota/ostrovok/property/$id': typeof DemoOtaOstrovokPropertyIdRoute
+  '/demo/ota/ostrovok/success/$orderId': typeof DemoOtaOstrovokSuccessOrderIdRoute
+  '/demo/ota/yandex/booking/$bookingToken': typeof DemoOtaYandexBookingBookingTokenRoute
+  '/demo/ota/yandex/property/$id': typeof DemoOtaYandexPropertyIdRoute
+  '/demo/ota/yandex/success/$orderId': typeof DemoOtaYandexSuccessOrderIdRoute
   '/o/$orgSlug/properties/$propertyId/content': typeof AppOOrgSlugPropertiesPropertyIdContentRoute
   '/o/$orgSlug/properties/$propertyId/inventory': typeof AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren
   '/o/$orgSlug/bookings/$bookingId/folios/$folioId': typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
@@ -261,12 +346,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/demo': typeof DemoRouteWithChildren
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/welcome': typeof WelcomeRoute
   '/_app/o-select': typeof AppOSelectRoute
   '/booking/$jwt': typeof BookingJwtRoute
+  '/demo/showcase': typeof DemoShowcaseRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
   '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
@@ -277,11 +364,19 @@ export interface FileRoutesById {
   '/widget/$tenantSlug_/$propertyId_/extras': typeof WidgetTenantSlugPropertyIdExtrasRoute
   '/widget/$tenantSlug_/$propertyId_/guest-and-pay': typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
   '/_app/o/$orgSlug/': typeof AppOOrgSlugIndexRoute
+  '/demo/ota/ostrovok/': typeof DemoOtaOstrovokIndexRoute
+  '/demo/ota/yandex/': typeof DemoOtaYandexIndexRoute
   '/_app/o/$orgSlug/account/security': typeof AppOOrgSlugAccountSecurityRoute
   '/_app/o/$orgSlug/admin/channels': typeof AppOOrgSlugAdminChannelsRoute
   '/_app/o/$orgSlug/admin/migration-registrations': typeof AppOOrgSlugAdminMigrationRegistrationsRoute
   '/_app/o/$orgSlug/admin/notifications': typeof AppOOrgSlugAdminNotificationsRoute
   '/_app/o/$orgSlug/admin/tax': typeof AppOOrgSlugAdminTaxRoute
+  '/demo/ota/ostrovok/booking/$partnerOrderId': typeof DemoOtaOstrovokBookingPartnerOrderIdRoute
+  '/demo/ota/ostrovok/property/$id': typeof DemoOtaOstrovokPropertyIdRoute
+  '/demo/ota/ostrovok/success/$orderId': typeof DemoOtaOstrovokSuccessOrderIdRoute
+  '/demo/ota/yandex/booking/$bookingToken': typeof DemoOtaYandexBookingBookingTokenRoute
+  '/demo/ota/yandex/property/$id': typeof DemoOtaYandexPropertyIdRoute
+  '/demo/ota/yandex/success/$orderId': typeof DemoOtaYandexSuccessOrderIdRoute
   '/_app/o/$orgSlug/properties/$propertyId/content': typeof AppOOrgSlugPropertiesPropertyIdContentRoute
   '/_app/o/$orgSlug/properties/$propertyId/inventory': typeof AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren
   '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId': typeof AppOOrgSlugBookingsBookingIdFoliosFolioIdRoute
@@ -293,12 +388,14 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/demo'
     | '/login'
     | '/privacy'
     | '/signup'
     | '/welcome'
     | '/o-select'
     | '/booking/$jwt'
+    | '/demo/showcase'
     | '/widget/$tenantSlug'
     | '/o/$orgSlug'
     | '/booking/guest-portal/$bookingId'
@@ -309,11 +406,19 @@ export interface FileRouteTypes {
     | '/widget/$tenantSlug/$propertyId/extras'
     | '/widget/$tenantSlug/$propertyId/guest-and-pay'
     | '/o/$orgSlug/'
+    | '/demo/ota/ostrovok/'
+    | '/demo/ota/yandex/'
     | '/o/$orgSlug/account/security'
     | '/o/$orgSlug/admin/channels'
     | '/o/$orgSlug/admin/migration-registrations'
     | '/o/$orgSlug/admin/notifications'
     | '/o/$orgSlug/admin/tax'
+    | '/demo/ota/ostrovok/booking/$partnerOrderId'
+    | '/demo/ota/ostrovok/property/$id'
+    | '/demo/ota/ostrovok/success/$orderId'
+    | '/demo/ota/yandex/booking/$bookingToken'
+    | '/demo/ota/yandex/property/$id'
+    | '/demo/ota/yandex/success/$orderId'
     | '/o/$orgSlug/properties/$propertyId/content'
     | '/o/$orgSlug/properties/$propertyId/inventory'
     | '/o/$orgSlug/bookings/$bookingId/folios/$folioId'
@@ -323,12 +428,14 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/demo'
     | '/login'
     | '/privacy'
     | '/signup'
     | '/welcome'
     | '/o-select'
     | '/booking/$jwt'
+    | '/demo/showcase'
     | '/widget/$tenantSlug'
     | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug/$propertyId'
@@ -338,11 +445,19 @@ export interface FileRouteTypes {
     | '/widget/$tenantSlug/$propertyId/extras'
     | '/widget/$tenantSlug/$propertyId/guest-and-pay'
     | '/o/$orgSlug'
+    | '/demo/ota/ostrovok'
+    | '/demo/ota/yandex'
     | '/o/$orgSlug/account/security'
     | '/o/$orgSlug/admin/channels'
     | '/o/$orgSlug/admin/migration-registrations'
     | '/o/$orgSlug/admin/notifications'
     | '/o/$orgSlug/admin/tax'
+    | '/demo/ota/ostrovok/booking/$partnerOrderId'
+    | '/demo/ota/ostrovok/property/$id'
+    | '/demo/ota/ostrovok/success/$orderId'
+    | '/demo/ota/yandex/booking/$bookingToken'
+    | '/demo/ota/yandex/property/$id'
+    | '/demo/ota/yandex/success/$orderId'
     | '/o/$orgSlug/properties/$propertyId/content'
     | '/o/$orgSlug/properties/$propertyId/inventory'
     | '/o/$orgSlug/bookings/$bookingId/folios/$folioId'
@@ -353,12 +468,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_app'
+    | '/demo'
     | '/login'
     | '/privacy'
     | '/signup'
     | '/welcome'
     | '/_app/o-select'
     | '/booking/$jwt'
+    | '/demo/showcase'
     | '/widget/$tenantSlug'
     | '/_app/o/$orgSlug'
     | '/booking/guest-portal/$bookingId'
@@ -369,11 +486,19 @@ export interface FileRouteTypes {
     | '/widget/$tenantSlug_/$propertyId_/extras'
     | '/widget/$tenantSlug_/$propertyId_/guest-and-pay'
     | '/_app/o/$orgSlug/'
+    | '/demo/ota/ostrovok/'
+    | '/demo/ota/yandex/'
     | '/_app/o/$orgSlug/account/security'
     | '/_app/o/$orgSlug/admin/channels'
     | '/_app/o/$orgSlug/admin/migration-registrations'
     | '/_app/o/$orgSlug/admin/notifications'
     | '/_app/o/$orgSlug/admin/tax'
+    | '/demo/ota/ostrovok/booking/$partnerOrderId'
+    | '/demo/ota/ostrovok/property/$id'
+    | '/demo/ota/ostrovok/success/$orderId'
+    | '/demo/ota/yandex/booking/$bookingToken'
+    | '/demo/ota/yandex/property/$id'
+    | '/demo/ota/yandex/success/$orderId'
     | '/_app/o/$orgSlug/properties/$propertyId/content'
     | '/_app/o/$orgSlug/properties/$propertyId/inventory'
     | '/_app/o/$orgSlug/bookings/$bookingId/folios/$folioId'
@@ -385,6 +510,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  DemoRoute: typeof DemoRouteWithChildren
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
   SignupRoute: typeof SignupRoute
@@ -427,6 +553,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo': {
+      id: '/demo'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof DemoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app': {
       id: '/_app'
       path: ''
@@ -447,6 +580,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/widget/$tenantSlug'
       preLoaderRoute: typeof WidgetTenantSlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/demo/showcase': {
+      id: '/demo/showcase'
+      path: '/showcase'
+      fullPath: '/demo/showcase'
+      preLoaderRoute: typeof DemoShowcaseRouteImport
+      parentRoute: typeof DemoRoute
     }
     '/booking/$jwt': {
       id: '/booking/$jwt'
@@ -482,6 +622,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/o/$orgSlug'
       preLoaderRoute: typeof AppOOrgSlugRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/demo/ota/yandex/': {
+      id: '/demo/ota/yandex/'
+      path: '/ota/yandex'
+      fullPath: '/demo/ota/yandex/'
+      preLoaderRoute: typeof DemoOtaYandexIndexRouteImport
+      parentRoute: typeof DemoRoute
+    }
+    '/demo/ota/ostrovok/': {
+      id: '/demo/ota/ostrovok/'
+      path: '/ota/ostrovok'
+      fullPath: '/demo/ota/ostrovok/'
+      preLoaderRoute: typeof DemoOtaOstrovokIndexRouteImport
+      parentRoute: typeof DemoRoute
     }
     '/_app/o/$orgSlug/': {
       id: '/_app/o/$orgSlug/'
@@ -524,6 +678,48 @@ declare module '@tanstack/react-router' {
       fullPath: '/o/$orgSlug/grid'
       preLoaderRoute: typeof AppOOrgSlugGridRouteImport
       parentRoute: typeof AppOOrgSlugRoute
+    }
+    '/demo/ota/yandex/success/$orderId': {
+      id: '/demo/ota/yandex/success/$orderId'
+      path: '/ota/yandex/success/$orderId'
+      fullPath: '/demo/ota/yandex/success/$orderId'
+      preLoaderRoute: typeof DemoOtaYandexSuccessOrderIdRouteImport
+      parentRoute: typeof DemoRoute
+    }
+    '/demo/ota/yandex/property/$id': {
+      id: '/demo/ota/yandex/property/$id'
+      path: '/ota/yandex/property/$id'
+      fullPath: '/demo/ota/yandex/property/$id'
+      preLoaderRoute: typeof DemoOtaYandexPropertyIdRouteImport
+      parentRoute: typeof DemoRoute
+    }
+    '/demo/ota/yandex/booking/$bookingToken': {
+      id: '/demo/ota/yandex/booking/$bookingToken'
+      path: '/ota/yandex/booking/$bookingToken'
+      fullPath: '/demo/ota/yandex/booking/$bookingToken'
+      preLoaderRoute: typeof DemoOtaYandexBookingBookingTokenRouteImport
+      parentRoute: typeof DemoRoute
+    }
+    '/demo/ota/ostrovok/success/$orderId': {
+      id: '/demo/ota/ostrovok/success/$orderId'
+      path: '/ota/ostrovok/success/$orderId'
+      fullPath: '/demo/ota/ostrovok/success/$orderId'
+      preLoaderRoute: typeof DemoOtaOstrovokSuccessOrderIdRouteImport
+      parentRoute: typeof DemoRoute
+    }
+    '/demo/ota/ostrovok/property/$id': {
+      id: '/demo/ota/ostrovok/property/$id'
+      path: '/ota/ostrovok/property/$id'
+      fullPath: '/demo/ota/ostrovok/property/$id'
+      preLoaderRoute: typeof DemoOtaOstrovokPropertyIdRouteImport
+      parentRoute: typeof DemoRoute
+    }
+    '/demo/ota/ostrovok/booking/$partnerOrderId': {
+      id: '/demo/ota/ostrovok/booking/$partnerOrderId'
+      path: '/ota/ostrovok/booking/$partnerOrderId'
+      fullPath: '/demo/ota/ostrovok/booking/$partnerOrderId'
+      preLoaderRoute: typeof DemoOtaOstrovokBookingPartnerOrderIdRouteImport
+      parentRoute: typeof DemoRoute
     }
     '/_app/o/$orgSlug/admin/tax': {
       id: '/_app/o/$orgSlug/admin/tax'
@@ -676,9 +872,37 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface DemoRouteChildren {
+  DemoShowcaseRoute: typeof DemoShowcaseRoute
+  DemoOtaOstrovokIndexRoute: typeof DemoOtaOstrovokIndexRoute
+  DemoOtaYandexIndexRoute: typeof DemoOtaYandexIndexRoute
+  DemoOtaOstrovokBookingPartnerOrderIdRoute: typeof DemoOtaOstrovokBookingPartnerOrderIdRoute
+  DemoOtaOstrovokPropertyIdRoute: typeof DemoOtaOstrovokPropertyIdRoute
+  DemoOtaOstrovokSuccessOrderIdRoute: typeof DemoOtaOstrovokSuccessOrderIdRoute
+  DemoOtaYandexBookingBookingTokenRoute: typeof DemoOtaYandexBookingBookingTokenRoute
+  DemoOtaYandexPropertyIdRoute: typeof DemoOtaYandexPropertyIdRoute
+  DemoOtaYandexSuccessOrderIdRoute: typeof DemoOtaYandexSuccessOrderIdRoute
+}
+
+const DemoRouteChildren: DemoRouteChildren = {
+  DemoShowcaseRoute: DemoShowcaseRoute,
+  DemoOtaOstrovokIndexRoute: DemoOtaOstrovokIndexRoute,
+  DemoOtaYandexIndexRoute: DemoOtaYandexIndexRoute,
+  DemoOtaOstrovokBookingPartnerOrderIdRoute:
+    DemoOtaOstrovokBookingPartnerOrderIdRoute,
+  DemoOtaOstrovokPropertyIdRoute: DemoOtaOstrovokPropertyIdRoute,
+  DemoOtaOstrovokSuccessOrderIdRoute: DemoOtaOstrovokSuccessOrderIdRoute,
+  DemoOtaYandexBookingBookingTokenRoute: DemoOtaYandexBookingBookingTokenRoute,
+  DemoOtaYandexPropertyIdRoute: DemoOtaYandexPropertyIdRoute,
+  DemoOtaYandexSuccessOrderIdRoute: DemoOtaYandexSuccessOrderIdRoute,
+}
+
+const DemoRouteWithChildren = DemoRoute._addFileChildren(DemoRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  DemoRoute: DemoRouteWithChildren,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
   SignupRoute: SignupRoute,

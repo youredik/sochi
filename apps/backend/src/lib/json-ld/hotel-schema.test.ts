@@ -211,11 +211,79 @@ describe('renderHotelJsonLdScript — encoding + valid JSON round-trip', () => {
 		const block = renderHotelJsonLdScript(SIRIUS_BASE)
 		const inner = block.slice('<script type="application/ld+json">'.length, -'</script>'.length)
 		const parsed = JSON.parse(inner) as Record<string, unknown>
-		const action = parsed.potentialAction as Record<string, unknown>
-		expect(action['@type']).toBe('ReserveAction')
-		const target = action.target as Record<string, unknown>
+		// Round 8 P1: potentialAction is now array (ReserveAction + SearchAction)
+		const actions = parsed.potentialAction as Array<Record<string, unknown>>
+		expect(Array.isArray(actions)).toBe(true)
+		const reserve = actions.find((a) => a['@type'] === 'ReserveAction') as Record<string, unknown>
+		expect(reserve['@type']).toBe('ReserveAction')
+		const target = reserve.target as Record<string, unknown>
 		expect(target['@type']).toBe('EntryPoint')
 		expect(target.urlTemplate).toBe('https://demo-sirius.sochi.app/widget/demo-sirius')
 		expect((target.actionPlatform as Array<string>).length).toBe(2)
+	})
+
+	it('[JL9] Round 8 — aiCompatibility AI-discoverability hints (Lake.com canon)', () => {
+		const block = renderHotelJsonLdScript(SIRIUS_BASE)
+		const inner = block.slice('<script type="application/ld+json">'.length, -'</script>'.length)
+		const parsed = JSON.parse(inner) as Record<string, unknown>
+		const ai = parsed.aiCompatibility as Record<string, unknown>
+		expect(ai.alisaSearchable).toBe(true)
+		expect(ai.openAiAppsSDK).toBe(true)
+		expect(ai.mcpDiscoverable).toBe(true)
+		expect(typeof ai.lastUpdatedIso).toBe('string')
+		expect((ai.lastUpdatedIso as string).endsWith('Z')).toBe(true)
+	})
+
+	it('[JL10] Round 8 — OpenTravel 2.0 additionalType + identifier', () => {
+		const block = renderHotelJsonLdScript({
+			...SIRIUS_BASE,
+			ota2026PropertyCode: 'SIRIUS-001',
+		})
+		const inner = block.slice('<script type="application/ld+json">'.length, -'</script>'.length)
+		const parsed = JSON.parse(inner) as Record<string, unknown>
+		expect((parsed.additionalType as string[])[0]).toBe(
+			'https://opentravel.org/2026/LodgingBusiness',
+		)
+		const ids = parsed.identifier as Array<Record<string, unknown>>
+		expect(ids[0]?.name).toBe('OTA2026.PropertyCode')
+		expect(ids[0]?.value).toBe('SIRIUS-001')
+		expect(ids[1]?.name).toBe('OTA2026.TenantSlug')
+		expect(ids[1]?.value).toBe('demo-sirius')
+	})
+
+	it('[JL11] Round 8 — mainEntityOfPage points to canonical URL', () => {
+		const block = renderHotelJsonLdScript(SIRIUS_BASE)
+		const inner = block.slice('<script type="application/ld+json">'.length, -'</script>'.length)
+		const parsed = JSON.parse(inner) as Record<string, unknown>
+		expect(parsed.mainEntityOfPage).toBe('https://demo-sirius.sochi.app/widget/demo-sirius')
+	})
+
+	it('[JL12] Round 8 — SearchAction enables agentic search via query template', () => {
+		const block = renderHotelJsonLdScript(SIRIUS_BASE)
+		const inner = block.slice('<script type="application/ld+json">'.length, -'</script>'.length)
+		const parsed = JSON.parse(inner) as Record<string, unknown>
+		const actions = parsed.potentialAction as Array<Record<string, unknown>>
+		const search = actions.find((a) => a['@type'] === 'SearchAction') as Record<string, unknown>
+		expect(search['@type']).toBe('SearchAction')
+		const target = search.target as Record<string, unknown>
+		expect((target.urlTemplate as string).includes('{search_term_string}')).toBe(true)
+		expect(search['query-input']).toBe('required name=search_term_string')
+	})
+
+	it('[JL13] Round 8 — ota2026PropertyCode falls back to tenantSlug when omitted', () => {
+		const block = renderHotelJsonLdScript(SIRIUS_BASE) // no ota2026PropertyCode
+		const inner = block.slice('<script type="application/ld+json">'.length, -'</script>'.length)
+		const parsed = JSON.parse(inner) as Record<string, unknown>
+		const ids = parsed.identifier as Array<Record<string, unknown>>
+		expect(ids[0]?.value).toBe('demo-sirius') // === tenantSlug
+	})
+
+	it('[JL14] Round 8 — lastUpdatedIso honors caller override for replayability', () => {
+		const fixed = '2026-05-25T10:00:00.000Z'
+		const block = renderHotelJsonLdScript({ ...SIRIUS_BASE, lastUpdatedIso: fixed })
+		const inner = block.slice('<script type="application/ld+json">'.length, -'</script>'.length)
+		const parsed = JSON.parse(inner) as Record<string, unknown>
+		const ai = parsed.aiCompatibility as Record<string, unknown>
+		expect(ai.lastUpdatedIso).toBe(fixed)
 	})
 })

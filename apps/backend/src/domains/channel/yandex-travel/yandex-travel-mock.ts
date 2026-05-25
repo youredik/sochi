@@ -34,9 +34,12 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import type {
 	AriDelta,
+	AriPushResult,
 	AvailabilityQuery,
 	AvailabilityRow,
 	CancellationPolicy,
+	ChannelAdapterError,
+	ChannelErrorCategory,
 	ChannelManagerAdapter,
 	ChannelMetadata,
 	ChannelReservation,
@@ -52,6 +55,7 @@ import {
 	parseCloudEvent,
 	type SochiCloudEvent,
 } from '../../../lib/channel-manager/cloud-events.ts'
+import { nextSequenceNumber } from '../../../lib/channel-manager/sequence.ts'
 
 const REPLAY_WINDOW_SECONDS = 300
 const REPLAY_WINDOW_MS = REPLAY_WINDOW_SECONDS * 1000
@@ -75,6 +79,12 @@ interface InternalReservation {
 	readonly totalAmountMicros: bigint
 	readonly status: 'Confirmed' | 'Cancelled'
 	readonly lastModificationUtc: string
+	/**
+	 * Per-resource monotonic sequence (Round 8 canon). Increments on every
+	 * mutation (create / cancel) — replays of the same idempotencyKey MUST NOT
+	 * bump the sequence (see `cancelReservation` test [YT21]).
+	 */
+	readonly sequenceNumber: bigint
 	readonly guest: {
 		readonly firstName: string
 		readonly lastName: string
@@ -103,6 +113,30 @@ const DEFAULT_CANCELLATION_POLICY: CancellationPolicy = {
 	hoursBeforeRef: 48,
 	penaltyKind: 'first_night',
 	penaltyValue: 1,
+}
+
+/**
+ * Adapter error carrying canonical `ChannelErrorCategory` (Round 8 canon).
+ * Factory handlers translate this к HttpAttemptResult; ops alerts route via
+ * `errCategory` без leaking message body PII (see factory log sanitize).
+ */
+export class YandexTravelApiError extends Error {
+	readonly category: ChannelErrorCategory
+	readonly httpStatus: number
+	readonly upstreamCode: string | undefined
+
+	constructor(input: {
+		category: ChannelErrorCategory
+		httpStatus: number
+		message: string
+		upstreamCode?: string
+	}) {
+		super(input.message)
+		this.name = 'YandexTravelApiError'
+		this.category = input.category
+		this.httpStatus = input.httpStatus
+		this.upstreamCode = input.upstreamCode
+	}
 }
 
 export interface YandexTravelMockOptions {
@@ -175,6 +209,13 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 	const reservations = new Map<string, InternalReservation>()
 	const ariPushes: PushedAriEntry[] = []
 	const ariIdempotencyIndex = new Set<string>()
+	/**
+	 * Idempotency cache for createBooking (idempotencyKey → externalId) +
+	 * cancelReservation (idempotencyKey → final status). Round 8 canon: repeated
+	 * calls with same key MUST be no-ops returning same outcome.
+	 */
+	const createBookingIdempotencyIndex = new Map<string, string>()
+	const cancelIdempotencyIndex = new Map<string, 'cancelled' | 'not_found' | 'already_cancelled'>()
 
 	const metadata: ChannelMetadata = {
 		channelId: 'YT',
@@ -187,34 +228,90 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 		return `${delta.tenantId}:${delta.propertyId}:${delta.roomTypeId}:${delta.ratePlanId}:${delta.date}`
 	}
 
-	function pushOne(delta: AriDelta): { accepted: boolean; idempotencyKey: string } {
+	/**
+	 * Per-resource sequence floor for monotonicity check (Round 8 canon).
+	 * Key = `(tenantId, propertyId, roomTypeId, ratePlanId)` — scoped per resource,
+	 * NOT per date, so consumers detect gaps across the whole rate-plan window.
+	 */
+	function buildResourceKey(delta: AriDelta): string {
+		return `${delta.tenantId}:${delta.propertyId}:${delta.roomTypeId}:${delta.ratePlanId}`
+	}
+	const resourceSeqFloor = new Map<string, bigint>()
+
+	const pushOne = (
+		delta: AriDelta,
+		itemIndex: number,
+	): { accepted: boolean; error?: ChannelAdapterError } => {
+		const resourceKey = buildResourceKey(delta)
+		const floor = resourceSeqFloor.get(resourceKey)
+		if (floor !== undefined && delta.sequenceNumber <= floor) {
+			return {
+				accepted: false,
+				error: {
+					category: 'invalid_payload',
+					message: `out_of_order_sequence: got=${delta.sequenceNumber.toString()} floor=${floor.toString()}`,
+					itemIndex,
+				},
+			}
+		}
 		const key = buildAriIdempotencyKey(delta)
 		if (ariIdempotencyIndex.has(key)) {
-			return { accepted: false, idempotencyKey: key } // already-seen → idempotent ack
+			return {
+				accepted: false,
+				error: {
+					category: 'duplicate_idempotency_key',
+					message: `duplicate ARI key: ${key}`,
+					itemIndex,
+				},
+			}
 		}
 		ariIdempotencyIndex.add(key)
 		ariPushes.push({ idempotencyKey: key, delta, acceptedAtMs: now() })
-		return { accepted: true, idempotencyKey: key }
+		resourceSeqFloor.set(resourceKey, delta.sequenceNumber)
+		return { accepted: true }
 	}
 
 	const adapter: ChannelManagerAdapter = {
 		metadata,
 
-		async pushAri(delta: ReadonlyArray<AriDelta>) {
+		async pushAri(delta: ReadonlyArray<AriDelta>): Promise<AriPushResult> {
 			let accepted = 0
-			for (const d of delta) {
-				const r = pushOne(d)
-				if (r.accepted) accepted++
+			let rejected = 0
+			const errors: ChannelAdapterError[] = []
+			for (let i = 0; i < delta.length; i++) {
+				const d = delta[i]
+				if (d === undefined) continue
+				const r = pushOne(d, i)
+				if (r.accepted) {
+					accepted++
+				} else {
+					rejected++
+					if (r.error) errors.push(r.error)
+				}
 			}
-			return { accepted, rejected: 0 }
+			return { accepted, rejected, errors }
 		},
 
-		async pushAriFull(snapshot: ReadonlyArray<AriDelta>) {
-			// Full snapshot — clear idempotency index, re-push everything.
+		async pushAriFull(snapshot: ReadonlyArray<AriDelta>): Promise<AriPushResult> {
+			// Full snapshot — clear idempotency index + sequence floors, re-push everything.
 			ariIdempotencyIndex.clear()
 			ariPushes.length = 0
-			for (const d of snapshot) pushOne(d)
-			return { accepted: snapshot.length, rejected: 0 }
+			resourceSeqFloor.clear()
+			let accepted = 0
+			let rejected = 0
+			const errors: ChannelAdapterError[] = []
+			for (let i = 0; i < snapshot.length; i++) {
+				const d = snapshot[i]
+				if (d === undefined) continue
+				const r = pushOne(d, i)
+				if (r.accepted) {
+					accepted++
+				} else {
+					rejected++
+					if (r.error) errors.push(r.error)
+				}
+			}
+			return { accepted, rejected, errors }
 		},
 
 		// YT не exposes search-availability к partners (PMS sets ARI; users see).
@@ -225,9 +322,37 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 			})
 		},
 
-		// YT pushes reservations via webhook (NOT polling) → readReservations empty.
-		async readReservations(_cursor: ReservationReadCursor) {
-			return { reservations: [] as ReadonlyArray<ChannelReservation>, hasMore: false }
+		// YT pushes reservations via webhook (NOT polling) — но Mock exposes seeded
+		// reservations через readReservations for symmetry с TL (test fixture access).
+		// Live impl returns []; cursor parameter ignored in Mock.
+		async readReservations(cursor: ReservationReadCursor) {
+			const all = Array.from(reservations.values())
+			const filtered = all.filter(
+				(r) => r.tenantId === cursor.tenantId && r.propertyId === cursor.propertyId,
+			)
+			const out: ChannelReservation[] = filtered.map((r) => ({
+				channelId: 'YT',
+				externalId: r.externalId,
+				tenantId: r.tenantId,
+				propertyId: r.propertyId,
+				roomTypeId: r.roomTypeId,
+				ratePlanId: r.ratePlanId,
+				checkIn: r.arrivalDate,
+				checkOut: r.departureDate,
+				guestCount: r.guestCount,
+				totalAmountMicros: r.totalAmountMicros,
+				currency: 'RUB',
+				status: r.status === 'Confirmed' ? 'confirmed' : 'cancelled',
+				lastModificationUtc: r.lastModificationUtc,
+				sequenceNumber: r.sequenceNumber,
+				guest: {
+					firstName: r.guest.firstName,
+					lastName: r.guest.lastName,
+					...(r.guest.email !== undefined ? { email: r.guest.email } : {}),
+					...(r.guest.phone !== undefined ? { phone: r.guest.phone } : {}),
+				},
+			}))
+			return { reservations: out, hasMore: false }
 		},
 
 		async verifyBooking(input: VerifyBookingInput): Promise<VerifyBookingResult> {
@@ -247,6 +372,9 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 		},
 
 		async createBooking(input: CreateBookingInput): Promise<{ readonly externalId: string }> {
+			// Idempotent createBooking: same idempotencyKey → return previously-created externalId.
+			const existing = createBookingIdempotencyIndex.get(input.idempotencyKey)
+			if (existing !== undefined) return { externalId: existing }
 			const externalId = `yt-res-${randomUUID().slice(0, 12)}`
 			reservations.set(externalId, {
 				externalId,
@@ -260,22 +388,41 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 				totalAmountMicros: input.verifyResult.totalAmountMicros,
 				status: 'Confirmed',
 				lastModificationUtc: new Date(now()).toISOString(),
+				sequenceNumber: nextSequenceNumber(),
 				guest: { firstName: 'YT', lastName: 'Guest' },
 				consent: { processing: true, transferToHotel: true, marketing: false },
 			})
+			createBookingIdempotencyIndex.set(input.idempotencyKey, externalId)
 			return { externalId }
 		},
 
-		async cancelReservation(input: { readonly tenantId: string; readonly externalId: string }) {
+		async cancelReservation(input: {
+			readonly tenantId: string
+			readonly externalId: string
+			readonly idempotencyKey: string
+		}) {
 			if (input.tenantId !== opts.tenantId) return { status: 'not_found' as const }
+			// Idempotent canon: same key replayed → `already_cancelled` (NOT the
+			// cached prior result). Sequence number NOT bumped on replay.
+			if (cancelIdempotencyIndex.has(input.idempotencyKey)) {
+				return { status: 'already_cancelled' as const }
+			}
 			const r = reservations.get(input.externalId)
-			if (!r) return { status: 'not_found' as const }
-			if (r.status === 'Cancelled') return { status: 'already_cancelled' as const }
+			if (!r) {
+				cancelIdempotencyIndex.set(input.idempotencyKey, 'not_found')
+				return { status: 'not_found' as const }
+			}
+			if (r.status === 'Cancelled') {
+				cancelIdempotencyIndex.set(input.idempotencyKey, 'already_cancelled')
+				return { status: 'already_cancelled' as const }
+			}
 			reservations.set(input.externalId, {
 				...r,
 				status: 'Cancelled',
 				lastModificationUtc: new Date(now()).toISOString(),
+				sequenceNumber: nextSequenceNumber(),
 			})
+			cancelIdempotencyIndex.set(input.idempotencyKey, 'cancelled')
 			return { status: 'cancelled' as const }
 		},
 
