@@ -136,18 +136,28 @@ export class DemoInboxAdapter implements EmailAdapter {
 	/**
 	 * Latest non-expired captured message for the recipient, or `null` if no
 	 * unexpired capture exists. Used by `/api/v1/public/demo/inbox`.
+	 *
+	 * Optional `after` parameter (Round 7 v3 fix 2026-05-25 — E2 smoke race):
+	 * returns only captures с capturedAt STRICTLY greater than `after`. Mirrors
+	 * since-based polling canon (Mailosaur, Mailhook). Race-free для repeat-
+	 * send scenarios где BA could reuse same magic-link token (identical URL)
+	 * — каноничный URL-based filter would loop forever; time-based filter
+	 * captures NEW send irrespective of URL identity.
 	 */
-	getLatest(to: string): CapturedMessage | null {
+	getLatest(to: string, after?: Date): CapturedMessage | null {
 		const key = normalizeEmail(to)
 		const bucket = this.perRecipient.get(key)
 		if (!bucket || bucket.length === 0) return null
 		const cutoff = this.now() - this.ttlMs
+		const afterMs = after?.getTime()
 		// Walk back-to-front: latest entries first, return first non-expired.
 		for (let i = bucket.length - 1; i >= 0; i -= 1) {
 			const entry = bucket[i]
-			if (entry && entry.capturedAt.getTime() >= cutoff) {
-				return { ...entry }
-			}
+			if (!entry) continue
+			const entryMs = entry.capturedAt.getTime()
+			if (entryMs < cutoff) continue // expired
+			if (afterMs !== undefined && entryMs <= afterMs) continue // not new enough
+			return { ...entry }
 		}
 		return null
 	}

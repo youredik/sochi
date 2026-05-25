@@ -191,4 +191,89 @@ describe('demo-inbox route — input validation', () => {
 		const res = await app.request('/api/public/demo/inbox?email=not-an-email')
 		expect(res.status).toBe(400)
 	})
+
+	test('[Q3] malformed `since` (not ISO datetime) → 400', async () => {
+		const app = makeApp(true)
+		const res = await app.request('/api/public/demo/inbox?email=user%40x.com&since=not-iso')
+		expect(res.status).toBe(400)
+	})
+})
+
+describe('demo-inbox route — since filter (Round 7 v3 race-free polling)', () => {
+	test('[S1] since=capturedAt1 returns SECOND capture (race-free repeat send)', async () => {
+		const { createEmailAdapter } = await import('../../workers/lib/postbox-adapter.ts')
+		const env = {
+			POSTBOX_ENABLED: false,
+			POSTBOX_ENDPOINT: 'https://example.com',
+			SMTP_HOST: '',
+			SMTP_PORT: 0,
+			DEMO_DEPLOYMENT: true,
+		}
+		const adapter = createEmailAdapter(env, { info: () => {}, warn: () => {} })
+		await adapter.send({
+			from: '"HoReCa" <noreply@horeca.local>',
+			to: 'race@x.com',
+			subject: 'First',
+			html: `<a href="${VERIFY_URL}">Войти</a>`,
+			text: VERIFY_URL,
+		})
+		const app = makeApp(true)
+
+		// First poll — get latest, capture timestamp
+		const r1 = await app.request('/api/public/demo/inbox?email=race%40x.com')
+		const b1 = (await r1.json()) as { data: { capturedAt: string | null } }
+		const since1 = b1.data.capturedAt!
+		expect(typeof since1).toBe('string')
+
+		// Wait 50ms, send second email (same URL — simulates BA token reuse)
+		await new Promise((r) => setTimeout(r, 50))
+		await adapter.send({
+			from: '"HoReCa" <noreply@horeca.local>',
+			to: 'race@x.com',
+			subject: 'Second',
+			html: `<a href="${VERIFY_URL}">Войти</a>`,
+			text: VERIFY_URL,
+		})
+
+		// Poll с since=first → returns SECOND capture (subject reflects it)
+		const r2 = await app.request(
+			`/api/public/demo/inbox?email=race%40x.com&since=${encodeURIComponent(since1)}`,
+		)
+		const b2 = (await r2.json()) as {
+			data: { latestUrl: string | null; capturedAt: string | null; subject: string | null }
+		}
+		expect(b2.data.subject).toBe('Second')
+		expect(b2.data.capturedAt).not.toBe(since1)
+		expect(b2.data.latestUrl).toBe(VERIFY_URL) // same URL ok — time-based filter race-free
+	})
+
+	test('[S2] since=now returns null (no captures after current time)', async () => {
+		const { createEmailAdapter } = await import('../../workers/lib/postbox-adapter.ts')
+		await createEmailAdapter(
+			{
+				POSTBOX_ENABLED: false,
+				POSTBOX_ENDPOINT: 'https://example.com',
+				SMTP_HOST: '',
+				SMTP_PORT: 0,
+				DEMO_DEPLOYMENT: true,
+			},
+			{ info: () => {}, warn: () => {} },
+		).send({
+			from: '"HoReCa" <noreply@horeca.local>',
+			to: 'user@x.com',
+			subject: 'Hi',
+			html: `<a href="${VERIFY_URL}">Войти</a>`,
+			text: VERIFY_URL,
+		})
+		const app = makeApp(true)
+		const future = new Date(Date.now() + 10_000).toISOString()
+		const res = await app.request(
+			`/api/public/demo/inbox?email=user%40x.com&since=${encodeURIComponent(future)}`,
+		)
+		const body = (await res.json()) as {
+			data: { latestUrl: string | null; capturedAt: string | null }
+		}
+		expect(body.data.latestUrl).toBe(null)
+		expect(body.data.capturedAt).toBe(null)
+	})
 })

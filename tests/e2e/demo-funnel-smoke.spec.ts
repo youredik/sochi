@@ -74,23 +74,29 @@ test.describe('Demo funnel — empirical против prod', () => {
 
 	/**
 	 * Captures magic-link verify URL из DemoInboxAdapter с polling.
-	 * Returns undefined если link не captured в timeout window.
+	 * Returns `{url, capturedAt}` or undefined if not captured в timeout window.
+	 *
+	 * Round 7 v3 2026-05-25 fix — race-free time-based filter (was URL-based
+	 * excludeUrl). BA might reuse token within window → identical URLs → URL
+	 * filter loops forever. Time-based `since=<iso>` captures NEW send
+	 * irrespective of URL identity. См. [[round_7_v3_sws_canon]] + [[demo_
+	 * inbox_adapter]] getLatest(to, after) signature.
 	 */
 	async function fetchMagicLink(
 		request: import('@playwright/test').APIRequestContext,
 		email: string,
-		excludeUrl?: string,
-	): Promise<string | undefined> {
+		since?: string,
+	): Promise<{ url: string; capturedAt: string } | undefined> {
 		for (let i = 0; i < 20; i++) {
-			const res = await request.get(
-				`${PROD_BASE}/api/public/demo/inbox?email=${encodeURIComponent(email)}`,
-			)
-			const json = (await res.json()) as { data?: { latestUrl?: string | null } }
+			const params = new URLSearchParams({ email })
+			if (since) params.set('since', since)
+			const res = await request.get(`${PROD_BASE}/api/public/demo/inbox?${params.toString()}`)
+			const json = (await res.json()) as {
+				data?: { latestUrl?: string | null; capturedAt?: string | null }
+			}
 			const url = json?.data?.latestUrl
-			// API returns `latestUrl: null` until backend captures. Skip null
-			// AND skip excluded prev-url (return-visit case). Previously checked
-			// `!== undefined` which let null through prematurely → race fail.
-			if (url != null && url !== excludeUrl) return url
+			const capturedAt = json?.data?.capturedAt
+			if (url != null && capturedAt != null) return { url, capturedAt }
 			await new Promise((r) => setTimeout(r, 500))
 		}
 		return undefined
@@ -123,6 +129,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		// Poll DemoInbox для captured URL
 		const magicLink = await fetchMagicLink(request, email)
 		expect(magicLink, 'Magic-link не captured в DemoInbox в timeout').toBeTruthy()
+		const magicLinkUrl = magicLink?.url
 
 		// Visit verify URL — sets session cookie + redirects к callbackURL
 		// === Regression guard: NO org-scoped /api/v1/* calls на /welcome ===
@@ -140,7 +147,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		}
 		page.on('response', tenantScopedListener)
 
-		await page.goto(magicLink as string)
+		await page.goto(magicLinkUrl as string)
 
 		// Should land на /welcome (fresh-signup, no existing orgs)
 		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })
@@ -205,7 +212,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		const magicLink1 = await fetchMagicLink(request, email)
 		expect(magicLink1, 'First visit: magic-link не captured').toBeTruthy()
 
-		await page.goto(magicLink1 as string)
+		await page.goto(magicLink1!.url)
 		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })
 		await page.getByRole('button', { name: /Создать гостиницу/ }).click()
 		await expect(page).toHaveURL(/\/o\/[^/]+/, { timeout: 15_000 })
@@ -224,11 +231,15 @@ test.describe('Demo funnel — empirical против prod', () => {
 			data: { email, callbackURL: callbackURL2 },
 			headers: getSmokeHeaders(),
 		})
-		const magicLink2 = await fetchMagicLink(request, email, magicLink1)
+		// Round 7 v3 fix 2026-05-25 — pass first capturedAt as `since` filter.
+		// Race-free: backend returns ONLY captures after this timestamp, even
+		// if BA reused magic-link token (identical URL). URL-equality assertion
+		// dropped — actual invariant is «return visit lands SAME tenant», not
+		// «BA generated different token»; the latter is impl detail of BA.
+		const magicLink2 = await fetchMagicLink(request, email, magicLink1!.capturedAt)
 		expect(magicLink2, 'Return visit: second magic-link не captured').toBeTruthy()
-		expect(magicLink2).not.toBe(magicLink1)
 
-		await page.goto(magicLink2 as string)
+		await page.goto(magicLink2!.url)
 
 		// **Wait для FINAL settled URL** — `/o/{slug}/`. Race vector: BA verify
 		// делает server 302 → /welcome callback, потом TanStack Router
@@ -310,7 +321,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 
 		const magicLink = await fetchMagicLink(request, email)
 		expect(magicLink, 'Magic-link не captured').toBeTruthy()
-		await page.goto(magicLink as string)
+		await page.goto(magicLink!.url)
 
 		// /welcome — fires WelcomeForm защитный orgList query (BA, не /api/v1)
 		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })

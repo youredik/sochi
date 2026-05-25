@@ -37,6 +37,13 @@ import { getDemoInboxIfActive } from '../../workers/lib/postbox-adapter.ts'
 
 const querySchema = z.object({
 	email: z.email('invalid email format'),
+	/**
+	 * Round 7 v3 fix 2026-05-25 — race-free polling для smoke E2 return-visit.
+	 * ISO-8601 timestamp; endpoint returns capture STRICTLY after this time.
+	 * If absent → returns latest capture (backward-compatible).
+	 * Pattern mirrors Mailosaur `received_after` + Mailhook `since`.
+	 */
+	since: z.iso.datetime({ offset: true }).optional(),
 })
 
 export interface DemoInboxResponse {
@@ -55,7 +62,7 @@ export function createDemoInboxRoutes(opts: DemoInboxRoutesOptions) {
 		if (!opts.enabled) {
 			return c.json({ error: { code: 'NOT_FOUND', message: 'Not found' } }, 404)
 		}
-		const { email } = c.req.valid('query')
+		const { email, since } = c.req.valid('query')
 		const inbox = getDemoInboxIfActive()
 		if (!inbox) {
 			// Demo deployment env was true at startup so adapter SHOULD exist,
@@ -69,7 +76,7 @@ export function createDemoInboxRoutes(opts: DemoInboxRoutesOptions) {
 			}
 			return c.json({ data: response }, 200)
 		}
-		const captured = inbox.getLatest(email)
+		const captured = inbox.getLatest(email, since ? new Date(since) : undefined)
 		const response: DemoInboxResponse = captured
 			? {
 					email,

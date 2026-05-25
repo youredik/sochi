@@ -139,6 +139,55 @@ describe('DemoInboxAdapter — TTL', () => {
 	})
 })
 
+describe('DemoInboxAdapter — getLatest(after) time-based filter (Round 7 v3 fix)', () => {
+	it('[A1] after=capturedAt1 returns SECOND capture (race-free repeat send)', async () => {
+		let clock = 1_000_000
+		const adapter = new DemoInboxAdapter({ now: () => clock })
+		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
+		const first = adapter.getLatest('a@x.com')
+		expect(first?.magicLinkUrl).toBe(VERIFY_URL_A)
+
+		clock += 100
+		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_B))
+		const second = adapter.getLatest('a@x.com', first?.capturedAt)
+		expect(second?.magicLinkUrl).toBe(VERIFY_URL_B)
+	})
+
+	it('[A2] after=capturedAt returns null когда no newer capture', async () => {
+		let clock = 1_000_000
+		const adapter = new DemoInboxAdapter({ now: () => clock })
+		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
+		const first = adapter.getLatest('a@x.com')
+		// Same clock — no new send happened.
+		expect(adapter.getLatest('a@x.com', first?.capturedAt)).toBe(null)
+	})
+
+	it('[A3] after filter race-free даже если BA reuses identical URL', async () => {
+		// Critical canonical test — BA may de-dup magic-link tokens within
+		// window; both emails get IDENTICAL URL. Time-based filter still
+		// distinguishes the two captures correctly.
+		let clock = 1_000_000
+		const adapter = new DemoInboxAdapter({ now: () => clock })
+		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
+		const first = adapter.getLatest('a@x.com')
+		expect(first?.magicLinkUrl).toBe(VERIFY_URL_A)
+
+		clock += 100
+		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A)) // SAME URL
+		const second = adapter.getLatest('a@x.com', first?.capturedAt)
+		expect(second?.magicLinkUrl).toBe(VERIFY_URL_A) // same URL, but newer capture
+		expect(second?.capturedAt.getTime()).toBeGreaterThan(first!.capturedAt.getTime())
+	})
+
+	it('[A4] after omitted → equivalent к non-filtered getLatest (backward-compat)', async () => {
+		const adapter = new DemoInboxAdapter()
+		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
+		const filtered = adapter.getLatest('a@x.com', undefined)
+		const unfiltered = adapter.getLatest('a@x.com')
+		expect(filtered?.magicLinkUrl).toBe(unfiltered?.magicLinkUrl)
+	})
+})
+
 describe('DemoInboxAdapter — bounded growth', () => {
 	it('[R1] per-recipient bucket caps at MAX_PER_RECIPIENT (FIFO drop)', async () => {
 		const adapter = new DemoInboxAdapter()
