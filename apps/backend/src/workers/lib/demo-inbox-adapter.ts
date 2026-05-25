@@ -1,6 +1,6 @@
 import { extractMagicLinkUrl } from '@horeca/shared'
 import type { sql as SQL } from '../../db/index.ts'
-import { toTs } from '../../db/ydb-helpers.ts'
+import { textOpt, toTs } from '../../db/ydb-helpers.ts'
 import type { EmailAdapter, SendEmailInput, SendEmailResult } from './email-adapter.types.ts'
 import { isReservedTestDomain } from './reserved-test-ranges.ts'
 
@@ -119,11 +119,13 @@ export class DemoInboxAdapter implements EmailAdapter {
 		// All container instances share state. См. migration 0075.
 		// Note: `toTs(Date)` обязателен — без него @ydbjs/value infers Datetime
 		// (seconds), теряет ms precision + SELECT comparison ловит type mismatch
-		// (см. project_ydb_specifics.md item 10).
+		// (см. project_ydb_specifics.md item 10). `textOpt(magicLinkUrl)` wraps
+		// nullable Utf8 — bare `${null}` rejected by @ydbjs/query («Cannot
+		// convert undefined to YDBValue» empirically Run #106 cold-start logs).
 		if (this.sql) {
 			await this.sql`
 				INSERT INTO demoInboxCapture (email, capturedAt, magicLinkUrl, subject)
-				VALUES (${key}, ${toTs(captured.capturedAt)}, ${captured.magicLinkUrl}, ${captured.subject})
+				VALUES (${key}, ${toTs(captured.capturedAt)}, ${textOpt(captured.magicLinkUrl)}, ${captured.subject})
 			`
 		} else {
 			// In-process Map fallback — local dev / tests / single-instance mode.
