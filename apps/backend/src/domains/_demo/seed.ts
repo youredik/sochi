@@ -53,12 +53,14 @@ export async function seedDemoChannelInfra(opts: SeedDemoChannelInfraOptions): P
 	let connectionsSeeded = 0
 
 	for (const channelId of channels) {
-		// webhookSecret: PK=(channelId, kid); status='active' means receiver accepts
+		// webhookSecret: PK=(channelId, kid); status='active' means receiver accepts.
+		// Round 11 P1-B3 — bind secret к demo-tenant explicitly (migration 0077).
+		// Cross-tenant URN forgery now rejected at signature-vs-row tenantId match.
 		await sql`
 			UPSERT INTO webhookSecret (
-				\`channelId\`, \`kid\`, \`secret\`, \`status\`, \`activatedAt\`
+				\`channelId\`, \`kid\`, \`secret\`, \`status\`, \`activatedAt\`, \`tenantId\`
 			) VALUES (
-				${channelId}, ${DEMO_WEBHOOK_KID}, ${opts.webhookSecret}, ${'active'}, ${now}
+				${channelId}, ${DEMO_WEBHOOK_KID}, ${opts.webhookSecret}, ${'active'}, ${now}, ${opts.tenantId}
 			)
 		`
 		secretsSeeded++

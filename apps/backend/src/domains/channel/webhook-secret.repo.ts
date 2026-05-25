@@ -30,6 +30,12 @@ export interface WebhookSecretRow {
 	readonly status: WebhookSecretStatus
 	readonly activatedAt: string
 	readonly expiresAt: string | null
+	/**
+	 * Round 11 P1-B3 — explicit tenant binding (migration 0077).
+	 * `null` = legacy channel-shared (back-compat with pre-Round-11 production rows).
+	 * Non-null = bound to specific tenant; URN tenantId MUST match at verification.
+	 */
+	readonly tenantId: string | null
 }
 
 type SecretYdbRow = {
@@ -39,6 +45,7 @@ type SecretYdbRow = {
 	status: string
 	activatedAt: Date
 	expiresAt: Date | null
+	tenantId?: string | null
 }
 
 function rowToSecret(r: SecretYdbRow): WebhookSecretRow {
@@ -49,6 +56,7 @@ function rowToSecret(r: SecretYdbRow): WebhookSecretRow {
 		status: r.status as WebhookSecretStatus,
 		activatedAt: r.activatedAt.toISOString(),
 		expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
+		tenantId: r.tenantId ?? null,
 	}
 }
 
@@ -66,15 +74,39 @@ export function createWebhookSecretRepo(sql: SqlInstance) {
 		 * List ACCEPTED secrets for a channel (active + previous, ordered by
 		 * activatedAt desc). Verifier walks this list trying each kid until
 		 * signature matches OR all exhausted.
+		 *
+		 * **Round 11 P1-B3 (canon `feedback_round_10_truthful_post_review`)**:
+		 * optional `tenantId` parameter binds secret к (channelId, tenantId).
+		 * - `tenantId` undefined → legacy behavior, returns ALL channel secrets
+		 *   (back-compat — production rows pre-Round 11 have NULL tenantId).
+		 * - `tenantId` set → returns rows matching either (a) explicit tenantId
+		 *   match OR (b) NULL tenantId (channel-shared legacy). Demo seed always
+		 *   populates tenantId='demo-tenant'; cross-tenant URN forgery rejected
+		 *   when victim has explicit tenantId AND attacker doesn't have matching
+		 *   secret.
 		 */
-		async listAccepted(channelId: string): Promise<ReadonlyArray<WebhookSecretRow>> {
-			const [rows = []] = await sql<SecretYdbRow[]>`
+		async listAccepted(
+			channelId: string,
+			tenantId?: string,
+		): Promise<ReadonlyArray<WebhookSecretRow>> {
+			const [rows = []] =
+				tenantId !== undefined
+					? await sql<SecretYdbRow[]>`
+				SELECT channelId, kid, secret, status, activatedAt, expiresAt
+				FROM webhookSecret
+				WHERE channelId = ${channelId}
+				  AND (tenantId = ${tenantId} OR tenantId IS NULL)
+				  AND (status = ${'active'} OR status = ${'previous'})
+			`
+							.isolation('snapshotReadOnly')
+							.idempotent(true)
+					: await sql<SecretYdbRow[]>`
 				SELECT channelId, kid, secret, status, activatedAt, expiresAt
 				FROM webhookSecret
 				WHERE channelId = ${channelId} AND (status = ${'active'} OR status = ${'previous'})
 			`
-				.isolation('snapshotReadOnly')
-				.idempotent(true)
+							.isolation('snapshotReadOnly')
+							.idempotent(true)
 			// Sort active-first, then by activatedAt desc.
 			return rows.map(rowToSecret).sort((a, b) => {
 				if (a.status !== b.status) return a.status === 'active' ? -1 : 1

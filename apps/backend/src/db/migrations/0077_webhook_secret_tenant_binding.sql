@@ -1,0 +1,34 @@
+-- Round 11 P1-B3 fix (canon `feedback_round_10_truthful_post_review_canon_2026_05_25.md`)
+--
+-- Bind webhookSecret к (channelId, tenantId, kid) для cross-tenant security.
+--
+-- **Threat model** (Agent B P1-B3 finding):
+--   Round 8 webhookSecret PK = (channelId, kid). Single secret per channel
+--   shared across ALL tenants. Attacker tenant A with valid YT signature can
+--   forge URN claiming tenant B → signature verifies (same channel secret) →
+--   webhook routed к tenant B's inbox. Round 8 P1-6 partial mitigation via
+--   connectionRepo gate is insufficient when both tenants legitimately have
+--   YT enabled.
+--
+-- **Incremental fix** (этот migration):
+--   Add nullable `tenantId Utf8` column к webhookSecret. listAccepted then
+--   filters by (channelId, tenantId-from-URN). NULL preserves back-compat —
+--   any row WITHOUT explicit tenantId acts как channel-shared secret (legacy
+--   production behavior). New rows (demo seed + future per-tenant onboard)
+--   populate tenantId explicitly.
+--
+-- **Future Phase-2** (deferred к Round 12 if production traffic mandates):
+--   Migrate all existing prod rows к explicit tenantId + change column к NOT
+--   NULL + recompose PK к (channelId, tenantId, kid). This requires:
+--     1. Backfill: for each existing (channelId, kid) → for each enabled
+--        tenant on that channel → INSERT new row с tenantId.
+--     2. Delete old (channelId, kid)-PK rows.
+--     3. ALTER TABLE recompose PK.
+--   YDB ALTER PK requires table recreation — expensive operation. Не нужна
+--   до production traffic; demo flow works с incremental nullable design.
+--
+-- **Idempotency**: ALTER TABLE ADD COLUMN IF NOT EXISTS not supported в YDB.
+-- Use simple ADD; if column exists, migration runner skips (per `applyMigrations`
+-- canon — migrations are .sql immutable, applied once via migration table).
+
+ALTER TABLE webhookSecret ADD COLUMN tenantId Utf8;

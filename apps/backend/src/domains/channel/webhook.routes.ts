@@ -192,6 +192,18 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
 			return c.json({ error: 'forbidden_tenant_for_channel', tenantId, channelId }, 403)
 		}
 
+		// Round 11 P1-B3 — verify matched-secret's tenantId binding.
+		// Round 8 P1-6 alone insufficient: when BOTH attacker + victim have
+		// enabled YT connections, channel-shared secret allowed cross-tenant URN
+		// forge. Round 11 binds secret к (channelId, tenantId): NULL row =
+		// legacy back-compat (any tenant); explicit row must match URN tenantId.
+		if (matchedKid !== null) {
+			const matched = await deps.secretRepo.getByKid({ channelId, kid: matchedKid })
+			if (matched !== null && matched.tenantId !== null && matched.tenantId !== tenantId) {
+				return c.json({ error: 'webhook_secret_tenant_mismatch', tenantId, channelId }, 403)
+			}
+		}
+
 		const classification = await deps.inboxRepo.classifyAndInsert({
 			source: event.source,
 			eventId: event.id,
