@@ -1,6 +1,9 @@
 import { extractMagicLinkUrl } from '@horeca/shared'
+import type { sql as SQL } from '../../db/index.ts'
 import type { EmailAdapter, SendEmailInput, SendEmailResult } from './email-adapter.types.ts'
 import { isReservedTestDomain } from './reserved-test-ranges.ts'
+
+type SqlInstance = typeof SQL
 
 /**
  * Demo deployment in-process inbox — captures outgoing emails per recipient
@@ -67,6 +70,19 @@ interface DemoInboxAdapterOptions {
 	 * Без downstream — capture-only (старый pure demo mode).
 	 */
 	readonly downstream?: EmailAdapter
+	/**
+	 * Round 7 v3 2026-05-25 — optional YDB client для multi-instance race
+	 * elimination. Когда set, captures persisted к `demoInboxCapture` table
+	 * (migration 0075). All container instances share same state — поллер
+	 * sees captures regardless of which instance handled the send.
+	 *
+	 * Без sql → in-process `Map<email, captures[]>` (legacy single-instance
+	 * mode, sufficient для local dev tests где multi-instance не is at play).
+	 *
+	 * Production wiring: `createEmailAdapter` factory passes sql when
+	 * `DEMO_DEPLOYMENT=true` (см. postbox-adapter.ts).
+	 */
+	readonly sql?: SqlInstance
 }
 
 export class DemoInboxAdapter implements EmailAdapter {
@@ -74,6 +90,7 @@ export class DemoInboxAdapter implements EmailAdapter {
 	private readonly now: () => number
 	private readonly ttlMs: number
 	private readonly downstream?: EmailAdapter
+	private readonly sql?: SqlInstance
 	private nextId = 1
 
 	constructor(opts: DemoInboxAdapterOptions = {}) {
@@ -81,6 +98,9 @@ export class DemoInboxAdapter implements EmailAdapter {
 		this.ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS
 		if (opts.downstream !== undefined) {
 			this.downstream = opts.downstream
+		}
+		if (opts.sql !== undefined) {
+			this.sql = opts.sql
 		}
 	}
 
@@ -93,21 +113,32 @@ export class DemoInboxAdapter implements EmailAdapter {
 			magicLinkUrl: extractMagicLinkUrl(input.html) ?? extractMagicLinkUrl(input.text),
 		}
 
-		// Evict oldest recipient wholesale when over total cap (LRU-on-insert).
-		if (!this.perRecipient.has(key) && this.perRecipient.size >= MAX_TOTAL_RECIPIENTS) {
-			const oldestKey = this.perRecipient.keys().next().value
-			if (oldestKey !== undefined) {
-				this.perRecipient.delete(oldestKey)
+		// Round 7 v3 2026-05-25 — YDB persist eliminates multi-instance race.
+		// Когда sql provided, write к demoInboxCapture (TTL P6M auto-cleanup).
+		// All container instances share state. См. migration 0075.
+		if (this.sql) {
+			await this.sql`
+				INSERT INTO demoInboxCapture (email, capturedAt, magicLinkUrl, subject)
+				VALUES (${key}, ${captured.capturedAt}, ${captured.magicLinkUrl}, ${captured.subject})
+			`
+		} else {
+			// In-process Map fallback — local dev / tests / single-instance mode.
+			// Evict oldest recipient wholesale when over total cap (LRU-on-insert).
+			if (!this.perRecipient.has(key) && this.perRecipient.size >= MAX_TOTAL_RECIPIENTS) {
+				const oldestKey = this.perRecipient.keys().next().value
+				if (oldestKey !== undefined) {
+					this.perRecipient.delete(oldestKey)
+				}
 			}
-		}
 
-		const bucket = this.perRecipient.get(key) ?? []
-		bucket.push(captured)
-		// Drop oldest within recipient bucket when over per-recipient cap.
-		while (bucket.length > MAX_PER_RECIPIENT) {
-			bucket.shift()
+			const bucket = this.perRecipient.get(key) ?? []
+			bucket.push(captured)
+			// Drop oldest within recipient bucket when over per-recipient cap.
+			while (bucket.length > MAX_PER_RECIPIENT) {
+				bucket.shift()
+			}
+			this.perRecipient.set(key, bucket)
 		}
-		this.perRecipient.set(key, bucket)
 
 		// Dual-write mode: forward к downstream adapter (e.g. PostboxAdapter)
 		// для real email delivery. DemoInboxPanel UI работает через capture
@@ -144,18 +175,52 @@ export class DemoInboxAdapter implements EmailAdapter {
 	 * — каноничный URL-based filter would loop forever; time-based filter
 	 * captures NEW send irrespective of URL identity.
 	 */
-	getLatest(to: string, after?: Date): CapturedMessage | null {
+	async getLatest(to: string, after?: Date): Promise<CapturedMessage | null> {
 		const key = normalizeEmail(to)
+		const cutoff = new Date(this.now() - this.ttlMs)
+		const afterMs = after?.getTime()
+
+		if (this.sql) {
+			// YDB query — TTL handles cutoff at storage layer, но also filter
+			// для defensive consistency с in-process Map semantic.
+			const [rows = []] = await this.sql<
+				Array<{
+					email: string
+					capturedAt: Date
+					magicLinkUrl: string | null
+					subject: string
+				}>
+			>`
+				SELECT email, capturedAt, magicLinkUrl, subject
+				FROM demoInboxCapture
+				WHERE email = ${key}
+				  AND capturedAt >= ${cutoff}
+				  ${after ? this.sql`AND capturedAt > ${after}` : this.sql``}
+				ORDER BY capturedAt DESC
+				LIMIT 1
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const row = rows[0]
+			if (!row) return null
+			return {
+				to: row.email,
+				subject: row.subject,
+				capturedAt: row.capturedAt,
+				magicLinkUrl: row.magicLinkUrl,
+			}
+		}
+
+		// In-process Map fallback
 		const bucket = this.perRecipient.get(key)
 		if (!bucket || bucket.length === 0) return null
-		const cutoff = this.now() - this.ttlMs
-		const afterMs = after?.getTime()
+		const cutoffMs = cutoff.getTime()
 		// Walk back-to-front: latest entries first, return first non-expired.
 		for (let i = bucket.length - 1; i >= 0; i -= 1) {
 			const entry = bucket[i]
 			if (!entry) continue
 			const entryMs = entry.capturedAt.getTime()
-			if (entryMs < cutoff) continue // expired
+			if (entryMs < cutoffMs) continue // expired
 			if (afterMs !== undefined && entryMs <= afterMs) continue // not new enough
 			return { ...entry }
 		}
@@ -163,8 +228,11 @@ export class DemoInboxAdapter implements EmailAdapter {
 	}
 
 	/** Reset all captures — for tests / refresh-cron parity in future. */
-	clear(): void {
+	async clear(): Promise<void> {
 		this.perRecipient.clear()
+		if (this.sql) {
+			await this.sql`DELETE FROM demoInboxCapture`
+		}
 	}
 
 	/** Diagnostic: number of distinct recipient buckets currently stored. */

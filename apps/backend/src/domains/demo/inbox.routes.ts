@@ -58,7 +58,7 @@ export interface DemoInboxRoutesOptions {
 }
 
 export function createDemoInboxRoutes(opts: DemoInboxRoutesOptions) {
-	return new Hono<AppEnv>().get('/inbox', zValidator('query', querySchema), (c) => {
+	return new Hono<AppEnv>().get('/inbox', zValidator('query', querySchema), async (c) => {
 		if (!opts.enabled) {
 			return c.json({ error: { code: 'NOT_FOUND', message: 'Not found' } }, 404)
 		}
@@ -76,7 +76,8 @@ export function createDemoInboxRoutes(opts: DemoInboxRoutesOptions) {
 			}
 			return c.json({ data: response }, 200)
 		}
-		const captured = inbox.getLatest(email, since ? new Date(since) : undefined)
+		// Round 7 v3 2026-05-25 — getLatest is now async (YDB persist path).
+		const captured = await inbox.getLatest(email, since ? new Date(since) : undefined)
 		const response: DemoInboxResponse = captured
 			? {
 					email,

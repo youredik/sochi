@@ -294,9 +294,18 @@ export function extractEnvelopeAddress(mailbox: string): string {
  */
 let demoInboxSingleton: DemoInboxAdapter | null = null
 
-function getOrCreateDemoInbox(downstream?: EmailAdapter): DemoInboxAdapter {
+function getOrCreateDemoInbox(
+	downstream?: EmailAdapter,
+	sql?: typeof import('../../db/index.ts').sql,
+): DemoInboxAdapter {
 	if (!demoInboxSingleton) {
-		demoInboxSingleton = new DemoInboxAdapter(downstream ? { downstream } : {})
+		// Round 7 v3 2026-05-25 — sql optional. When provided (prod), captures
+		// persist к YDB (multi-instance race elimination per migration 0075).
+		// Without sql (tests / local dev) → in-process Map fallback.
+		const opts: { downstream?: EmailAdapter; sql?: typeof import('../../db/index.ts').sql } = {}
+		if (downstream) opts.downstream = downstream
+		if (sql) opts.sql = sql
+		demoInboxSingleton = new DemoInboxAdapter(opts)
 	}
 	return demoInboxSingleton
 }
@@ -505,7 +514,11 @@ interface FactoryLogger {
  * Pattern from stankoff-v2; pre-launch verification is `dig TXT _domainkey.<domain>`
  * + DKIM/SPF/DMARC records on sender domain (set in infra-фаза, not here).
  */
-export function createEmailAdapter(env: EmailAdapterEnv, log: FactoryLogger): EmailAdapter {
+export function createEmailAdapter(
+	env: EmailAdapterEnv,
+	log: FactoryLogger,
+	sql?: typeof import('../../db/index.ts').sql,
+): EmailAdapter {
 	// Build Postbox client если creds present — может wrap demo OR standalone.
 	const postbox = buildPostboxIfReady(env, log)
 
@@ -514,14 +527,16 @@ export function createEmailAdapter(env: EmailAdapterEnv, log: FactoryLogger): Em
 		// Postbox real send (если creds present). Prospect видит link в panel,
 		// real users получают email на свой inbox. Без Postbox creds —
 		// capture-only fallback (старый behavior).
+		// **Round 7 v3 2026-05-25**: when sql provided → YDB persist (migration
+		// 0075) eliminates multi-instance race deterministically.
 		const downstream = postbox
 		log.info(
-			{ dualWrite: downstream !== undefined },
+			{ dualWrite: downstream !== undefined, ydbPersist: sql !== undefined },
 			downstream !== undefined
 				? 'Email adapter: DemoInbox (capture + UI panel) + Postbox (real send)'
 				: 'Email adapter: DemoInbox (capture-only, no Postbox creds)',
 		)
-		return getOrCreateDemoInbox(downstream)
+		return getOrCreateDemoInbox(downstream, sql)
 	}
 	if (env.POSTBOX_ENABLED) {
 		if (postbox === undefined) {

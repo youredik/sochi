@@ -70,30 +70,30 @@ describe('DemoInboxAdapter — send() return shape', () => {
 })
 
 describe('DemoInboxAdapter — getLatest()', () => {
-	it('[C1] returns null for unseen recipient', () => {
+	it('[C1] returns null for unseen recipient', async () => {
 		const adapter = new DemoInboxAdapter()
-		expect(adapter.getLatest('nobody@x.com')).toBe(null)
+		expect(await adapter.getLatest('nobody@x.com')).toBe(null)
 	})
 
 	it('[C2] returns latest entry from multi-entry bucket', async () => {
 		const adapter = new DemoInboxAdapter()
 		await adapter.send(emailWithLink('user@x.com', VERIFY_URL_A))
 		await adapter.send(emailWithLink('user@x.com', VERIFY_URL_B))
-		const latest = adapter.getLatest('user@x.com')
+		const latest = await adapter.getLatest('user@x.com')
 		expect(latest?.magicLinkUrl).toBe(VERIFY_URL_B)
 	})
 
 	it('[C3] case-insensitive lookup (envelope-key normalization)', async () => {
 		const adapter = new DemoInboxAdapter()
 		await adapter.send(emailWithLink('User@Example.COM', VERIFY_URL_A))
-		expect(adapter.getLatest('user@example.com')?.magicLinkUrl).toBe(VERIFY_URL_A)
-		expect(adapter.getLatest('USER@EXAMPLE.COM')?.magicLinkUrl).toBe(VERIFY_URL_A)
+		expect((await adapter.getLatest('user@example.com'))?.magicLinkUrl).toBe(VERIFY_URL_A)
+		expect((await adapter.getLatest('USER@EXAMPLE.COM'))?.magicLinkUrl).toBe(VERIFY_URL_A)
 	})
 
 	it('[C4] extracts magic-link URL из html body', async () => {
 		const adapter = new DemoInboxAdapter()
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
-		expect(adapter.getLatest('a@x.com')?.magicLinkUrl).toBe(VERIFY_URL_A)
+		expect((await adapter.getLatest('a@x.com'))?.magicLinkUrl).toBe(VERIFY_URL_A)
 	})
 
 	it('[C5] falls back к text body when html lacks the URL', async () => {
@@ -105,13 +105,13 @@ describe('DemoInboxAdapter — getLatest()', () => {
 			html: '<p>see text body</p>',
 			text: `Click: ${VERIFY_URL_B}`,
 		})
-		expect(adapter.getLatest('a@x.com')?.magicLinkUrl).toBe(VERIFY_URL_B)
+		expect((await adapter.getLatest('a@x.com'))?.magicLinkUrl).toBe(VERIFY_URL_B)
 	})
 
 	it('[C6] magicLinkUrl = null когда neither body has verify URL', async () => {
 		const adapter = new DemoInboxAdapter()
 		await adapter.send(emailWithoutLink('a@x.com'))
-		expect(adapter.getLatest('a@x.com')?.magicLinkUrl).toBe(null)
+		expect((await adapter.getLatest('a@x.com'))?.magicLinkUrl).toBe(null)
 	})
 })
 
@@ -122,7 +122,7 @@ describe('DemoInboxAdapter — TTL', () => {
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
 		// Advance past TTL.
 		clock += 61_000
-		expect(adapter.getLatest('a@x.com')).toBe(null)
+		expect(await adapter.getLatest('a@x.com')).toBe(null)
 	})
 
 	it('[T2] fresh entry visible когда older entries already expired', async () => {
@@ -131,7 +131,7 @@ describe('DemoInboxAdapter — TTL', () => {
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
 		clock += 61_000 // first expired
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_B))
-		expect(adapter.getLatest('a@x.com')?.magicLinkUrl).toBe(VERIFY_URL_B)
+		expect((await adapter.getLatest('a@x.com'))?.magicLinkUrl).toBe(VERIFY_URL_B)
 	})
 
 	it('[T3] DEFAULT_TTL_MS = 6 minutes (5-min BA magic-link + 1-min slack)', () => {
@@ -144,12 +144,12 @@ describe('DemoInboxAdapter — getLatest(after) time-based filter (Round 7 v3 fi
 		let clock = 1_000_000
 		const adapter = new DemoInboxAdapter({ now: () => clock })
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
-		const first = adapter.getLatest('a@x.com')
+		const first = await adapter.getLatest('a@x.com')
 		expect(first?.magicLinkUrl).toBe(VERIFY_URL_A)
 
 		clock += 100
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_B))
-		const second = adapter.getLatest('a@x.com', first?.capturedAt)
+		const second = await adapter.getLatest('a@x.com', first?.capturedAt)
 		expect(second?.magicLinkUrl).toBe(VERIFY_URL_B)
 	})
 
@@ -157,9 +157,9 @@ describe('DemoInboxAdapter — getLatest(after) time-based filter (Round 7 v3 fi
 		let clock = 1_000_000
 		const adapter = new DemoInboxAdapter({ now: () => clock })
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
-		const first = adapter.getLatest('a@x.com')
+		const first = await adapter.getLatest('a@x.com')
 		// Same clock — no new send happened.
-		expect(adapter.getLatest('a@x.com', first?.capturedAt)).toBe(null)
+		expect(await adapter.getLatest('a@x.com', first?.capturedAt)).toBe(null)
 	})
 
 	it('[A3] after filter race-free даже если BA reuses identical URL', async () => {
@@ -169,12 +169,12 @@ describe('DemoInboxAdapter — getLatest(after) time-based filter (Round 7 v3 fi
 		let clock = 1_000_000
 		const adapter = new DemoInboxAdapter({ now: () => clock })
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
-		const first = adapter.getLatest('a@x.com')
+		const first = await adapter.getLatest('a@x.com')
 		expect(first?.magicLinkUrl).toBe(VERIFY_URL_A)
 
 		clock += 100
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A)) // SAME URL
-		const second = adapter.getLatest('a@x.com', first?.capturedAt)
+		const second = await adapter.getLatest('a@x.com', first?.capturedAt)
 		expect(second?.magicLinkUrl).toBe(VERIFY_URL_A) // same URL, but newer capture
 		expect(second?.capturedAt.getTime()).toBeGreaterThan(first!.capturedAt.getTime())
 	})
@@ -182,8 +182,8 @@ describe('DemoInboxAdapter — getLatest(after) time-based filter (Round 7 v3 fi
 	it('[A4] after omitted → equivalent к non-filtered getLatest (backward-compat)', async () => {
 		const adapter = new DemoInboxAdapter()
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
-		const filtered = adapter.getLatest('a@x.com', undefined)
-		const unfiltered = adapter.getLatest('a@x.com')
+		const filtered = await adapter.getLatest('a@x.com', undefined)
+		const unfiltered = await adapter.getLatest('a@x.com')
 		expect(filtered?.magicLinkUrl).toBe(unfiltered?.magicLinkUrl)
 	})
 })
@@ -200,7 +200,7 @@ describe('DemoInboxAdapter — bounded growth', () => {
 			)
 		}
 		// Latest is still visible.
-		expect(adapter.getLatest('flood@x.com')?.magicLinkUrl).toBe(
+		expect((await adapter.getLatest('flood@x.com'))?.magicLinkUrl).toBe(
 			`http://localhost:8787/api/auth/magic-link/verify?token=t${MAX_PER_RECIPIENT + 4}`,
 		)
 		// Bucket size capped — verified indirectly by recipientCount being 1.
@@ -217,8 +217,8 @@ describe('DemoInboxAdapter — bounded growth', () => {
 		// First recipient should be evicted when next NEW one is inserted.
 		await adapter.send(emailWithLink('newcomer@x.com', VERIFY_URL_B))
 		expect(adapter.recipientCount()).toBe(MAX_TOTAL_RECIPIENTS) // still at cap
-		expect(adapter.getLatest('u0@x.com')).toBe(null) // u0 evicted
-		expect(adapter.getLatest('newcomer@x.com')?.magicLinkUrl).toBe(VERIFY_URL_B)
+		expect(await adapter.getLatest('u0@x.com')).toBe(null) // u0 evicted
+		expect((await adapter.getLatest('newcomer@x.com'))?.magicLinkUrl).toBe(VERIFY_URL_B)
 	})
 
 	it('[R3] re-send к existing recipient does NOT count as a new bucket key', async () => {
@@ -246,9 +246,9 @@ describe('DemoInboxAdapter — admin/test surface', () => {
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
 		await adapter.send(emailWithLink('b@x.com', VERIFY_URL_B))
 		expect(adapter.recipientCount()).toBe(2)
-		adapter.clear()
+		await adapter.clear()
 		expect(adapter.recipientCount()).toBe(0)
-		expect(adapter.getLatest('a@x.com')).toBe(null)
+		expect(await adapter.getLatest('a@x.com')).toBe(null)
 	})
 
 	it('[X2] recipientCount() reflects actual distinct-key count', async () => {
@@ -333,7 +333,7 @@ describe('DemoInboxAdapter — downstream forward guard (security 2026-05-22)', 
 		expect(calls.length).toBe(0)
 		expect(result.kind).toBe('sent')
 		// Capture в UI всё равно happens
-		expect(inbox.getLatest('demo-guest-0@example.com')?.magicLinkUrl).toBe(VERIFY_URL_A)
+		expect((await inbox.getLatest('demo-guest-0@example.com'))?.magicLinkUrl).toBe(VERIFY_URL_A)
 	})
 
 	it('[D2] real domain → downstream IS called + capture also happens', async () => {
@@ -361,7 +361,7 @@ describe('DemoInboxAdapter — downstream forward guard (security 2026-05-22)', 
 		expect(r1.kind).toBe('sent')
 		expect(r2.kind).toBe('sent')
 		// Both captured in UI
-		expect(inbox.getLatest('user@example.com')?.magicLinkUrl).toBe(VERIFY_URL_A)
-		expect(inbox.getLatest('user@gmail.com')?.magicLinkUrl).toBe(VERIFY_URL_B)
+		expect((await inbox.getLatest('user@example.com'))?.magicLinkUrl).toBe(VERIFY_URL_A)
+		expect((await inbox.getLatest('user@gmail.com'))?.magicLinkUrl).toBe(VERIFY_URL_B)
 	})
 })

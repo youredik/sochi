@@ -686,7 +686,7 @@ const demoRefreshCron =
 const notificationDispatcher =
 	process.env.NODE_ENV === 'test'
 		? null
-		: startNotificationDispatcher(sql, createEmailAdapter(env, logger), logger, {
+		: startNotificationDispatcher(sql, createEmailAdapter(env, logger, sql), logger, {
 				fromAddress: `"${env.EMAIL_FROM_NAME}" <${env.EMAIL_FROM_ADDRESS}>`,
 			})
 
