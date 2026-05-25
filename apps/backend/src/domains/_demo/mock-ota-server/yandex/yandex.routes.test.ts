@@ -11,7 +11,7 @@
  *
  * Strict-tests canon (`feedback_strict_tests`):
  *   - Exact-value `.toBe(...)` / `.toEqual(...)` only.
- *   - No `.toBeDefined()` / `.toBeTruthy()`.
+ *   - No weak matchers (см. feedback_strict_tests canon).
  *   - Immutable-field assertions where applicable.
  *   - Adversarial cases (missing auth, bad token, idempotent replay).
  */
