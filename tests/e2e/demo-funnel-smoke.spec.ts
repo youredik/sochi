@@ -157,7 +157,13 @@ test.describe('Demo funnel — empirical против prod', () => {
 
 		// Should land на /welcome (fresh-signup, no existing orgs)
 		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })
-		await expect(page.getByRole('heading', { name: /Почти готово/ })).toBeVisible()
+		// Race-tolerant: heading visibility check после TanStack Router beforeLoad
+		// guard + React hydration. Default 5s toBeVisible timeout may be too tight
+		// для cold-start CI runs (especially on serverless container scale-from-1).
+		// 15s leaves margin для full SPA hydrate cycle.
+		await expect(page.getByRole('heading', { name: /Почти готово/ })).toBeVisible({
+			timeout: 15_000,
+		})
 
 		// Settle — defensive queries fire on mount, give them chance to land.
 		await page.waitForLoadState('networkidle', { timeout: 5_000 })
