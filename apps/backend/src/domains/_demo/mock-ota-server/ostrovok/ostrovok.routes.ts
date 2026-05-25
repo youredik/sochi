@@ -185,13 +185,22 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 	 * Does NOT block — demo accepts everything. Only purpose: surface real-PII
 	 * leak risk if env is misconfigured (e.g. ENABLE_DEMO_MODE=true in prod).
 	 */
-	function logIfNotReservedContact(email: string, phone: string): void {
+	/**
+	 * Round 10 P0-3 — reserved-test-range shield = HARD REJECT, не warn.
+	 * Canon `feedback_round_10_truthful_post_review_canon_2026_05_25.md` +
+	 * `feedback_post_flip_5expert_verification_canon_2026_05_24.md`.
+	 * Returns null = pass; returns field name = caller emits 422.
+	 */
+	function rejectNonReservedContact(email: string, phone: string): 'email' | 'phone' | null {
 		if (!isReservedTestDomain(email)) {
-			logWarn('guest_email_not_reserved_test', { email })
+			logWarn('guest_email_rejected_not_reserved_test', { email })
+			return 'email'
 		}
 		if (!isReservedTestPhone(phone)) {
-			logWarn('guest_phone_not_reserved_test', { phone })
+			logWarn('guest_phone_rejected_not_reserved_test', { phone })
+			return 'phone'
 		}
+		return null
 	}
 
 	// ── Stage 1: POST /search/hp/ ──────────────────────────────────────────
@@ -396,9 +405,19 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 			return c.json(errorEnvelope('rate_not_found'), 400)
 		}
 
-		// Round 8 mock shield: warn if non-reserved-test PII slips через demo form.
-		// We log but do NOT block — demo wow-effect proceeds regardless.
-		logIfNotReservedContact(email, phone)
+		// Round 10 P0-3 — hard reject non-reserved PII (152-ФЗ legal-cover).
+		const shieldField = rejectNonReservedContact(email, phone)
+		if (shieldField !== null) {
+			return c.json(
+				{
+					status: 'error',
+					error: 'non_reserved_demo_data',
+					field: shieldField,
+					data: null,
+				},
+				422,
+			)
+		}
 
 		// Parse rooms[0].guests shape (real ETG repeats per-room; demo squashes).
 		const roomsArr = Array.isArray(parsed.rooms) ? parsed.rooms : []

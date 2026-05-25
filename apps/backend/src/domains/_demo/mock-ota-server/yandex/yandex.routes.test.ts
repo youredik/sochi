@@ -159,7 +159,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 			body: JSON.stringify({
 				booking_token: 'NOPE_NOT_REAL',
 				customer_email: 'ivan@example.com',
-				customer_phone: '+79999999999',
+				customer_phone: '+70000000001',
 				guests: [{ first_name: 'Иван', last_name: 'Иванов' }],
 			}),
 		})
@@ -188,7 +188,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 			body: JSON.stringify({
 				booking_token: token,
 				customer_email: 'guest@example.com',
-				customer_phone: '+79999999999',
+				customer_phone: '+70000000001',
 				guests: [{ first_name: 'Иван', last_name: 'Иванов' }],
 				comment: 'Тестовый комментарий',
 			}),
@@ -244,7 +244,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 			body: JSON.stringify({
 				booking_token: token,
 				customer_email: 'guest@example.com',
-				customer_phone: '+79999999999',
+				customer_phone: '+70000000001',
 				guests: [{ first_name: 'Иван', last_name: 'Иванов' }],
 			}),
 		})
@@ -315,7 +315,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 			body: JSON.stringify({
 				booking_token: token,
 				customer_email: 'ivan@example.com', // RFC 2606 reserved
-				customer_phone: '+79999999999', // Россвязь reserved
+				customer_phone: '+70000000001', // Россвязь reserved
 				guests: [{ first_name: 'Иван', last_name: 'Иванов' }],
 			}),
 		})
@@ -339,7 +339,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 			body: JSON.stringify({
 				booking_token: token,
 				customer_email: 'guest@example.com',
-				customer_phone: '+79999999999',
+				customer_phone: '+70000000001',
 				guests: [{ first_name: 'Иван', last_name: 'Иванов' }],
 			}),
 		})

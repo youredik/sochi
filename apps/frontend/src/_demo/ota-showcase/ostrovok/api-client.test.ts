@@ -308,7 +308,7 @@ describe('Ostrovok API client', () => {
 			)
 			await finishBooking({
 				partner: { partner_order_id: 'p-1' },
-				user: { email: 'petr@example.com', phone: '+79999999998' },
+				user: { email: 'petr@example.com', phone: '+70000000002' },
 				language: 'ru',
 				rooms: [{ guests: [{ first_name: 'Пётр', last_name: 'Петров' }] }],
 				payment_type: { type: 'now', amount: '14000', currency_code: 'RUB' },
@@ -321,7 +321,7 @@ describe('Ostrovok API client', () => {
 			expect(partner.partner_order_id).toBe('p-1')
 			const user = body.user as Record<string, unknown>
 			expect(user.email).toBe('petr@example.com')
-			expect(user.phone).toBe('+79999999998')
+			expect(user.phone).toBe('+70000000002')
 		})
 
 		test('[FB2] 200 data is null (ETG canon)', async () => {
@@ -340,7 +340,7 @@ describe('Ostrovok API client', () => {
 			)
 			const res = await finishBooking({
 				partner: { partner_order_id: 'p-1' },
-				user: { email: 'p@example.com', phone: '+79999999998' },
+				user: { email: 'p@example.com', phone: '+70000000002' },
 				language: 'ru',
 				rooms: [{ guests: [{ first_name: 'A', last_name: 'B' }] }],
 				payment_type: { type: 'now', amount: '14000', currency_code: 'RUB' },

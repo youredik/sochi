@@ -209,6 +209,11 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 	const reservations = new Map<string, InternalReservation>()
 	const ariPushes: PushedAriEntry[] = []
 	const ariIdempotencyIndex = new Set<string>()
+	// Round 10 P1-α — cache VerifyBookingInput keyed by createBookingToken
+	// so createBooking() может derive dates/guest/roomType/ratePlan from
+	// real input вместо hardcoded fixture (sibling-fix Ostrovok P0-3 Round 8).
+	// Per canon `feedback_round_10_truthful_post_review_canon_2026_05_25`.
+	const pendingVerifies = new Map<string, VerifyBookingInput>()
 	/**
 	 * Idempotency cache for createBooking (idempotencyKey → externalId) +
 	 * cancelReservation (idempotencyKey → final status). Round 8 canon: repeated
@@ -360,8 +365,11 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 			const departure = new Date(input.checkOut).getTime()
 			const nights = Math.max(1, Math.round((departure - arrival) / (24 * 60 * 60 * 1000)))
 			const total = nightRateMicros * BigInt(nights) * BigInt(input.guestCount)
+			const createBookingToken = randomUUID()
+			// Round 10 P1-α — cache input so createBooking() derives real state.
+			pendingVerifies.set(createBookingToken, input)
 			return {
-				createBookingToken: randomUUID(),
+				createBookingToken,
 				checksum: createHmac('sha256', hmacSecret)
 					.update(`${input.checkIn}|${input.checkOut}|${total.toString()}`)
 					.digest('hex'),
@@ -375,23 +383,38 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 			// Idempotent createBooking: same idempotencyKey → return previously-created externalId.
 			const existing = createBookingIdempotencyIndex.get(input.idempotencyKey)
 			if (existing !== undefined) return { externalId: existing }
+			// Round 10 P1-α — derive state из cached verifyBooking input (sibling
+			// of Ostrovok P0-3 Round 8 fix). Fallback к safe-default ТОЛЬКО если
+			// verify-stage expired — graceful degradation, не silent canon-violation.
+			const verifyInput = pendingVerifies.get(input.verifyResult.createBookingToken)
 			const externalId = `yt-res-${randomUUID().slice(0, 12)}`
 			reservations.set(externalId, {
 				externalId,
 				tenantId: opts.tenantId,
 				propertyId: opts.propertyId,
-				roomTypeId: 'yt_rt',
-				ratePlanId: 'yt_rp',
-				arrivalDate: '2027-06-15',
-				departureDate: '2027-06-17',
-				guestCount: 1,
+				roomTypeId: verifyInput?.roomTypeId ?? 'yt_rt',
+				ratePlanId: verifyInput?.ratePlanId ?? 'yt_rp',
+				arrivalDate: verifyInput?.checkIn ?? '2027-06-15',
+				departureDate: verifyInput?.checkOut ?? '2027-06-17',
+				guestCount: verifyInput?.guestCount ?? 1,
 				totalAmountMicros: input.verifyResult.totalAmountMicros,
 				status: 'Confirmed',
 				lastModificationUtc: new Date(now()).toISOString(),
 				sequenceNumber: nextSequenceNumber(),
-				guest: { firstName: 'YT', lastName: 'Guest' },
+				guest: {
+					firstName: verifyInput?.guest.firstName ?? 'YT',
+					lastName: verifyInput?.guest.lastName ?? 'Guest',
+					...(verifyInput?.guest.email !== undefined && {
+						email: verifyInput.guest.email,
+					}),
+					...(verifyInput?.guest.phone !== undefined && {
+						phone: verifyInput.guest.phone,
+					}),
+				},
 				consent: { processing: true, transferToHotel: true, marketing: false },
 			})
+			// Single-use verify input — clean up to avoid Map growth.
+			pendingVerifies.delete(input.verifyResult.createBookingToken)
 			createBookingIdempotencyIndex.set(input.idempotencyKey, externalId)
 			return { externalId }
 		},
@@ -496,7 +519,11 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 			if (data) {
 				const consent = data.consent as Record<string, unknown> | undefined
 				if (!consent || consent.processing !== true || consent.transferToHotel !== true) {
-					return { ok: false, reason: 'consent_missing_required_checkboxes', httpStatus: 422 }
+					return {
+						ok: false,
+						reason: 'consent_missing_required_checkboxes',
+						httpStatus: 422,
+					}
 				}
 				const photos = Array.isArray(data.photoUrls) ? (data.photoUrls as string[]) : []
 				const nonRu = findNonRuHost(photos)
@@ -522,7 +549,10 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 		emitReservationEvent(reservation: InternalReservation): SochiCloudEvent {
 			return buildCloudEvent({
 				id: reservation.externalId,
-				source: buildSourceUrn({ channelCode: 'YT', organizationId: opts.tenantId }),
+				source: buildSourceUrn({
+					channelCode: 'YT',
+					organizationId: opts.tenantId,
+				}),
 				type: buildEventType({
 					entity: 'booking',
 					action: reservation.status === 'Confirmed' ? 'created' : 'cancelled',

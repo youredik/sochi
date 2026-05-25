@@ -5,63 +5,64 @@ import { newId } from '@horeca/shared'
 import { Hono } from 'hono'
 import { contextStorage } from 'hono/context-storage'
 import { cors } from 'hono/cors'
-import { secureHeaders } from 'hono/secure-headers'
 import { requestId } from 'hono/request-id'
+import { secureHeaders } from 'hono/secure-headers'
 import { pinoLogger } from 'hono-pino'
 import { auth } from './auth.ts'
+import { startMigrationDeadlineMonitor } from './cron/epgu-deadline-monitor.ts'
 import { driver, sql } from './db/index.ts'
+import { registerDemoRoutes } from './domains/_demo/index.ts'
+import { seedDemoChannelInfra } from './domains/_demo/seed.ts'
 import { createActivityFactory } from './domains/activity/activity.factory.ts'
 import { createActivityRoutes } from './domains/activity/activity.routes.ts'
 import { createAvailabilityFactory } from './domains/availability/availability.factory.ts'
 import { createAvailabilityRoutes } from './domains/availability/availability.routes.ts'
 import { createBookingFactory } from './domains/booking/booking.factory.ts'
 import { createBookingRoutes } from './domains/booking/booking.routes.ts'
-import { createPropertyBlockFactory } from './domains/property-block/property-block.factory.ts'
-import { createPropertyBlockRoutes } from './domains/property-block/property-block.routes.ts'
 import { createGuestPortalRepo } from './domains/booking/guest-portal.repo.ts'
 import { createGuestPortalRoutes } from './domains/booking/guest-portal.routes.ts'
 import { createChannelFactory } from './domains/channel/channel.factory.ts'
 import { registerOstrovokEtgWithChannelFactory } from './domains/channel/ostrovok-etg/ostrovok-etg.factory.ts'
 import { registerTravellineWithChannelFactory } from './domains/channel/travelline/travelline.factory.ts'
 import { registerYandexTravelWithChannelFactory } from './domains/channel/yandex-travel/yandex-travel.factory.ts'
+import { createDemoInboxRoutes } from './domains/demo/inbox.routes.ts'
+import { createDemoSmsInboxRoutes } from './domains/demo/sms-inbox.routes.ts'
 import { createMockArchiveBuilder } from './domains/epgu/archive/mock-archive.ts'
+import { createConsentRevokeRoutes } from './domains/epgu/passport-scan/consent/consent-revoke.routes.ts'
+import { createPassportDataExportRoutes } from './domains/epgu/passport-scan/dsar/passport-data-export.routes.ts'
+import { createPassportScanFactory } from './domains/epgu/passport-scan/passport-scan.factory.ts'
+import { createPassportPhotoStorageFromEnv } from './domains/epgu/passport-scan/storage/passport-photo-storage.factory.ts'
 import { createMigrationRegistrationFactory } from './domains/epgu/registration/registration.factory.ts'
 import { createMigrationRegistrationRoutes } from './domains/epgu/registration/registration.routes.ts'
 import { createMockRklCheck } from './domains/epgu/rkl/mock-rkl.ts'
 import { createMockEpguTransport } from './domains/epgu/transport/mock-epgu.ts'
 import { createVisionAdapterFromEnv } from './domains/epgu/vision/vision.factory.ts'
 import { createVisionRoutes } from './domains/epgu/vision/vision.routes.ts'
-import { createConsentRevokeRoutes } from './domains/epgu/passport-scan/consent/consent-revoke.routes.ts'
-import { createGuestDocumentRoutes } from './domains/guest/guest-document.routes.ts'
-import { createPassportDataExportRoutes } from './domains/epgu/passport-scan/dsar/passport-data-export.routes.ts'
-import { createPassportScanFactory } from './domains/epgu/passport-scan/passport-scan.factory.ts'
-import { createPassportPhotoStorageFromEnv } from './domains/epgu/passport-scan/storage/passport-photo-storage.factory.ts'
 import { createFolioFactory } from './domains/folio/folio.factory.ts'
-import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
-import { createDemoInboxRoutes } from './domains/demo/inbox.routes.ts'
-import { createDemoSmsInboxRoutes } from './domains/demo/sms-inbox.routes.ts'
-import { demoInboxRateLimiter } from './middleware/demo-inbox-rate-limit.ts'
-import { magicLinkRateLimit, orgCreateRateLimit } from './middleware/auth-signup-rate-limit.ts'
-import { initDemoInboxSms } from './workers/lib/demo-inbox-sms-adapter.ts'
-import { createIdentityRoutes } from './domains/identity/identity.routes.ts'
-import { createOnboardingFactory } from './domains/onboarding/onboarding.factory.ts'
-import { createOnboardingRoutes } from './domains/onboarding/onboarding.routes.ts'
 import { createFolioRoutes } from './domains/folio/folio.routes.ts'
 import { createGuestFactory } from './domains/guest/guest.factory.ts'
 import { createGuestRoutes } from './domains/guest/guest.routes.ts'
+import { createGuestDocumentRoutes } from './domains/guest/guest-document.routes.ts'
+import { createDaDataAdapter } from './domains/identity/dadata/factory.ts'
+import { createIdentityRoutes } from './domains/identity/identity.routes.ts'
 import { createMeRoutes } from './domains/me/me.routes.ts'
 import { createNotificationFactory } from './domains/notification/notification.factory.ts'
+import { createOpsMetricsRoutes } from './domains/observability/ops-metrics.routes.ts'
 import { RumBuffer } from './domains/observability/rum.repo.ts'
 import { createRumRoutes } from './domains/observability/rum.routes.ts'
+import { createOnboardingFactory } from './domains/onboarding/onboarding.factory.ts'
+import { createOnboardingRoutes } from './domains/onboarding/onboarding.routes.ts'
 import { createPaymentFactory } from './domains/payment/payment.factory.ts'
 import { createPaymentRoutes } from './domains/payment/payment.routes.ts'
-import { createPaymentWebhookEventRepo } from './domains/payment/payment-webhook-event.repo.ts'
 import { createPaymentWebhookRoutes } from './domains/payment/payment-webhook.routes.ts'
+import { createPaymentWebhookEventRepo } from './domains/payment/payment-webhook-event.repo.ts'
 import { createPaymentProviderFromEnv } from './domains/payment/provider/factory.ts'
 import { createPropertyFactory } from './domains/property/property.factory.ts'
 import { createPropertyRoutes } from './domains/property/property.routes.ts'
 import { createPropertyContentFactory } from './domains/property/property-content.factory.ts'
 import { createPropertyContentRoutes } from './domains/property/property-content.routes.ts'
+import { createPropertyBlockFactory } from './domains/property-block/property-block.factory.ts'
+import { createPropertyBlockRoutes } from './domains/property-block/property-block.routes.ts'
 import { createRateFactory } from './domains/rate/rate.factory.ts'
 import { createRateRoutes } from './domains/rate/rate.routes.ts'
 import { createRatePlanFactory } from './domains/ratePlan/ratePlan.factory.ts'
@@ -92,6 +93,8 @@ import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
 import { createMagicLinkSecretResolver } from './lib/magic-link/secret.ts'
 import { createReadinessEvaluator } from './lib/readiness.ts'
 import { logger } from './logger.ts'
+import { magicLinkRateLimit, orgCreateRateLimit } from './middleware/auth-signup-rate-limit.ts'
+import { demoInboxRateLimiter } from './middleware/demo-inbox-rate-limit.ts'
 import { loadTenantMode } from './middleware/demo-lock.ts'
 import { createIdempotencyRepo } from './middleware/idempotency.repo.ts'
 import { idempotencyMiddleware } from './middleware/idempotency.ts'
@@ -102,7 +105,6 @@ import { createAdminTaxRoutes } from './routes/admin/tax.ts'
 import { createBookingSseCdcHandler } from './sse/booking-cdc-projection.ts'
 import { createBookingEventBroadcaster } from './sse/booking-event-broadcaster.ts'
 import { broadcastShutdown, createSseRoutes } from './sse/sse.routes.ts'
-import { startMigrationDeadlineMonitor } from './cron/epgu-deadline-monitor.ts'
 import { createActivityCdcHandler, startCdcConsumer } from './workers/cdc-consumer.ts'
 import { startDemoRefreshCron } from './workers/demo-refresh.cron.ts'
 import { createCancelFeeFinalizerHandler } from './workers/handlers/cancel-fee-finalizer.ts'
@@ -110,14 +112,13 @@ import { createChannelBroadcastHandler } from './workers/handlers/channel-broadc
 import { createCheckoutFinalizerHandler } from './workers/handlers/checkout-finalizer.ts'
 import { createFolioBalanceHandler } from './workers/handlers/folio-balance.ts'
 import { createFolioCreatorHandler } from './workers/handlers/folio-creator.ts'
-import { createSlotReconciliationHandler } from './workers/handlers/slot-reconciliation.ts'
 import { createMigrationRegistrationEnqueuerHandler } from './workers/handlers/migration-registration-enqueuer.ts'
 import { createNotificationHandler } from './workers/handlers/notification.ts'
-import { createOpsMetricsRoutes } from './domains/observability/ops-metrics.routes.ts'
-import { registerDemoRoutes } from './domains/_demo/index.ts'
 import { createPassportScanAuditProjectorHandler } from './workers/handlers/passport-scan-audit-projector.ts'
 import { createPaymentStatusHandler } from './workers/handlers/payment-status.ts'
 import { createRefundCreatorHandler } from './workers/handlers/refund-creator.ts'
+import { createSlotReconciliationHandler } from './workers/handlers/slot-reconciliation.ts'
+import { initDemoInboxSms } from './workers/lib/demo-inbox-sms-adapter.ts'
 import { createEmailAdapter } from './workers/lib/postbox-adapter.ts'
 import { startNightAuditCron } from './workers/night-audit.cron.ts'
 import { startNotificationCron } from './workers/notification-cron.ts'
@@ -135,13 +136,46 @@ const app = new Hono<AppEnv>()
 // (Phase 2). Production deploys never see `/api/_mock-ota/*` paths — they
 // return 404. See `domains/_demo/README.md` for full canon.
 if (env.APP_MODE !== 'production') {
+	const demoWebhookSecret = 'demo-mock-ota-webhook-secret-do-not-use-in-prod'
+	const demoTenantId = 'demo-tenant'
+	const demoPropertyId = 'demo-hotel-sochi'
 	registerDemoRoutes(app, {
-		tenantId: 'demo-tenant',
-		yandexPropertyId: 'demo-hotel-sochi',
-		ostrovokPropertyId: 'demo-hotel-sochi',
+		tenantId: demoTenantId,
+		yandexPropertyId: demoPropertyId,
+		ostrovokPropertyId: demoPropertyId,
 		webhookTargetBaseUrl: 'http://localhost:8787',
-		webhookSecret: 'demo-mock-ota-webhook-secret-do-not-use-in-prod',
+		webhookSecret: demoWebhookSecret,
 	})
+	// Round 10 P0-1 + P0-2 fix — env-gated idempotent seed для demo webhook loop.
+	// Без этого: cold-start receiver→401 (no webhookSecret) или 403 (no
+	// channelConnection). Race window first ~100ms boot acceptable для demo
+	// (presenter natural pause). Production branch не достигнут (env-gate).
+	// Canon: `feedback_round_10_truthful_post_review_canon_2026_05_25.md`.
+	void seedDemoChannelInfra({
+		tenantId: demoTenantId,
+		propertyId: demoPropertyId,
+		webhookSecret: demoWebhookSecret,
+	}).then(
+		(r) =>
+			logger.info(
+				{
+					event: 'demo_seed_complete',
+					secrets: r.secretsSeeded,
+					connections: r.connectionsSeeded,
+				},
+				'demo channel infra seeded',
+			),
+		(e: unknown) =>
+			logger.error(
+				{
+					err:
+						e instanceof Error
+							? { name: e.name, message: e.message.slice(0, 200) }
+							: { name: 'unknown', message: String(e).slice(0, 200) },
+				},
+				'demo seed failed — webhook loop will return 401/403',
+			),
+	)
 }
 
 // Domain factories (one place to wire sql → repo → service).
@@ -1100,7 +1134,10 @@ const routes = app
 	// Sprint C: DSAR endpoint — 152-ФЗ ст.14 (30 рабочих дней)
 	.route(
 		'/api/v1',
-		createPassportDataExportRoutes({ passportScanFactory, guestRepo: guestFactory.repo }),
+		createPassportDataExportRoutes({
+			passportScanFactory,
+			guestRepo: guestFactory.repo,
+		}),
 	)
 	.route('/api/v1', createIdentityRoutes(dadata.adapter))
 	.route('/api/v1', createOnboardingRoutes(onboardingFactory, idempotency))

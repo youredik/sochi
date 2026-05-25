@@ -1,16 +1,32 @@
 /**
- * Per-resource monotonic sequence number generator (Round 8 canon).
+ * Process-global monotonic sequence number generator (Round 8 canon).
  *
  * Canon ref: `feedback_round_8_strict_sweep_canon_2026_05_25.md` +
- * `project_2026_grade_architecture_canon_2026_05_25.md` —
- * наш architectural leapfrog vs Apaleo/Mews/Cloudbeds/Hostaway:
- * each per-resource update emits strictly-increasing sequence so
- * consumers detect gaps + drop out-of-order updates.
+ * `project_2026_grade_architecture_canon_2026_05_25.md`.
  *
- * Implementation: epoch-microseconds + sub-microsecond tiebreaker counter,
- * monotonic per process. NOT cross-process safe — production code should
- * use YDB-generated sequence (e.g. column ROW_NUMBER OVER PARTITION) for
- * cross-replica correctness. Mocks + single-process flows use this helper.
+ * **Round 10 P1-A honest correction**: previous docstring claimed
+ * «per-resource monotonic», but implementation uses single process-global
+ * counter shared across ALL resources (channel mocks + bookings + ARI etc.).
+ * Therefore «gap detection» works ONLY for cross-process replay safety —
+ * within a single process you cannot tell apart «gap from loss» vs «gap from
+ * another resource consuming numbers». Documentation now matches behavior.
+ *
+ * Real per-resource gap detection requires either:
+ *   - YDB-generated sequence per partition (production canon — column
+ *     `ROW_NUMBER() OVER PARTITION BY resource_key`), or
+ *   - Threading a `key: string` parameter and maintaining `Map<key, bigint>`
+ *     state (Phase-2 candidate if mock-level gap detection becomes needed).
+ *
+ * What this helper IS for:
+ *   - Process-monotonic clock with sub-microsecond tiebreaker counter
+ *   - Time-aligned encoding: sequence ≈ (epoch_us << 12 | counter)
+ *   - Single-process tests where "increasing number that survives same-ms
+ *     bursts" is the only requirement
+ *
+ * What this helper is NOT:
+ *   - Not cross-process safe (each Node/Bun worker has its own counter)
+ *   - Not per-resource (does not distinguish resources internally)
+ *   - Not crash-recovery safe (counter resets to 0 on process restart)
  */
 
 const SUBSECOND_COUNTER_BITS = 12n // 4096 per microsecond — fits even high-frequency batches

@@ -87,6 +87,15 @@ const REDACT_PATHS = [
 	'*.textSnapshot',
 	'*.consent152fzTextSnapshot',
 	'*.consentTextSnapshot',
+	// Round 10 P2-B1+B2 (canon `feedback_round_10_truthful_post_review_canon`):
+	// guest names ARE PII under 152-ФЗ ст.3 п.1 — Agent B audit found booking.guest
+	// snapshots могли leak через `logger.info({booking})` accidentally. Email
+	// domain suffix (e.g. «yandex.ru») itself borderline-PII; defense-in-depth
+	// redact via wildcard.
+	'*.firstName',
+	'*.lastName',
+	'*.middleName',
+	'*.emailDomainSuffix',
 	// 152-ФЗ: PII contact fields
 	'*.email',
 	'*.phone',

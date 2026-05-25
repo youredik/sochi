@@ -270,20 +270,25 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 			return c.json({ error: 'missing_primary_guest_name' }, 400)
 		}
 
-		// Reserved-test-range shield (defense-in-depth, not a hard reject —
-		// демо can accept real-ish data, but we log non-reserved usage so ops
-		// can spot accidental prod-data hits via demo path).
+		// Round 10 P0-3 fix — reserved-test-range shield = HARD REJECT, не warn.
+		// Canon `feedback_round_10_truthful_post_review_canon_2026_05_25.md` +
+		// `feedback_post_flip_5expert_verification_canon_2026_05_24.md` (демо
+		// accepting real PII без legal cover = ст.5 ч.2 152-ФЗ до 700k₽ КоАП).
+		// До Round 10: warn-only — реальный email/phone мог утечь в guest snapshot
+		// → channel inbox → real upstream на A7.5 dispatch.
 		if (!isReservedTestDomain(customerEmail)) {
 			logger.warn(
 				{
 					channelId: 'YT',
 					emailDomainSuffix: customerEmail.split('@').pop() ?? '',
 				},
-				'mock_ota_yandex_non_reserved_email',
+				'mock_ota_yandex_rejected_non_reserved_email',
 			)
+			return c.json({ error: 'non_reserved_demo_data', field: 'customer_email' }, 422)
 		}
 		if (!isReservedTestPhone(customerPhone)) {
-			logger.warn({ channelId: 'YT' }, 'mock_ota_yandex_non_reserved_phone')
+			logger.warn({ channelId: 'YT' }, 'mock_ota_yandex_rejected_non_reserved_phone')
+			return c.json({ error: 'non_reserved_demo_data', field: 'customer_phone' }, 422)
 		}
 
 		// Step 4 — verify + create через production-grade Round 8 adapter.

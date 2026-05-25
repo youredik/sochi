@@ -36,7 +36,7 @@ const DEFAULTS = {
 	firstName: 'Пётр',
 	lastName: 'Петров',
 	email: 'petr@example.com',
-	phone: '+79999999998',
+	phone: '+70000000002',
 } as const
 
 export interface OstrovokBookingPageProps {

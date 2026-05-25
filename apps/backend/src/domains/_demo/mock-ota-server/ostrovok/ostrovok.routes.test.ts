@@ -628,8 +628,8 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		expect(status).toBe(200)
 	})
 
-	// ── OSTR11 — Reserved-test shield logging ──────────────────────────────
-	it('[OSTR11] Non-reserved guest contact details → warn log, NOT blocked', async () => {
+	// ── OSTR11 — Reserved-test shield: Round 10 P0-3 = HARD REJECT (152-ФЗ) ─
+	it('[OSTR11] Non-reserved guest email → HTTP 422 + warn (Round 10 P0-3 hard reject)', async () => {
 		const { fetchImpl, calls } = buildFetchSpy()
 		const log = buildLogSpy()
 		const app = mountApp({ fetchImpl, logWarn: log.logWarn })
@@ -660,14 +660,16 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 			rooms: [{ guests: [{ first_name: 'Иван', last_name: 'Иванов' }] }],
 			payment_type: { type: 'now', amount: '28000', currency_code: 'RUB' },
 		})
-		// Accepted — demo wow-effect doesn't block on real PII.
-		expect(finish.status).toBe(200)
-		expect(calls.length).toBe(1)
-
-		// Both shields tripped (email + phone).
-		expect(log.warnings.length).toBe(2)
-		const msgs = log.warnings.map((w) => w.msg).sort()
-		expect(msgs).toEqual(['guest_email_not_reserved_test', 'guest_phone_not_reserved_test'])
+		// Round 10 P0-3: HARD REJECT — real PII не должна попасть в demo flow
+		// (152-ФЗ legal cover canon). Email checked first → reject before phone seen.
+		expect(finish.status).toBe(422)
+		expect((finish.json as { error: string }).error).toBe('non_reserved_demo_data')
+		expect((finish.json as { field: string }).field).toBe('email')
+		// Webhook MUST NOT fire on reject (no PII leak downstream).
+		expect(calls.length).toBe(0)
+		// First check tripped → 1 warn (not 2, because second never runs).
+		expect(log.warnings.length).toBe(1)
+		expect(log.warnings[0]?.msg).toBe('guest_email_rejected_not_reserved_test')
 	})
 
 	it('[OSTR11.b] Reserved-test guest contact details → NO warn log', async () => {

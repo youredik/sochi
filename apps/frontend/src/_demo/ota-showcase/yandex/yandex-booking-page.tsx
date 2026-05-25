@@ -27,7 +27,7 @@ const DEFAULTS = {
 	firstName: 'Иван',
 	lastName: 'Иванов',
 	email: 'ivan@example.com',
-	phone: '+79999999999',
+	phone: '+70000000001',
 } as const
 
 export interface YandexBookingPageProps {

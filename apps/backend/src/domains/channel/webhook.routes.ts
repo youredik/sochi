@@ -204,7 +204,10 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
 
 		if (classification.kind === 'tampered') {
 			return c.json(
-				{ error: 'tampered_replay', originalReceivedAt: classification.stored.receivedAt },
+				{
+					error: 'tampered_replay',
+					originalReceivedAt: classification.stored.receivedAt,
+				},
 				400,
 			)
 		}
@@ -258,12 +261,30 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
 }
 
 /**
+ * Round 10 P1-B1 — restricted character class для tenantId + channelCode.
+ *
+ * `[^:]+` (Round 8 original) accepts ANY character except `:`, including
+ * newline, tab, control chars, Unicode. Attacker can submit URN like
+ * `urn:sochi:channel:TL:tenant:org\r\nFAKE_LOG_LINE` — extractTenantId
+ * returns `'org\r\nFAKE_LOG_LINE'` which then writes multi-line log entries
+ * masquerading as separate events (log injection attack).
+ *
+ * Restricted class `[A-Za-z0-9_-]{1,64}` matches all real tenant/channel
+ * identifiers (UUID, slug, org_id prefixed forms) and blocks any control
+ * char or whitespace exploit. Length capped at 64 для defense-in-depth
+ * (real IDs ≤ 36 chars per UUID format).
+ */
+const URN_ID_CHARSET = '[A-Za-z0-9_-]{1,64}'
+
+/**
  * Extract tenantId from canonical source URN
  *   `urn:sochi:channel:{channelCode}:tenant:{organizationId}`.
- * Returns null on malformed input.
+ * Returns null on malformed input OR if components contain forbidden chars.
  */
 export function extractTenantId(source: string): string | null {
-	const m = source.match(/^urn:sochi:channel:[^:]+:tenant:([^:]+)$/)
+	const m = source.match(
+		new RegExp(`^urn:sochi:channel:${URN_ID_CHARSET}:tenant:(${URN_ID_CHARSET})$`),
+	)
 	return m ? (m[1] ?? null) : null
 }
 
@@ -272,9 +293,11 @@ export function extractTenantId(source: string): string | null {
  *   `urn:sochi:channel:{channelCode}:tenant:{organizationId}`.
  * Used to verify URN's claimed channelCode matches route's channelId
  * parameter (prevents URN-injection cross-channel attack). Returns null
- * on malformed input.
+ * on malformed input OR if components contain forbidden chars.
  */
 export function extractChannelCode(source: string): string | null {
-	const m = source.match(/^urn:sochi:channel:([^:]+):tenant:[^:]+$/)
+	const m = source.match(
+		new RegExp(`^urn:sochi:channel:(${URN_ID_CHARSET}):tenant:${URN_ID_CHARSET}$`),
+	)
 	return m ? (m[1] ?? null) : null
 }

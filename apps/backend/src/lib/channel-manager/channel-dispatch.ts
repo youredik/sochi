@@ -78,8 +78,42 @@ export function computeNextAttemptAt(input: {
  *   - 429 (rate-limited) = retryable
  *   - 5xx = retryable
  *   - Network error (fetch threw, status undefined) = retryable
+ *
+ * Round 10 P1-C — `errorCategory` semantic override: when adapter signals
+ * category explicitly, it overrides HTTP-status-derived decision. Aligns с
+ * `feedback_round_10_truthful_post_review_canon_2026_05_25.md` — until Round 10
+ * dispatcher only read httpStatus, ignoring the structured category — meaning
+ * `consent_missing` (422) and `invalid_payload` (422) got identical retry
+ * behavior despite distinct ops-semantics. Now each category routes correctly.
  */
-export function isRetryableFailure(input: { httpStatus: number | undefined }): boolean {
+export function isRetryableFailure(input: {
+	httpStatus: number | undefined
+	errorCategory?: string
+}): boolean {
+	// Round 10 P1-C — explicit category overrides HTTP-status heuristic.
+	if (input.errorCategory !== undefined) {
+		switch (input.errorCategory) {
+			// Non-retryable categories: client-side problem; retry won't help
+			case 'invalid_credentials':
+			case 'invalid_payload':
+			case 'consent_missing':
+			case 'cross_border_blocked':
+			case 'reserved_test_range':
+			case 'duplicate_idempotency_key':
+			case 'not_found':
+				return false
+			// Retryable categories: transient/server-side
+			case 'rate_limited':
+			case 'transient':
+				return true
+			// Unknown — fall through to HTTP heuristic
+			case 'unknown':
+				break
+			default:
+				// New uncategorized values — be conservative + retry (caller logs)
+				return true
+		}
+	}
 	if (input.httpStatus === undefined) return true // network error
 	if (input.httpStatus >= 200 && input.httpStatus < 300) return false // 2xx success
 	if (input.httpStatus === 408) return true
@@ -126,4 +160,8 @@ export function buildIdempotencyKey(input: {
 }
 
 /** Test-only export for unit assertions on the schedule constant. */
-export const __testHooks = { RETRY_SCHEDULE_MS, FAILURE_THRESHOLD, SEVEN_DAYS_MS } as const
+export const __testHooks = {
+	RETRY_SCHEDULE_MS,
+	FAILURE_THRESHOLD,
+	SEVEN_DAYS_MS,
+} as const

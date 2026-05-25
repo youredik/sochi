@@ -213,6 +213,20 @@ describe('checkBookingComplianceGate — 3-path regulatory routing', () => {
 		// NPD takes precedence per task spec (квартира посуточно вне ПП-1951).
 		expect(out).toBeNull()
 	})
+
+	test('[G16] Round 10 P1-B5 — NPD + guest_house + Fz127Registered=false → null (NPD precedence)', () => {
+		// Adversarial branch-order test: ensure NPD short-circuit fires BEFORE
+		// guest_house 127-ФЗ check, even when both legalEntityType='npd' AND
+		// ksrCategory='guest_house' AND Fz127Registered=false would individually
+		// reject. Guards against future refactor that swaps branch order.
+		const out = checkBookingComplianceGate(TENANT, {
+			ksrRegistryId: null,
+			ksrCategory: 'guest_house',
+			legalEntityType: 'npd',
+			guestHouseFz127Registered: false, // would normally reject under guest_house branch
+		})
+		expect(out).toBeNull()
+	})
 })
 
 describe('HOTEL_LIKE_KSR_CATEGORIES set contents', () => {

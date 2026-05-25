@@ -174,7 +174,7 @@ describe('createOrder', () => {
 			{
 				booking_token: 'aBcDeFgHiJkL',
 				customer_email: 'ivan@example.com',
-				customer_phone: '+79999999999',
+				customer_phone: '+70000000001',
 				guests: [{ first_name: 'Иван', last_name: 'Иванов' }],
 			},
 			mockFetch,
@@ -188,7 +188,7 @@ describe('createOrder', () => {
 		const parsed = JSON.parse(call.body ?? '{}')
 		expect(parsed.booking_token).toBe('aBcDeFgHiJkL')
 		expect(parsed.customer_email).toBe('ivan@example.com')
-		expect(parsed.customer_phone).toBe('+79999999999')
+		expect(parsed.customer_phone).toBe('+70000000001')
 		expect(parsed.guests).toEqual([{ first_name: 'Иван', last_name: 'Иванов' }])
 	})
 
@@ -198,7 +198,7 @@ describe('createOrder', () => {
 			{
 				booking_token: 't',
 				customer_email: 'ivan@example.com',
-				customer_phone: '+79999999999',
+				customer_phone: '+70000000001',
 				guests: [{ first_name: 'И', last_name: 'И' }],
 			},
 			mockFetch,
@@ -219,7 +219,7 @@ describe('createOrder', () => {
 			{
 				booking_token: 'bad',
 				customer_email: 'ivan@example.com',
-				customer_phone: '+79999999999',
+				customer_phone: '+70000000001',
 				guests: [{ first_name: 'И', last_name: 'И' }],
 			},
 			mockFetch,

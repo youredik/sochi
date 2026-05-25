@@ -39,7 +39,11 @@ import {
 import { logger } from '../logger.ts'
 
 export type HttpAttemptResult =
-	| { readonly ok: true; readonly httpStatus: number; readonly responseBody?: unknown }
+	| {
+			readonly ok: true
+			readonly httpStatus: number
+			readonly responseBody?: unknown
+	  }
 	| {
 			readonly ok: false
 			readonly httpStatus: number | null
@@ -180,12 +184,25 @@ async function processRow(
 	const newAttemptCount = row.attemptCount + 1
 
 	// Permanent failure (4xx non-retryable) → DLQ immediately, no schedule.
-	if (!isRetryableFailure({ httpStatus: result.httpStatus ?? undefined })) {
+	// Round 10 P1-C — pass errorCategory so semantic categories override HTTP
+	// heuristic (e.g. `reserved_test_range` 200 NOT retryable, `transient` 500
+	// retryable, `consent_missing` 422 NOT retryable + no client retry).
+	if (
+		!isRetryableFailure({
+			httpStatus: result.httpStatus ?? undefined,
+			...(result.errorCategory !== undefined && {
+				errorCategory: result.errorCategory,
+			}),
+		})
+	) {
 		await deps.dispatchRepo.markDlq({
 			tenantId: row.tenantId,
 			dispatchId: row.dispatchId,
 			httpStatus: result.httpStatus,
-			errorJson: { message: result.errorMessage, response: result.responseBody ?? null },
+			errorJson: {
+				message: result.errorMessage,
+				response: result.responseBody ?? null,
+			},
 		})
 		if (deps.onDispatchOutcome) {
 			await deps.onDispatchOutcome({

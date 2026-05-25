@@ -42,11 +42,13 @@ APP_MODE != 'production'  →  routes mounted at /api/_mock-ota/*
 APP_MODE == 'production'  →  registerDemoRoutes() is no-op; routes return 404
 ```
 
-Triple defense from production leak:
+Defense layers from production leak (Phase-1 = 2 active + 1 planned):
 
-1. Env-gate (this layer)
-2. Reserved-test-ranges shield (Round 8 — `feedback_outbound_side_effect_discipline_2026_05_22`)
-3. YDB native TTL P1D on `mockOta_*` tables (when implemented Phase 2)
+1. **Active** — Env-gate (this layer): `APP_MODE != 'production'` mounting check
+2. **Active** — Reserved-test-ranges shield (Round 10 P0-3: warn → **hard reject HTTP 422**) — canon `feedback_outbound_side_effect_discipline_2026_05_22` + `feedback_round_10_truthful_post_review_canon_2026_05_25`
+3. **Planned** — YDB native TTL P1D on `mockOta_*` tables (deferred Phase-2; current state = in-memory)
+
+**Honest correction (Round 10)**: original README said «Triple defense» as if all 3 were live. Phase-1 ships with 2 active layers + 1 architectural commitment for Phase-2.
 
 ## Folder layout
 
