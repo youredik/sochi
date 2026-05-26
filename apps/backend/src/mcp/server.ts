@@ -313,7 +313,12 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 		},
 		annotations: { readOnlyHint: true, openWorldHint: false, idempotentHint: true },
 		async handler(args: unknown) {
-			const limit = Math.min(10, Math.max(1, (args as { limit?: number })?.limit ?? 5))
+			// Defensive NaN guard — `Math.min/max` propagate NaN (empirical:
+			// `Math.max(1, NaN) === NaN`), so a caller passing `limit: NaN` would
+			// result в `slice(0, NaN) === []` silently zero-result.
+			const rawLimit = (args as { limit?: number })?.limit
+			const requestedLimit = rawLimit !== undefined && Number.isFinite(rawLimit) ? rawLimit : 5
+			const limit = Math.min(10, Math.max(1, requestedLimit))
 			const demoBookings = [
 				{
 					bookingId: 'demo-bk-001',

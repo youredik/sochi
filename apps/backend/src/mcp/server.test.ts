@@ -526,4 +526,31 @@ describe('MCP server (Round 13 + Round 14 self-review #3 + #4)', () => {
 		})
 		expect(res.status).toBe(200)
 	})
+
+	test('[MCP-ADV1] tools/call limit NaN-slip defense → fallback 5', async () => {
+		// Adversarial reading checklist #6 — Math.min/max propagate NaN.
+		// Caller passing `limit: NaN` would otherwise hit `slice(0, NaN) === []`
+		// silently producing zero bookings (false-empty).
+		const app = mount()
+		const res = await app.request('/api/mcp/rpc', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 'adv1',
+				method: 'tools/call',
+				params: {
+					name: 'sepshn.demo.list_recent_demo_bookings',
+					arguments: { limit: Number('abc') }, // NaN
+				},
+			}),
+		})
+		const body = (await res.json()) as {
+			result: {
+				structuredContent: { bookings: ReadonlyArray<{ bookingId: string }> }
+			}
+		}
+		// NaN fell back к default 5, NOT silently empty
+		expect(body.result.structuredContent.bookings.length).toBe(5)
+	})
 })

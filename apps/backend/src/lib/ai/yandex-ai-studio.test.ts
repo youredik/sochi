@@ -527,4 +527,40 @@ describe('Yandex AI Studio HTTP client', () => {
 		})
 		expect(config.timeoutMs).toBe(20000)
 	})
+
+	test("[YAI26] maxTokens NaN-slip defense — Number('abc') ≡ NaN → fallback 500", async () => {
+		// Adversarial reading checklist #6 — Math.max/min propagate NaN. Caller
+		// passing `Number('abc') === NaN` would otherwise send `maxTokens: "NaN"`
+		// к Yandex и получить 400.
+		let capturedBody: string | undefined
+		const fakeFetch = async (_url: unknown, init: RequestInit) => {
+			capturedBody = init.body as string
+			return new Response(
+				JSON.stringify({
+					result: {
+						alternatives: [{ message: { text: 'ok' } }],
+						usage: { inputTextTokens: '1', completionTokens: '1' },
+					},
+				}),
+				{ status: 200 },
+			)
+		}
+		await chatCompletion(
+			{
+				messages: [{ role: 'user', text: 'hi' }],
+				maxTokens: Number('abc'), // NaN
+			},
+			{
+				apiKey: 'k1',
+				folderId: 'f1',
+				model: 'yandexgpt-lite/latest',
+				fetchImpl: fakeFetch as unknown as typeof fetch,
+			},
+		)
+		const parsed = JSON.parse(capturedBody as string) as {
+			completionOptions: { maxTokens: string }
+		}
+		// Fallback default 500, NOT "NaN"
+		expect(parsed.completionOptions.maxTokens).toBe('500')
+	})
 })

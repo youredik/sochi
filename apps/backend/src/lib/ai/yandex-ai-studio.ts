@@ -227,7 +227,12 @@ export async function chatCompletion(
 	const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
 	// Cap maxTokens client-side. Defense-in-depth: Yandex rejects > 8K upstream,
 	// but client-side cap prevents wasted round-trip + cost on a 100M-token typo.
-	const cappedMaxTokens = Math.max(1, Math.min(MAX_OUTPUT_TOKENS, input.maxTokens ?? 500))
+	// Defensive `Number.isFinite` guard — Math.max/min PROPAGATE NaN (empirical:
+	// `Math.max(1, NaN) === NaN`), so a caller passing `Number('abc') === NaN`
+	// would send `maxTokens: "NaN"` к Yandex и получить 400.
+	const requestedMaxTokens =
+		input.maxTokens !== undefined && Number.isFinite(input.maxTokens) ? input.maxTokens : 500
+	const cappedMaxTokens = Math.max(1, Math.min(MAX_OUTPUT_TOKENS, requestedMaxTokens))
 	const body = {
 		modelUri: `gpt://${config.folderId}/${config.model}`,
 		completionOptions: {
