@@ -43,7 +43,7 @@ test.describe('Round 13 — architectural leapfrog regression', () => {
 			tools: string[]
 		}
 		expect(body.name).toBe('sepshn-pms')
-		expect(body.transport).toBe('http+json-rpc')
+		expect(body.transport).toBe('streamable-http')
 		expect(body.tools).toContain('sepshn.demo.list_demo_routes')
 	})
 

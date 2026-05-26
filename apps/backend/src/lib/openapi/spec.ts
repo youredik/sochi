@@ -448,7 +448,7 @@ export const SEPSHN_OPENAPI_SPEC = {
 										name: { type: 'string' },
 										version: { type: 'string' },
 										protocolVersion: { type: 'string' },
-										transport: { type: 'string', const: 'http+json-rpc' },
+										transport: { type: 'string', const: 'streamable-http' },
 										tools: { type: 'array', items: { type: 'string' } },
 									},
 								},
@@ -463,7 +463,7 @@ export const SEPSHN_OPENAPI_SPEC = {
 				tags: ['MCP'],
 				summary: 'JSON-RPC 2.0 endpoint (initialize | tools/list | tools/call)',
 				description:
-					'MCP protocol version `2025-11-25` (latest stable per modelcontextprotocol.io as of May 2026; RC `2026-07-28` adds stateless protocol core + MCP Apps + Tasks + OAuth-aligned auth — adopted when promoted to stable). Supported methods: `initialize`, `tools/list`, `tools/call`. See `/api/mcp/manifest` для available tool names. AI-backed tools (`sepshn.ai.*`) require `YANDEX_AI_API_KEY` + `YANDEX_AI_FOLDER_ID` env vars; absent env → `{ kind: "not_configured" }` graceful fallback.',
+					'MCP Streamable HTTP transport per spec `2025-11-25` (latest stable May 2026; RC `2026-07-28` adds stateless protocol core + MCP Apps + Tasks). Single endpoint supports POST (request) + GET (SSE / 405) + DELETE (405). Headers enforced: `Origin` (DNS-rebinding 403), `MCP-Protocol-Version` (unsupported → 400), `Accept` (must list `application/json` or `text/event-stream`). Methods: `initialize`, `notifications/initialized` (→ 202), `tools/list`, `tools/call`. Tool execution errors wrapped в `{ content, isError: true }` envelope per spec. Rate limit: 120 RPC/min/IP broad + 10 sepshn.ai.*/5min/IP strict. AI-backed tools (`sepshn.ai.*`) require `YANDEX_AI_API_KEY` + `YANDEX_AI_FOLDER_ID` env vars; absent → graceful `kind:"not_configured"` fallback. PII shield (RFC 2606 + Россвязь + ITU-T E.164.3 reserved-test only) blocks outbound real PII в AI prompts.',
 				requestBody: {
 					required: true,
 					content: {

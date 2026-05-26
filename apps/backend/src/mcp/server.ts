@@ -1,46 +1,74 @@
 /**
- * Round 13 — MCP (Model Context Protocol) server skeleton mounted at `/api/mcp/*`.
+ * Round 14 self-review #3 — MCP (Model Context Protocol) server mounted at
+ * `/api/mcp/*` per spec `2025-11-25` Streamable HTTP transport.
  *
  * Canon: `project_2026_grade_architecture_canon_2026_05_25.md` §«MCP day-1»
  * — Apaleo (Sep 2025), Hospitable (Apr 2026), SiteMinder (Apr 2026) shipped
  * MCP integrations первыми; Sepshn matches the architectural leapfrog window.
  *
- * **Scope (skeleton)** — JSON-RPC 2.0 over HTTP per MCP transport spec:
- *   - `POST /api/mcp/rpc`     — JSON-RPC 2.0 endpoint
- *   - `GET  /api/mcp/manifest` — capabilities discovery (non-spec, sales surface)
+ * **Transport — Streamable HTTP** (spec `2025-11-25` § Transports):
+ *   - Single MCP endpoint `/api/mcp/rpc` MUST handle POST + GET.
+ *   - POST → JSON-RPC request. Response `application/json` (single object) — we
+ *     do NOT yet open SSE streams (single-response shape valid per spec).
+ *   - GET → SSE stream OR 405 Method Not Allowed (server doesn't yet offer
+ *     server-to-client push; we return 405 per spec backwards-compat clause).
+ *   - DELETE → 405 (we don't manage explicit sessions yet).
+ *
+ * **Spec-MUST clauses enforced** (May 2026):
+ *   - `Origin` header validation (DNS rebinding defense) → 403 on invalid.
+ *   - `MCP-Protocol-Version` header validation on subsequent requests → 400 on
+ *     invalid (spec backwards-compat: assume `2025-03-26` if absent).
+ *   - `Accept` header MUST list both `application/json` and `text/event-stream`
+ *     on POST per spec — we currently only return `application/json`, so we
+ *     accept POSTs that list either one (lenient mode допустим до Streamable
+ *     HTTP server-push activation).
+ *   - Tool execution errors wrapped в `{ content: [...], isError: true }`
+ *     spec result envelope, NOT JSON-RPC `error` envelope.
+ *   - `notifications/initialized` accepted (returns HTTP 202 No Content).
  *
  * **Methods implemented**:
- *   - `initialize`      — MCP handshake (protocolVersion, capabilities)
- *   - `tools/list`      — enumerate available tools
- *   - `tools/call`      — invoke tool by name (1 read-only tool в skeleton)
+ *   - `initialize`               — handshake (protocolVersion + capabilities + serverInfo + instructions)
+ *   - `notifications/initialized` — client-ready signal (no response, HTTP 202)
+ *   - `tools/list`               — enumerate tools
+ *   - `tools/call`               — invoke tool (returns content + isError)
  *
- * **Tools (v1 = 1 read-only proof)**:
- *   - `sepshn.demo.list_demo_routes` — lists the 8 demo OTA routes + showcase.
- *     Zero-arg, no PII, idempotent. Proves the MCP wire works end-to-end.
- *     Future Phase-2: `search-properties`, `view-booking`, `create-booking`
- *     wired через existing domain services с 152-ФЗ PII-redaction.
+ * **Tools (read-only demo scope + AI proof)**:
+ *   - `sepshn.demo.list_demo_routes`           — demo OTA routes (8 routes + showcase)
+ *   - `sepshn.demo.get_property_summary`       — fictional 3-star property metadata
+ *   - `sepshn.demo.list_recent_demo_bookings`  — last 5 fictional bookings (reserved-test PII)
+ *   - `sepshn.ai.generate_property_description` — AI-backed (Yandex AI Studio)
+ *     All annotated `readOnlyHint: true` → Claude Desktop skips confirm-prompt.
  *
- * **Security**:
- *   - Unauthenticated в Round 13 scope (read-only demo data).
- *   - Phase-2 wraps c X-Sepshn-MCP-Token or RFC 7591 DCR-issued bearer.
- *   - Each tool call MUST be wrapped with PII-redaction transformer pre-return
- *     (canon `feedback_outbound_side_effect_discipline`).
+ * **Auth**: read-only demo scope, unauthenticated в this skeleton. Production
+ * Phase-2 wraps c OAuth 2.1 + PKCE + RFC 9728 Protected Resource Metadata
+ * (`/.well-known/oauth-protected-resource`) per spec `2025-11-25` §Authorization.
+ * Round 14 ships DCR at `/api/oauth/register` — orthogonal route, not yet
+ * wired к MCP token validation.
  */
 
 import { Hono } from 'hono'
 import type { AppEnv } from '../factory.ts'
 import { chatCompletion, readConfigFromEnv } from '../lib/ai/yandex-ai-studio.ts'
+import { mcpAiRateLimit, mcpRpcRateLimit } from './rate-limit.ts'
 
 // MCP spec version pinned к `2025-11-25` (latest stable May 2026 per canon
 // `feedback_aggressive_delegacy`). RC `2026-07-28` adds stateless protocol
 // core + MCP Apps + Tasks + OAuth-aligned auth — adopt когда RC promotes к stable.
 const MCP_PROTOCOL_VERSION = '2025-11-25'
+// Spec backwards-compat clause: «if the server does not receive an MCP-Protocol-Version
+// header, it SHOULD assume protocol version 2025-03-26». We accept both 2025-03-26
+// и 2025-11-25, и any newer dated version (lexicographic compare keeps future-RC
+// adoption frictionless).
+const ACCEPTED_PROTOCOL_VERSIONS = new Set(['2025-03-26', '2025-06-18', '2025-11-25'])
 const SEPSHN_MCP_SERVER_NAME = 'sepshn-pms'
 const SEPSHN_MCP_SERVER_VERSION = '0.1.0'
 
+const SEPSHN_MCP_INSTRUCTIONS =
+	'Sepshn PMS+CM (демо). Read-only tools exposing fictional RFC-2606 reserved-test PII only — do NOT request real-tenant data. The `sepshn.ai.*` tool calls Yandex AI Studio with PII shield; sending real guest names/emails/phones will be rejected. All demo data is trademark-safe (no real property names / INNs).'
+
 interface JsonRpcRequest {
 	readonly jsonrpc: '2.0'
-	readonly id: string | number | null
+	readonly id?: string | number | null
 	readonly method: string
 	readonly params?: unknown
 }
@@ -52,102 +80,129 @@ interface JsonRpcResponse {
 	readonly error?: { readonly code: number; readonly message: string; readonly data?: unknown }
 }
 
+interface ToolAnnotations {
+	readonly title?: string
+	readonly readOnlyHint?: boolean
+	readonly destructiveHint?: boolean
+	readonly idempotentHint?: boolean
+	readonly openWorldHint?: boolean
+}
+
 interface ToolDescriptor {
 	readonly name: string
+	readonly title?: string
 	readonly description: string
-	readonly inputSchema: { readonly type: 'object'; readonly properties: Record<string, unknown> }
-	readonly handler: (args: unknown) => Promise<unknown>
+	readonly inputSchema: {
+		readonly type: 'object'
+		readonly properties: Record<string, unknown>
+		readonly additionalProperties?: boolean
+	}
+	readonly outputSchema?: { readonly type: 'object'; readonly properties: Record<string, unknown> }
+	readonly annotations?: ToolAnnotations
+	readonly handler: (args: unknown) => Promise<{ structured: unknown; isError?: boolean }>
 }
 
 const TOOLS: ReadonlyArray<ToolDescriptor> = [
 	{
 		name: 'sepshn.demo.list_demo_routes',
+		title: 'List demo OTA routes',
 		description:
 			'Lists the demo OTA routes mounted by Sepshn (Yandex + Островок mock servers + showcase). Read-only, zero-arg.',
-		inputSchema: {
-			type: 'object',
-			properties: {},
-		},
+		inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+		annotations: { readOnlyHint: true, openWorldHint: false, idempotentHint: true },
 		async handler() {
 			return {
-				routes: [
-					{ path: '/demo', kind: 'index', description: 'Tile-based demo landing' },
-					{ path: '/demo/ota/yandex', kind: 'demo-ota', brand: 'yandex' },
-					{
-						path: '/demo/ota/yandex/property/{hotelId}',
-						kind: 'demo-property',
-						brand: 'yandex',
-					},
-					{
-						path: '/demo/ota/yandex/booking/{bookingToken}',
-						kind: 'demo-booking',
-						brand: 'yandex',
-					},
-					{ path: '/demo/ota/yandex/success/{orderId}', kind: 'demo-success', brand: 'yandex' },
-					{ path: '/demo/ota/ostrovok', kind: 'demo-ota', brand: 'ostrovok' },
-					{
-						path: '/demo/ota/ostrovok/property/{hid}',
-						kind: 'demo-property',
-						brand: 'ostrovok',
-					},
-					{
-						path: '/demo/ota/ostrovok/booking/{partnerOrderId}',
-						kind: 'demo-booking',
-						brand: 'ostrovok',
-					},
-					{ path: '/demo/ota/ostrovok/success/{orderId}', kind: 'demo-success', brand: 'ostrovok' },
-					{ path: '/demo/showcase', kind: 'split-pane', description: 'OTA + PMS side-by-side' },
-				],
-				notes: [
-					'Demo data — RFC 2606 + Россвязь reserved-test PII only',
-					'Webhook loop fires CloudEvents 1.0.2 к own /api/channel/webhooks/{channel}',
-					'Round 13 canon: MCP day-1 mounted (Apaleo first-mover parity)',
-				],
+				structured: {
+					routes: [
+						{ path: '/demo', kind: 'index', description: 'Tile-based demo landing' },
+						{ path: '/demo/ota/yandex', kind: 'demo-ota', brand: 'yandex' },
+						{
+							path: '/demo/ota/yandex/property/{hotelId}',
+							kind: 'demo-property',
+							brand: 'yandex',
+						},
+						{
+							path: '/demo/ota/yandex/booking/{bookingToken}',
+							kind: 'demo-booking',
+							brand: 'yandex',
+						},
+						{ path: '/demo/ota/yandex/success/{orderId}', kind: 'demo-success', brand: 'yandex' },
+						{ path: '/demo/ota/ostrovok', kind: 'demo-ota', brand: 'ostrovok' },
+						{
+							path: '/demo/ota/ostrovok/property/{hid}',
+							kind: 'demo-property',
+							brand: 'ostrovok',
+						},
+						{
+							path: '/demo/ota/ostrovok/booking/{partnerOrderId}',
+							kind: 'demo-booking',
+							brand: 'ostrovok',
+						},
+						{
+							path: '/demo/ota/ostrovok/success/{orderId}',
+							kind: 'demo-success',
+							brand: 'ostrovok',
+						},
+						{
+							path: '/demo/showcase',
+							kind: 'split-pane',
+							description: 'OTA + PMS side-by-side',
+						},
+					],
+					notes: [
+						'Demo data — RFC 2606 + Россвязь reserved-test PII only',
+						'Webhook loop fires CloudEvents 1.0.2 к own /api/channel/webhooks/{channel}',
+						'Round 13 canon: MCP day-1 mounted (Apaleo first-mover parity)',
+					],
+				},
 			}
 		},
 	},
 	{
 		name: 'sepshn.demo.get_property_summary',
+		title: 'Demo property metadata',
 		description:
 			'Returns demo property metadata (Sepshn-демо in Sochi). Read-only, zero-arg, no PII. Useful для AI agents demonstrating «hotel listing» search use case.',
-		inputSchema: {
-			type: 'object',
-			properties: {},
-		},
+		inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+		annotations: { readOnlyHint: true, openWorldHint: false, idempotentHint: true },
 		async handler() {
 			return {
-				property: {
-					id: 'demo-hotel-sochi',
-					name: 'Гостевой дом «Сэпшн-демо» в Сочи',
-					starRating: 3,
-					address: {
-						country: 'RU',
-						city: 'Сочи',
-						region: 'Краснодарский край',
+				structured: {
+					property: {
+						id: 'demo-hotel-sochi',
+						name: 'Гостевой дом «Сэпшн-демо» в Сочи',
+						starRating: 3,
+						address: {
+							country: 'RU',
+							city: 'Сочи',
+							region: 'Краснодарский край',
+						},
+						amenities: ['Wi-Fi бесплатно', 'Завтрак включён', 'Парковка', 'Кондиционер'],
+						numberOfRooms: 8,
+						priceRangeRubPerNight: { min: 6000, max: 14000 },
+						channelIds: ['YT', 'ETG'],
 					},
-					amenities: ['Wi-Fi бесплатно', 'Завтрак включён', 'Парковка', 'Кондиционер'],
-					numberOfRooms: 8,
-					priceRangeRubPerNight: { min: 6000, max: 14000 },
-					channelIds: ['YT', 'ETG'],
+					notes: [
+						'Demo / trademark-safe — fictional property, не real Sochi hotel',
+						'JSON-LD schema rendered на /demo/ota/{brand}/property/{id} (Lake.com canon)',
+					],
 				},
-				notes: [
-					'Demo / trademark-safe — fictional property, не real Sochi hotel',
-					'JSON-LD schema rendered на /demo/ota/{brand}/property/{id} (Lake.com canon)',
-				],
 			}
 		},
 	},
 	{
 		name: 'sepshn.ai.generate_property_description',
+		title: 'Generate property description (Yandex AI Studio)',
 		description:
-			'Generate a marketing-style property description via Yandex AI Studio (`yandexgpt-lite` default, configurable via `YANDEX_AI_MODEL`). Args: `{ propertyHint?: string, lengthHint?: "short"|"medium"|"long" }`. Returns `{ text, model, tokensUsed }` or `not_configured` if `YANDEX_AI_API_KEY` env not set. Replaces «multi-day external blocker» Round 13 framing — Yandex AI Studio OpenAI-compat REST endpoint, без on-prem GPU.',
+			'Generate a marketing-style property description via Yandex AI Studio (`yandexgpt-lite/latest` default, configurable via `YANDEX_AI_MODEL`). Args: `{ propertyHint?: string, lengthHint?: "short"|"medium"|"long" }`. Returns `{ text, model, usage }` or `{ isError: true }` with `not_configured`/`rejected`/`error` reason. PII shield rejects real guest names/emails/phones — use reserved-test ranges (RFC 2606 + Россвязь) only.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				propertyHint: {
 					type: 'string',
+					maxLength: 280,
 					description:
-						'Optional hint about property style (default: «гостевой дом 3*, Сочи, 0.5 км до пляжа»)',
+						'Optional hint about property style (default: «гостевой дом 3*, Сочи, 0.5 км до пляжа»). Max 280 chars. Must NOT contain real PII (guest names/emails/phones) — outbound shield will reject.',
 				},
 				lengthHint: {
 					type: 'string',
@@ -155,10 +210,40 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 					default: 'short',
 				},
 			},
+			additionalProperties: false,
 		},
+		outputSchema: {
+			type: 'object',
+			properties: {
+				kind: { type: 'string', enum: ['ok', 'not_configured', 'rejected', 'error'] },
+				text: { type: 'string' },
+				model: { type: 'string' },
+				usage: {
+					type: 'object',
+					properties: { inputTokens: { type: 'integer' }, outputTokens: { type: 'integer' } },
+				},
+			},
+		},
+		annotations: { readOnlyHint: true, openWorldHint: true, idempotentHint: false },
 		async handler(args: unknown) {
-			const a = (args ?? {}) as { propertyHint?: string; lengthHint?: 'short' | 'medium' | 'long' }
-			const hint = a.propertyHint ?? 'гостевой дом 3*, Сочи, 0.5 км до пляжа, 8 номеров'
+			const a = (args ?? {}) as {
+				propertyHint?: string
+				lengthHint?: 'short' | 'medium' | 'long'
+			}
+			const rawHint = a.propertyHint ?? 'гостевой дом 3*, Сочи, 0.5 км до пляжа, 8 номеров'
+			// Hard length cap — token-bomb DoS defense. Spec also has maxLength 280 в
+			// inputSchema, but JSON-Schema validation is advisory client-side; enforce
+			// here too for safety-in-depth.
+			if (rawHint.length > 280) {
+				return {
+					structured: {
+						kind: 'rejected',
+						reason: 'prompt_too_long',
+						message: 'propertyHint must be ≤ 280 chars',
+					},
+					isError: true,
+				}
+			}
 			const length = a.lengthHint ?? 'short'
 			const tokenCap = length === 'long' ? 500 : length === 'medium' ? 250 : 120
 			const result = await chatCompletion(
@@ -168,10 +253,7 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 							role: 'system',
 							text: 'Ты — копирайтер отелей. Пиши коротко, на русском, с упором на конкретные удобства и расположение. Без emoji.',
 						},
-						{
-							role: 'user',
-							text: `Опиши объект для booking-листинга: ${hint}`,
-						},
+						{ role: 'user', text: `Опиши объект для booking-листинга: ${rawHint}` },
 					],
 					maxTokens: tokenCap,
 				},
@@ -179,28 +261,40 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 			)
 			if (result.kind === 'not_configured') {
 				return {
-					kind: 'not_configured',
-					reason: result.reason,
-					configHelp:
-						'Set YANDEX_AI_API_KEY + YANDEX_AI_FOLDER_ID env vars (Yandex Cloud Lockbox recommended in production). Model selectable via YANDEX_AI_MODEL (default `yandexgpt-lite/latest`; alternatives: `yandexgpt/latest`, `alice-ai-llm/latest`, `qwen-3/latest`, `deepseek-v3/latest`).',
+					structured: {
+						kind: 'not_configured',
+						reason: result.reason,
+						configHelp:
+							'Set YANDEX_AI_API_KEY + YANDEX_AI_FOLDER_ID env vars (Yandex Cloud Lockbox recommended). Model selectable via YANDEX_AI_MODEL (default `yandexgpt-lite/latest`; alternatives: `yandexgpt/latest`, `aliceai-llm`, `qwen3-235b-a22b-fp8`, `qwen3.6-35b-a3b`, `deepseek-v32`, `gpt-oss-120b`, `gpt-oss-20b`).',
+					},
+					isError: true,
+				}
+			}
+			if (result.kind === 'rejected') {
+				return {
+					structured: { kind: 'rejected', reason: result.reason, message: result.message },
+					isError: true,
 				}
 			}
 			if (result.kind === 'error') {
 				return {
-					kind: 'error',
-					status: result.status,
-					message: result.message,
+					structured: { kind: 'error', status: result.status, message: result.message },
+					isError: true,
 				}
 			}
 			return {
-				kind: 'ok',
-				text: result.text,
-				usage: result.usage,
+				structured: {
+					kind: 'ok',
+					text: result.text,
+					model: result.model,
+					usage: result.usage,
+				},
 			}
 		},
 	},
 	{
 		name: 'sepshn.demo.list_recent_demo_bookings',
+		title: 'Recent demo bookings (fictional)',
 		description:
 			'Returns last 5 demo bookings (fictional). All names are RFC 2606-reserved-test (Иванов/Петров example.com). Useful для AI agents demonstrating «recent reservations» dashboard use case. Read-only.',
 		inputSchema: {
@@ -210,12 +304,15 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 					type: 'integer',
 					description: 'Max bookings to return (default 5, max 10).',
 					default: 5,
+					minimum: 1,
+					maximum: 10,
 				},
 			},
+			additionalProperties: false,
 		},
+		annotations: { readOnlyHint: true, openWorldHint: false, idempotentHint: true },
 		async handler(args: unknown) {
 			const limit = Math.min(10, Math.max(1, (args as { limit?: number })?.limit ?? 5))
-			// Synthetic fictional data — no real-tenant data. PII shape is reserved-test ranges.
 			const demoBookings = [
 				{
 					bookingId: 'demo-bk-001',
@@ -264,14 +361,16 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 				},
 			]
 			return {
-				bookings: demoBookings.slice(0, limit),
-				meta: {
-					tenant: 'demo-tenant',
-					generatedAt: new Date().toISOString(),
-					notes: [
-						'Fictional data — all guests use RFC 2606 reserved-test emails (@example.com)',
-						'Real production tool would require auth + tenant scoping (Phase-2)',
-					],
+				structured: {
+					bookings: demoBookings.slice(0, limit),
+					meta: {
+						tenant: 'demo-tenant',
+						generatedAt: new Date().toISOString(),
+						notes: [
+							'Fictional data — all guests use RFC 2606 reserved-test emails (@example.com)',
+							'Real production tool would require auth + tenant scoping (Phase-2)',
+						],
+					},
 				},
 			}
 		},
@@ -286,14 +385,37 @@ function rpcError(
 ): JsonRpcResponse {
 	const err: { code: number; message: string; data?: unknown } = { code, message }
 	if (data !== undefined) err.data = data
-	return { jsonrpc: '2.0', id, error: err }
+	return { jsonrpc: '2.0', id: id ?? null, error: err }
 }
 
 function rpcResult(id: JsonRpcRequest['id'], result: unknown): JsonRpcResponse {
-	return { jsonrpc: '2.0', id, result }
+	return { jsonrpc: '2.0', id: id ?? null, result }
 }
 
-async function handleRpc(req: JsonRpcRequest): Promise<JsonRpcResponse> {
+/** Origin allow-list для DNS-rebinding defense (spec MUST §Security Warning).
+ * Empty / missing `Origin` is allowed (non-browser tools — curl / SDKs). */
+const ALLOWED_ORIGINS = new Set([
+	'http://localhost:3000',
+	'http://localhost:5173',
+	'http://127.0.0.1:3000',
+	'http://127.0.0.1:5173',
+	'https://demo.sepshn.ru',
+	'https://app.sepshn.ru',
+	'https://sepshn.ru',
+])
+
+function isAllowedOrigin(origin: string | undefined | null): boolean {
+	if (origin === undefined || origin === null || origin === '') return true
+	return ALLOWED_ORIGINS.has(origin)
+}
+
+interface ToolCallResultEnvelope {
+	readonly content: ReadonlyArray<{ readonly type: 'text'; readonly text: string }>
+	readonly structuredContent?: unknown
+	readonly isError?: boolean
+}
+
+async function handleRpc(req: JsonRpcRequest): Promise<JsonRpcResponse | null> {
 	switch (req.method) {
 		case 'initialize':
 			return rpcResult(req.id, {
@@ -303,15 +425,25 @@ async function handleRpc(req: JsonRpcRequest): Promise<JsonRpcResponse> {
 				},
 				serverInfo: {
 					name: SEPSHN_MCP_SERVER_NAME,
+					title: 'Sepshn PMS+CM (демо)',
 					version: SEPSHN_MCP_SERVER_VERSION,
 				},
+				instructions: SEPSHN_MCP_INSTRUCTIONS,
 			})
+		case 'notifications/initialized':
+			// Spec MUST: response is HTTP 202 No Content. Returning `null` signals the
+			// route handler к short-circuit с 202 — JSON-RPC notifications (no `id`)
+			// MUST NOT produce a JSON-RPC response.
+			return null
 		case 'tools/list':
 			return rpcResult(req.id, {
 				tools: TOOLS.map((t) => ({
 					name: t.name,
+					...(t.title !== undefined && { title: t.title }),
 					description: t.description,
 					inputSchema: t.inputSchema,
+					...(t.outputSchema !== undefined && { outputSchema: t.outputSchema }),
+					...(t.annotations !== undefined && { annotations: t.annotations }),
 				})),
 			})
 		case 'tools/call': {
@@ -324,13 +456,23 @@ async function handleRpc(req: JsonRpcRequest): Promise<JsonRpcResponse> {
 				return rpcError(req.id, -32601, `Unknown tool: ${params.name}`)
 			}
 			try {
-				const result = await tool.handler(params.arguments)
-				return rpcResult(req.id, {
-					content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-				})
+				const { structured, isError } = await tool.handler(params.arguments)
+				const envelope: ToolCallResultEnvelope = {
+					content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
+					structuredContent: structured,
+					...(isError === true && { isError: true }),
+				}
+				return rpcResult(req.id, envelope)
 			} catch (e) {
 				const msg = e instanceof Error ? e.message : String(e)
-				return rpcError(req.id, -32603, `Tool handler error: ${msg}`)
+				// Spec §Server Tools: «Tool Execution Errors MUST be reported with
+				// isError: true in the result». Use JSON-RPC -32603 ONLY для protocol
+				// errors, NOT для tool execution errors.
+				const envelope: ToolCallResultEnvelope = {
+					content: [{ type: 'text', text: `Tool execution failed: ${msg}` }],
+					isError: true,
+				}
+				return rpcResult(req.id, envelope)
 			}
 		}
 		default:
@@ -338,10 +480,49 @@ async function handleRpc(req: JsonRpcRequest): Promise<JsonRpcResponse> {
 	}
 }
 
+function isNotification(method: string): boolean {
+	return method.startsWith('notifications/')
+}
+
 export function createMcpRoutes() {
 	const app = new Hono<AppEnv>()
 
+	// Apply rate-limit на все RPC traffic + extra stricter limit для sepshn.ai.*
+	// tools-call branch. Middleware ordering: broad RPC limit first → tool-name
+	// inspection happens inside handler, AI-specific limit applied к request
+	// after JSON parse via inner check.
+	app.use('/rpc', mcpRpcRateLimit)
+
 	app.post('/rpc', async (c) => {
+		// Origin validation (DNS rebinding defense) — spec MUST.
+		const origin = c.req.header('Origin') ?? c.req.header('origin')
+		if (!isAllowedOrigin(origin)) {
+			return c.json(rpcError(null, -32000, `Forbidden — origin not allowed: ${origin}`), 403)
+		}
+		// Accept header check — spec says client MUST list both application/json AND
+		// text/event-stream. We're lenient: either is fine because server only
+		// returns application/json today (no SSE push yet).
+		const accept = c.req.header('Accept') ?? c.req.header('accept') ?? ''
+		if (
+			accept !== '' &&
+			!accept.includes('application/json') &&
+			!accept.includes('text/event-stream') &&
+			!accept.includes('*/*')
+		) {
+			return c.json(rpcError(null, -32000, 'Not Acceptable — must accept application/json'), 406)
+		}
+		// MCP-Protocol-Version header validation. Spec MUST: if header present AND
+		// unsupported → 400 Bad Request. Absent header → assume 2025-03-26 (spec
+		// backwards-compat).
+		const protoHeader = c.req.header('MCP-Protocol-Version') ?? c.req.header('mcp-protocol-version')
+		if (protoHeader !== undefined && !ACCEPTED_PROTOCOL_VERSIONS.has(protoHeader)) {
+			return c.json(
+				rpcError(null, -32000, `Unsupported MCP-Protocol-Version: ${protoHeader}`, {
+					supported: Array.from(ACCEPTED_PROTOCOL_VERSIONS).sort(),
+				}),
+				400,
+			)
+		}
 		let body: JsonRpcRequest
 		try {
 			body = (await c.req.json()) as JsonRpcRequest
@@ -354,23 +535,57 @@ export function createMcpRoutes() {
 				400,
 			)
 		}
+		// Extra rate-limit на AI tool calls — cost runaway defense. Anyone hitting
+		// `/api/mcp/rpc` с `tools/call name=sepshn.ai.*` triggers stricter bucket.
+		if (body.method === 'tools/call') {
+			const callParams = body.params as { name?: string } | undefined
+			if (typeof callParams?.name === 'string' && callParams.name.startsWith('sepshn.ai.')) {
+				const aiLimitResult = await mcpAiRateLimit(c)
+				if (aiLimitResult !== undefined) return aiLimitResult
+			}
+		}
 		const response = await handleRpc(body)
+		// Notifications (e.g. `notifications/initialized`) → HTTP 202 Accepted, no body.
+		if (response === null || (body.id === undefined && isNotification(body.method))) {
+			return c.body(null, 202)
+		}
 		return c.json(response)
 	})
 
+	// Spec §Streamable HTTP «Listening for Messages from the Server»: server MUST
+	// either return text/event-stream OR 405 Method Not Allowed for GET. We
+	// return 405 — we don't yet open server-to-client SSE streams (no need until
+	// tool list mutates or background notifications fire).
+	app.get('/rpc', (c) =>
+		c.body('Method Not Allowed — Sepshn MCP does not expose server-initiated SSE', 405),
+	)
+
+	// DELETE → 405 (we don't manage explicit MCP sessions yet — no MCP-Session-Id
+	// returned on initialize, so clients won't send DELETE; but spec allows).
+	app.delete('/rpc', (c) => c.body('Method Not Allowed — no session management', 405))
+
+	// Sales-surface discovery (NON-spec — Sepshn convenience endpoint).
+	// The canonical MCP discovery is `initialize` itself; this endpoint helps
+	// integration partners locate the server без MCP client handshake.
 	app.get('/manifest', (c) =>
 		c.json({
 			name: SEPSHN_MCP_SERVER_NAME,
+			title: 'Sepshn PMS+CM (демо)',
 			version: SEPSHN_MCP_SERVER_VERSION,
 			protocolVersion: MCP_PROTOCOL_VERSION,
-			transport: 'http+json-rpc',
+			transport: 'streamable-http',
 			endpoints: {
 				rpc: '/api/mcp/rpc',
 				manifest: '/api/mcp/manifest',
 			},
-			capabilities: ['tools/list', 'tools/call'],
+			capabilities: ['tools/list', 'tools/call', 'notifications/initialized'],
 			tools: TOOLS.map((t) => t.name),
 			docs: 'https://demo.sepshn.ru/api/docs',
+			notes: [
+				'Manifest is a Sepshn sales-surface — NOT canonical MCP discovery (use `initialize`)',
+				'Transport: Streamable HTTP per MCP spec 2025-11-25',
+				'AI-backed tools (`sepshn.ai.*`) require YANDEX_AI_API_KEY + YANDEX_AI_FOLDER_ID env vars',
+			],
 		}),
 	)
 
