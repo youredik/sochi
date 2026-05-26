@@ -51,7 +51,18 @@ import {
 	isReservedTestPhone,
 } from '../../../../workers/lib/reserved-test-ranges.ts'
 import { emitDemoWebhook } from '../shared/webhook-emit.ts'
-import { generateBookHash, generateItemId, generateOrderId, type OstrovokStore } from './state.ts'
+import {
+	cancelBooking,
+	finalizeBooking,
+	generateBookHash,
+	generateItemId,
+	generateOrderId,
+	getBookHash,
+	getBooking,
+	getFormStage,
+	storeBookHash,
+	storeFormStage,
+} from './state.ts'
 
 /**
  * Canonical sandbox demo hotel id mirrors the Round 8 ETG canon
@@ -139,12 +150,6 @@ export interface OstrovokMockOtaDeps {
 	 * warnings on non-reserved guest contact details.
 	 */
 	readonly logWarn?: (msg: string, ctx: Record<string, unknown>) => void
-	/**
-	 * Round 14 self-review #6 — state store DI. Tests pass
-	 * `createInMemoryOstrovokStore()`, prod mount passes
-	 * `createYdbOstrovokStore(sql)`. Cross-instance state coherence via YDB.
-	 */
-	readonly store: OstrovokStore
 }
 
 /**
@@ -250,7 +255,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		const bookHash = generateBookHash()
 		const dailyPrices = buildDailyPrices(nights)
 		const totalPrice = dailyPrices.reduce((acc, p) => acc + p, 0) * adults
-		await deps.store.storeBookHash({
+		storeBookHash({
 			bookHash,
 			hid,
 			checkin,
@@ -320,7 +325,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 			return c.json(errorEnvelope('invalid_payload'), 400)
 		}
 
-		const bookHashContext = await deps.store.getBookHash(bookHash, nowMs())
+		const bookHashContext = getBookHash(bookHash, nowMs())
 		if (bookHashContext === null) {
 			return c.json(errorEnvelope('rate_not_found'), 400)
 		}
@@ -328,11 +333,11 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		// If a form-stage already exists for the same partner_order_id, return
 		// it idempotently rather than re-creating — matches real ETG behaviour
 		// when client retries the same prebook call.
-		const existing = await deps.store.getFormStage(partnerOrderId, nowMs())
+		const existing = getFormStage(partnerOrderId, nowMs())
 		const orderId = existing !== null ? existing.orderId : generateOrderId()
 		const itemId = existing !== null ? existing.itemId : generateItemId()
 		if (existing === null) {
-			await deps.store.storeFormStage({
+			storeFormStage({
 				partnerOrderId,
 				bookHash,
 				orderId,
@@ -389,12 +394,12 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 			return c.json(errorEnvelope('invalid_payload'), 400)
 		}
 
-		const form = await deps.store.getFormStage(partnerOrderId, nowMs())
+		const form = getFormStage(partnerOrderId, nowMs())
 		if (form === null) {
 			return c.json(errorEnvelope('order_not_found'), 400)
 		}
 
-		const bookHashContext = await deps.store.getBookHash(form.bookHash, nowMs())
+		const bookHashContext = getBookHash(form.bookHash, nowMs())
 		if (bookHashContext === null) {
 			// Edge case: book_hash expired between form-stage creation и finish.
 			return c.json(errorEnvelope('rate_not_found'), 400)
@@ -441,7 +446,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 			})
 			.filter((g): g is NonNullable<typeof g> => g !== null)
 
-		const booking = await deps.store.finalizeBooking({
+		const booking = finalizeBooking({
 			form,
 			bookHashContext,
 			customerEmail: email,
@@ -507,7 +512,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		}
 		// Demo simplification: always return 'ok' immediately if the booking exists
 		// (real ETG может вернуть 'processing' first, then 'ok' on subsequent poll).
-		const booking = await deps.store.getBooking(partnerOrderId)
+		const booking = getBooking(partnerOrderId)
 		if (booking === null) {
 			return c.json(errorEnvelope('order_not_found'), 404)
 		}
@@ -534,11 +539,11 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		if (partnerOrderId === '') {
 			return c.json(errorEnvelope('invalid_payload'), 400)
 		}
-		const result = await deps.store.cancelBooking(partnerOrderId)
+		const result = cancelBooking(partnerOrderId)
 		if (result === 'not_found') {
 			return c.json(errorEnvelope('order_not_found'), 404)
 		}
-		const booking = await deps.store.getBooking(partnerOrderId)
+		const booking = getBooking(partnerOrderId)
 		if (booking === null) {
 			// Defensive: cancelBooking returned a non-not_found status, so booking
 			// MUST exist — unreachable in practice but typescript narrows safer.

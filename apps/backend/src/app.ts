@@ -170,7 +170,6 @@ if (env.APP_MODE !== 'production') {
 		webhookTargetBaseUrl: 'http://localhost:8787',
 		webhookSecret: demoWebhookSecret,
 		adminSessionToken,
-		sql,
 	})
 	// Round 12 polish — promise captured, NOT fire-and-forget. `index.ts`
 	// awaits before `serve()` to close the 100 ms cold-start race window
