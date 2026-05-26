@@ -23,6 +23,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ostrovokBrandTokens } from '../shared/brand-tokens.ts'
 import { DemoDisclaimerBanner, type DemoOtaBrand } from '../shared/demo-disclaimer-banner.tsx'
+import { DemoHotelJsonLd } from '../shared/demo-hotel-json-ld.tsx'
 import { OstrovokApiError, type OstrovokRate, searchHotel } from './api-client.ts'
 
 const BRAND: DemoOtaBrand = 'ostrovok'
@@ -120,6 +121,16 @@ export function OstrovokPropertyPage({
 			}}
 		>
 			<DemoDisclaimerBanner brand={BRAND} footerNote={footerNote} />
+			{state.kind === 'ready' && (
+				<DemoHotelJsonLd
+					brand={BRAND}
+					propertyId={String(hid)}
+					checkIn={checkinDate}
+					checkOut={checkoutDate}
+					totalPriceRub={state.rate.total_price}
+					roomName={state.rate.room_name}
+				/>
+			)}
 			<header
 				className="px-6 py-4"
 				style={{

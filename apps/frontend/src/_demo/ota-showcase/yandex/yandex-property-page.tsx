@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { yandexBrandTokens } from '../shared/brand-tokens.ts'
 import { DemoDisclaimerBanner, type DemoOtaBrand } from '../shared/demo-disclaimer-banner.tsx'
+import { DemoHotelJsonLd } from '../shared/demo-hotel-json-ld.tsx'
 import { searchOffers, type YandexOffer } from './api-client.ts'
 
 const BRAND: DemoOtaBrand = 'yandex'
@@ -111,6 +112,19 @@ export function YandexPropertyPage({
 			}}
 		>
 			<DemoDisclaimerBanner brand={BRAND} footerNote={footerNote} />
+			{/* Round 13 — AI-readable JSON-LD (canon Lake.com 47% AI mention share).
+			    Only rendered когда state.kind === 'ready' (offer data available);
+			    avoids invalid schema before backend response lands. */}
+			{state.kind === 'ready' && (
+				<DemoHotelJsonLd
+					brand={BRAND}
+					propertyId={hotelId}
+					checkIn={checkinDate}
+					checkOut={checkoutDate}
+					totalPriceRub={state.offer.total_price}
+					roomName={state.offer.room_name}
+				/>
+			)}
 			<header
 				className="px-6 py-4"
 				style={{
