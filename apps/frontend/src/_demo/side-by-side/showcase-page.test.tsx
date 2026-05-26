@@ -12,14 +12,26 @@
  *   [S8] PMS iframe respects pmsGridUrl prop override
  *   [S9] Initial channel respects initialChannel prop
  *   [S10] aria-pressed reflects active channel
+ *   [S11] Round 12 — `sessionToken` prop sets `X-Demo-Session-Token` header
+ *         on every admin POST (closes the «admin panel returns 401 in
+ *         production» frontend audit P0).
+ *   [S12] Round 12 — sessionToken state persisted в `localStorage` survives
+ *         component remount (presenter handover scenario).
+ *   [S13] Round 12 — sessionToken read из `localStorage` on initial mount
+ *         when no prop provided (presenter pre-loaded token via previous
+ *         session).
  */
 
 import { afterEach, describe, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { DEMO_SESSION_TOKEN_STORAGE_KEY } from './showcase-page.constants.ts'
 import { ShowcasePage } from './showcase-page.tsx'
 
 afterEach(() => {
 	cleanup()
+	if (typeof window !== 'undefined') {
+		window.localStorage.removeItem(DEMO_SESSION_TOKEN_STORAGE_KEY)
+	}
 })
 
 interface FetchCall {
@@ -158,5 +170,55 @@ describe('<ShowcasePage>', () => {
 		expect(screen.getByTestId('showcase-channel-ostrovok').getAttribute('aria-pressed')).toBe(
 			'false',
 		)
+	})
+
+	/**
+	 * Round 12 P0 — admin session token wired to `X-Demo-Session-Token` header.
+	 * Backend admin middleware (Round 11 P1-B2) returns 401 when token is set
+	 * + caller header missing/wrong; this test fixes the «admin panel broken»
+	 * frontend audit P0.
+	 */
+	test('[S11] sessionToken prop sets X-Demo-Session-Token header on admin POSTs', async () => {
+		const { calls, fetchImpl } = buildFetchSpy()
+		render(<ShowcasePage fetchImpl={fetchImpl} sessionToken="demo_admin_abc123" />)
+		await act(async () => {
+			fireEvent.click(screen.getByTestId('showcase-admin-reset'))
+		})
+		await waitFor(() => {
+			expect(calls.length).toBe(1)
+		})
+		const headers = calls[0]?.init?.headers as Record<string, string> | undefined
+		expect(headers?.['x-demo-session-token']).toBe('demo_admin_abc123')
+		expect(headers?.['content-type']).toBe('application/json')
+	})
+
+	test('[S12] sessionToken changes persisted to localStorage', async () => {
+		render(<ShowcasePage />)
+		// Initial: no token, localStorage empty.
+		expect(window.localStorage.getItem(DEMO_SESSION_TOKEN_STORAGE_KEY)).toBeNull()
+		const input = screen.getByTestId('showcase-session-token') as HTMLInputElement
+		await act(async () => {
+			fireEvent.change(input, { target: { value: 'demo_admin_xyz789' } })
+		})
+		expect(window.localStorage.getItem(DEMO_SESSION_TOKEN_STORAGE_KEY)).toBe('demo_admin_xyz789')
+		// Clearing the input removes the key (no empty-string in storage).
+		await act(async () => {
+			fireEvent.change(input, { target: { value: '' } })
+		})
+		expect(window.localStorage.getItem(DEMO_SESSION_TOKEN_STORAGE_KEY)).toBeNull()
+	})
+
+	test('[S13] initial mount reads sessionToken from localStorage when no prop', async () => {
+		window.localStorage.setItem(DEMO_SESSION_TOKEN_STORAGE_KEY, 'demo_admin_restored')
+		const { calls, fetchImpl } = buildFetchSpy()
+		render(<ShowcasePage fetchImpl={fetchImpl} />)
+		await act(async () => {
+			fireEvent.click(screen.getByTestId('showcase-admin-reset'))
+		})
+		await waitFor(() => {
+			expect(calls.length).toBe(1)
+		})
+		const headers = calls[0]?.init?.headers as Record<string, string> | undefined
+		expect(headers?.['x-demo-session-token']).toBe('demo_admin_restored')
 	})
 })

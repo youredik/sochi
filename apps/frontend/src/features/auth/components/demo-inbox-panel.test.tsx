@@ -15,7 +15,7 @@
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import * as React from 'react'
+import type * as React from 'react'
 
 const fetchMock = mock()
 const originalFetch = globalThis.fetch

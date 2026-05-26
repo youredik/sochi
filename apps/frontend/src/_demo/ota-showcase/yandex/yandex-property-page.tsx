@@ -15,7 +15,7 @@
  * book button is disabled — guarantees we never submit без valid token.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { yandexBrandTokens } from '../shared/brand-tokens.ts'
 import { DemoDisclaimerBanner, type DemoOtaBrand } from '../shared/demo-disclaimer-banner.tsx'
 import { searchOffers, type YandexOffer } from './api-client.ts'
@@ -55,6 +55,15 @@ export function YandexPropertyPage({
 }: YandexPropertyPageProps) {
 	const [state, setState] = useState<LoadState>({ kind: 'loading' })
 
+	// Round 12 — `fetchImpl` parked in a ref so a parent passing a new function
+	// identity on every render doesn't re-fire the search. Tests record-spy a
+	// stable fetch impl на mount; production parent (TanStack route) likewise
+	// stable. The contract: caller updates fetchImpl mid-mount → ignored
+	// until the next query-param-driven refetch (intentional — fetchImpl is
+	// for injection, not for live swapping).
+	const fetchImplRef = useRef(fetchImpl)
+	fetchImplRef.current = fetchImpl
+
 	useEffect(() => {
 		let cancelled = false
 		void (async () => {
@@ -66,7 +75,7 @@ export function YandexPropertyPage({
 					adults,
 					children: childrenCount,
 				},
-				fetchImpl,
+				fetchImplRef.current,
 			)
 			if (cancelled) return
 			const firstOffer = result.kind === 'ok' ? result.data.offers[0] : undefined
@@ -84,7 +93,7 @@ export function YandexPropertyPage({
 		return () => {
 			cancelled = true
 		}
-	}, [hotelId, checkinDate, checkoutDate, adults, childrenCount, fetchImpl])
+	}, [hotelId, checkinDate, checkoutDate, adults, childrenCount])
 
 	const footerNote = (
 		<span>
@@ -189,10 +198,13 @@ export function YandexPropertyPage({
 					{state.kind === 'error' && (
 						<p
 							role="alert"
-							className="mt-4 rounded-md p-3 text-sm"
+							className="mt-4 rounded-md border-l-4 p-3 text-sm font-medium"
 							style={{
 								background: 'hsl(11 92% 96%)',
-								color: yandexBrandTokens.primary,
+								// Round 12 — text darkened to lightness 30% for WCAG AA 4.5:1
+								// against 96% light tinted bg (previous lightness 50% was ~3.6:1).
+								color: 'hsl(11 80% 30%)',
+								borderLeftColor: yandexBrandTokens.primary,
 							}}
 						>
 							{state.message}

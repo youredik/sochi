@@ -46,7 +46,14 @@ async function main(): Promise<void> {
 
 	// Dynamic import AFTER migrations — fires app.ts side-effects with schema
 	// in place. Bypasses ES module static-import ordering trap.
-	const { app, stopApp } = await import('./app.ts')
+	const { app, stopApp, demoBootPromise } = await import('./app.ts')
+
+	// Round 12 polish — await demo channel-infra seed BEFORE binding listener.
+	// Closes the 100 ms cold-start race window Round 10 P0-1 had acknowledged
+	// (webhook receiver returning 401/403 before seed populated webhookSecret +
+	// channelConnection). In production this is a `Promise.resolve()` no-op
+	// (env-gated branch in app.ts).
+	await demoBootPromise
 
 	// Sandbox / Production gate (see env.ts APP_MODE comment). Importing
 	// `app.ts` above triggered every adapter factory's `registerAdapter()`

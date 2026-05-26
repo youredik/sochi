@@ -312,7 +312,7 @@ describe('backfill-room-type-night-slot', () => {
 			allotment: 1,
 		})
 		// Seed 3 bookings same night allotment=1 → 2 losers
-		const a = await seedBooking({
+		const _a = await seedBooking({
 			tenantId: TENANT,
 			propertyId: PROPERTY,
 			roomTypeId: ROOMTYPE,
@@ -320,7 +320,7 @@ describe('backfill-room-type-night-slot', () => {
 			nights: 1,
 			status: 'confirmed',
 		})
-		const b = await seedBooking({
+		const _b = await seedBooking({
 			tenantId: TENANT,
 			propertyId: PROPERTY,
 			roomTypeId: ROOMTYPE,
@@ -328,7 +328,7 @@ describe('backfill-room-type-night-slot', () => {
 			nights: 1,
 			status: 'confirmed',
 		})
-		const c = await seedBooking({
+		const _c = await seedBooking({
 			tenantId: TENANT,
 			propertyId: PROPERTY,
 			roomTypeId: ROOMTYPE,

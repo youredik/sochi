@@ -66,9 +66,7 @@ export interface ReadinessProbeResult {
 	readonly statusCode: 200 | 503
 }
 
-export interface ReadinessEvaluator {
-	(): Promise<ReadinessProbeResult>
-}
+export type ReadinessEvaluator = () => Promise<ReadinessProbeResult>
 
 /** Cache TTL — see canon comment header. 2s default. */
 export const READINESS_CACHE_TTL_MS = 2000

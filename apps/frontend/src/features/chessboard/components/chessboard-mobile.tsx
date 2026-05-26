@@ -3,7 +3,6 @@ import { useMemo, useState } from 'react'
 import { CalendarRangeIcon } from 'lucide-react'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BookingEditSheet } from '../../bookings/components/booking-edit-sheet'
 import { useBookingEventsStream } from '../hooks/use-booking-events-stream'
@@ -11,7 +10,6 @@ import { useGridData } from '../hooks/use-grid-data'
 import {
 	channelIndicator,
 	formatTourismTaxRub,
-	maskGuestNameRu,
 	paletteFor,
 	registrationBadgeFor,
 } from '../lib/booking-palette'

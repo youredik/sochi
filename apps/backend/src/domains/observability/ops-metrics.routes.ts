@@ -69,13 +69,17 @@ function checkInternalToken(c: import('hono').Context, internalToken: string): R
 		)
 	}
 	const providedToken = c.req.header('x-internal-token') ?? ''
+	// Round 12 polish — length difference folded into mismatch (constant-time);
+	// previous form OR-ed length comparison after the loop, leaking length via
+	// short-circuit timing.
 	const expected = Buffer.from(internalToken.padEnd(64, ' ').slice(0, 64))
 	const provided = Buffer.from(providedToken.padEnd(64, ' ').slice(0, 64))
 	let mismatch = 0
 	for (let i = 0; i < 64; i++) {
 		mismatch |= (expected[i] ?? 0) ^ (provided[i] ?? 0)
 	}
-	if (mismatch !== 0 || providedToken.length !== internalToken.length) {
+	mismatch |= providedToken.length ^ internalToken.length
+	if (mismatch !== 0) {
 		return c.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid X-Internal-Token' } }, 401)
 	}
 	return null

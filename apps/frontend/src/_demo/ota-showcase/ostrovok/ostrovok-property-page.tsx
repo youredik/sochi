@@ -20,7 +20,7 @@
  * URL search and orchestrates the 2-stage form→finish handshake.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ostrovokBrandTokens } from '../shared/brand-tokens.ts'
 import { DemoDisclaimerBanner, type DemoOtaBrand } from '../shared/demo-disclaimer-banner.tsx'
 import { OstrovokApiError, type OstrovokRate, searchHotel } from './api-client.ts'
@@ -61,6 +61,11 @@ export function OstrovokPropertyPage({
 }: OstrovokPropertyPageProps) {
 	const [state, setState] = useState<LoadState>({ kind: 'loading' })
 
+	// Round 12 — fetchImpl parked в ref to avoid fetch storm if caller passes
+	// new function identity per render (mirrors yandex-property-page.tsx).
+	const fetchImplRef = useRef(fetchImpl)
+	fetchImplRef.current = fetchImpl
+
 	useEffect(() => {
 		let cancelled = false
 		void (async () => {
@@ -75,7 +80,7 @@ export function OstrovokPropertyPage({
 						residency: 'ru',
 						guests: [{ adults, children: new Array(childrenCount).fill(10) }],
 					},
-					fetchImpl !== undefined ? { fetchImpl } : {},
+					fetchImplRef.current !== undefined ? { fetchImpl: fetchImplRef.current } : {},
 				)
 				if (cancelled) return
 				const firstHotel = result.data.hotels[0]
@@ -97,7 +102,7 @@ export function OstrovokPropertyPage({
 		return () => {
 			cancelled = true
 		}
-	}, [hid, checkinDate, checkoutDate, adults, childrenCount, fetchImpl])
+	}, [hid, checkinDate, checkoutDate, adults, childrenCount])
 
 	const footerNote = (
 		<span>
@@ -202,10 +207,12 @@ export function OstrovokPropertyPage({
 					{state.kind === 'error' && (
 						<p
 							role="alert"
-							className="mt-4 rounded-md p-3 text-sm"
+							className="mt-4 rounded-md border-l-4 p-3 text-sm font-medium"
 							style={{
 								background: 'hsl(354 76% 96%)',
-								color: ostrovokBrandTokens.primary,
+								// Round 12 — darkened text для WCAG AA 4.5:1 (was 50%).
+								color: 'hsl(354 70% 30%)',
+								borderLeftColor: ostrovokBrandTokens.primary,
 							}}
 						>
 							{state.message}

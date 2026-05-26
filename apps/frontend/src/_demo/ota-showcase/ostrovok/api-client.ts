@@ -12,12 +12,17 @@
  * `Basic ZGVtbzpkZW1v` (= base64 `demo:demo`) so a curl-replay against
  * the same backend works.
  *
- * **Stage map**:
- *   1. searchHotel         → POST /search/hp/
- *   2. prebookForm         → POST /hotel/order/booking/form/
- *   3. finishBooking       → POST /hotel/order/booking/finish/
- *   4. pollFinishStatus    → POST /hotel/order/booking/finish/status/   (optional)
- *   5. cancelBooking       → POST /hotel/order/cancel/
+ * **Stage map** (Phase-1 — UI exercises 1-3; 4-5 exposed for curl/Phase-2):
+ *   1. searchHotel         → POST /search/hp/                            ← UI: property page
+ *   2. prebookForm         → POST /hotel/order/booking/form/             ← UI: booking page
+ *   3. finishBooking       → POST /hotel/order/booking/finish/           ← UI: booking page
+ *   4. pollFinishStatus    → POST /hotel/order/booking/finish/status/   (curl / Phase-2)
+ *   5. cancelBooking       → POST /hotel/order/cancel/                  (curl / Phase-2)
+ *
+ * Round 12 honesty fix — Round 9 docstring previously claimed «5-stage ETG
+ * flow» end-to-end, но UI exercises only stages 1-3. Stages 4-5 ARE backend-
+ * implemented (verified by curl loop) and exported here so future Phase-2 UI
+ * adds the polling + cancel surface without re-exporting the wire shape.
  *
  * Test seam: callers may inject `fetchImpl` (defaults to `globalThis.fetch`).
  * In bun:test the global fetch is BLOCKED — every test MUST inject a spy

@@ -36,7 +36,7 @@ import * as fc from 'fast-check'
 import { planAutoAssign } from './auto-assign.ts'
 
 // Bounded arbs — SMB-realistic scale (Sochi target).
-const arbDate = fc.integer({ min: 0, max: 30 }).map((d) => {
+const _arbDate = fc.integer({ min: 0, max: 30 }).map((d) => {
 	const date = new Date('2030-01-01T00:00:00Z')
 	date.setUTCDate(date.getUTCDate() + d)
 	return date.toISOString().slice(0, 10)

@@ -154,7 +154,7 @@ describe('DemoInboxAdapter — getLatest(after) time-based filter (Round 7 v3 fi
 	})
 
 	it('[A2] after=capturedAt returns null когда no newer capture', async () => {
-		let clock = 1_000_000
+		const clock = 1_000_000
 		const adapter = new DemoInboxAdapter({ now: () => clock })
 		await adapter.send(emailWithLink('a@x.com', VERIFY_URL_A))
 		const first = await adapter.getLatest('a@x.com')

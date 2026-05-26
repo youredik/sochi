@@ -16,11 +16,18 @@
  *                        state — purpose is wow-effect UX («presenter clicked
  *                        the button, sometime happened») not behavioural fidelity.
  *
- * **Auth**: none — this is `_demo/` env-gated (mounted only когда `APP_MODE !==
- * 'production'`). Three layers of defense from prod accident:
+ * **Auth**: session-token gate (Round 11 P1-B2) + `_demo/` env-gated mount
+ * (mounted only когда `APP_MODE !== 'production'`). Two layers of defense
+ * from prod accident:
  *   1. Env-gate at mount site (`_demo/index.ts`).
- *   2. Reserved-test-ranges shield (Round 8 canon).
- *   3. YDB native TTL P1D (Phase-2).
+ *   2. Reserved-test-ranges shield (Round 8 canon) — at HTTP intake.
+ *
+ * Round 12 honesty fix — Round 9 canon claimed «triple defense» including
+ * native YDB TTL P1D on `mockOta_*` tables. Reality: those tables don't yet
+ * exist (state lives in in-memory `Map` in `state.ts` modules). Phase-2 will
+ * add YDB-backed state + TTL; until then это «double defense» (env-gate +
+ * shield). Documented honestly here so the security claim matches the
+ * deployed reality.
  *
  * **No webhook fired** — these endpoints only mutate local mock state; the
  * actual `POST /orders` route does the webhook emission. Reset clears tokens
@@ -88,18 +95,27 @@ export function createDemoAdminRoutes(opts: DemoAdminRoutesOptions = {}): Hono<A
 	 * Round 11 P1-B2 — constant-time session-token verification middleware.
 	 * Mounted on ALL admin routes. Empty `sessionToken` skip-mode preserves
 	 * existing test ergonomics; production wiring (app.ts) always supplies one.
+	 *
+	 * Round 12 polish — length difference folded into mismatch accumulator,
+	 * not OR-ed separately. Previous form `if (mismatch !== 0 || provided.length
+	 * !== token.length)` leaked length via short-circuit timing — adversary
+	 * could distinguish length-mismatch from content-mismatch by measuring how
+	 * quickly the 401 was returned. Folding length into the XOR sum equalizes
+	 * comparison time regardless of input shape.
 	 */
 	app.use('/*', async (c, next) => {
 		if (sessionToken.length === 0) return next() // no-auth mode for tests
 		const provided = c.req.header('x-demo-session-token') ?? ''
-		// Constant-time compare via fixed-length padded buffer.
+		// Constant-time compare via fixed-length padded buffer + length fold.
 		const expected = Buffer.from(sessionToken.padEnd(64, ' ').slice(0, 64))
 		const got = Buffer.from(provided.padEnd(64, ' ').slice(0, 64))
 		let mismatch = 0
 		for (let i = 0; i < 64; i++) {
 			mismatch |= (expected[i] ?? 0) ^ (got[i] ?? 0)
 		}
-		if (mismatch !== 0 || provided.length !== sessionToken.length) {
+		// Fold length difference into accumulator (constant-time).
+		mismatch |= provided.length ^ sessionToken.length
+		if (mismatch !== 0) {
 			return c.json({ error: 'UNAUTHORIZED', message: 'X-Demo-Session-Token mismatch' }, 401)
 		}
 		return next()

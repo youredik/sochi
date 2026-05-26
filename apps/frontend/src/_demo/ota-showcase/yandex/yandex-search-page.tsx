@@ -159,7 +159,15 @@ export function YandexSearchPage({ onSearch }: YandexSearchPageProps) {
 								max={10}
 								required
 								value={adults}
-								onChange={(e) => setAdults(Number.parseInt(e.target.value, 10) || 1)}
+								onChange={(e) => {
+									// Round 12 — clamp to [1,10]; empty input → fallback to current
+									// value (no surprise 1-reset mid-typing).
+									const raw = e.target.value
+									if (raw === '') return
+									const n = Number.parseInt(raw, 10)
+									if (!Number.isFinite(n)) return
+									setAdults(Math.min(10, Math.max(1, n)))
+								}}
 								className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2"
 								style={{ borderColor: yandexBrandTokens.border }}
 							/>
@@ -177,7 +185,15 @@ export function YandexSearchPage({ onSearch }: YandexSearchPageProps) {
 								min={0}
 								max={6}
 								value={children}
-								onChange={(e) => setChildren(Number.parseInt(e.target.value, 10) || 0)}
+								onChange={(e) => {
+									// Round 12 — clamp to [0,6]; empty input → fallback to current
+									// (avoid `'' || 0` collapse that silently zeroes mid-typing).
+									const raw = e.target.value
+									if (raw === '') return
+									const n = Number.parseInt(raw, 10)
+									if (!Number.isFinite(n)) return
+									setChildren(Math.min(6, Math.max(0, n)))
+								}}
 								className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2"
 								style={{ borderColor: yandexBrandTokens.border }}
 							/>

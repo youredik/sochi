@@ -27,7 +27,8 @@
  *   - Mobile-responsive layout
  */
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
+import { DEMO_SESSION_TOKEN_STORAGE_KEY } from './showcase-page.constants.ts'
 
 export type ShowcaseChannel = 'yandex' | 'ostrovok'
 
@@ -59,6 +60,15 @@ export interface ShowcasePageProps {
 	 * Real demo сессии use the global; component tests pass a recording spy.
 	 */
 	readonly fetchImpl?: typeof fetch
+	/**
+	 * Round 12 P0 fix — session token wired to `X-Demo-Session-Token` header
+	 * on every admin POST (Round 11 P1-B2 backend gate). Presenter copies the
+	 * token from backend boot log (printed once per process). Persisted via
+	 * `localStorage` keyed by `DEMO_SESSION_TOKEN_STORAGE_KEY` so the value
+	 * survives page reload and admin handover. Empty = backend accepts
+	 * (Round 11 back-compat dev path).
+	 */
+	readonly sessionToken?: string
 }
 
 type LastActionStatus =
@@ -80,11 +90,30 @@ export function ShowcasePage({
 	initialChannel = 'yandex',
 	pmsGridUrl = '/o/demo/grid',
 	fetchImpl,
+	sessionToken: sessionTokenProp,
 }: ShowcasePageProps) {
 	const [channel, setChannel] = useState<ShowcaseChannel>(initialChannel)
 	const [scenario, setScenario] = useState<AdminScenario>('overbooking')
 	const [status, setStatus] = useState<LastActionStatus>({ kind: 'idle' })
+	// Round 12 P0 — admin session token state. Initialized lazily from
+	// localStorage (browser-only; SSR guard via typeof check).
+	const [sessionToken, setSessionToken] = useState<string>(() => {
+		if (sessionTokenProp !== undefined) return sessionTokenProp
+		if (typeof window === 'undefined') return ''
+		return window.localStorage.getItem(DEMO_SESSION_TOKEN_STORAGE_KEY) ?? ''
+	})
 	const scenarioSelectId = useId()
+	const sessionTokenInputId = useId()
+
+	// Persist non-empty token changes to localStorage (test+presenter handover).
+	useEffect(() => {
+		if (typeof window === 'undefined') return
+		if (sessionToken.length === 0) {
+			window.localStorage.removeItem(DEMO_SESSION_TOKEN_STORAGE_KEY)
+		} else {
+			window.localStorage.setItem(DEMO_SESSION_TOKEN_STORAGE_KEY, sessionToken)
+		}
+	}, [sessionToken])
 
 	const fetchFn = fetchImpl ?? globalThis.fetch
 
@@ -95,9 +124,15 @@ export function ShowcasePage({
 	): Promise<void> {
 		setStatus({ kind: 'pending', action: actionLabel })
 		try {
+			const headers: Record<string, string> = { 'content-type': 'application/json' }
+			// Round 12 P0 — attach session-token header when set. Backend rejects
+			// 401 if production-mode token set + caller didn't provide.
+			if (sessionToken.length > 0) {
+				headers['x-demo-session-token'] = sessionToken
+			}
 			const init: RequestInit = {
 				method: 'POST',
-				headers: { 'content-type': 'application/json' },
+				headers,
 			}
 			if (body !== undefined) {
 				init.body = JSON.stringify(body)
@@ -179,6 +214,24 @@ export function ShowcasePage({
 				</div>
 
 				<div className="flex flex-wrap items-center gap-2">
+					<div className="flex items-center gap-1">
+						<label htmlFor={sessionTokenInputId} className="text-xs font-medium text-neutral-600">
+							Session token
+						</label>
+						<input
+							id={sessionTokenInputId}
+							data-testid="showcase-session-token"
+							type="password"
+							value={sessionToken}
+							onChange={(e) => setSessionToken(e.target.value)}
+							placeholder="demo_admin_…"
+							className="w-40 rounded-md border border-neutral-300 bg-white px-2 py-1 font-mono text-xs text-neutral-700"
+							aria-describedby={`${sessionTokenInputId}-help`}
+						/>
+						<span id={`${sessionTokenInputId}-help`} className="sr-only">
+							Скопируйте токен из лога бэкенда (`X-Demo-Session-Token`). Сохраняется в localStorage.
+						</span>
+					</div>
 					<button
 						type="button"
 						data-testid="showcase-admin-reset"

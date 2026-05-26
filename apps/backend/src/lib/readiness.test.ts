@@ -274,7 +274,7 @@ describe('evaluateReadiness — AbortSignal probe timeout (B11)', () => {
 describe('createReadinessEvaluator — cache + single-flight (B11)', () => {
 	test('second call within TTL returns cached result — probeYdb invoked only once', async () => {
 		let probeCalls = 0
-		let virtualNow = 1_000_000
+		const virtualNow = 1_000_000
 		const evaluator = createReadinessEvaluator(
 			makeInput({
 				probeYdb: async (_signal) => {
@@ -342,7 +342,7 @@ describe('createReadinessEvaluator — cache + single-flight (B11)', () => {
 
 	test('failed probe NOT cached as success — next call re-probes', async () => {
 		let probeCalls = 0
-		let shouldFail = true
+		const shouldFail = true
 		const evaluator = createReadinessEvaluator(
 			makeInput({
 				probeYdb: async (_signal) => {

@@ -6,8 +6,16 @@
  * **MUST be present on every page** в `/demo/ota/*` route tree. Playwright
  * E2E ассертит наличие через `data-testid="demo-disclaimer-banner"`. Canon
  * mandates trademark-safe positioning:
- *   - Sticky top: «🧪 Демонстрация Sepshn — не настоящий [Yandex.Путешествия|Островок]»
+ *   - Sticky top: «[ДЕМО] Демонстрация Sepshn — не настоящий [Yandex.Путешествия|Островок]»
  *   - Optional footer disclaimer slot (passed via `footerNote` prop)
+ *
+ * Round 12 polish (canon `feedback_no_emoji.md` + factual ИНН fix):
+ *   - Pill chip «[ДЕМО]» replaces emoji `🧪` (canon: 0 emojis default).
+ *   - Trademark disclaimer drops ИНН (`7704735704` was incorrectly bound to
+ *     `ООО „Яндекс.Путешествия"` — that ИНН belongs to `ООО „ЯНДЕКС.ТАКСИ"`).
+ *     Neutral phrasing «ООО „Яндекс" и аффилированные лица» avoids factual error.
+ *     Ostrovok: `Emerging Travel Group OÜ` (Estonian OÜ form) → `Emerging Travel
+ *     Group` без legal-form (group is multi-jurisdiction; OÜ is one of several).
  *
  * Brand parameter accepts only known channels — TypeScript-enforced const-union
  * so мы не можем случайно показать «не настоящий Booking.com» в Yandex flow.
@@ -22,9 +30,15 @@ const BRAND_LABELS: Record<DemoOtaBrand, string> = {
 	ostrovok: 'Островок',
 }
 
+/**
+ * Round 12 fix — neutral trademark phrasing. Drops ИНН (factual error) and
+ * legal form (OÜ vs plc / Раша — multi-jurisdiction group). Honors trademark
+ * acknowledgement without claiming specific corporate-registry facts that may
+ * be wrong or change.
+ */
 const BRAND_LEGAL: Record<DemoOtaBrand, string> = {
-	yandex: 'ООО „Яндекс.Путешествия" (ИНН: 7704735704)',
-	ostrovok: 'Emerging Travel Group OÜ',
+	yandex: 'ООО „Яндекс" и аффилированные лица',
+	ostrovok: 'Emerging Travel Group и аффилированные лица',
 }
 
 export interface DemoDisclaimerBannerProps {
@@ -43,8 +57,11 @@ export function DemoDisclaimerBanner({ brand, footerNote }: DemoDisclaimerBanner
 				role="status"
 				aria-label="Демонстрационный режим"
 			>
-				<span aria-hidden="true">🧪</span> <strong>Демонстрация Sepshn</strong> — это не настоящий{' '}
-				{label}. Все данные — тестовые, бронирования не имеют юридической силы.
+				<span className="mr-2 inline-block rounded bg-amber-300/80 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-amber-950">
+					Демо
+				</span>
+				<strong>Демонстрация Sepshn</strong> — это не настоящий {label}. Все данные — тестовые,
+				бронирования не имеют юридической силы.
 			</div>
 			{footerNote !== undefined && (
 				<footer

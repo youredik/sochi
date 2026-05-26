@@ -215,10 +215,12 @@ export function YandexBookingPage({
 						<p
 							role="alert"
 							data-testid="booking-error"
-							className="mt-4 rounded-md p-3 text-sm"
+							className="mt-4 rounded-md border-l-4 p-3 text-sm font-medium"
 							style={{
 								background: 'hsl(11 92% 96%)',
-								color: yandexBrandTokens.primary,
+								// Round 12 — darkened text для WCAG AA 4.5:1.
+								color: 'hsl(11 80% 30%)',
+								borderLeftColor: yandexBrandTokens.primary,
 							}}
 						>
 							{state.message}

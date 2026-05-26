@@ -43,11 +43,7 @@ import { afterAll, beforeAll, describe, expect, jest, test } from 'bun:test'
 jest.setTimeout(60_000)
 
 import { dateFromIso } from '../../db/ydb-helpers.ts'
-import {
-	InvalidBookingAmendStateError,
-	NoInventoryError,
-	RatePlanNotFoundError,
-} from '../../errors/domain.ts'
+import { InvalidBookingAmendStateError, RatePlanNotFoundError } from '../../errors/domain.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import { createAvailabilityFactory } from '../availability/availability.factory.ts'
 import { createPropertyFactory } from '../property/property.factory.ts'

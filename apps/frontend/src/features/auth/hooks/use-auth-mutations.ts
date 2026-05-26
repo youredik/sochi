@@ -55,7 +55,6 @@ export function useSignInMagicLink() {
 		{ email: string; callbackURL: string; captchaToken?: string | undefined }
 	>({
 		mutationFn: async ({ email, callbackURL, captchaToken }) => {
-			// biome-ignore lint/style/useNamingConvention: Better Auth API contract (callbackURL)
 			const { error } = await authClient.signIn.magicLink(
 				{ email, callbackURL },
 				captchaFetchOptions(captchaToken),

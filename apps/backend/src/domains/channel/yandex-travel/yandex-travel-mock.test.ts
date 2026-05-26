@@ -565,3 +565,104 @@ describe('YT Mock — Round 8 sequenceNumber monotonicity (YT18-YT22)', () => {
 		expect(r.reservations[0]?.externalId).toBe('yt-read-1')
 	})
 })
+
+/**
+ * Round 11 P1-α + Round 12 P1 test coverage — `pendingVerifies` cache.
+ *
+ * Round 10 caught: `createBooking` hardcoded `arrivalDate: '2027-06-15'` while
+ * docstring promised «derives from cached verifyBooking input». Round 11
+ * fix added `pendingVerifies: Map<idempotencyKey, VerifyBookingInput>` so the
+ * subsequent `createBooking({verifyResult, idempotencyKey})` reads the cached
+ * dates / guest / counts instead of fabricating fixtures. Round 12 audit
+ * (canon `feedback_critical_fix_test_coverage_canon`): the fix shipped
+ * with ZERO tests — `yandex-travel-mock.test.ts` had 0 references to
+ * `pendingVerifies` and would still pass with the hardcoded fallback in
+ * place. Closing the gap below.
+ */
+describe('YT Mock — Round 11 P1-α + Round 12 P1 pendingVerifies cache (YT23-YT24)', () => {
+	it('[YT23] createBooking derives arrivalDate from cached verifyBooking input', async () => {
+		const yt = createYandexTravelMock({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			hmacSecret: SECRET,
+		})
+		// Custom check-in date NOT equal to the legacy fallback '2027-06-15'.
+		const v = await yt.verifyBooking({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: 'rt',
+			ratePlanId: 'rp',
+			checkIn: '2028-03-01',
+			checkOut: '2028-03-05',
+			guestCount: 3,
+			guest: {
+				firstName: 'Иван',
+				lastName: 'Иванов',
+				email: 'ivanov@example.com',
+				phone: '+70000000001',
+			},
+		})
+		const created = await yt.createBooking({
+			verifyResult: v,
+			idempotencyKey: 'yt23-k1',
+		})
+		const read = await yt.readReservations({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+		})
+		const row = read.reservations.find((r) => r.externalId === created.externalId)
+		// Round 12 strict-test canon — exact-value assertion. ChannelReservation
+		// projection (readReservations output) flattens arrivalDate→checkIn,
+		// departureDate→checkOut per channel-manager interface.
+		expect(row?.checkIn).toBe('2028-03-01')
+		expect(row?.checkOut).toBe('2028-03-05')
+		expect(row?.guestCount).toBe(3)
+	})
+
+	it('[YT24] re-createBooking after verify-cache eviction → safe fallback fires', async () => {
+		// Single-use cache: first createBooking consumes pendingVerifies entry.
+		// A re-attempted call with a NEW idempotencyKey but the same verifyResult
+		// finds an empty cache slot → falls back to safe-default fixture dates
+		// (legacy hardcoded `2027-06-15`/`2027-06-17`). Pinning the fallback
+		// keeps the graceful-degradation contract — silent crash would surface
+		// during a presenter demo, the fallback at least produces a valid row.
+		const yt = createYandexTravelMock({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			hmacSecret: SECRET,
+		})
+		const v = await yt.verifyBooking({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+			roomTypeId: 'rt',
+			ratePlanId: 'rp',
+			checkIn: '2029-01-10',
+			checkOut: '2029-01-12',
+			guestCount: 1,
+			guest: {
+				firstName: 'A',
+				lastName: 'B',
+				email: 'a@example.com',
+				phone: '+70000000002',
+			},
+		})
+		// First createBooking — succeeds + evicts cache entry.
+		await yt.createBooking({ verifyResult: v, idempotencyKey: 'yt24-k1' })
+		// Second createBooking — same verifyResult, new idempotencyKey → cache
+		// already evicted → fallback path.
+		const second = await yt.createBooking({
+			verifyResult: v,
+			idempotencyKey: 'yt24-k2',
+		})
+		const read = await yt.readReservations({
+			tenantId: TENANT,
+			propertyId: PROPERTY,
+		})
+		const row = read.reservations.find((r) => r.externalId === second.externalId)
+		// Fallback values — documents the graceful-degradation contract.
+		// ChannelReservation projection flattens arrivalDate→checkIn,
+		// departureDate→checkOut per channel-manager interface.
+		expect(row?.checkIn).toBe('2027-06-15')
+		expect(row?.checkOut).toBe('2027-06-17')
+	})
+})

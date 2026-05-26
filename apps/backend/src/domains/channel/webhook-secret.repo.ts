@@ -92,7 +92,7 @@ export function createWebhookSecretRepo(sql: SqlInstance) {
 			const [rows = []] =
 				tenantId !== undefined
 					? await sql<SecretYdbRow[]>`
-				SELECT channelId, kid, secret, status, activatedAt, expiresAt
+				SELECT channelId, kid, secret, status, activatedAt, expiresAt, tenantId
 				FROM webhookSecret
 				WHERE channelId = ${channelId}
 				  AND (tenantId = ${tenantId} OR tenantId IS NULL)
@@ -101,7 +101,7 @@ export function createWebhookSecretRepo(sql: SqlInstance) {
 							.isolation('snapshotReadOnly')
 							.idempotent(true)
 					: await sql<SecretYdbRow[]>`
-				SELECT channelId, kid, secret, status, activatedAt, expiresAt
+				SELECT channelId, kid, secret, status, activatedAt, expiresAt, tenantId
 				FROM webhookSecret
 				WHERE channelId = ${channelId} AND (status = ${'active'} OR status = ${'previous'})
 			`
@@ -119,7 +119,7 @@ export function createWebhookSecretRepo(sql: SqlInstance) {
 			readonly kid: string
 		}): Promise<WebhookSecretRow | null> {
 			const [rows = []] = await sql<SecretYdbRow[]>`
-				SELECT channelId, kid, secret, status, activatedAt, expiresAt
+				SELECT channelId, kid, secret, status, activatedAt, expiresAt, tenantId
 				FROM webhookSecret
 				WHERE channelId = ${input.channelId} AND kid = ${input.kid}
 				LIMIT 1
@@ -144,7 +144,7 @@ export function createWebhookSecretRepo(sql: SqlInstance) {
 				const expiresAt = new Date(input.previousExpiresAtMs)
 				const now = new Date()
 				const [activeRows = []] = await tx<SecretYdbRow[]>`
-					SELECT channelId, kid, secret, status, activatedAt, expiresAt
+					SELECT channelId, kid, secret, status, activatedAt, expiresAt, tenantId
 					FROM webhookSecret
 					WHERE channelId = ${input.channelId} AND status = ${'active'}
 				`
@@ -176,7 +176,7 @@ export function createWebhookSecretRepo(sql: SqlInstance) {
 		}): Promise<{ readonly expired: number }> {
 			const cutoff = new Date(input.nowMs)
 			const [rows = []] = await sql<SecretYdbRow[]>`
-				SELECT channelId, kid, secret, status, activatedAt, expiresAt
+				SELECT channelId, kid, secret, status, activatedAt, expiresAt, tenantId
 				FROM webhookSecret
 				WHERE channelId = ${input.channelId} AND status = ${'previous'}
 			`

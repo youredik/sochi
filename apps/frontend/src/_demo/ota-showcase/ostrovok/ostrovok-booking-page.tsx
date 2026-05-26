@@ -246,10 +246,12 @@ export function OstrovokBookingPage({
 						<p
 							role="alert"
 							data-testid="booking-error"
-							className="mt-4 rounded-md p-3 text-sm"
+							className="mt-4 rounded-md border-l-4 p-3 text-sm font-medium"
 							style={{
 								background: 'hsl(354 76% 96%)',
-								color: ostrovokBrandTokens.primary,
+								// Round 12 — darkened text для WCAG AA 4.5:1.
+								color: 'hsl(354 70% 30%)',
+								borderLeftColor: ostrovokBrandTokens.primary,
 							}}
 						>
 							{state.message}

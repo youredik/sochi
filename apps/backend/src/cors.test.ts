@@ -63,7 +63,7 @@ describe('resolveCorsOrigin — function-style canonical allowlist', () => {
 
 	test('[C7] http→https scheme spoof → null', () => {
 		const allowed = corsAllowlist[0]
-		if (allowed && allowed.startsWith('https://')) {
+		if (allowed?.startsWith('https://')) {
 			const insecure = allowed.replace(/^https:/, 'http:')
 			expect(resolveCorsOrigin(insecure)).toBe(null)
 		}

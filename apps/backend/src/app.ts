@@ -131,10 +131,22 @@ import { startNotificationDispatcher } from './workers/notification-dispatcher.t
 const app = new Hono<AppEnv>()
 
 // Round 9 demo OTA mock-server routes (env-gated, mounted ONLY when
-// `APP_MODE !== 'production'`). Triple defense from prod accident:
-// env-gate (here) + reserved-test-ranges shield (Round 8) + 24h YDB TTL
-// (Phase 2). Production deploys never see `/api/_mock-ota/*` paths — they
-// return 404. See `domains/_demo/README.md` for full canon.
+// `APP_MODE !== 'production'`). Round 12 honest claim — DOUBLE defense from
+// prod accident (env-gate + reserved-test-ranges shield); Round 9 canon
+// originally said «triple» including 24h YDB TTL on mockOta_* tables, but
+// those tables don't exist yet (state still in-memory Map). Phase-2 adds
+// YDB-backed state + TTL — until then это double-defense not triple. Production
+// deploys never see `/api/_mock-ota/*` paths — they return 404. See
+// `domains/_demo/README.md` for full canon.
+//
+// Round 12 polish — `demoBootPromise` exported so `index.ts` awaits seed
+// completion BEFORE binding the HTTP listener. Previously seed fired as
+// `void seedDemoChannelInfra(...)` (fire-and-forget) and Round 10 P0-1
+// acknowledged a 100 ms cold-start race window where the first incoming
+// webhook hit 401/403 (no `webhookSecret` row yet). Awaiting at the
+// pre-serve seam eliminates the race entirely (deterministic ready signal,
+// no «presenter natural pause» hand-waving).
+let demoBootPromiseInternal: Promise<void> = Promise.resolve()
 if (env.APP_MODE !== 'production') {
 	const demoWebhookSecret = 'demo-mock-ota-webhook-secret-do-not-use-in-prod'
 	const demoTenantId = 'demo-tenant'
@@ -155,17 +167,17 @@ if (env.APP_MODE !== 'production') {
 		webhookSecret: demoWebhookSecret,
 		adminSessionToken,
 	})
-	// Round 10 P0-1 + P0-2 fix — env-gated idempotent seed для demo webhook loop.
-	// Без этого: cold-start receiver→401 (no webhookSecret) или 403 (no
-	// channelConnection). Race window first ~100ms boot acceptable для demo
-	// (presenter natural pause). Production branch не достигнут (env-gate).
-	// Canon: `feedback_round_10_truthful_post_review_canon_2026_05_25.md`.
-	void seedDemoChannelInfra({
+	// Round 12 polish — promise captured, NOT fire-and-forget. `index.ts`
+	// awaits before `serve()` to close the 100 ms cold-start race window
+	// where webhook receiver returned 401 (no `webhookSecret`) or 403 (no
+	// `channelConnection`) before seed completed. Errors logged + rethrown
+	// so boot fails-loud instead of silent-broken-demo.
+	demoBootPromiseInternal = seedDemoChannelInfra({
 		tenantId: demoTenantId,
 		propertyId: demoPropertyId,
 		webhookSecret: demoWebhookSecret,
 	}).then(
-		(r) =>
+		(r) => {
 			logger.info(
 				{
 					event: 'demo_seed_complete',
@@ -173,8 +185,9 @@ if (env.APP_MODE !== 'production') {
 					connections: r.connectionsSeeded,
 				},
 				'demo channel infra seeded',
-			),
-		(e: unknown) =>
+			)
+		},
+		(e: unknown) => {
 			logger.error(
 				{
 					err:
@@ -183,9 +196,18 @@ if (env.APP_MODE !== 'production') {
 							: { name: 'unknown', message: String(e).slice(0, 200) },
 				},
 				'demo seed failed — webhook loop will return 401/403',
-			),
+			)
+			throw e
+		},
 	)
 }
+/**
+ * Round 12 — promise that resolves when the demo channel-infra seed has
+ * applied (webhookSecret + channelConnection rows). `index.ts` awaits this
+ * before `serve()` so the first webhook never races the seed. In production
+ * mode this is `Promise.resolve()` (no demo branch executed).
+ */
+export const demoBootPromise: Promise<void> = demoBootPromiseInternal
 
 // Domain factories (one place to wire sql → repo → service).
 const propertyFactory = createPropertyFactory(sql)

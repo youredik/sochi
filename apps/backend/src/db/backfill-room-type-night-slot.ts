@@ -41,7 +41,7 @@ import { YDBError } from '@ydbjs/error'
 import { query } from '@ydbjs/query'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { dateFromIso, NULL_TEXT, timestampOpt, toJson, toTs, tsFromIso } from './ydb-helpers.ts'
+import { dateFromIso, NULL_TEXT, timestampOpt, toJson, toTs } from './ydb-helpers.ts'
 
 const TYPEID_RE = /^[a-z]+_[0-9a-hjkmnp-tv-z]{26}$/
 function assertValidTenantId(id: string): string {

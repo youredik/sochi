@@ -60,9 +60,9 @@ export interface CreateGuestDocumentFromScanInput {
 
 /**
  * Internal row shape — reserved for future SELECT operations. Not exported
- * to keep knip happy (Sprint C+ no-unused-exports canon).
+ * to keep knip happy (Sprint C+ no-unused-exports canon). Underscore-prefix
+ * exempts из biome `noUnusedVariables` (Round 12 — stale suppression dropped).
  */
-// biome-ignore lint/correctness/noUnusedVariables: kept for future SELECT shape
 interface _GuestDocumentRow {
 	readonly id: string
 	readonly tenantId: string

@@ -80,9 +80,15 @@ describe('<YandexSearchPage>', () => {
 		expect(captured!.children).toBe(0)
 	})
 
-	test('[R7] footer disclaimer with Яндекс.Путешествия legal note', () => {
+	test('[R7] footer disclaimer carries trademark-safe Yandex legal mention', () => {
+		// Round 12 — legal phrasing updated. Previously the footer carried
+		// «ООО „Яндекс.Путешествия" (ИНН: 7704735704)» which is factually
+		// incorrect (ИНН 7704735704 belongs to ООО „ЯНДЕКС.ТАКСИ"). New
+		// phrasing is jurisdiction-neutral and includes «ООО „Яндекс"» without
+		// inventing a specific subsidiary entity that may not exist.
 		render(<YandexSearchPage onSearch={() => {}} />)
 		const footer = screen.getByTestId('demo-disclaimer-footer')
-		expect(footer.textContent).toContain('Яндекс.Путешествия')
+		expect(footer.textContent).toContain('ООО „Яндекс"')
+		expect(footer.textContent).toContain('собственность соответствующих правообладателей')
 	})
 })

@@ -35,11 +35,7 @@ CREATE TABLE IF NOT EXISTS photoConsentLog (
     ipAddress       Utf8 NOT NULL,           -- right-most-trusted-proxy resolved
     userAgent       Utf8 NOT NULL,           -- request UA header
 
-    -- Right to be forgotten: 152-ФЗ ст.20 (revocation right) + ст.21 ч.5
-    -- (30 days destruction SLA after revocation request). Round 8 P2-G fix
-    -- (canon `feedback_legal_round_5_corrections_canon_2026_05_23.md`): comment
-    -- previously incorrectly cited «10 рабочих дней» — that's ст.20 ответ срок,
-    -- not destruction срок. Schema unchanged.
+    -- Right to be forgotten (152-ФЗ ст.20 — 10 рабочих дней)
     revokedAt       Timestamp,               -- NULL = active
     revokedReason   Utf8,                    -- 'user_request' | 'gdpr_export' | etc.
 
