@@ -37,27 +37,35 @@ describe('createDemoSmsInboxRoutes — enabled', () => {
 	})
 
 	test('happy path returns captured body', async () => {
+		// Round 13 phase B SMS shield + Round 14 self-review #5 fix: use
+		// Россвязь reserved-test prefix `+7 000` (per `reserved-test-ranges.ts`
+		// canon). Non-reserved-test phones rejected by adapter shield —
+		// previous fixture `+79991234567` (real Russian mobile shape) was
+		// rejected post-Round-13, causing 1 fail-local-pass-CI flake until
+		// caught by Run #112+#113 SC empirical evidence.
 		const inbox = initDemoInboxSms()
-		await inbox.send({ to: '+79991234567', body: 'OTP: 1234' })
+		await inbox.send({ to: '+70001234567', body: 'OTP: 1234' })
 		const app = createDemoSmsInboxRoutes({ enabled: true })
-		const res = await app.fetch(new Request('http://test/sms-inbox?phone=%2B79991234567'))
+		const res = await app.fetch(new Request('http://test/sms-inbox?phone=%2B70001234567'))
 		expect(res.status).toBe(200)
 		const json = (await res.json()) as { data: { phone: string; body: string } }
 		expect(json.data.body).toBe('OTP: 1234')
-		expect(json.data.phone).toBe('+79991234567')
+		expect(json.data.phone).toBe('+70001234567')
 	})
 
 	test('phone normalized к canonical form (spaces stripped)', async () => {
+		// Same Round 13 SMS shield — use `+7 000` reserved-test prefix.
 		const inbox = initDemoInboxSms()
-		await inbox.send({ to: '+7 999 123 45 67', body: 'Hi' })
+		await inbox.send({ to: '+7 000 123 45 67', body: 'Hi' })
 		const app = createDemoSmsInboxRoutes({ enabled: true })
-		// Query string with same formatted phone.
+		// Query string with same formatted phone (URL-encoded spaces).
 		const res = await app.fetch(
-			new Request('http://test/sms-inbox?phone=%2B7%20999%20123%2045%2067'),
+			new Request('http://test/sms-inbox?phone=%2B7%20000%20123%2045%2067'),
 		)
 		expect(res.status).toBe(200)
 		const json = (await res.json()) as { data: { phone: string; body: string } }
-		expect(json.data.phone).toBe('+79991234567') // canonical
+		expect(json.data.phone).toBe('+70001234567') // canonical
+		expect(json.data.body).toBe('Hi')
 	})
 
 	test('invalid phone format → 400', async () => {
