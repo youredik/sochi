@@ -25,21 +25,21 @@ import {
 describe('DemoInboxSmsAdapter — send', () => {
 	test('happy path — captures + returns sent messageId', async () => {
 		const adapter = new DemoInboxSmsAdapter()
-		const result = await adapter.send({ to: '+79991234567', body: 'OTP: 1234' })
+		const result = await adapter.send({ to: '+70001234567', body: 'OTP: 1234' })
 		expect(result.kind).toBe('sent')
 		if (result.kind === 'sent') {
 			expect(result.messageId).toMatch(/^demo-sms-/)
 		}
-		const captured = adapter.getLatest('+79991234567')
+		const captured = adapter.getLatest('+70001234567')
 		expect(captured?.body).toBe('OTP: 1234')
 	})
 
 	test('phone normalization — strips spaces / dashes / parens', async () => {
 		const adapter = new DemoInboxSmsAdapter()
-		await adapter.send({ to: '+7 (999) 123-45-67', body: 'Hello' })
-		const captured = adapter.getLatest('+79991234567')
+		await adapter.send({ to: '+7 (000) 123-45-67', body: 'Hello' })
+		const captured = adapter.getLatest('+70001234567')
 		expect(captured?.body).toBe('Hello')
-		expect(captured?.to).toBe('+79991234567')
+		expect(captured?.to).toBe('+70001234567')
 	})
 
 	test('international phones accepted (E.164 format)', async () => {
@@ -52,10 +52,10 @@ describe('DemoInboxSmsAdapter — send', () => {
 	test('invalid phone → permanent error без capture', async () => {
 		const adapter = new DemoInboxSmsAdapter()
 		// Missing +
-		const r1 = await adapter.send({ to: '79991234567', body: 'X' })
+		const r1 = await adapter.send({ to: '70001234567', body: 'X' })
 		expect(r1.kind).toBe('permanent')
 		// Too short
-		const r2 = await adapter.send({ to: '+7999', body: 'X' })
+		const r2 = await adapter.send({ to: '+7000', body: 'X' })
 		expect(r2.kind).toBe('permanent')
 		// Letters mixed
 		const r3 = await adapter.send({ to: '+7abc1234567', body: 'X' })
@@ -72,19 +72,19 @@ describe('DemoInboxSmsAdapter — send', () => {
 		// uses normalized value, NEVER raw — CRLF never propagates к header
 		// smuggle surface.
 		const adapter = new DemoInboxSmsAdapter()
-		const r = await adapter.send({ to: '+7999\r\n1234567', body: 'X' })
+		const r = await adapter.send({ to: '+7000\r\n1234567', body: 'X' })
 		expect(r.kind).toBe('sent')
 		// Captured phone is canonical (CRLF stripped).
-		const captured = adapter.getLatest('+79991234567')
+		const captured = adapter.getLatest('+70001234567')
 		expect(captured?.body).toBe('X')
-		expect(captured?.to).toBe('+79991234567')
+		expect(captured?.to).toBe('+70001234567')
 		expect(captured?.to).not.toContain('\r')
 		expect(captured?.to).not.toContain('\n')
 	})
 
 	test('empty body rejected', async () => {
 		const adapter = new DemoInboxSmsAdapter()
-		const result = await adapter.send({ to: '+79991234567', body: '' })
+		const result = await adapter.send({ to: '+70001234567', body: '' })
 		expect(result.kind).toBe('permanent')
 		if (result.kind === 'permanent') {
 			expect(result.reason).toMatch(/empty/i)
@@ -93,9 +93,9 @@ describe('DemoInboxSmsAdapter — send', () => {
 
 	test('whitespace-only body rejected (M3 fix — provider-symmetric)', async () => {
 		const adapter = new DemoInboxSmsAdapter()
-		const spaces = await adapter.send({ to: '+79991234567', body: '   ' })
+		const spaces = await adapter.send({ to: '+70001234567', body: '   ' })
 		expect(spaces.kind).toBe('permanent')
-		const tabsNewlines = await adapter.send({ to: '+79991234567', body: '\t\n\r ' })
+		const tabsNewlines = await adapter.send({ to: '+70001234567', body: '\t\n\r ' })
 		expect(tabsNewlines.kind).toBe('permanent')
 		// Should NOT have captured anything (both rejected).
 		expect(adapter.recipientCount()).toBe(0)
@@ -105,9 +105,9 @@ describe('DemoInboxSmsAdapter — send', () => {
 		const adapter = new DemoInboxSmsAdapter()
 		const atCap = 'a'.repeat(MAX_BODY_LENGTH)
 		const overCap = 'a'.repeat(MAX_BODY_LENGTH + 1)
-		const r1 = await adapter.send({ to: '+79991234567', body: atCap })
+		const r1 = await adapter.send({ to: '+70001234567', body: atCap })
 		expect(r1.kind).toBe('sent')
-		const r2 = await adapter.send({ to: '+79991234567', body: overCap })
+		const r2 = await adapter.send({ to: '+70001234567', body: overCap })
 		expect(r2.kind).toBe('permanent')
 		if (r2.kind === 'permanent') {
 			expect(r2.reason).toMatch(/exceeds.*cap/i)
@@ -126,10 +126,10 @@ describe('DemoInboxSmsAdapter — TTL', () => {
 			now: () => now,
 			ttlMs: 1000,
 		})
-		await adapter.send({ to: '+79991234567', body: 'Fresh' })
-		expect(adapter.getLatest('+79991234567')?.body).toBe('Fresh')
+		await adapter.send({ to: '+70001234567', body: 'Fresh' })
+		expect(adapter.getLatest('+70001234567')?.body).toBe('Fresh')
 		now += 1500 // past TTL
-		expect(adapter.getLatest('+79991234567')).toBeNull()
+		expect(adapter.getLatest('+70001234567')).toBeNull()
 	})
 
 	test('latest non-expired returned when multiple captures', async () => {
@@ -138,10 +138,10 @@ describe('DemoInboxSmsAdapter — TTL', () => {
 			now: () => now,
 			ttlMs: 10_000,
 		})
-		await adapter.send({ to: '+79991234567', body: 'First' })
+		await adapter.send({ to: '+70001234567', body: 'First' })
 		now += 1000
-		await adapter.send({ to: '+79991234567', body: 'Second' })
-		expect(adapter.getLatest('+79991234567')?.body).toBe('Second')
+		await adapter.send({ to: '+70001234567', body: 'Second' })
+		expect(adapter.getLatest('+70001234567')?.body).toBe('Second')
 	})
 
 	test('default TTL is 5 minutes', () => {
@@ -153,10 +153,10 @@ describe('DemoInboxSmsAdapter — bounded memory', () => {
 	test('per-recipient ring buffer cap', async () => {
 		const adapter = new DemoInboxSmsAdapter()
 		for (let i = 0; i < MAX_PER_RECIPIENT + 5; i++) {
-			await adapter.send({ to: '+79991234567', body: `msg-${i}` })
+			await adapter.send({ to: '+70001234567', body: `msg-${i}` })
 		}
 		// Should have only MAX_PER_RECIPIENT (oldest dropped)
-		const latest = adapter.getLatest('+79991234567')
+		const latest = adapter.getLatest('+70001234567')
 		expect(latest?.body).toBe(`msg-${MAX_PER_RECIPIENT + 4}`)
 	})
 
@@ -164,22 +164,24 @@ describe('DemoInboxSmsAdapter — bounded memory', () => {
 		const adapter = new DemoInboxSmsAdapter()
 		// Fill к cap
 		for (let i = 0; i < MAX_TOTAL_RECIPIENTS; i++) {
-			const phone = `+7999${String(i).padStart(7, '0')}`
+			const phone = `+7000${String(i).padStart(7, '0')}`
 			await adapter.send({ to: phone, body: 'x' })
 		}
 		expect(adapter.recipientCount()).toBe(MAX_TOTAL_RECIPIENTS)
-		// One more — first phone evicted
-		await adapter.send({ to: '+71111111111', body: 'new' })
+		// One more — first phone evicted. Use NANP test-block (`+1xxx55501xx`)
+		// reserved phone so shield accepts. Round 13 shield blocked previous
+		// `+71111111111` (non-reserved).
+		await adapter.send({ to: '+12025550100', body: 'new' })
 		expect(adapter.recipientCount()).toBe(MAX_TOTAL_RECIPIENTS)
-		expect(adapter.getLatest('+79990000000')).toBeNull() // first phone evicted
-		expect(adapter.getLatest('+71111111111')?.body).toBe('new')
+		expect(adapter.getLatest('+70000000000')).toBeNull() // first phone evicted
+		expect(adapter.getLatest('+12025550100')?.body).toBe('new')
 	})
 })
 
 describe('DemoInboxSmsAdapter — lookup invariants', () => {
 	test('getLatest returns null for unknown phone', () => {
 		const adapter = new DemoInboxSmsAdapter()
-		expect(adapter.getLatest('+79999999999')).toBeNull()
+		expect(adapter.getLatest('+70009999999')).toBeNull()
 	})
 
 	test('getLatest returns null for malformed lookup', () => {
@@ -189,18 +191,18 @@ describe('DemoInboxSmsAdapter — lookup invariants', () => {
 
 	test('clear() resets all buckets', async () => {
 		const adapter = new DemoInboxSmsAdapter()
-		await adapter.send({ to: '+79991234567', body: 'x' })
+		await adapter.send({ to: '+70001234567', body: 'x' })
 		expect(adapter.recipientCount()).toBe(1)
 		adapter.clear()
 		expect(adapter.recipientCount()).toBe(0)
-		expect(adapter.getLatest('+79991234567')).toBeNull()
+		expect(adapter.getLatest('+70001234567')).toBeNull()
 	})
 
 	test('different phones isolated in buckets', async () => {
 		const adapter = new DemoInboxSmsAdapter()
-		await adapter.send({ to: '+79991234567', body: 'A' })
-		await adapter.send({ to: '+79997654321', body: 'B' })
-		expect(adapter.getLatest('+79991234567')?.body).toBe('A')
-		expect(adapter.getLatest('+79997654321')?.body).toBe('B')
+		await adapter.send({ to: '+70001234567', body: 'A' })
+		await adapter.send({ to: '+70007654321', body: 'B' })
+		expect(adapter.getLatest('+70001234567')?.body).toBe('A')
+		expect(adapter.getLatest('+70007654321')?.body).toBe('B')
 	})
 })

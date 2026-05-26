@@ -66,7 +66,7 @@ import {
 	buildSourceUrn,
 	type SochiCloudEvent,
 } from '../../../lib/channel-manager/cloud-events.ts'
-import { nextSequenceNumber } from '../../../lib/channel-manager/sequence.ts'
+import { nextSequenceNumber, sequenceKey } from '../../../lib/channel-manager/sequence.ts'
 
 export type EtgBookingStage = 'search' | 'prebook' | 'book' | 'start' | 'check'
 
@@ -380,7 +380,9 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 			}
 			b.terminalState = 'failed'
 			b.stage = 'check'
-			b.sequenceNumber = nextSequenceNumber()
+			b.sequenceNumber = nextSequenceNumber(
+				sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'ETG' }),
+			)
 			b.cancellationIdempotencyKeys.add(input.idempotencyKey)
 			return { status: 'cancelled' as const }
 		},
@@ -504,7 +506,9 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 				terminalState: null,
 				cancellationPolicy: DEFAULT_CANCELLATION_POLICY,
 				rgExt: [{ category: 'main', url: 'https://cdn.ostrovok.ru/h/8473727/m1.jpg' }],
-				sequenceNumber: nextSequenceNumber(),
+				sequenceNumber: nextSequenceNumber(
+					sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'ETG' }),
+				),
 				cancellationIdempotencyKeys: new Set<string>(),
 			})
 			return { partnerOrderId, bookHash }
@@ -532,14 +536,18 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 					...b,
 					partnerOrderId: newId,
 					rotationAttempts: b.rotationAttempts + 1,
-					sequenceNumber: nextSequenceNumber(),
+					sequenceNumber: nextSequenceNumber(
+						sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'ETG' }),
+					),
 				})
 				return { stage: 'book', partnerOrderIdRotated: newId }
 			}
 
 			b.stage = 'book'
 			b.bookStartedAtMs = now()
-			b.sequenceNumber = nextSequenceNumber()
+			b.sequenceNumber = nextSequenceNumber(
+				sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'ETG' }),
+			)
 			return { stage: 'book' }
 		},
 
@@ -547,7 +555,9 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 			const b = bookings.get(input.partnerOrderId)
 			if (!b) throw new Error(`partner_order_id not found: ${input.partnerOrderId}`)
 			b.stage = 'start'
-			b.sequenceNumber = nextSequenceNumber()
+			b.sequenceNumber = nextSequenceNumber(
+				sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'ETG' }),
+			)
 			return { stage: 'start' }
 		},
 
@@ -562,7 +572,9 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 				if (elapsed > timeout) {
 					b.terminalState = 'failed'
 					b.stage = 'check'
-					b.sequenceNumber = nextSequenceNumber()
+					b.sequenceNumber = nextSequenceNumber(
+						sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'ETG' }),
+					)
 					return {
 						stage: 'check',
 						terminal: 'failed',
@@ -584,7 +596,9 @@ export function createOstrovokEtgMock(opts: OstrovokEtgMockOptions): OstrovokEtg
 			if (!b) throw new Error(`partner_order_id not found: ${input.partnerOrderId}`)
 			b.terminalState = input.outcome
 			b.stage = 'check'
-			b.sequenceNumber = nextSequenceNumber()
+			b.sequenceNumber = nextSequenceNumber(
+				sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'ETG' }),
+			)
 		},
 
 		extractBrandFromSource(source: string): EtgBrand | null {

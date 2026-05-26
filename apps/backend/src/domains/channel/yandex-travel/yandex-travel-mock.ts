@@ -55,7 +55,7 @@ import {
 	parseCloudEvent,
 	type SochiCloudEvent,
 } from '../../../lib/channel-manager/cloud-events.ts'
-import { nextSequenceNumber } from '../../../lib/channel-manager/sequence.ts'
+import { nextSequenceNumber, sequenceKey } from '../../../lib/channel-manager/sequence.ts'
 
 const REPLAY_WINDOW_SECONDS = 300
 const REPLAY_WINDOW_MS = REPLAY_WINDOW_SECONDS * 1000
@@ -400,7 +400,9 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 				totalAmountMicros: input.verifyResult.totalAmountMicros,
 				status: 'Confirmed',
 				lastModificationUtc: new Date(now()).toISOString(),
-				sequenceNumber: nextSequenceNumber(),
+				sequenceNumber: nextSequenceNumber(
+					sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'YT' }),
+				),
 				guest: {
 					firstName: verifyInput?.guest.firstName ?? 'YT',
 					lastName: verifyInput?.guest.lastName ?? 'Guest',
@@ -443,7 +445,9 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 				...r,
 				status: 'Cancelled',
 				lastModificationUtc: new Date(now()).toISOString(),
-				sequenceNumber: nextSequenceNumber(),
+				sequenceNumber: nextSequenceNumber(
+					sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'YT' }),
+				),
 			})
 			cancelIdempotencyIndex.set(input.idempotencyKey, 'cancelled')
 			return { status: 'cancelled' as const }

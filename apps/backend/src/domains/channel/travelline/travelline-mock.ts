@@ -55,7 +55,7 @@ import {
 	buildSourceUrn,
 	type SochiCloudEvent,
 } from '../../../lib/channel-manager/cloud-events.ts'
-import { nextSequenceNumber } from '../../../lib/channel-manager/sequence.ts'
+import { nextSequenceNumber, sequenceKey } from '../../../lib/channel-manager/sequence.ts'
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 const JWT_TTL_MS = 15 * 60 * 1000
@@ -494,7 +494,9 @@ export function createTravellineMock(opts: TravellineMockOptions): ChannelManage
 				totalPriceMicros: entry.totalPriceMicros,
 				status: 'Confirmed',
 				lastModificationUtc: created,
-				sequenceNumber: nextSequenceNumber(),
+				sequenceNumber: nextSequenceNumber(
+					sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'TL' }),
+				),
 				guest: entry.guest,
 				cancellationPolicy: entry.cancellationPolicy,
 			})
@@ -531,7 +533,9 @@ export function createTravellineMock(opts: TravellineMockOptions): ChannelManage
 				...r,
 				status: 'Cancelled',
 				lastModificationUtc: new Date(now()).toISOString(),
-				sequenceNumber: nextSequenceNumber(),
+				sequenceNumber: nextSequenceNumber(
+					sequenceKey({ tenantId: opts.tenantId, propertyId: opts.propertyId, channelId: 'TL' }),
+				),
 			})
 			cancelIdempotencyIndex.set(input.idempotencyKey, 'cancelled')
 			return { status: 'cancelled' as const }

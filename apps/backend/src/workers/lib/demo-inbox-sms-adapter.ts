@@ -25,6 +25,7 @@
  * `env.DEMO_DEPLOYMENT === true`. Symmetric к email canon.
  */
 
+import { isReservedTestPhone } from './reserved-test-ranges.ts'
 import { normalizePhoneE164 } from './sms-adapter.types.ts'
 import type { SendSmsInput, SendSmsResult, SmsAdapter } from './sms-adapter.types.ts'
 
@@ -77,6 +78,17 @@ export class DemoInboxSmsAdapter implements SmsAdapter {
 			return {
 				kind: 'permanent',
 				reason: 'phone is not valid E.164 format',
+			}
+		}
+		// Round 13 — reserved-test shield (canon `feedback_outbound_side_effect_discipline`).
+		// Symmetric с DemoInboxAdapter (email) — both adapters MUST consult shield.
+		// Round 12 self-review found SMS adapter lacked the check (canon `feedback_self_review_finds_halfmeasure`).
+		// In-process capture-only adapter doesn't burn real cost, но keeps shield
+		// canon honest: NO outbound write к non-reserved phone even в demo mode.
+		if (!isReservedTestPhone(normalized)) {
+			return {
+				kind: 'permanent',
+				reason: 'phone outside reserved-test ranges — demo adapter rejects to keep canon symmetry',
 			}
 		}
 		// Empty / whitespace-only body — symmetric к email canon (no «blank text»

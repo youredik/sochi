@@ -24,6 +24,7 @@
  */
 
 import { sql } from '../../db/index.ts'
+import { createMockOtaAuditRepo } from './mock-ota-server/shared/mock-ota-audit.repo.ts'
 
 export interface SeedDemoChannelInfraOptions {
 	readonly tenantId: string
@@ -46,6 +47,7 @@ const DEMO_WEBHOOK_KID = 'kid_demo_v1'
 export async function seedDemoChannelInfra(opts: SeedDemoChannelInfraOptions): Promise<{
 	readonly secretsSeeded: number
 	readonly connectionsSeeded: number
+	readonly auditTablesReachable: boolean
 }> {
 	const channels = opts.channels ?? DEFAULT_CHANNELS
 	const now = new Date()
@@ -82,5 +84,20 @@ export async function seedDemoChannelInfra(opts: SeedDemoChannelInfraOptions): P
 		connectionsSeeded++
 	}
 
-	return { secretsSeeded, connectionsSeeded }
+	// Round 13 — verify mockOta audit tables reachable (migration 0078).
+	// Touch tables once at boot via 0-arg countLastHours read → catches missing
+	// migration или RLS misconfig at boot, не при first request. Closes Round 9
+	// «triple defense» claim functionally — TTL P1D on populated table.
+	const auditRepo = createMockOtaAuditRepo(sql)
+	let auditTablesReachable = false
+	try {
+		await auditRepo.countLastHours({ tenantId: opts.tenantId, hours: 24, nowMs: Date.now() })
+		auditTablesReachable = true
+	} catch {
+		// Tables missing OR migration 0078 not applied → log later; demo still
+		// works via in-memory state.ts. Failure NOT fatal at boot.
+		auditTablesReachable = false
+	}
+
+	return { secretsSeeded, connectionsSeeded, auditTablesReachable }
 }
