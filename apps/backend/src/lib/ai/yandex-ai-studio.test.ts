@@ -113,7 +113,7 @@ describe('Yandex AI Studio HTTP client', () => {
 				fetchImpl: fakeFetch as unknown as typeof fetch,
 			},
 		)
-		expect(capturedReq).toBeDefined()
+		expect(capturedReq).not.toBe(undefined)
 		const headers = capturedReq?.headers as Record<string, string>
 		expect(headers.Authorization).toBe('Api-Key test-key')
 		// Per Yandex docs: with Api-Key auth, x-folder-id header is redundant
@@ -500,7 +500,7 @@ describe('Yandex AI Studio HTTP client', () => {
 				fetchImpl: fakeFetch as unknown as typeof fetch,
 			},
 		)
-		expect(capturedBody).toBeDefined()
+		expect(typeof capturedBody).toBe('string')
 		const parsed = JSON.parse(capturedBody as string) as {
 			completionOptions: { maxTokens: string }
 		}

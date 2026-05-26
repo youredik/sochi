@@ -8,7 +8,6 @@
 		"tw-animate-css",
 		"axe-core",
 		"happy-dom",
-		"bun",
 		"@stryker-mutator/command-runner",
 		"amaro"
 	],

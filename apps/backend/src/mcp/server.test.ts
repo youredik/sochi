@@ -81,7 +81,8 @@ describe('MCP server (Round 13 + Round 14 self-review #3 + #4)', () => {
 		// All 4 tools annotated readOnlyHint: true → Claude Desktop skips confirm
 		for (const t of body.result.tools) {
 			expect(t.annotations?.readOnlyHint).toBe(true)
-			expect(t.title).toBeDefined()
+			expect(typeof t.title).toBe('string')
+			expect((t.title ?? '').length).toBeGreaterThan(0)
 		}
 	})
 
@@ -313,8 +314,8 @@ describe('MCP server (Round 13 + Round 14 self-review #3 + #4)', () => {
 			result: { content: unknown[]; structuredContent: unknown; isError?: boolean }
 		}
 		// Successful call → no isError key
-		expect(body.result.isError).toBeUndefined()
-		expect(body.result.structuredContent).toBeDefined()
+		expect(body.result.isError).toBe(undefined)
+		expect(body.result.structuredContent).not.toBe(undefined)
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────

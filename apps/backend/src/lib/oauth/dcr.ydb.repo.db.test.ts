@@ -80,7 +80,7 @@ describe('DCR YDB repo — integration (real YDB)', () => {
 			SELECT clientSecretHash FROM oauthClient WHERE clientId = ${registered.client_id}
 		`.idempotent(true)
 		const storedHash = rows[0]?.clientSecretHash
-		expect(storedHash).toBeDefined()
+		expect(typeof storedHash).toBe('string')
 		if (storedHash !== undefined) {
 			// Plaintext secret verifies против stored scrypt hash.
 			expect(await verifySecret(registered.client_secret, storedHash)).toBe(true)
