@@ -7,11 +7,13 @@
  *   tool annotations, structuredContent, AI tool branch coverage)
  */
 
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
+import { __resetAiBucket } from './rate-limit.ts'
 import { createMcpRoutes } from './server.ts'
 
-describe('MCP server (Round 13 + Round 14 self-review #3)', () => {
+describe('MCP server (Round 13 + Round 14 self-review #3 + #4)', () => {
+	afterEach(() => __resetAiBucket())
 	function mount() {
 		return new Hono().route('/api/mcp', createMcpRoutes())
 	}
@@ -415,5 +417,113 @@ describe('MCP server (Round 13 + Round 14 self-review #3)', () => {
 			if (originalFolder !== undefined) process.env.YANDEX_AI_FOLDER_ID = originalFolder
 			else delete process.env.YANDEX_AI_FOLDER_ID
 		}
+	})
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Self-review #4 — rate-limit + CORS preflight + Origin allow-list extras
+	// ─────────────────────────────────────────────────────────────────────────
+
+	test('[MCP-RL1] 11th sepshn.ai.* tool call from same IP → 429 JSON-RPC error', async () => {
+		// Self-review #3 audit empirical evidence: previous helper bypassed.
+		// New in-memory bucket should fire 429 on call ≥11 within 5min window.
+		__resetAiBucket()
+		const app = mount()
+		const callRequest = () =>
+			app.request('/api/mcp/rpc', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+					'x-forwarded-for': '203.0.113.42', // single test IP
+				},
+				body: JSON.stringify({
+					jsonrpc: '2.0',
+					id: 'rl',
+					method: 'tools/call',
+					params: { name: 'sepshn.ai.generate_property_description', arguments: {} },
+				}),
+			})
+		// First 10 calls — allowed (each returns 200 + isError:true not_configured)
+		for (let i = 0; i < 10; i++) {
+			const res = await callRequest()
+			expect(res.status).toBe(200)
+		}
+		// 11th — blocked at rate-limit BEFORE reaching the AI client
+		const blocked = await callRequest()
+		expect(blocked.status).toBe(429)
+		expect(blocked.headers.get('Retry-After')).not.toBeNull()
+		expect(blocked.headers.get('RateLimit-Limit')).toBe('10')
+		const body = (await blocked.json()) as { error: { code: number; message: string } }
+		expect(body.error.code).toBe(-32029)
+		expect(body.error.message).toContain('budget-gated')
+	})
+
+	test('[MCP-RL2] non-AI tool calls do NOT count against AI bucket', async () => {
+		__resetAiBucket()
+		const app = mount()
+		// Burn 10 demo-tool calls
+		for (let i = 0; i < 10; i++) {
+			const res = await app.request('/api/mcp/rpc', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.99' },
+				body: JSON.stringify({
+					jsonrpc: '2.0',
+					id: i,
+					method: 'tools/call',
+					params: { name: 'sepshn.demo.list_demo_routes', arguments: {} },
+				}),
+			})
+			expect(res.status).toBe(200)
+		}
+		// AI tool from same IP should STILL work (first AI call burns slot 1/10)
+		const aiCall = await app.request('/api/mcp/rpc', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.99' },
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 'ai',
+				method: 'tools/call',
+				params: { name: 'sepshn.ai.generate_property_description', arguments: {} },
+			}),
+		})
+		expect(aiCall.status).toBe(200)
+	})
+
+	test('[MCP-CORS1] OPTIONS /api/mcp/rpc с allowed Origin → 204 + CORS headers', async () => {
+		const app = mount()
+		const res = await app.request('/api/mcp/rpc', {
+			method: 'OPTIONS',
+			headers: {
+				Origin: 'https://demo.sepshn.ru',
+				'Access-Control-Request-Method': 'POST',
+			},
+		})
+		expect(res.status).toBe(204)
+		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://demo.sepshn.ru')
+		expect(res.headers.get('Access-Control-Allow-Methods')).toContain('POST')
+		expect(res.headers.get('Access-Control-Allow-Headers')).toContain('MCP-Protocol-Version')
+	})
+
+	test('[MCP-CORS2] OPTIONS /api/mcp/rpc с disallowed Origin → 204 without CORS headers (browser blocks)', async () => {
+		const app = mount()
+		const res = await app.request('/api/mcp/rpc', {
+			method: 'OPTIONS',
+			headers: { Origin: 'https://attacker.evil.com' },
+		})
+		expect(res.status).toBe(204)
+		// Without Access-Control-Allow-Origin, browser blocks the actual request
+		expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+	})
+
+	test('[MCP-CORS3] www.sepshn.ru Origin allowed (marketing landing canon)', async () => {
+		const app = mount()
+		const res = await app.request('/api/mcp/rpc', {
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json',
+				Origin: 'https://www.sepshn.ru',
+			},
+			body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' }),
+		})
+		expect(res.status).toBe(200)
 	})
 })

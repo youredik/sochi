@@ -49,7 +49,8 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../factory.ts'
 import { chatCompletion, readConfigFromEnv } from '../lib/ai/yandex-ai-studio.ts'
-import { mcpAiRateLimit, mcpRpcRateLimit } from './rate-limit.ts'
+import { extractClientIp } from '../middleware/widget-rate-limit.ts'
+import { checkAiRateLimit, MCP_AI_RATE_LIMIT_MESSAGE, mcpRpcRateLimit } from './rate-limit.ts'
 
 // MCP spec version pinned к `2025-11-25` (latest stable May 2026 per canon
 // `feedback_aggressive_delegacy`). RC `2026-07-28` adds stateless protocol
@@ -402,7 +403,12 @@ const ALLOWED_ORIGINS = new Set([
 	'https://demo.sepshn.ru',
 	'https://app.sepshn.ru',
 	'https://sepshn.ru',
+	'https://www.sepshn.ru',
 ])
+
+const CORS_ALLOW_HEADERS = 'Content-Type, MCP-Protocol-Version, Accept, MCP-Session-Id'
+const CORS_ALLOW_METHODS = 'POST, GET, DELETE, OPTIONS'
+const CORS_MAX_AGE = '600'
 
 function isAllowedOrigin(origin: string | undefined | null): boolean {
 	if (origin === undefined || origin === null || origin === '') return true
@@ -536,12 +542,23 @@ export function createMcpRoutes() {
 			)
 		}
 		// Extra rate-limit на AI tool calls — cost runaway defense. Anyone hitting
-		// `/api/mcp/rpc` с `tools/call name=sepshn.ai.*` triggers stricter bucket.
+		// `/api/mcp/rpc` с `tools/call name=sepshn.ai.*` triggers strict bucket
+		// (10 calls / 5min / IP). Inlined here AFTER body parse so we can read
+		// method + tool name; middleware can't peek into JSON body without
+		// consuming the request stream.
 		if (body.method === 'tools/call') {
 			const callParams = body.params as { name?: string } | undefined
 			if (typeof callParams?.name === 'string' && callParams.name.startsWith('sepshn.ai.')) {
-				const aiLimitResult = await mcpAiRateLimit(c)
-				if (aiLimitResult !== undefined) return aiLimitResult
+				const ip = extractClientIp(c)
+				const limitResult = checkAiRateLimit(ip)
+				if (!limitResult.allowed) {
+					const retrySec = Math.ceil(limitResult.resetMs / 1000)
+					c.header('RateLimit-Limit', String(limitResult.limit))
+					c.header('RateLimit-Remaining', '0')
+					c.header('RateLimit-Reset', String(retrySec))
+					c.header('Retry-After', String(retrySec))
+					return c.json(MCP_AI_RATE_LIMIT_MESSAGE, 429)
+				}
 			}
 		}
 		const response = await handleRpc(body)
@@ -550,6 +567,24 @@ export function createMcpRoutes() {
 			return c.body(null, 202)
 		}
 		return c.json(response)
+	})
+
+	// CORS preflight (OPTIONS) — browser-based MCP clients (web-Claude alternates)
+	// preflight cross-origin POSTs. Without this handler, preflight 404s → POST
+	// never sent. Origin validation still applies; invalid origin → no CORS
+	// headers returned (browser blocks). Allowed origin → 204 с full CORS hdrs.
+	app.options('/rpc', (c) => {
+		const origin = c.req.header('Origin') ?? c.req.header('origin')
+		if (origin !== undefined && origin !== '' && !isAllowedOrigin(origin)) {
+			return c.body(null, 204) // No CORS headers → browser blocks
+		}
+		const headers: Record<string, string> = {
+			'Access-Control-Allow-Methods': CORS_ALLOW_METHODS,
+			'Access-Control-Allow-Headers': CORS_ALLOW_HEADERS,
+			'Access-Control-Max-Age': CORS_MAX_AGE,
+		}
+		if (origin !== undefined && origin !== '') headers['Access-Control-Allow-Origin'] = origin
+		return c.body(null, 204, headers)
 	})
 
 	// Spec §Streamable HTTP «Listening for Messages from the Server»: server MUST

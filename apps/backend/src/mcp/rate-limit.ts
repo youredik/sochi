@@ -1,27 +1,33 @@
 /**
- * Round 14 self-review #3 — MCP rate-limit middleware (cost runaway defense).
+ * Round 14 self-review #4 — MCP rate-limit (cost runaway defense).
  *
  * Two-tier rate limit на `/api/mcp/rpc`:
  *
  *   1. **`mcpRpcRateLimit`** — broad limiter (120 req/min/IP) on all JSON-RPC
- *      traffic. Cap chosen mirroring `demoInboxRateLimiter` canon (1Hz polling
- *      × 2 headroom). Prevents wholesale `/rpc` flooding.
+ *      traffic. Cap mirrors `demoInboxRateLimiter` canon (1Hz polling × 2
+ *      headroom). Mounted via `app.use()` middleware.
  *
- *   2. **`mcpAiRateLimit`** — strict secondary limiter (10 calls / 5 min / IP)
- *      gating only `tools/call` requests targeting `sepshn.ai.*` tools.
- *      AI tools incur real upstream cost per invocation (Yandex AI Studio
- *      0.20-0.80₽/1K tokens). Without this gate any attacker can drain the
- *      monthly budget. 10/5min = 2880/day/IP worst-case ≈ 230₽/day worst-case
- *      per attacker IP — bounded.
+ *   2. **`checkAiRateLimit(ip)`** — strict in-memory token bucket (10 calls
+ *      / 5 min / IP) gating `tools/call sepshn.ai.*` requests. AI tools incur
+ *      real Yandex AI Studio cost — without gate, attacker drains budget.
+ *      Inlined into the route handler AFTER body parse + tool name inspection
+ *      (middleware can't easily peek into JSON body without consuming the stream).
  *
- * Storage: in-memory MemoryStore (same as sibling `demoInboxRateLimiter`).
- * Multi-replica YC Serverless deployment OK для now (single container default);
- * Phase-2 = Unstorage carry-forward.
+ * **Round 14 self-review #4 fix**: previous implementation used hono-rate-limiter
+ * wrapped в an async middleware-capture helper that did NOT actually block the
+ * route (verified empirically: 12 calls returned 200, AI tool fired regardless
+ * of bucket state). The helper's `c.res.clone()` produced an empty 200 response
+ * instead of the 429 because hono-rate-limiter writes к c.res via the route-
+ * handler return path, not via middleware c.res mutation. Switched к explicit
+ * in-memory bucket с direct return — testable, predictable, no library quirks.
  *
- * IP extraction: shared `extractClientIp` (right-most-trusted-proxy canon
- * per `feedback_token_bucket_upstream_canon_2026_05_24`).
+ * Storage: in-memory `Map`. Single-replica YC Serverless OK для now; Phase-2
+ * = Unstorage carry-forward для multi-container deployments.
+ *
+ * IP extraction: shared `extractClientIp` (right-most-trusted-proxy canon per
+ * `feedback_token_bucket_upstream_canon_2026_05_24`).
  */
-import type { Context, MiddlewareHandler } from 'hono'
+import type { MiddlewareHandler } from 'hono'
 import { rateLimiter } from 'hono-rate-limiter'
 import type { AppEnv } from '../factory.ts'
 import { extractClientIp } from '../middleware/widget-rate-limit.ts'
@@ -35,7 +41,7 @@ const MCP_RATE_LIMIT_MESSAGE = {
 	},
 } as const
 
-const MCP_AI_RATE_LIMIT_MESSAGE = {
+export const MCP_AI_RATE_LIMIT_MESSAGE = {
 	jsonrpc: '2.0',
 	id: null,
 	error: {
@@ -45,11 +51,11 @@ const MCP_AI_RATE_LIMIT_MESSAGE = {
 	},
 } as const
 
-function mcpRpcKey(c: Context<AppEnv>): string {
+function mcpRpcKey(c: Parameters<MiddlewareHandler<AppEnv>>[0]): string {
 	return extractClientIp(c)
 }
 
-/** Broad MCP RPC rate-limit — 120 req/min/IP. */
+/** Broad MCP RPC rate-limit — 120 req/min/IP. Mounted via `app.use('/rpc', ...)`. */
 export const mcpRpcRateLimit: MiddlewareHandler<AppEnv> = rateLimiter<AppEnv>({
 	windowMs: 60_000,
 	limit: 120,
@@ -59,32 +65,57 @@ export const mcpRpcRateLimit: MiddlewareHandler<AppEnv> = rateLimiter<AppEnv>({
 	message: MCP_RATE_LIMIT_MESSAGE,
 })
 
-const aiRateLimitMiddleware = rateLimiter<AppEnv>({
-	windowMs: 5 * 60_000,
-	limit: 10,
-	keyGenerator: (c) => `ai:${extractClientIp(c)}`,
-	standardHeaders: 'draft-7',
-	statusCode: 429,
-	message: MCP_AI_RATE_LIMIT_MESSAGE,
-})
+// ─── In-memory AI bucket ─────────────────────────────────────────────────────
+
+interface BucketEntry {
+	count: number
+	resetAt: number
+}
+
+const AI_BUCKET = new Map<string, BucketEntry>()
+export const AI_WINDOW_MS = 5 * 60_000
+export const AI_LIMIT = 10
+const CLEANUP_THRESHOLD = 100
+
+export interface AiRateLimitResult {
+	readonly allowed: boolean
+	readonly limit: number
+	readonly remaining: number
+	readonly resetMs: number
+}
 
 /**
- * Run AI-specific rate-limit gate INSIDE the POST handler (after JSON parse +
- * tool name inspection) and return the 429 response if limit hit, else
- * `undefined` to let the handler continue. hono-rate-limiter is middleware-style
- * (calls `next()`), so we wrap it to capture/short-circuit.
+ * Token-bucket check for AI tool calls. Returns `allowed=false` when bucket
+ * exhausted within the 5-minute window. Bucket auto-resets when window expires.
+ *
+ * Opportunistic cleanup keeps the Map size bounded; full sweep only when ≥100
+ * entries (avoid per-call O(n)). Memory cost: ~64 bytes/entry × 1k IPs = 64 KiB.
  */
-export async function mcpAiRateLimit(c: Context<AppEnv>): Promise<Response | undefined> {
-	let nextCalled = false
-	let blocked: Response | undefined
-	await aiRateLimitMiddleware(c, async () => {
-		nextCalled = true
-	})
-	if (!nextCalled) {
-		// hono-rate-limiter wrote the 429 response into c.res directly when the
-		// limiter aborted the chain without calling next() — clone и return so
-		// the route handler short-circuits.
-		blocked = c.res.clone()
+export function checkAiRateLimit(ip: string, now: number = Date.now()): AiRateLimitResult {
+	if (AI_BUCKET.size >= CLEANUP_THRESHOLD) {
+		for (const [k, v] of AI_BUCKET) {
+			if (v.resetAt <= now) AI_BUCKET.delete(k)
+		}
 	}
-	return blocked
+	const key = `ai:${ip}`
+	const entry = AI_BUCKET.get(key)
+	if (entry === undefined || entry.resetAt <= now) {
+		AI_BUCKET.set(key, { count: 1, resetAt: now + AI_WINDOW_MS })
+		return { allowed: true, limit: AI_LIMIT, remaining: AI_LIMIT - 1, resetMs: AI_WINDOW_MS }
+	}
+	if (entry.count >= AI_LIMIT) {
+		return { allowed: false, limit: AI_LIMIT, remaining: 0, resetMs: entry.resetAt - now }
+	}
+	entry.count += 1
+	return {
+		allowed: true,
+		limit: AI_LIMIT,
+		remaining: AI_LIMIT - entry.count,
+		resetMs: entry.resetAt - now,
+	}
+}
+
+/** TEST-ONLY — reset bucket for clean test isolation. */
+export function __resetAiBucket(): void {
+	AI_BUCKET.clear()
 }

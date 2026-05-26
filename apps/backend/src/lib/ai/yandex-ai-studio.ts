@@ -83,52 +83,77 @@ const DEFAULT_ENDPOINT = 'https://llm.api.cloud.yandex.net/foundationModels/v1/c
 const DEFAULT_MODEL = 'yandexgpt-lite/latest'
 const DEFAULT_TIMEOUT_MS = 15_000
 const MAX_TOTAL_PROMPT_BYTES = 8_192
+const MAX_OUTPUT_TOKENS = 4_000 // hard client-side cap (Yandex max ~8K; we cap defensively)
 const ALLOWED_ENDPOINT_HOSTS = new Set(['llm.api.cloud.yandex.net'])
+const STRICT_INT_REGEX = /^\d+$/
 
-// PII heuristics для inbound prompt content. Conservative — false-positive bias
-// в demo mode чтобы предотвратить leakage real PII в outbound AI call. Tightly
-// scoped: only triggers на patterns обладающих low ambiguity (E.164 phone,
-// passport-like 10-digit document numbers, non-reserved-test email domains,
-// long Cyrillic surname runs). Adjustable если будущие use-cases hit false-positives.
-const PHONE_REGEX = /\+?[0-9][\d\s()-]{9,}/u
-const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/u
-const PASSPORT_DOC_REGEX = /\b\d{4}\s?\d{6}\b/u // 4+6 digit Russian passport / 10-digit зайран
+// PII heuristics для inbound prompt content. Round 14 self-review #4 hardening:
+//
+//   - Email: Cyrillic AND Latin local-part covered (агент B caught `иван@gazprom.ru`
+//     bypass — local-part char class was Latin-only).
+//   - Phone: strict E.164ish — REQUIRES either explicit `+` international prefix
+//     OR Russian `7`/`8` leading digit followed by 10 more digits (11 total).
+//     Previous lax regex `/\+?[0-9][\d\s()-]{9,}/u` caught hospitality price
+//     ranges like «16000-25000 ₽» (10 digits after separator-strip) as «phones»
+//     — direct hit on the headline `sepshn.ai.generate_property_description`
+//     use case (агент A empirical evidence).
+//   - Passport: BOTH new-format `4517 123456` (4+6) AND old-format `45 12 345678`
+//     (2+2+6) covered. Soviet-era / regional passports use the latter — silent
+//     pass-through was a 152-ФЗ ст.10 special-category PII leak.
+//
+// Conservative posture preferred: a year+id combo like «В 2017 123456 транзакция»
+// blocks (false-positive) is acceptable; missing real PII is not.
+const PHONE_CANDIDATE_REGEX = /(?:\+\d|\b[78])[\d\s\-()]{9,18}/gu
+const EMAIL_REGEX = /[A-Za-zА-ЯЁа-яё0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/u
+const PASSPORT_NEW_REGEX = /\b\d{4}\s?\d{6}\b/u // new-format 4+6
+const PASSPORT_OLD_REGEX = /\b\d{2}\s+\d{2}\s+\d{6}\b/u // old-format 2+2+6 (Soviet/regional)
 const RESERVED_TEST_EMAIL_DOMAINS =
 	/@(example\.(?:com|net|org)|.+?\.(?:test|example|invalid|localhost))$/iu
 
 /** Detects probable PII в outbound prompt text. Returns `null` if clean else reason string. */
 function detectPii(text: string): string | null {
-	// Email: strict reject ALL emails EXCEPT reserved-test ranges
+	// Email: strict reject ALL emails (Latin + Cyrillic local part) EXCEPT reserved-test.
 	const emailMatch = text.match(EMAIL_REGEX)
 	if (emailMatch !== null && !RESERVED_TEST_EMAIL_DOMAINS.test(emailMatch[0])) {
 		return 'non-reserved-test email detected'
 	}
-	// Phone: any E.164-shaped run except известные reserved-test prefixes (99899, 7000, 1XXX555-01XX)
-	const phoneMatch = text.match(PHONE_REGEX)
-	if (phoneMatch !== null) {
-		const digits = phoneMatch[0].replace(/\D/g, '')
+	// Phone: scan candidates that LOOK like E.164 (require `+` or RU `7`/`8`
+	// leading digit). Strip non-digits, validate length 10-15, then check
+	// reserved-test prefixes (99899 = ITU-T E.164.3 §6.1, 7000 = Россвязь,
+	// 1XXX55501XX = NANP fictitious).
+	for (const m of text.matchAll(PHONE_CANDIDATE_REGEX)) {
+		const digits = m[0].replace(/\D/g, '')
+		if (digits.length < 10 || digits.length > 15) continue
+		const startsPlus = m[0].startsWith('+')
+		const isRussianE164 = digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))
+		if (!startsPlus && !isRussianE164) continue
 		const isReservedTest =
 			digits.startsWith('99899') ||
 			digits.startsWith('7000') ||
-			(digits.length >= 11 && digits.startsWith('1') && digits.slice(4, 9) === '55501')
+			(digits.length === 11 && digits.startsWith('1') && digits.slice(4, 9) === '55501')
 		if (!isReservedTest) return 'non-reserved-test phone detected'
 	}
-	// Russian passport (4+6 = 10 digit) — never reserved-test; всегда reject
-	if (PASSPORT_DOC_REGEX.test(text)) return 'passport-like number detected'
+	// Passport: both formats covered.
+	if (PASSPORT_NEW_REGEX.test(text) || PASSPORT_OLD_REGEX.test(text)) {
+		return 'passport-like number detected'
+	}
 	return null
 }
 
 export function readConfigFromEnv(env: NodeJS.ProcessEnv = process.env): YandexAiStudioConfig {
 	const timeoutOverride = env.YANDEX_AI_TIMEOUT_MS
+	// Strict parse — `'15s'` (units) or `'1000abc'` (partial-parse) returns
+	// undefined, NOT a silent corruption. `Number.parseInt('1000abc',10) === 1000`
+	// would yield 1000ms = insta-timeout if env value has stray chars.
 	const timeoutMs =
-		timeoutOverride !== undefined && timeoutOverride.length > 0
+		timeoutOverride !== undefined && STRICT_INT_REGEX.test(timeoutOverride)
 			? Number.parseInt(timeoutOverride, 10)
 			: undefined
 	return {
 		apiKey: env.YANDEX_AI_API_KEY,
 		folderId: env.YANDEX_AI_FOLDER_ID,
 		model: env.YANDEX_AI_MODEL ?? DEFAULT_MODEL,
-		...(timeoutMs !== undefined && !Number.isNaN(timeoutMs) && { timeoutMs }),
+		...(timeoutMs !== undefined && timeoutMs > 0 && { timeoutMs }),
 	}
 }
 
@@ -200,6 +225,9 @@ export async function chatCompletion(
 
 	const fetchFn = config.fetchImpl ?? globalThis.fetch
 	const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+	// Cap maxTokens client-side. Defense-in-depth: Yandex rejects > 8K upstream,
+	// but client-side cap prevents wasted round-trip + cost on a 100M-token typo.
+	const cappedMaxTokens = Math.max(1, Math.min(MAX_OUTPUT_TOKENS, input.maxTokens ?? 500))
 	const body = {
 		modelUri: `gpt://${config.folderId}/${config.model}`,
 		completionOptions: {
@@ -207,7 +235,7 @@ export async function chatCompletion(
 			// Clamp temperature к canonical 0..1 (Yandex AI Studio rejects >1 anyway,
 			// but defense-in-depth gate avoids round-trip к upstream).
 			temperature: Math.min(1, Math.max(0, input.temperature ?? 0.3)),
-			maxTokens: String(input.maxTokens ?? 500),
+			maxTokens: String(cappedMaxTokens),
 		},
 		messages: input.messages,
 	}

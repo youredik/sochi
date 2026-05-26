@@ -461,9 +461,40 @@ export const SEPSHN_OPENAPI_SPEC = {
 		'/api/mcp/rpc': {
 			post: {
 				tags: ['MCP'],
-				summary: 'JSON-RPC 2.0 endpoint (initialize | tools/list | tools/call)',
+				summary:
+					'JSON-RPC 2.0 endpoint (initialize | notifications/initialized | tools/list | tools/call)',
 				description:
-					'MCP Streamable HTTP transport per spec `2025-11-25` (latest stable May 2026; RC `2026-07-28` adds stateless protocol core + MCP Apps + Tasks). Single endpoint supports POST (request) + GET (SSE / 405) + DELETE (405). Headers enforced: `Origin` (DNS-rebinding 403), `MCP-Protocol-Version` (unsupported → 400), `Accept` (must list `application/json` or `text/event-stream`). Methods: `initialize`, `notifications/initialized` (→ 202), `tools/list`, `tools/call`. Tool execution errors wrapped в `{ content, isError: true }` envelope per spec. Rate limit: 120 RPC/min/IP broad + 10 sepshn.ai.*/5min/IP strict. AI-backed tools (`sepshn.ai.*`) require `YANDEX_AI_API_KEY` + `YANDEX_AI_FOLDER_ID` env vars; absent → graceful `kind:"not_configured"` fallback. PII shield (RFC 2606 + Россвязь + ITU-T E.164.3 reserved-test only) blocks outbound real PII в AI prompts.',
+					'MCP Streamable HTTP transport per spec `2025-11-25` (latest stable May 2026; RC `2026-07-28` adds stateless protocol core + MCP Apps + Tasks). Single endpoint supports POST + GET (405) + DELETE (405) + OPTIONS (CORS preflight). Tool execution errors wrapped в `{ content, isError: true }` envelope per spec §Server Tools. Rate limit: 120 RPC/min/IP broad + 10 sepshn.ai.*/5min/IP strict (cost-runaway defense). AI-backed tools (`sepshn.ai.*`) require `YANDEX_AI_API_KEY` + `YANDEX_AI_FOLDER_ID` env vars (also: `YANDEX_AI_MODEL` default `yandexgpt-lite/latest`, `YANDEX_AI_TIMEOUT_MS` default 15000); absent → graceful `kind:"not_configured"` fallback. PII shield (RFC 2606 + Россвязь + ITU-T E.164.3 reserved-test only) blocks outbound real PII в AI prompts — non-reserved-test emails (Latin OR Cyrillic local-part), Russian E.164 phones (with `+` or `7`/`8` prefix), passport-like 4+6 or 2+2+6 number patterns all rejected pre-fetch.',
+				parameters: [
+					{
+						name: 'Origin',
+						in: 'header',
+						required: false,
+						description:
+							'Browser Origin header — validated против allow-list для DNS-rebinding defense (spec MUST §Security Warning). Disallowed Origin → 403 Forbidden.',
+						schema: { type: 'string', format: 'uri' },
+					},
+					{
+						name: 'MCP-Protocol-Version',
+						in: 'header',
+						required: false,
+						description:
+							'MCP protocol version negotiated during initialize. Supported: `2025-03-26` | `2025-06-18` | `2025-11-25`. Unsupported → 400. Absent → server assumes `2025-03-26` (spec backwards-compat).',
+						schema: {
+							type: 'string',
+							enum: ['2025-03-26', '2025-06-18', '2025-11-25'],
+							default: '2025-11-25',
+						},
+					},
+					{
+						name: 'Accept',
+						in: 'header',
+						required: false,
+						description:
+							'MUST list `application/json` and/or `text/event-stream` per spec. Server currently always returns `application/json`.',
+						schema: { type: 'string', example: 'application/json, text/event-stream' },
+					},
+				],
 				requestBody: {
 					required: true,
 					content: {
@@ -474,7 +505,10 @@ export const SEPSHN_OPENAPI_SPEC = {
 								properties: {
 									jsonrpc: { type: 'string', const: '2.0' },
 									id: { oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'null' }] },
-									method: { type: 'string' },
+									method: {
+										type: 'string',
+										enum: ['initialize', 'notifications/initialized', 'tools/list', 'tools/call'],
+									},
 									params: { type: 'object' },
 								},
 							},
@@ -482,8 +516,58 @@ export const SEPSHN_OPENAPI_SPEC = {
 					},
 				},
 				responses: {
-					'200': { description: 'JSON-RPC response (result OR error)' },
-					'400': { description: 'parse error | invalid request' },
+					'200': {
+						description:
+							'JSON-RPC response (result OR error envelope; tool-exec errors carry `isError: true` inside `result`)',
+					},
+					'202': {
+						description:
+							'JSON-RPC notification accepted (no body) — `notifications/initialized` or other notifications',
+					},
+					'400': {
+						description:
+							'JSON parse error | invalid jsonrpc version | unsupported MCP-Protocol-Version',
+					},
+					'403': { description: 'Forbidden — Origin not in allow-list (DNS-rebinding defense)' },
+					'406': {
+						description: 'Accept header lists neither `application/json` nor `text/event-stream`',
+					},
+					'429': {
+						description: 'Rate limit exceeded — broad 120/min OR strict AI-tool 10/5min',
+						headers: {
+							'Retry-After': { schema: { type: 'integer' }, description: 'Seconds until reset' },
+							'RateLimit-Limit': { schema: { type: 'integer' } },
+							'RateLimit-Remaining': { schema: { type: 'integer' } },
+							'RateLimit-Reset': { schema: { type: 'integer' } },
+						},
+					},
+				},
+			},
+			get: {
+				tags: ['MCP'],
+				summary: 'GET handler (spec §Streamable HTTP — server-to-client SSE OR 405)',
+				description:
+					'Sepshn MCP does NOT expose server-initiated SSE (no need until tool list mutates / background notifications fire). Returns 405 per spec backwards-compat clause.',
+				responses: {
+					'405': { description: 'Method Not Allowed — no SSE stream' },
+				},
+			},
+			delete: {
+				tags: ['MCP'],
+				summary: 'DELETE handler (spec §Session Management — MAY 405)',
+				description:
+					'Sepshn MCP does NOT manage explicit MCP-Session-Id (no session affinity needed for stateless tool calls). Returns 405 per spec allowance.',
+				responses: {
+					'405': { description: 'Method Not Allowed — no session management' },
+				},
+			},
+			options: {
+				tags: ['MCP'],
+				summary: 'CORS preflight для browser-based MCP clients',
+				description:
+					'Returns 204 + CORS headers если Origin allowed. Disallowed Origin → 204 без CORS headers (browser blocks).',
+				responses: {
+					'204': { description: 'CORS preflight response' },
 				},
 			},
 		},

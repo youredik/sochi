@@ -356,4 +356,175 @@ describe('Yandex AI Studio HTTP client', () => {
 			expect(result.message).toContain('not whitelisted')
 		}
 	})
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Self-review #4 — PII regex false-positive + false-negative coverage
+	// ─────────────────────────────────────────────────────────────────────────
+
+	test('[YAI18] PII shield: hospitality price range «16000-25000 ₽» allowed (no FP)', async () => {
+		// Agent A finding (self-review #3 → #4): price ranges previously matched
+		// PHONE_REGEX → blocked the headline AI tool use case. Stricter regex
+		// requires + or RU 7/8 prefix.
+		let fetched = false
+		const fakeFetch = async () => {
+			fetched = true
+			return new Response(
+				JSON.stringify({
+					result: {
+						alternatives: [{ message: { text: 'описание' } }],
+						usage: { inputTextTokens: '5', completionTokens: '8' },
+					},
+				}),
+				{ status: 200 },
+			)
+		}
+		const result = await chatCompletion(
+			{
+				messages: [{ role: 'user', text: 'Гостевой дом, цены 16000-25000 ₽ за номер премиум' }],
+			},
+			{
+				apiKey: 'k1',
+				folderId: 'f1',
+				model: 'yandexgpt-lite/latest',
+				fetchImpl: fakeFetch as unknown as typeof fetch,
+			},
+		)
+		expect(result.kind).toBe('ok')
+		expect(fetched).toBe(true)
+	})
+
+	test('[YAI19] PII shield: postal-code «Сочи 354000» allowed (no FP)', async () => {
+		const fakeFetch = async () =>
+			new Response(
+				JSON.stringify({
+					result: {
+						alternatives: [{ message: { text: 'описание' } }],
+						usage: { inputTextTokens: '3', completionTokens: '5' },
+					},
+				}),
+				{ status: 200 },
+			)
+		const result = await chatCompletion(
+			{ messages: [{ role: 'user', text: 'Сочи 354000 Краснодарский край' }] },
+			{
+				apiKey: 'k1',
+				folderId: 'f1',
+				model: 'yandexgpt-lite/latest',
+				fetchImpl: fakeFetch as unknown as typeof fetch,
+			},
+		)
+		expect(result.kind).toBe('ok')
+	})
+
+	test('[YAI20] PII shield: Cyrillic local-part email иван@gazprom.ru REJECTED (close 152-ФЗ FN)', async () => {
+		// Agent B finding (self-review #3 → #4): previous EMAIL_REGEX char class
+		// was Latin-only, so Cyrillic local-part emails leaked through.
+		let fetched = false
+		const fakeFetch = async () => {
+			fetched = true
+			return new Response('{}', { status: 200 })
+		}
+		const result = await chatCompletion(
+			{ messages: [{ role: 'user', text: 'Гость иван@gazprom.ru забронировал' }] },
+			{
+				apiKey: 'k1',
+				folderId: 'f1',
+				model: 'yandexgpt-lite/latest',
+				fetchImpl: fakeFetch as unknown as typeof fetch,
+			},
+		)
+		expect(result.kind).toBe('rejected')
+		if (result.kind === 'rejected') {
+			expect(result.reason).toBe('pii_in_prompt')
+		}
+		expect(fetched).toBe(false)
+	})
+
+	test('[YAI21] PII shield: Russian national format 8(916)123-45-67 REJECTED', async () => {
+		const fakeFetch = async () => new Response('{}', { status: 200 })
+		const result = await chatCompletion(
+			{ messages: [{ role: 'user', text: 'Звоните 8(916)123-45-67 для брони' }] },
+			{
+				apiKey: 'k1',
+				folderId: 'f1',
+				model: 'yandexgpt-lite/latest',
+				fetchImpl: fakeFetch as unknown as typeof fetch,
+			},
+		)
+		expect(result.kind).toBe('rejected')
+		if (result.kind === 'rejected') {
+			expect(result.reason).toBe('pii_in_prompt')
+		}
+	})
+
+	test('[YAI22] PII shield: old-format passport «45 12 345678» REJECTED', async () => {
+		// Agent A finding (self-review #3 → #4): only new-format passport (4+6)
+		// matched previously; Soviet-era / regional 2+2+6 format slipped through
+		// as 152-ФЗ ст.10 special-category PII leak.
+		const fakeFetch = async () => new Response('{}', { status: 200 })
+		const result = await chatCompletion(
+			{ messages: [{ role: 'user', text: 'Паспорт 45 12 345678' }] },
+			{
+				apiKey: 'k1',
+				folderId: 'f1',
+				model: 'yandexgpt-lite/latest',
+				fetchImpl: fakeFetch as unknown as typeof fetch,
+			},
+		)
+		expect(result.kind).toBe('rejected')
+		if (result.kind === 'rejected') {
+			expect(result.reason).toBe('pii_in_prompt')
+		}
+	})
+
+	test('[YAI23] maxTokens client-side cap — request 100k → upstream sees ≤ 4000', async () => {
+		let capturedBody: string | undefined
+		const fakeFetch = async (_url: unknown, init: RequestInit) => {
+			capturedBody = init.body as string
+			return new Response(
+				JSON.stringify({
+					result: {
+						alternatives: [{ message: { text: 'ok' } }],
+						usage: { inputTextTokens: '1', completionTokens: '1' },
+					},
+				}),
+				{ status: 200 },
+			)
+		}
+		await chatCompletion(
+			{ messages: [{ role: 'user', text: 'hi' }], maxTokens: 100_000 },
+			{
+				apiKey: 'k1',
+				folderId: 'f1',
+				model: 'yandexgpt-lite/latest',
+				fetchImpl: fakeFetch as unknown as typeof fetch,
+			},
+		)
+		expect(capturedBody).toBeDefined()
+		const parsed = JSON.parse(capturedBody as string) as {
+			completionOptions: { maxTokens: string }
+		}
+		// Hard cap = 4000 — 100k input clamped down.
+		expect(Number(parsed.completionOptions.maxTokens)).toBe(4000)
+	})
+
+	test('[YAI24] readConfigFromEnv: strict-int parse rejects partial garbage', () => {
+		// Agent A finding (self-review #3 → #4): `Number.parseInt('1000abc',10)`
+		// returns 1000 (silent partial-parse) → insta-timeout if env has stray chars.
+		const config = readConfigFromEnv({
+			YANDEX_AI_API_KEY: 'k',
+			YANDEX_AI_FOLDER_ID: 'f',
+			YANDEX_AI_TIMEOUT_MS: '15s', // bogus units suffix
+		})
+		expect(config.timeoutMs).toBeUndefined()
+	})
+
+	test('[YAI25] readConfigFromEnv: valid integer timeout passes', () => {
+		const config = readConfigFromEnv({
+			YANDEX_AI_API_KEY: 'k',
+			YANDEX_AI_FOLDER_ID: 'f',
+			YANDEX_AI_TIMEOUT_MS: '20000',
+		})
+		expect(config.timeoutMs).toBe(20000)
+	})
 })
