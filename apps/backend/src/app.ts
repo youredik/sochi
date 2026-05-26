@@ -91,6 +91,8 @@ import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
 import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
 import { createMagicLinkSecretResolver } from './lib/magic-link/secret.ts'
+import { createDcrRoutes } from './lib/oauth/dcr.routes.ts'
+import { createInMemoryDcrStore } from './lib/oauth/dcr.ts'
 import { createOpenApiRoutes } from './lib/openapi/routes.ts'
 import { createReadinessEvaluator } from './lib/readiness.ts'
 import { createMcpRoutes } from './mcp/server.ts'
@@ -1017,6 +1019,9 @@ const routes = app
 	// Round 13 — MCP server (Model Context Protocol) day-1 canon parity (Apaleo
 	// Sep 2025 first-mover). JSON-RPC 2.0 over HTTP at /api/mcp/rpc + manifest.
 	.route('/api/mcp', createMcpRoutes())
+	// Round 13 — RFC 7591 Dynamic Client Registration. In-memory store
+	// (Phase-1 skeleton); Phase-2 swaps к YDB-backed с secret hash + rotation.
+	.route('/api/oauth', createDcrRoutes(createInMemoryDcrStore()))
 	.route('/api/otel', otelIngest)
 	// M9.widget.7 / A5.2 — RUM ingest. Public, anonymous, CORS *. Mounted
 	// BEFORE auth middleware so embedded widgets can POST without credentials.

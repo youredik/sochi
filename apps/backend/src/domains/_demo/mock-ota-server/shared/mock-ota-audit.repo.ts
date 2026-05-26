@@ -11,7 +11,7 @@
  * direct YDB query при triage.
  */
 
-import { sql as SQL } from '../../../../db/index.ts'
+import type { sql as SQL } from '../../../../db/index.ts'
 
 type SqlInstance = typeof SQL
 
