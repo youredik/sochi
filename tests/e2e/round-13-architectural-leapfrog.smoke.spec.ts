@@ -12,7 +12,11 @@
  */
 import { expect, test } from '@playwright/test'
 
-const API = 'http://localhost:8787'
+// Canon: smoke specs MUST respect `PLAYWRIGHT_API_URL` env var (set by SC
+// deploy-verify к `https://demo.sepshn.ru`). Hardcoded localhost broke 8 R13
+// tests в Run #112 — `ECONNREFUSED ::1:8787` from prod smoke runner. Sibling
+// `demo-funnel-smoke.spec.ts` uses `PROD_BASE` pattern; aligning here.
+const API = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8787'
 
 test.describe('Round 13 — architectural leapfrog regression', () => {
 	test.use({ storageState: { cookies: [], origins: [] } })
