@@ -16,13 +16,23 @@
  * (`POST /api/channel/webhooks/{channel}`) — closes the integration loop with
  * Round 8 production-tested webhook handlers. This is intentional: demo IS
  * integration test that the wow-effect.
+ *
+ * **Round 14 self-review #6 (2026-05-27)**: state stores promoted from in-memory
+ * Map к YDB-backed primary state (migration 0080). Closes multi-instance state
+ * divergence bug empirically caught by Run #112+#114 smoke failures. Mount site
+ * now requires `sql` instance to build YDB stores.
  */
 
 import type { Hono } from 'hono'
+import type { sql as SQL } from '../../db/index.ts'
 import type { AppEnv } from '../../factory.ts'
 import { createDemoAdminRoutes } from './admin/admin.routes.ts'
+import { createYdbOstrovokStore } from './mock-ota-server/ostrovok/state.ts'
 import { createOstrovokMockOtaRoutes } from './mock-ota-server/ostrovok/ostrovok.routes.ts'
 import { createYandexMockOtaRoutes } from './mock-ota-server/yandex/yandex.routes.ts'
+import { createYdbYandexStore } from './mock-ota-server/yandex/state.ts'
+
+type SqlInstance = typeof SQL
 
 /**
  * Options passed by `app.ts` when calling `registerDemoRoutes`. The host
@@ -41,6 +51,12 @@ export interface RegisterDemoRoutesOptions {
 	 * showcase UI. Prevents multi-tenant cross-reset attacks.
 	 */
 	readonly adminSessionToken?: string
+	/**
+	 * Round 14 self-review #6 — YDB sql instance for primary-state stores.
+	 * Without sql, mount falls back к in-memory stores (NOT cross-instance
+	 * coherent — local dev only).
+	 */
+	readonly sql: SqlInstance
 }
 
 /**
@@ -52,29 +68,31 @@ export interface RegisterDemoRoutesOptions {
  *   - `/api/_mock-ota/ostrovok/v1/*` — Островок mock OTA
  *   - `/api/_mock-ota/admin/*`       — reset / seed / trigger controls
  *
- * Each call constructs fresh router instances; the routers carry no shared
- * mutable state (state lives в module-scope `state.ts` files which the
- * `_demo/admin/reset` endpoint clears at presenter command).
- *
- * Returns synchronously — Phase-1 mounting uses in-memory state modules. Phase-2
- * will move to YDB-bound impls but the mount itself remains sync; YDB schema
- * provisioning happens out-of-band via migration runner.
+ * Each call constructs YDB-backed stores (migration 0080) — multi-instance
+ * state coherent.
  */
 export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOptions): void {
+	const ostrovokStore = createYdbOstrovokStore(opts.sql)
+	const yandexStore = createYdbYandexStore(opts.sql)
+
 	const yandexRouter = createYandexMockOtaRoutes({
 		tenantId: opts.tenantId,
 		propertyId: opts.yandexPropertyId,
 		webhookTargetUrl: `${opts.webhookTargetBaseUrl}/api/channel/webhooks/YT`,
 		webhookSecret: opts.webhookSecret,
+		store: yandexStore,
 	})
 	const ostrovokRouter = createOstrovokMockOtaRoutes({
 		tenantId: opts.tenantId,
 		propertyId: opts.ostrovokPropertyId,
 		webhookTargetUrl: `${opts.webhookTargetBaseUrl}/api/channel/webhooks/ETG`,
 		webhookSecret: opts.webhookSecret,
+		store: ostrovokStore,
 	})
 	const adminRouter = createDemoAdminRoutes({
 		...(opts.adminSessionToken !== undefined && { sessionToken: opts.adminSessionToken }),
+		ostrovokStore,
+		yandexStore,
 	})
 
 	app.route('/api/_mock-ota/yandex/v1', yandexRouter)

@@ -47,15 +47,7 @@ import {
 } from '../../../../workers/lib/reserved-test-ranges.ts'
 import { createYandexTravelMock } from '../../../channel/yandex-travel/yandex-travel-mock.ts'
 import { emitDemoWebhook } from '../shared/webhook-emit.ts'
-import {
-	cancelOrder,
-	consumeBookingToken,
-	generateBookingToken,
-	generateOrderId,
-	getOrder,
-	storeBookingToken,
-	storeOrder,
-} from './state.ts'
+import { generateBookingToken, generateOrderId, type YandexStore } from './state.ts'
 
 const _NIGHT_RATE_MICROS = 6_000_000n // 6 RUB micros = 6.00 RUB? — see below
 // NB: 1 RUB = 1_000_000 micros, so 6_000_000n = 6 RUB. For demo wow we want
@@ -75,6 +67,12 @@ export interface YandexMockOtaRoutesOptions {
 	readonly fetchImpl?: typeof fetch
 	/** Inject clock для deterministic timestamps в tests. */
 	readonly nowMs?: () => number
+	/**
+	 * Round 14 self-review #6 — state store DI. Tests pass
+	 * `createInMemoryYandexStore()`, prod mount passes `createYdbYandexStore(sql)`.
+	 * Cross-instance state coherence via YDB.
+	 */
+	readonly store: YandexStore
 }
 
 /**
@@ -170,7 +168,7 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		const totalPrice = dailyPrices.reduce((s, p) => s + p, 0)
 
 		const token = generateBookingToken()
-		storeBookingToken({
+		await opts.store.storeBookingToken({
 			token,
 			hotelId,
 			checkinDate: checkin,
@@ -248,7 +246,7 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		if (token.length === 0) {
 			return c.json({ error: 'missing_booking_token' }, 400)
 		}
-		const tokenCtx = consumeBookingToken(token, opts.nowMs?.())
+		const tokenCtx = await opts.store.consumeBookingToken(token, opts.nowMs?.())
 		if (tokenCtx === null) {
 			return c.json({ error: 'invalid_booking_token' }, 400)
 		}
@@ -315,7 +313,7 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 
 		// Step 5 — persist order locally + fire CloudEvents webhook.
 		const orderId = generateOrderId()
-		storeOrder({
+		await opts.store.storeOrder({
 			orderId,
 			bookingToken: token,
 			customerEmail,
@@ -390,12 +388,12 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		if (!auth.ok) return c.json({ error: 'unauthorized' }, 401)
 
 		const orderId = c.req.param('order_id')
-		const order = getOrder(orderId)
+		const order = await opts.store.getOrder(orderId)
 		if (order === null) {
 			return c.json({ error: 'order_not_found' }, 404)
 		}
 
-		const cancelStatus = cancelOrder(orderId)
+		const cancelStatus = await opts.store.cancelOrder(orderId)
 		if (cancelStatus === 'not_found') {
 			// Lost a race с another cancel? Treat as not_found.
 			return c.json({ error: 'order_not_found' }, 404)

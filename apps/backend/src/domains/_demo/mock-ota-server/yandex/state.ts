@@ -1,34 +1,31 @@
 /**
- * In-memory state for the Round 9 Yandex.Путешествия mock-OTA HTTP server.
+ * Round 14 self-review #6 — state store for the Round 9 Yandex.Путешествия
+ * mock-OTA HTTP server. **YDB-backed primary state** (canon
+ * `feedback_p1_means_now_not_later`).
  *
- * Holds two ephemeral maps:
- *   - `bookingTokens` — issued by `GET /hotels/hotel/offers` and consumed by
- *     `POST /hotels/booking/orders`. Each token carries the search context
- *     (hotelId, date range, party size) so order creation can validate that
- *     guest fields match what was quoted.
- *   - `orders` — created via `POST /hotels/booking/orders`, mutated via
- *     `POST /hotels/booking/orders/{order_id}/payment/cancel`. The status
- *     transitions `CONFIRMED → CANCELLED` are one-way; a second cancel returns
- *     `already_cancelled` to the route handler so it can echo idempotent shape.
+ * History:
+ *   - Round 9 → in-memory `Map<string, Context>`
+ *   - Round 14 self-review #6 (2026-05-27): user trigger «точно уверен?» caught
+ *     Run #112+#114 R12-11 + YT-SMOKE flakiness empirically — multi-instance
+ *     state divergence. Promoted к YDB-backed primary state с migration 0080.
  *
- * Token / order IDs follow real Yandex.Путешествия shape:
- *   - `booking_token` — 12 char [A-Za-z0-9] (mirrors observed real-API tokens).
- *   - `order_id` — `yt-order-{12-hex}` (own prefix; real Yandex uses opaque
- *     uuid-like — we keep human-readable for demo log clarity).
+ * Two tables (TTL P1D enforced natively):
+ *   - `mockOtaYandexBookingToken` — search → booking_token
+ *   - `mockOtaYandexOrder`        — order creation → order
  *
- * TTL: tokens expire after 24h walltime (`expiresAt` field). Sweep is lazy —
- * on `consumeBookingToken` we check expiry and reject if past. No background
- * cron — the demo state pool is small and the wrap process restarts daily on
- * deploy anyway. Phase 2 — move to `mockOtaReservation_demo` YDB table with
- * 24h native TTL per `feedback_native_yc_services_first_canon_2026_05_24`.
- *
- * **Reset**: `__resetState()` clears both maps. Called by the admin reset
- * endpoint (Batch 3) and by `beforeEach` in tests for isolation.
+ * **Store interface** (canonical pattern, mirrors `DcrStore` + `OstrovokStore`):
+ *   - `createInMemoryYandexStore()` — for unit tests
+ *   - `createYdbYandexStore(sql)`   — for production / integration tests
  */
 
 import { randomBytes, randomUUID } from 'node:crypto'
+import type { sql as SQL } from '../../../../db/index.ts'
+import { toJson } from '../../../../db/ydb-helpers.ts'
+
+type SqlInstance = typeof SQL
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000
+const DEMO_TENANT = 'demo-tenant'
 
 const TOKEN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 
@@ -58,13 +55,32 @@ export interface MockOtaOrder {
 	}>
 }
 
-const bookingTokens = new Map<string, BookingTokenContext>()
-const orders = new Map<string, MockOtaOrder>()
+export interface StoreBookingTokenInput {
+	readonly token: string
+	readonly hotelId: string
+	readonly checkinDate: string
+	readonly checkoutDate: string
+	readonly adults: number
+	readonly children: number
+	readonly totalPriceMicros: bigint
+	readonly nowMs?: number
+}
+
+export interface YandexStore {
+	storeBookingToken(input: StoreBookingTokenInput): Promise<void>
+	getBookingToken(token: string, nowMs?: number): Promise<BookingTokenContext | null>
+	consumeBookingToken(token: string, nowMs?: number): Promise<BookingTokenContext | null>
+	storeOrder(order: MockOtaOrder): Promise<void>
+	getOrder(orderId: string): Promise<MockOtaOrder | null>
+	cancelOrder(orderId: string): Promise<'cancelled' | 'already_cancelled' | 'not_found'>
+	__reset(): Promise<void>
+	__listBookingTokens(): Promise<ReadonlyArray<{ token: string; context: BookingTokenContext }>>
+	__listOrders(): Promise<ReadonlyArray<MockOtaOrder>>
+}
 
 /**
  * Generate a 12-char alphanumeric booking token, mirroring observed
- * Yandex.Путешествия `booking_token` shape. Uses `randomBytes` to avoid
- * collisions across concurrent search requests.
+ * Yandex.Путешествия `booking_token` shape.
  */
 export function generateBookingToken(): string {
 	const bytes = randomBytes(12)
@@ -80,109 +96,240 @@ export function generateOrderId(): string {
 	return `yt-order-${randomUUID().replace(/-/g, '').slice(0, 12)}`
 }
 
-/**
- * Store a freshly-minted booking token along with its search context.
- * Sets `expiresAtMs` based on optional `nowMs` injector (for test determinism).
- */
-export function storeBookingToken(input: {
+// ─────────────────────────────────────────────────────────────────────────
+// In-memory implementation (unit tests)
+// ─────────────────────────────────────────────────────────────────────────
+
+export function createInMemoryYandexStore(): YandexStore {
+	const bookingTokens = new Map<string, BookingTokenContext>()
+	const orders = new Map<string, MockOtaOrder>()
+
+	return {
+		async storeBookingToken(input) {
+			const now = input.nowMs ?? Date.now()
+			bookingTokens.set(input.token, {
+				hotelId: input.hotelId,
+				checkinDate: input.checkinDate,
+				checkoutDate: input.checkoutDate,
+				adults: input.adults,
+				children: input.children,
+				totalPriceMicros: input.totalPriceMicros,
+				expiresAtMs: now + TOKEN_TTL_MS,
+			})
+		},
+		async getBookingToken(token, nowMs) {
+			const ctx = bookingTokens.get(token)
+			if (ctx === undefined) return null
+			const now = nowMs ?? Date.now()
+			if (ctx.expiresAtMs < now) {
+				bookingTokens.delete(token)
+				return null
+			}
+			return ctx
+		},
+		async consumeBookingToken(token, nowMs) {
+			const ctx = bookingTokens.get(token)
+			if (ctx === undefined) return null
+			const now = nowMs ?? Date.now()
+			if (ctx.expiresAtMs < now) {
+				bookingTokens.delete(token)
+				return null
+			}
+			bookingTokens.delete(token)
+			return ctx
+		},
+		async storeOrder(order) {
+			orders.set(order.orderId, order)
+		},
+		async getOrder(orderId) {
+			return orders.get(orderId) ?? null
+		},
+		async cancelOrder(orderId) {
+			const existing = orders.get(orderId)
+			if (existing === undefined) return 'not_found'
+			if (existing.status === 'CANCELLED') return 'already_cancelled'
+			orders.set(orderId, { ...existing, status: 'CANCELLED' })
+			return 'cancelled'
+		},
+		async __reset() {
+			bookingTokens.clear()
+			orders.clear()
+		},
+		async __listBookingTokens() {
+			return Array.from(bookingTokens.entries()).map(([token, context]) => ({ token, context }))
+		},
+		async __listOrders() {
+			return Array.from(orders.values())
+		},
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// YDB implementation
+// ─────────────────────────────────────────────────────────────────────────
+
+interface YdbBookingTokenRow {
 	token: string
 	hotelId: string
 	checkinDate: string
 	checkoutDate: string
 	adults: number
-	children: number
-	totalPriceMicros: bigint
-	nowMs?: number
-}): void {
-	const now = input.nowMs ?? Date.now()
-	bookingTokens.set(input.token, {
-		hotelId: input.hotelId,
-		checkinDate: input.checkinDate,
-		checkoutDate: input.checkoutDate,
-		adults: input.adults,
-		children: input.children,
-		totalPriceMicros: input.totalPriceMicros,
-		expiresAtMs: now + TOKEN_TTL_MS,
-	})
+	childrenCount: number
+	totalPriceMicros: number | bigint
+	issuedAt: Date
+	expiresAt: Date
 }
 
-/**
- * Look up a previously-issued booking token. Returns the context if still
- * valid (not expired), null otherwise. Does NOT consume — callers that want
- * single-use semantics must call `consumeBookingToken` instead.
- */
-export function getBookingToken(token: string, nowMs?: number): BookingTokenContext | null {
-	const ctx = bookingTokens.get(token)
-	if (ctx === undefined) return null
-	const now = nowMs ?? Date.now()
-	if (ctx.expiresAtMs < now) {
-		bookingTokens.delete(token)
-		return null
+interface YdbOrderRow {
+	orderId: string
+	bookingToken: string
+	customerEmail: string
+	customerPhone: string
+	status: string
+	externalReservationId: string
+	guestsJson: string | unknown
+	createdAt: Date
+}
+
+function parseYdbJson<T>(value: unknown): T {
+	if (typeof value === 'string') return JSON.parse(value) as T
+	return value as T
+}
+
+function rowToBookingTokenContext(row: YdbBookingTokenRow): BookingTokenContext {
+	return {
+		hotelId: row.hotelId,
+		checkinDate: row.checkinDate,
+		checkoutDate: row.checkoutDate,
+		adults: row.adults,
+		children: row.childrenCount,
+		totalPriceMicros:
+			typeof row.totalPriceMicros === 'bigint'
+				? row.totalPriceMicros
+				: BigInt(row.totalPriceMicros),
+		expiresAtMs: row.expiresAt.getTime(),
 	}
-	return ctx
 }
 
-/**
- * Single-use consume: returns the context if valid, then deletes the token.
- * Used by `POST /hotels/booking/orders` so the same token cannot create
- * multiple orders.
- */
-export function consumeBookingToken(token: string, nowMs?: number): BookingTokenContext | null {
-	const ctx = getBookingToken(token, nowMs)
-	if (ctx === null) return null
-	bookingTokens.delete(token)
-	return ctx
+function rowToOrder(row: YdbOrderRow): MockOtaOrder {
+	return {
+		orderId: row.orderId,
+		bookingToken: row.bookingToken,
+		customerEmail: row.customerEmail,
+		customerPhone: row.customerPhone,
+		status: row.status as 'CONFIRMED' | 'CANCELLED',
+		externalReservationId: row.externalReservationId,
+		guests: parseYdbJson<MockOtaOrder['guests']>(row.guestsJson),
+		createdAtMs: row.createdAt.getTime(),
+	}
 }
 
-/**
- * Persist a freshly-confirmed order. Caller is responsible for generating
- * the orderId (typically via `generateOrderId()`).
- */
-export function storeOrder(order: MockOtaOrder): void {
-	orders.set(order.orderId, order)
-}
-
-export function getOrder(orderId: string): MockOtaOrder | null {
-	return orders.get(orderId) ?? null
-}
-
-/**
- * Mark an order as cancelled. Returns 'cancelled' on first call,
- * 'already_cancelled' on subsequent calls, 'not_found' if no such order.
- * Status mutation is monotonic — once CANCELLED, never returns to CONFIRMED.
- */
-export function cancelOrder(orderId: string): 'cancelled' | 'already_cancelled' | 'not_found' {
-	const existing = orders.get(orderId)
-	if (existing === undefined) return 'not_found'
-	if (existing.status === 'CANCELLED') return 'already_cancelled'
-	orders.set(orderId, { ...existing, status: 'CANCELLED' })
-	return 'cancelled'
-}
-
-/**
- * Test / admin reset helper. Drops every booking token + order. Called by
- * `beforeEach` in tests and by the admin `POST /api/_mock-ota/admin/reset`
- * endpoint (Batch 3). Production code paths must never call this.
- */
-export function __resetState(): void {
-	bookingTokens.clear()
-	orders.clear()
-}
-
-/**
- * Read-only snapshot accessors for tests / admin panel introspection.
- * Not exposed via HTTP routes directly.
- */
-export function __listBookingTokens(): ReadonlyArray<{
-	readonly token: string
-	readonly context: BookingTokenContext
-}> {
-	return Array.from(bookingTokens.entries()).map(([token, context]) => ({
-		token,
-		context,
-	}))
-}
-
-export function __listOrders(): ReadonlyArray<MockOtaOrder> {
-	return Array.from(orders.values())
+export function createYdbYandexStore(sql: SqlInstance): YandexStore {
+	return {
+		async storeBookingToken(input) {
+			const now = input.nowMs ?? Date.now()
+			const issuedAt = new Date(now)
+			const expiresAt = new Date(now + TOKEN_TTL_MS)
+			await sql`
+				UPSERT INTO mockOtaYandexBookingToken (
+					\`tenantId\`, \`token\`, \`hotelId\`, \`checkinDate\`, \`checkoutDate\`,
+					\`adults\`, \`childrenCount\`, \`totalPriceMicros\`, \`issuedAt\`, \`expiresAt\`
+				) VALUES (
+					${DEMO_TENANT}, ${input.token}, ${input.hotelId}, ${input.checkinDate}, ${input.checkoutDate},
+					${input.adults}, ${input.children}, ${input.totalPriceMicros}, ${issuedAt}, ${expiresAt}
+				)
+			`
+		},
+		async getBookingToken(token, nowMs) {
+			const [rows = []] = await sql<YdbBookingTokenRow[]>`
+				SELECT token, hotelId, checkinDate, checkoutDate, adults, childrenCount,
+					totalPriceMicros, issuedAt, expiresAt
+				FROM mockOtaYandexBookingToken
+				WHERE tenantId = ${DEMO_TENANT} AND token = ${token}
+				LIMIT 1
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const row = rows[0]
+			if (row === undefined) return null
+			const ctx = rowToBookingTokenContext(row)
+			const now = nowMs ?? Date.now()
+			if (ctx.expiresAtMs < now) return null
+			return ctx
+		},
+		async consumeBookingToken(token, nowMs) {
+			const ctx = await this.getBookingToken(token, nowMs)
+			if (ctx === null) return null
+			// Single-use semantic — delete after read.
+			await sql`
+				DELETE FROM mockOtaYandexBookingToken
+				WHERE tenantId = ${DEMO_TENANT} AND token = ${token}
+			`
+			return ctx
+		},
+		async storeOrder(order) {
+			const createdAt = new Date(order.createdAtMs)
+			await sql`
+				UPSERT INTO mockOtaYandexOrder (
+					\`tenantId\`, \`orderId\`, \`bookingToken\`, \`customerEmail\`, \`customerPhone\`,
+					\`status\`, \`externalReservationId\`, \`guestsJson\`, \`createdAt\`
+				) VALUES (
+					${DEMO_TENANT}, ${order.orderId}, ${order.bookingToken}, ${order.customerEmail},
+					${order.customerPhone}, ${order.status}, ${order.externalReservationId},
+					${toJson(order.guests)}, ${createdAt}
+				)
+			`
+		},
+		async getOrder(orderId) {
+			const [rows = []] = await sql<YdbOrderRow[]>`
+				SELECT orderId, bookingToken, customerEmail, customerPhone, status,
+					externalReservationId, guestsJson, createdAt
+				FROM mockOtaYandexOrder
+				WHERE tenantId = ${DEMO_TENANT} AND orderId = ${orderId}
+				LIMIT 1
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const row = rows[0]
+			if (row === undefined) return null
+			return rowToOrder(row)
+		},
+		async cancelOrder(orderId) {
+			const order = await this.getOrder(orderId)
+			if (order === null) return 'not_found'
+			if (order.status === 'CANCELLED') return 'already_cancelled'
+			await sql`
+				UPDATE mockOtaYandexOrder
+				SET \`status\` = ${'CANCELLED'}
+				WHERE tenantId = ${DEMO_TENANT} AND orderId = ${orderId}
+			`
+			return 'cancelled'
+		},
+		async __reset() {
+			await sql`DELETE FROM mockOtaYandexBookingToken WHERE tenantId = ${DEMO_TENANT}`
+			await sql`DELETE FROM mockOtaYandexOrder WHERE tenantId = ${DEMO_TENANT}`
+		},
+		async __listBookingTokens() {
+			const [rows = []] = await sql<YdbBookingTokenRow[]>`
+				SELECT token, hotelId, checkinDate, checkoutDate, adults, childrenCount,
+					totalPriceMicros, issuedAt, expiresAt
+				FROM mockOtaYandexBookingToken
+				WHERE tenantId = ${DEMO_TENANT}
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map((r) => ({ token: r.token, context: rowToBookingTokenContext(r) }))
+		},
+		async __listOrders() {
+			const [rows = []] = await sql<YdbOrderRow[]>`
+				SELECT orderId, bookingToken, customerEmail, customerPhone, status,
+					externalReservationId, guestsJson, createdAt
+				FROM mockOtaYandexOrder
+				WHERE tenantId = ${DEMO_TENANT}
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map(rowToOrder)
+		},
+	}
 }

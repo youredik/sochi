@@ -1,58 +1,57 @@
 /**
- * In-memory state for the Round 9 Островок / ETG mock-OTA HTTP server.
+ * Round 14 self-review #6 — state store for the Round 9 Островок / ETG mock-OTA
+ * HTTP server. **YDB-backed primary state** (canon `feedback_p1_means_now_not_later`).
  *
- * Mirrors the real ETG `api.worldota.net/api/b2b/v3/...` 5-stage flow but
- * lives entirely в `_demo/` (one-way dependency canon: `_demo` can lean on
- * `lib/channel-manager`, but MUST NOT import sibling domains). The Round 8
- * `OstrovokEtgMock` is the behaviour-faithful canon — this HTTP shell mirrors
- * its FSM contract, не зовёт его напрямую (cross-domain import would trip
- * `no-cross-domain` rule in `.dependency-cruiser.mjs`).
+ * History:
+ *   - Round 9 → in-memory `Map<string, Context>` (single-instance demo)
+ *   - Round 13 → migration 0078 added `mockOtaReservationAudit` (audit trail only)
+ *     с explicit design doc «in-memory state.ts remains the PRIMARY state»
+ *   - Round 14 self-review #6 (2026-05-27): user trigger «точно уверен?
+ *     по всем нашим канонам?» caught Run #112+#114 smoke failures empirically
+ *     — YC Serverless scales к multiple instances, in-process Map diverges,
+ *     prebook → `rate_not_found`. P1 same-session close: promote к YDB-backed
+ *     primary state с migration 0080.
  *
- * Three ephemeral maps хранят stage-progression:
+ * Three tables (TTL P1D enforced natively):
+ *   - `mockOtaOstrovokBookHash`     — search → bookHash
+ *   - `mockOtaOstrovokFormStage`    — prebook → form stage
+ *   - `mockOtaOstrovokBooking`      — finish → finalized booking
  *
- *   1. `bookHashes` — issued by `POST /search/hp/`. The 32-hex token carries
- *      the search context (hid, dates, party, daily prices). 24-hour TTL —
- *      real ETG keeps quoted rates valid for the same window. Consumed by
- *      `POST /hotel/order/booking/form/` (stage 2).
+ * **Store interface** (canonical pattern, mirrors `DcrStore`):
+ *   - `createInMemoryOstrovokStore()` — for unit tests (Map-backed, no YDB I/O)
+ *   - `createYdbOstrovokStore(sql)`   — for production / integration tests
  *
- *   2. `formStages` — created by `POST /hotel/order/booking/form/`. Carries
- *      partner_order_id → order_id mapping plus a 60-min lifetime (matches
- *      ETG's form-window canon, after which finish must restart from search).
- *      Consumed by `POST /hotel/order/booking/finish/` (stage 3) which
- *      promotes the form-stage record into a `bookings` entry.
- *
- *   3. `bookings` — finalized after `finish/`. Status starts `confirmed` →
- *      mutates `cancelled` via `POST /hotel/order/cancel/`. Idempotent cancel:
- *      second call returns `already_cancelled` без duplicate webhook emission.
+ * Both implement same `OstrovokStore` interface. All methods async.
  *
  * **Token / id shapes** mirror real ETG observed responses:
  *   - `book_hash` — 32-hex character string (`crypto.randomBytes(16).toString('hex')`)
- *   - `order_id` — 12-digit integer (numeric, что и в реальном ETG response shape)
+ *   - `order_id` — 12-digit integer (real ETG response shape)
  *   - `item_id` — separate 12-digit integer (real ETG returns both per-form)
  *
- * **TTL**: lazy expiry — checked at lookup time (`getBookHash` / `getFormStage`)
- * and stale entries deleted on read. No background sweep: demo state pool is
- * small + deploy restart is daily anyway. Phase-2 — move к `mockOtaReservation_demo`
- * YDB table с native 24h TTL per
- * `feedback_native_yc_services_first_canon_2026_05_24.md`.
+ * **TTL**: native YDB P1D. Defense-in-depth — store methods ALSO check
+ * `expiresAtMs < now` before returning (YDB TTL eventually consistent vs
+ * app-immediate check).
  *
- * **Reset**: `__resetState()` clears all three maps. Used by `beforeEach` в
- * tests + by the (Batch-3) admin reset endpoint. Production code paths never
- * touch these helpers — they live under `_demo/` and депенденcy-cruiser
- * blocks production runtime от importing them.
+ * Reserved-test PII shield enforced в routes BEFORE storeBooking — table
+ * carries non-real PII shape only (Иванов/Петров + example.com + +7000…).
  */
 
 import { randomBytes, randomInt } from 'node:crypto'
+import type { sql as SQL } from '../../../../db/index.ts'
+import { timestampOpt, toJson } from '../../../../db/ydb-helpers.ts'
+
+type SqlInstance = typeof SQL
 
 const BOOK_HASH_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours per real ETG quote lifetime
 const FORM_STAGE_TTL_MS = 60 * 60 * 1000 // 60 minutes per ETG form-window canon
+const DEMO_TENANT = 'demo-tenant'
 
 export interface BookHashContext {
 	readonly hid: number
 	readonly checkin: string // YYYY-MM-DD
 	readonly checkout: string // YYYY-MM-DD
 	readonly adults: number
-	readonly children: ReadonlyArray<number> // ages of child guests
+	readonly children: ReadonlyArray<number>
 	readonly currency: 'RUB'
 	readonly dailyPrices: ReadonlyArray<number>
 	readonly totalPrice: number
@@ -96,43 +95,7 @@ export interface FinalizedBooking {
 	readonly createdAtMs: number
 }
 
-const bookHashes = new Map<string, BookHashContext>()
-const formStages = new Map<string, FormStageContext>() // keyed by partnerOrderId
-const bookings = new Map<string, FinalizedBooking>() // keyed by partnerOrderId
-
-/**
- * Generate a 32-hex book_hash (16 random bytes → hex). Real ETG returns
- * 32-character hex tokens; we mirror the shape so downstream consumers
- * (Phase-1 frontend + Phase-2 inventory replay) can pattern-match.
- */
-export function generateBookHash(): string {
-	return randomBytes(16).toString('hex')
-}
-
-/**
- * Generate a 12-digit positive integer order_id. Real ETG emits opaque
- * numeric ids (observed range 10^11 .. 10^12). We use `randomInt(1e11, 1e12)`
- * to stay within the same shape без collision risk for demo throughput.
- */
-export function generateOrderId(): number {
-	return randomInt(1_000_000_000_00, 1_000_000_000_000)
-}
-
-/**
- * Generate a 12-digit positive integer item_id (per-room line item). Same
- * shape as order_id; separate counter so a future multi-room demo can
- * carry distinct ids per inventory line.
- */
-export function generateItemId(): number {
-	return randomInt(1_000_000_000_00, 1_000_000_000_000)
-}
-
-/**
- * Persist a search result so `POST /hotel/order/booking/form/` can validate
- * the book_hash. Caller is responsible for hash generation. `nowMs` injector
- * for test determinism.
- */
-export function storeBookHash(input: {
+export interface StoreBookHashInput {
 	readonly bookHash: string
 	readonly hid: number
 	readonly checkin: string
@@ -145,48 +108,9 @@ export function storeBookHash(input: {
 	readonly roomName: string
 	readonly mealName: string
 	readonly nowMs?: number
-}): void {
-	const now = input.nowMs ?? Date.now()
-	bookHashes.set(input.bookHash, {
-		hid: input.hid,
-		checkin: input.checkin,
-		checkout: input.checkout,
-		adults: input.adults,
-		children: input.children,
-		currency: input.currency,
-		dailyPrices: input.dailyPrices,
-		totalPrice: input.totalPrice,
-		roomName: input.roomName,
-		mealName: input.mealName,
-		issuedAtMs: now,
-		expiresAtMs: now + BOOK_HASH_TTL_MS,
-	})
 }
 
-/**
- * Resolve a previously-issued book_hash. Returns the context if valid (not
- * expired), null otherwise. Lazy sweep — expired entries deleted on read.
- * Does NOT consume the hash; multiple `form/` calls с same hash могут creates
- * multiple form-stages (each с unique partner_order_id), matching real ETG
- * permissive shape.
- */
-export function getBookHash(bookHash: string, nowMs?: number): BookHashContext | null {
-	const ctx = bookHashes.get(bookHash)
-	if (ctx === undefined) return null
-	const now = nowMs ?? Date.now()
-	if (ctx.expiresAtMs < now) {
-		bookHashes.delete(bookHash)
-		return null
-	}
-	return ctx
-}
-
-/**
- * Persist a freshly-created form stage. Caller validates the partner_order_id
- * shape (UUIDv4 3-256 chars per real ETG contract) AND that no existing
- * form/booking is associated с this id (idempotency window).
- */
-export function storeFormStage(input: {
+export interface StoreFormStageInput {
 	readonly partnerOrderId: string
 	readonly bookHash: string
 	readonly orderId: number
@@ -194,42 +118,9 @@ export function storeFormStage(input: {
 	readonly currency: 'RUB'
 	readonly totalAmount: number
 	readonly nowMs?: number
-}): void {
-	const now = input.nowMs ?? Date.now()
-	formStages.set(input.partnerOrderId, {
-		partnerOrderId: input.partnerOrderId,
-		bookHash: input.bookHash,
-		orderId: input.orderId,
-		itemId: input.itemId,
-		currency: input.currency,
-		totalAmount: input.totalAmount,
-		createdAtMs: now,
-		expiresAtMs: now + FORM_STAGE_TTL_MS,
-	})
 }
 
-/**
- * Look up a form-stage record by partner_order_id. Returns null if missing OR
- * expired (lazy sweep). Used by `finish/` to validate the prebook chain.
- */
-export function getFormStage(partnerOrderId: string, nowMs?: number): FormStageContext | null {
-	const ctx = formStages.get(partnerOrderId)
-	if (ctx === undefined) return null
-	const now = nowMs ?? Date.now()
-	if (ctx.expiresAtMs < now) {
-		formStages.delete(partnerOrderId)
-		return null
-	}
-	return ctx
-}
-
-/**
- * Promote a form-stage record into a finalized booking. Caller passes guest
- * data + status='confirmed'. Removes the form-stage record на finalization —
- * subsequent `form/` lookups by the same partner_order_id resolve through
- * `getBooking`, not `getFormStage`.
- */
-export function finalizeBooking(input: {
+export interface FinalizeBookingInput {
 	readonly form: FormStageContext
 	readonly bookHashContext: BookHashContext
 	readonly customerEmail: string
@@ -241,87 +132,454 @@ export function finalizeBooking(input: {
 		readonly age?: number
 	}>
 	readonly nowMs?: number
-}): FinalizedBooking {
-	const now = input.nowMs ?? Date.now()
-	const finalized: FinalizedBooking = {
-		partnerOrderId: input.form.partnerOrderId,
-		orderId: input.form.orderId,
-		itemId: input.form.itemId,
-		hid: input.bookHashContext.hid,
-		checkin: input.bookHashContext.checkin,
-		checkout: input.bookHashContext.checkout,
-		adults: input.bookHashContext.adults,
-		children: input.bookHashContext.children,
-		currency: input.form.currency,
-		totalAmount: input.form.totalAmount,
-		status: 'confirmed',
-		customerEmail: input.customerEmail,
-		customerPhone: input.customerPhone,
-		guests: input.guests,
-		createdAtMs: now,
+}
+
+export interface OstrovokStore {
+	storeBookHash(input: StoreBookHashInput): Promise<void>
+	getBookHash(bookHash: string, nowMs?: number): Promise<BookHashContext | null>
+	storeFormStage(input: StoreFormStageInput): Promise<void>
+	getFormStage(partnerOrderId: string, nowMs?: number): Promise<FormStageContext | null>
+	finalizeBooking(input: FinalizeBookingInput): Promise<FinalizedBooking>
+	getBooking(partnerOrderId: string): Promise<FinalizedBooking | null>
+	cancelBooking(partnerOrderId: string): Promise<'cancelled' | 'already_cancelled' | 'not_found'>
+	__reset(): Promise<void>
+	__listBookHashes(): Promise<ReadonlyArray<{ bookHash: string; context: BookHashContext }>>
+	__listFormStages(): Promise<ReadonlyArray<FormStageContext>>
+	__listBookings(): Promise<ReadonlyArray<FinalizedBooking>>
+}
+
+/**
+ * Generate a 32-hex book_hash (16 random bytes → hex). Real ETG returns
+ * 32-character hex tokens; we mirror the shape so downstream consumers
+ * (Phase-1 frontend + Phase-2 inventory replay) can pattern-match.
+ */
+export function generateBookHash(): string {
+	return randomBytes(16).toString('hex')
+}
+
+/**
+ * Generate a 12-digit positive integer order_id. Real ETG emits opaque
+ * numeric ids (observed range 10^11 .. 10^12).
+ */
+export function generateOrderId(): number {
+	return randomInt(1_000_000_000_00, 1_000_000_000_000)
+}
+
+/** Generate a 12-digit positive integer item_id (per-room line item). */
+export function generateItemId(): number {
+	return randomInt(1_000_000_000_00, 1_000_000_000_000)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// In-memory implementation (unit tests + APP_MODE !== sandbox local dev)
+// ─────────────────────────────────────────────────────────────────────────
+
+export function createInMemoryOstrovokStore(): OstrovokStore {
+	const bookHashes = new Map<string, BookHashContext>()
+	const formStages = new Map<string, FormStageContext>()
+	const bookings = new Map<string, FinalizedBooking>()
+
+	return {
+		async storeBookHash(input) {
+			const now = input.nowMs ?? Date.now()
+			bookHashes.set(input.bookHash, {
+				hid: input.hid,
+				checkin: input.checkin,
+				checkout: input.checkout,
+				adults: input.adults,
+				children: input.children,
+				currency: input.currency,
+				dailyPrices: input.dailyPrices,
+				totalPrice: input.totalPrice,
+				roomName: input.roomName,
+				mealName: input.mealName,
+				issuedAtMs: now,
+				expiresAtMs: now + BOOK_HASH_TTL_MS,
+			})
+		},
+		async getBookHash(bookHash, nowMs) {
+			const ctx = bookHashes.get(bookHash)
+			if (ctx === undefined) return null
+			const now = nowMs ?? Date.now()
+			if (ctx.expiresAtMs < now) {
+				bookHashes.delete(bookHash)
+				return null
+			}
+			return ctx
+		},
+		async storeFormStage(input) {
+			const now = input.nowMs ?? Date.now()
+			formStages.set(input.partnerOrderId, {
+				partnerOrderId: input.partnerOrderId,
+				bookHash: input.bookHash,
+				orderId: input.orderId,
+				itemId: input.itemId,
+				currency: input.currency,
+				totalAmount: input.totalAmount,
+				createdAtMs: now,
+				expiresAtMs: now + FORM_STAGE_TTL_MS,
+			})
+		},
+		async getFormStage(partnerOrderId, nowMs) {
+			const ctx = formStages.get(partnerOrderId)
+			if (ctx === undefined) return null
+			const now = nowMs ?? Date.now()
+			if (ctx.expiresAtMs < now) {
+				formStages.delete(partnerOrderId)
+				return null
+			}
+			return ctx
+		},
+		async finalizeBooking(input) {
+			const now = input.nowMs ?? Date.now()
+			const finalized: FinalizedBooking = {
+				partnerOrderId: input.form.partnerOrderId,
+				orderId: input.form.orderId,
+				itemId: input.form.itemId,
+				hid: input.bookHashContext.hid,
+				checkin: input.bookHashContext.checkin,
+				checkout: input.bookHashContext.checkout,
+				adults: input.bookHashContext.adults,
+				children: input.bookHashContext.children,
+				currency: input.form.currency,
+				totalAmount: input.form.totalAmount,
+				status: 'confirmed',
+				customerEmail: input.customerEmail,
+				customerPhone: input.customerPhone,
+				guests: input.guests,
+				createdAtMs: now,
+			}
+			bookings.set(input.form.partnerOrderId, finalized)
+			formStages.delete(input.form.partnerOrderId)
+			return finalized
+		},
+		async getBooking(partnerOrderId) {
+			return bookings.get(partnerOrderId) ?? null
+		},
+		async cancelBooking(partnerOrderId) {
+			const existing = bookings.get(partnerOrderId)
+			if (existing === undefined) return 'not_found'
+			if (existing.status === 'cancelled') return 'already_cancelled'
+			bookings.set(partnerOrderId, { ...existing, status: 'cancelled' })
+			return 'cancelled'
+		},
+		async __reset() {
+			bookHashes.clear()
+			formStages.clear()
+			bookings.clear()
+		},
+		async __listBookHashes() {
+			return Array.from(bookHashes.entries()).map(([bookHash, context]) => ({ bookHash, context }))
+		},
+		async __listFormStages() {
+			return Array.from(formStages.values())
+		},
+		async __listBookings() {
+			return Array.from(bookings.values())
+		},
 	}
-	bookings.set(input.form.partnerOrderId, finalized)
-	formStages.delete(input.form.partnerOrderId)
-	return finalized
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// YDB implementation — production primary state
+// ─────────────────────────────────────────────────────────────────────────
+
+interface YdbBookHashRow {
+	bookHash: string
+	hid: number | bigint
+	checkin: string
+	checkout: string
+	adults: number
+	childrenJson: string | unknown | null
+	currency: string
+	dailyPricesJson: string | unknown
+	totalPrice: number | bigint
+	roomName: string
+	mealName: string
+	issuedAt: Date
+	expiresAt: Date
+}
+
+interface YdbFormStageRow {
+	partnerOrderId: string
+	bookHash: string
+	orderId: number | bigint
+	itemId: number | bigint
+	currency: string
+	totalAmount: number | bigint
+	createdAt: Date
+	expiresAt: Date
+}
+
+interface YdbBookingRow {
+	partnerOrderId: string
+	orderId: number | bigint
+	itemId: number | bigint
+	hid: number | bigint
+	checkin: string
+	checkout: string
+	adults: number
+	childrenJson: string | unknown | null
+	currency: string
+	totalAmount: number | bigint
+	status: string
+	customerEmail: string
+	customerPhone: string
+	guestsJson: string | unknown
+	createdAt: Date
+}
+
+function parseYdbJson<T>(value: unknown): T {
+	if (typeof value === 'string') return JSON.parse(value) as T
+	return value as T
+}
+
+function toNum(v: number | bigint): number {
+	return typeof v === 'bigint' ? Number(v) : v
+}
+
+function rowToBookHashContext(row: YdbBookHashRow): BookHashContext {
+	const children =
+		row.childrenJson === null ? [] : parseYdbJson<ReadonlyArray<number>>(row.childrenJson)
+	return {
+		hid: toNum(row.hid),
+		checkin: row.checkin,
+		checkout: row.checkout,
+		adults: row.adults,
+		children,
+		currency: row.currency as 'RUB',
+		dailyPrices: parseYdbJson<ReadonlyArray<number>>(row.dailyPricesJson),
+		totalPrice: toNum(row.totalPrice),
+		roomName: row.roomName,
+		mealName: row.mealName,
+		issuedAtMs: row.issuedAt.getTime(),
+		expiresAtMs: row.expiresAt.getTime(),
+	}
+}
+
+function rowToFormStage(row: YdbFormStageRow): FormStageContext {
+	return {
+		partnerOrderId: row.partnerOrderId,
+		bookHash: row.bookHash,
+		orderId: toNum(row.orderId),
+		itemId: toNum(row.itemId),
+		currency: row.currency as 'RUB',
+		totalAmount: toNum(row.totalAmount),
+		createdAtMs: row.createdAt.getTime(),
+		expiresAtMs: row.expiresAt.getTime(),
+	}
+}
+
+function rowToBooking(row: YdbBookingRow): FinalizedBooking {
+	const children =
+		row.childrenJson === null ? [] : parseYdbJson<ReadonlyArray<number>>(row.childrenJson)
+	const guests = parseYdbJson<FinalizedBooking['guests']>(row.guestsJson)
+	return {
+		partnerOrderId: row.partnerOrderId,
+		orderId: toNum(row.orderId),
+		itemId: toNum(row.itemId),
+		hid: toNum(row.hid),
+		checkin: row.checkin,
+		checkout: row.checkout,
+		adults: row.adults,
+		children,
+		currency: row.currency as 'RUB',
+		totalAmount: toNum(row.totalAmount),
+		status: row.status as 'confirmed' | 'cancelled',
+		customerEmail: row.customerEmail,
+		customerPhone: row.customerPhone,
+		guests,
+		createdAtMs: row.createdAt.getTime(),
+	}
 }
 
 /**
- * Look up a finalized booking by partner_order_id. Used by `finish/status/`
- * and `cancel/` for status routing.
+ * Build YDB-backed Ostrovok store. Implements same `OstrovokStore` interface
+ * as `createInMemoryOstrovokStore` — swap-compatible. State persisted в YDB
+ * со native TTL P1D (migration 0080).
  */
-export function getBooking(partnerOrderId: string): FinalizedBooking | null {
-	return bookings.get(partnerOrderId) ?? null
-}
+export function createYdbOstrovokStore(sql: SqlInstance): OstrovokStore {
+	void timestampOpt // re-export from helpers — used implicitly by sql tag template
 
-/**
- * Mark a booking as cancelled. Monotonic: `confirmed → cancelled` is one-way.
- *
- *   - `'cancelled'` — first cancel, mutation applied, caller should emit webhook
- *   - `'already_cancelled'` — booking already в cancelled state, no-op (idempotent
- *     contract; caller MUST NOT emit duplicate webhook)
- *   - `'not_found'` — no booking with this partner_order_id
- */
-export function cancelBooking(
-	partnerOrderId: string,
-): 'cancelled' | 'already_cancelled' | 'not_found' {
-	const existing = bookings.get(partnerOrderId)
-	if (existing === undefined) return 'not_found'
-	if (existing.status === 'cancelled') return 'already_cancelled'
-	bookings.set(partnerOrderId, { ...existing, status: 'cancelled' })
-	return 'cancelled'
-}
-
-/**
- * Test / admin reset helper. Drops every book_hash + form-stage + booking.
- * Called by `beforeEach` в tests + by `POST /api/_mock-ota/admin/reset`.
- * Production code paths must never call this — depcruise + one-way `_demo`
- * boundary enforce.
- */
-export function __resetState(): void {
-	bookHashes.clear()
-	formStages.clear()
-	bookings.clear()
-}
-
-/**
- * Read-only snapshot accessors для tests + admin panel introspection.
- * NOT exposed через HTTP routes directly — assertions in `*.routes.test.ts`
- * use these to inspect post-condition without going through public API.
- */
-export function __listBookHashes(): ReadonlyArray<{
-	readonly bookHash: string
-	readonly context: BookHashContext
-}> {
-	return Array.from(bookHashes.entries()).map(([bookHash, context]) => ({
-		bookHash,
-		context,
-	}))
-}
-
-export function __listFormStages(): ReadonlyArray<FormStageContext> {
-	return Array.from(formStages.values())
-}
-
-export function __listBookings(): ReadonlyArray<FinalizedBooking> {
-	return Array.from(bookings.values())
+	return {
+		async storeBookHash(input) {
+			const now = input.nowMs ?? Date.now()
+			const issuedAt = new Date(now)
+			const expiresAt = new Date(now + BOOK_HASH_TTL_MS)
+			await sql`
+				UPSERT INTO mockOtaOstrovokBookHash (
+					\`tenantId\`, \`bookHash\`, \`hid\`, \`checkin\`, \`checkout\`,
+					\`adults\`, \`childrenJson\`, \`currency\`, \`dailyPricesJson\`,
+					\`totalPrice\`, \`roomName\`, \`mealName\`, \`issuedAt\`, \`expiresAt\`
+				) VALUES (
+					${DEMO_TENANT}, ${input.bookHash}, ${BigInt(input.hid)}, ${input.checkin}, ${input.checkout},
+					${input.adults}, ${toJson(input.children)}, ${input.currency}, ${toJson(input.dailyPrices)},
+					${BigInt(input.totalPrice)}, ${input.roomName}, ${input.mealName}, ${issuedAt}, ${expiresAt}
+				)
+			`
+		},
+		async getBookHash(bookHash, nowMs) {
+			const [rows = []] = await sql<YdbBookHashRow[]>`
+				SELECT bookHash, hid, checkin, checkout, adults, childrenJson, currency,
+					dailyPricesJson, totalPrice, roomName, mealName, issuedAt, expiresAt
+				FROM mockOtaOstrovokBookHash
+				WHERE tenantId = ${DEMO_TENANT} AND bookHash = ${bookHash}
+				LIMIT 1
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const row = rows[0]
+			if (row === undefined) return null
+			const ctx = rowToBookHashContext(row)
+			const now = nowMs ?? Date.now()
+			if (ctx.expiresAtMs < now) return null // TTL eventually consistent; app-immediate check
+			return ctx
+		},
+		async storeFormStage(input) {
+			const now = input.nowMs ?? Date.now()
+			const createdAt = new Date(now)
+			const expiresAt = new Date(now + FORM_STAGE_TTL_MS)
+			await sql`
+				UPSERT INTO mockOtaOstrovokFormStage (
+					\`tenantId\`, \`partnerOrderId\`, \`bookHash\`, \`orderId\`, \`itemId\`,
+					\`currency\`, \`totalAmount\`, \`createdAt\`, \`expiresAt\`
+				) VALUES (
+					${DEMO_TENANT}, ${input.partnerOrderId}, ${input.bookHash}, ${BigInt(input.orderId)},
+					${BigInt(input.itemId)}, ${input.currency}, ${BigInt(input.totalAmount)},
+					${createdAt}, ${expiresAt}
+				)
+			`
+		},
+		async getFormStage(partnerOrderId, nowMs) {
+			const [rows = []] = await sql<YdbFormStageRow[]>`
+				SELECT partnerOrderId, bookHash, orderId, itemId, currency, totalAmount, createdAt, expiresAt
+				FROM mockOtaOstrovokFormStage
+				WHERE tenantId = ${DEMO_TENANT} AND partnerOrderId = ${partnerOrderId}
+				LIMIT 1
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const row = rows[0]
+			if (row === undefined) return null
+			const ctx = rowToFormStage(row)
+			const now = nowMs ?? Date.now()
+			if (ctx.expiresAtMs < now) return null
+			return ctx
+		},
+		async finalizeBooking(input) {
+			const now = input.nowMs ?? Date.now()
+			const createdAt = new Date(now)
+			const finalized: FinalizedBooking = {
+				partnerOrderId: input.form.partnerOrderId,
+				orderId: input.form.orderId,
+				itemId: input.form.itemId,
+				hid: input.bookHashContext.hid,
+				checkin: input.bookHashContext.checkin,
+				checkout: input.bookHashContext.checkout,
+				adults: input.bookHashContext.adults,
+				children: input.bookHashContext.children,
+				currency: input.form.currency,
+				totalAmount: input.form.totalAmount,
+				status: 'confirmed',
+				customerEmail: input.customerEmail,
+				customerPhone: input.customerPhone,
+				guests: input.guests,
+				createdAtMs: now,
+			}
+			await sql`
+				UPSERT INTO mockOtaOstrovokBooking (
+					\`tenantId\`, \`partnerOrderId\`, \`orderId\`, \`itemId\`, \`hid\`,
+					\`checkin\`, \`checkout\`, \`adults\`, \`childrenJson\`, \`currency\`,
+					\`totalAmount\`, \`status\`, \`customerEmail\`, \`customerPhone\`,
+					\`guestsJson\`, \`createdAt\`
+				) VALUES (
+					${DEMO_TENANT}, ${finalized.partnerOrderId}, ${BigInt(finalized.orderId)},
+					${BigInt(finalized.itemId)}, ${BigInt(finalized.hid)}, ${finalized.checkin},
+					${finalized.checkout}, ${finalized.adults}, ${toJson(finalized.children)},
+					${finalized.currency}, ${BigInt(finalized.totalAmount)}, ${finalized.status},
+					${finalized.customerEmail}, ${finalized.customerPhone}, ${toJson(finalized.guests)},
+					${createdAt}
+				)
+			`
+			// Best-effort delete of the form-stage row (matches in-memory behavior).
+			await sql`
+				DELETE FROM mockOtaOstrovokFormStage
+				WHERE tenantId = ${DEMO_TENANT} AND partnerOrderId = ${finalized.partnerOrderId}
+			`
+			return finalized
+		},
+		async getBooking(partnerOrderId) {
+			const [rows = []] = await sql<YdbBookingRow[]>`
+				SELECT partnerOrderId, orderId, itemId, hid, checkin, checkout, adults, childrenJson,
+					currency, totalAmount, status, customerEmail, customerPhone, guestsJson, createdAt
+				FROM mockOtaOstrovokBooking
+				WHERE tenantId = ${DEMO_TENANT} AND partnerOrderId = ${partnerOrderId}
+				LIMIT 1
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const row = rows[0]
+			if (row === undefined) return null
+			return rowToBooking(row)
+		},
+		async cancelBooking(partnerOrderId) {
+			const [rows = []] = await sql<YdbBookingRow[]>`
+				SELECT partnerOrderId, orderId, itemId, hid, checkin, checkout, adults, childrenJson,
+					currency, totalAmount, status, customerEmail, customerPhone, guestsJson, createdAt
+				FROM mockOtaOstrovokBooking
+				WHERE tenantId = ${DEMO_TENANT} AND partnerOrderId = ${partnerOrderId}
+				LIMIT 1
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			const row = rows[0]
+			if (row === undefined) return 'not_found'
+			if (row.status === 'cancelled') return 'already_cancelled'
+			await sql`
+				UPDATE mockOtaOstrovokBooking
+				SET \`status\` = ${'cancelled'}
+				WHERE tenantId = ${DEMO_TENANT} AND partnerOrderId = ${partnerOrderId}
+			`
+			return 'cancelled'
+		},
+		async __reset() {
+			// Production safety: reset only the demo tenant rows. Admin endpoint
+			// has session-token gate (Round 11 P1-B2) layered on top.
+			await sql`DELETE FROM mockOtaOstrovokBookHash WHERE tenantId = ${DEMO_TENANT}`
+			await sql`DELETE FROM mockOtaOstrovokFormStage WHERE tenantId = ${DEMO_TENANT}`
+			await sql`DELETE FROM mockOtaOstrovokBooking WHERE tenantId = ${DEMO_TENANT}`
+		},
+		async __listBookHashes() {
+			const [rows = []] = await sql<YdbBookHashRow[]>`
+				SELECT bookHash, hid, checkin, checkout, adults, childrenJson, currency,
+					dailyPricesJson, totalPrice, roomName, mealName, issuedAt, expiresAt
+				FROM mockOtaOstrovokBookHash
+				WHERE tenantId = ${DEMO_TENANT}
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map((r) => ({ bookHash: r.bookHash, context: rowToBookHashContext(r) }))
+		},
+		async __listFormStages() {
+			const [rows = []] = await sql<YdbFormStageRow[]>`
+				SELECT partnerOrderId, bookHash, orderId, itemId, currency, totalAmount, createdAt, expiresAt
+				FROM mockOtaOstrovokFormStage
+				WHERE tenantId = ${DEMO_TENANT}
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map(rowToFormStage)
+		},
+		async __listBookings() {
+			const [rows = []] = await sql<YdbBookingRow[]>`
+				SELECT partnerOrderId, orderId, itemId, hid, checkin, checkout, adults, childrenJson,
+					currency, totalAmount, status, customerEmail, customerPhone, guestsJson, createdAt
+				FROM mockOtaOstrovokBooking
+				WHERE tenantId = ${DEMO_TENANT}
+			`
+				.isolation('snapshotReadOnly')
+				.idempotent(true)
+			return rows.map(rowToBooking)
+		},
+	}
 }
