@@ -27,6 +27,7 @@ import { Hono } from 'hono'
 import type { AppEnv } from '../../factory.ts'
 import type { SochiCloudEvent } from '../../lib/channel-manager/cloud-events.ts'
 import { parseCloudEvent } from '../../lib/channel-manager/cloud-events.ts'
+import { validateWebhookData } from '../../lib/channel-manager/webhook-data-schemas.ts'
 import { computeBodyHash } from '../../lib/channel-manager/inbox.ts'
 import {
 	type SignatureFailure,
@@ -190,6 +191,26 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
 		)
 		if (authorizedConnection === undefined) {
 			return c.json({ error: 'forbidden_tenant_for_channel', tenantId, channelId }, 403)
+		}
+
+		// Round 14 Phase E3 — per-channel `data` field zod validation. Unknown
+		// event-type+channel combinations pass-through (forward-compat); known
+		// schemas reject malformed `data` с structured 400 error.
+		const dataValidation = validateWebhookData({
+			eventType: event.type,
+			channelId,
+			data: event.data,
+		})
+		if (dataValidation.kind === 'invalid') {
+			return c.json(
+				{
+					error: 'invalid_webhook_data',
+					eventType: event.type,
+					channelId,
+					details: dataValidation.errors,
+				},
+				400,
+			)
 		}
 
 		// Round 11 P1-B3 — verify matched-secret's tenantId binding.

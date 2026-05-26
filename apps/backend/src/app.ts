@@ -92,7 +92,7 @@ import type { AppEnv } from './factory.ts'
 import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
 import { createMagicLinkSecretResolver } from './lib/magic-link/secret.ts'
 import { createDcrRoutes } from './lib/oauth/dcr.routes.ts'
-import { createInMemoryDcrStore } from './lib/oauth/dcr.ts'
+import { createYdbDcrStore } from './lib/oauth/dcr.ydb.repo.ts'
 import { createOpenApiRoutes } from './lib/openapi/routes.ts'
 import { createReadinessEvaluator } from './lib/readiness.ts'
 import { createMcpRoutes } from './mcp/server.ts'
@@ -1019,9 +1019,12 @@ const routes = app
 	// Round 13 — MCP server (Model Context Protocol) day-1 canon parity (Apaleo
 	// Sep 2025 first-mover). JSON-RPC 2.0 over HTTP at /api/mcp/rpc + manifest.
 	.route('/api/mcp', createMcpRoutes())
-	// Round 13 — RFC 7591 Dynamic Client Registration. In-memory store
-	// (Phase-1 skeleton); Phase-2 swaps к YDB-backed с secret hash + rotation.
-	.route('/api/oauth', createDcrRoutes(createInMemoryDcrStore()))
+	// Round 13 + Round 14 Phase E1 — RFC 7591 Dynamic Client Registration с
+	// YDB persistence (migration 0079). Closes Round 13 honest-scope limit:
+	// in-memory store invalidated all registrations on restart; YDB-backed
+	// store survives. Secrets are scrypt-hashed before storage; plaintext
+	// only returned once в register response per RFC 7591 §4.1.
+	.route('/api/oauth', createDcrRoutes(createYdbDcrStore(sql)))
 	.route('/api/otel', otelIngest)
 	// M9.widget.7 / A5.2 — RUM ingest. Public, anonymous, CORS *. Mounted
 	// BEFORE auth middleware so embedded widgets can POST without credentials.

@@ -80,6 +80,36 @@ describe('DCR (RFC 7591) validation', () => {
 		expect(generateClientId()).toMatch(/^sclient_/)
 		expect(generateClientSecret()).toMatch(/^whsec_dcr_/)
 	})
+
+	test('[DCR-E2-1] contacts without consent flag → contacts_consent_required', () => {
+		const result = validateClientMetadata({
+			client_name: 'Acme',
+			redirect_uris: ['https://acme.example/cb'],
+			contacts: ['ops@acme.example'],
+		})
+		expect(result.ok).toBe(false)
+		if (!result.ok) expect(result.error.kind).toBe('contacts_consent_required')
+	})
+
+	test('[DCR-E2-2] contacts с explicit 152-ФЗ consent flag → ok', () => {
+		const result = validateClientMetadata({
+			client_name: 'Acme',
+			redirect_uris: ['https://acme.example/cb'],
+			contacts: ['ops@acme.example'],
+			contacts_consent_152fz: true,
+		})
+		expect(result.ok).toBe(true)
+		if (result.ok) expect(result.metadata.contacts).toEqual(['ops@acme.example'])
+	})
+
+	test('[DCR-E2-3] empty contacts array without flag → ok (no PII collected)', () => {
+		const result = validateClientMetadata({
+			client_name: 'Acme',
+			redirect_uris: ['https://acme.example/cb'],
+			contacts: [],
+		})
+		expect(result.ok).toBe(true)
+	})
 })
 
 describe('DCR (RFC 7591) routes', () => {

@@ -33,6 +33,15 @@ export function createDcrRoutes(store: DcrStore) {
 					403,
 				)
 			}
+			if (err.kind === 'contacts_consent_required') {
+				return c.json(
+					{
+						error: 'invalid_client_metadata',
+						error_description: err.detail,
+					},
+					403,
+				)
+			}
 			return c.json(
 				{
 					error:

@@ -34,6 +34,14 @@ export interface ClientMetadata {
 	readonly redirect_uris: ReadonlyArray<string>
 	readonly grant_types?: ReadonlyArray<string>
 	readonly token_endpoint_auth_method?: string
+	/**
+	 * Round 14 Phase E2 — `contacts` field carries email PII per RFC 7591 §3.2.
+	 * 152-ФЗ ст.6 + ст.18 requires informed consent BEFORE collecting identifiable
+	 * data. Accepted ONLY when caller explicitly sets `contacts_consent_152fz: true`
+	 * acknowledging они confirm consent from listed contacts. Without consent
+	 * flag, field rejected. Stored values хранятся в `contactsJson` — subject
+	 * to 152-ФЗ ст.21 retention canon.
+	 */
 	readonly contacts?: ReadonlyArray<string>
 }
 
@@ -50,6 +58,7 @@ export type DcrError =
 	| { readonly kind: 'invalid_redirect_uri'; readonly detail: string }
 	| { readonly kind: 'invalid_client_metadata'; readonly detail: string }
 	| { readonly kind: 'reserved_client_name' }
+	| { readonly kind: 'contacts_consent_required'; readonly detail: string }
 
 const MAX_CLIENT_NAME_LEN = 200
 const MAX_REDIRECT_URIS = 5
@@ -130,6 +139,26 @@ export function validateClientMetadata(
 				ok: false,
 				error: { kind: 'invalid_redirect_uri', detail: 'unsafe redirect_uri scheme or content' },
 			}
+		}
+	}
+
+	// Round 14 Phase E2 — 152-ФЗ ст.6+18 consent gate для `contacts` field.
+	// Email PII в contacts requires informed consent. Caller must set
+	// `contacts_consent_152fz: true` acknowledging they have consent from
+	// all listed contacts. Without flag → reject 403. Empty/absent contacts
+	// array OK — no PII collected.
+	if (
+		Array.isArray(obj.contacts) &&
+		obj.contacts.length > 0 &&
+		obj.contacts_consent_152fz !== true
+	) {
+		return {
+			ok: false,
+			error: {
+				kind: 'contacts_consent_required',
+				detail:
+					'`contacts` field carries email PII per 152-ФЗ ст.6 + ст.18; set `contacts_consent_152fz: true` to acknowledge consent from listed contacts',
+			},
 		}
 	}
 
