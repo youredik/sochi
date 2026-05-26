@@ -463,7 +463,7 @@ export const SEPSHN_OPENAPI_SPEC = {
 				tags: ['MCP'],
 				summary: 'JSON-RPC 2.0 endpoint (initialize | tools/list | tools/call)',
 				description:
-					'MCP protocol version `2025-03-26`. Supported methods: `initialize`, `tools/list`, `tools/call`. See `/api/mcp/manifest` для available tool names.',
+					'MCP protocol version `2025-11-25` (latest stable per modelcontextprotocol.io as of May 2026; RC `2026-07-28` adds stateless protocol core + MCP Apps + Tasks + OAuth-aligned auth — adopted when promoted to stable). Supported methods: `initialize`, `tools/list`, `tools/call`. See `/api/mcp/manifest` для available tool names. AI-backed tools (`sepshn.ai.*`) require `YANDEX_AI_API_KEY` + `YANDEX_AI_FOLDER_ID` env vars; absent env → `{ kind: "not_configured" }` graceful fallback.',
 				requestBody: {
 					required: true,
 					content: {

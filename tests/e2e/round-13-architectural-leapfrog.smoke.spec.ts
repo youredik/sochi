@@ -58,7 +58,7 @@ test.describe('Round 13 — architectural leapfrog regression', () => {
 			result: { protocolVersion: string; serverInfo: { name: string } }
 		}
 		expect(body.jsonrpc).toBe('2.0')
-		expect(body.result.protocolVersion).toBe('2025-03-26')
+		expect(body.result.protocolVersion).toBe('2025-11-25')
 	})
 
 	test('[R13-5] POST /api/mcp/rpc tools/call sepshn.demo.list_demo_routes', async ({ request }) => {

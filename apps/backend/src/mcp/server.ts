@@ -29,8 +29,12 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from '../factory.ts'
+import { chatCompletion, readConfigFromEnv } from '../lib/ai/yandex-ai-studio.ts'
 
-const MCP_PROTOCOL_VERSION = '2025-03-26' // latest published spec at време написания
+// MCP spec version pinned к `2025-11-25` (latest stable May 2026 per canon
+// `feedback_aggressive_delegacy`). RC `2026-07-28` adds stateless protocol
+// core + MCP Apps + Tasks + OAuth-aligned auth — adopt когда RC promotes к stable.
+const MCP_PROTOCOL_VERSION = '2025-11-25'
 const SEPSHN_MCP_SERVER_NAME = 'sepshn-pms'
 const SEPSHN_MCP_SERVER_VERSION = '0.1.0'
 
@@ -130,6 +134,68 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 					'Demo / trademark-safe — fictional property, не real Sochi hotel',
 					'JSON-LD schema rendered на /demo/ota/{brand}/property/{id} (Lake.com canon)',
 				],
+			}
+		},
+	},
+	{
+		name: 'sepshn.ai.generate_property_description',
+		description:
+			'Generate a marketing-style property description via Yandex AI Studio (`yandexgpt-lite` default, configurable via `YANDEX_AI_MODEL`). Args: `{ propertyHint?: string, lengthHint?: "short"|"medium"|"long" }`. Returns `{ text, model, tokensUsed }` or `not_configured` if `YANDEX_AI_API_KEY` env not set. Replaces «multi-day external blocker» Round 13 framing — Yandex AI Studio OpenAI-compat REST endpoint, без on-prem GPU.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				propertyHint: {
+					type: 'string',
+					description:
+						'Optional hint about property style (default: «гостевой дом 3*, Сочи, 0.5 км до пляжа»)',
+				},
+				lengthHint: {
+					type: 'string',
+					enum: ['short', 'medium', 'long'],
+					default: 'short',
+				},
+			},
+		},
+		async handler(args: unknown) {
+			const a = (args ?? {}) as { propertyHint?: string; lengthHint?: 'short' | 'medium' | 'long' }
+			const hint = a.propertyHint ?? 'гостевой дом 3*, Сочи, 0.5 км до пляжа, 8 номеров'
+			const length = a.lengthHint ?? 'short'
+			const tokenCap = length === 'long' ? 500 : length === 'medium' ? 250 : 120
+			const result = await chatCompletion(
+				{
+					messages: [
+						{
+							role: 'system',
+							text: 'Ты — копирайтер отелей. Пиши коротко, на русском, с упором на конкретные удобства и расположение. Без emoji.',
+						},
+						{
+							role: 'user',
+							text: `Опиши объект для booking-листинга: ${hint}`,
+						},
+					],
+					maxTokens: tokenCap,
+				},
+				readConfigFromEnv(),
+			)
+			if (result.kind === 'not_configured') {
+				return {
+					kind: 'not_configured',
+					reason: result.reason,
+					configHelp:
+						'Set YANDEX_AI_API_KEY + YANDEX_AI_FOLDER_ID env vars (Yandex Cloud Lockbox recommended in production). Model selectable via YANDEX_AI_MODEL (default `yandexgpt-lite/latest`; alternatives: `yandexgpt/latest`, `alice-ai-llm/latest`, `qwen-3/latest`, `deepseek-v3/latest`).',
+				}
+			}
+			if (result.kind === 'error') {
+				return {
+					kind: 'error',
+					status: result.status,
+					message: result.message,
+				}
+			}
+			return {
+				kind: 'ok',
+				text: result.text,
+				usage: result.usage,
 			}
 		},
 	},

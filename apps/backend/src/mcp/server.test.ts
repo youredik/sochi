@@ -43,7 +43,7 @@ describe('MCP server skeleton (Round 13)', () => {
 		}
 		expect(body.jsonrpc).toBe('2.0')
 		expect(body.id).toBe(1)
-		expect(body.result.protocolVersion).toBe('2025-03-26')
+		expect(body.result.protocolVersion).toBe('2025-11-25')
 		expect(body.result.serverInfo.name).toBe('sepshn-pms')
 	})
 
