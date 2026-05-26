@@ -15,6 +15,7 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 import type { sql as SQL } from '../../db/index.ts'
+import { timestampOpt, toJson } from '../../db/ydb-helpers.ts'
 import {
 	type ClientMetadata,
 	type DcrStore,
@@ -99,6 +100,9 @@ export function createYdbDcrStore(sql: SqlInstance): DcrStore {
 			const issuedAt = new Date(nowMs)
 			const grantTypes = metadata.grant_types ?? ['authorization_code']
 			const tokenAuthMethod = metadata.token_endpoint_auth_method ?? 'client_secret_basic'
+			// Round 14 self-review fix — bare `${null}` rejected by `@ydbjs/query`
+			// driver per ydb-helpers.ts canon ("Expected optional, pg type or Null
+			// type, but got Utf8"). Use `timestampOpt(null)` + `toJson(null)`.
 			await sql`
 				INSERT INTO oauthClient (
 					\`tenantId\`, \`clientId\`, \`clientSecretHash\`, \`clientName\`,
@@ -106,11 +110,11 @@ export function createYdbDcrStore(sql: SqlInstance): DcrStore {
 					\`contactsJson\`, \`clientIdIssuedAt\`, \`clientSecretExpiresAt\`, \`revokedAt\`
 				) VALUES (
 					${DEFAULT_DCR_TENANT}, ${clientId}, ${secretHash}, ${metadata.client_name},
-					${JSON.stringify(metadata.redirect_uris)},
-					${JSON.stringify(grantTypes)},
+					${toJson(metadata.redirect_uris)},
+					${toJson(grantTypes)},
 					${tokenAuthMethod},
-					${metadata.contacts !== undefined ? JSON.stringify(metadata.contacts) : null},
-					${issuedAt}, ${null}, ${null}
+					${toJson(metadata.contacts !== undefined ? metadata.contacts : null)},
+					${issuedAt}, ${timestampOpt(null)}, ${timestampOpt(null)}
 				)
 			`
 			return rowToClient(
