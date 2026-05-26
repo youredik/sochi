@@ -57,18 +57,35 @@ interface YdbDcrRow {
 	clientId: string
 	clientSecretHash: string
 	clientName: string
-	redirectUrisJson: string
-	grantTypesJson: string
+	// YDB Json columns return either string (needs JSON.parse) OR already-parsed
+	// object — depends on driver / column shape. Defensive pattern per
+	// payment-webhook-event.repo.ts canon.
+	redirectUrisJson: string | unknown
+	grantTypesJson: string | unknown
 	tokenEndpointAuthMethod: string
-	contactsJson: string | null
+	contactsJson: string | unknown | null
 	clientIdIssuedAt: Date
 	clientSecretExpiresAt: Date | null
 	revokedAt: Date | null
 }
 
+/**
+ * Defensive JSON parse — handles YDB driver returning either string OR
+ * already-deserialized value. Round 14 self-review (commit `501e897` fix
+ * follow-up): empirical test caught `JSON.parse(parsedObj)` crash.
+ */
+function parseYdbJson<T>(value: unknown): T {
+	if (typeof value === 'string') return JSON.parse(value) as T
+	return value as T
+}
+
 function rowToClient(row: YdbDcrRow, plaintextSecretOnRegister?: string): RegisteredClient {
 	// On register we have plaintext to return once; on read we never expose
 	// the secret (signal absence via empty string per RFC 7591 §4.1).
+	const redirectUris = parseYdbJson<ReadonlyArray<string>>(row.redirectUrisJson)
+	const grantTypes = parseYdbJson<ReadonlyArray<string>>(row.grantTypesJson)
+	const contacts =
+		row.contactsJson === null ? undefined : parseYdbJson<ReadonlyArray<string>>(row.contactsJson)
 	return {
 		client_id: row.clientId,
 		client_secret: plaintextSecretOnRegister ?? '',
@@ -78,12 +95,10 @@ function rowToClient(row: YdbDcrRow, plaintextSecretOnRegister?: string): Regist
 				? 0
 				: Math.floor(row.clientSecretExpiresAt.getTime() / 1000),
 		client_name: row.clientName,
-		redirect_uris: JSON.parse(row.redirectUrisJson) as ReadonlyArray<string>,
-		grant_types: JSON.parse(row.grantTypesJson) as ReadonlyArray<string>,
+		redirect_uris: redirectUris,
+		grant_types: grantTypes,
 		token_endpoint_auth_method: row.tokenEndpointAuthMethod,
-		...(row.contactsJson !== null && {
-			contacts: JSON.parse(row.contactsJson) as ReadonlyArray<string>,
-		}),
+		...(contacts !== undefined && { contacts }),
 	}
 }
 
