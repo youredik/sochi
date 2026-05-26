@@ -91,7 +91,9 @@ import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
 import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
 import { createMagicLinkSecretResolver } from './lib/magic-link/secret.ts'
+import { createOpenApiRoutes } from './lib/openapi/routes.ts'
 import { createReadinessEvaluator } from './lib/readiness.ts'
+import { createMcpRoutes } from './mcp/server.ts'
 import { logger } from './logger.ts'
 import { magicLinkRateLimit, orgCreateRateLimit } from './middleware/auth-signup-rate-limit.ts'
 import { demoInboxRateLimiter } from './middleware/demo-inbox-rate-limit.ts'
@@ -1009,6 +1011,12 @@ const readinessEvaluator = createReadinessEvaluator({
 })
 
 const routes = app
+	// Round 13 — OpenAPI 3.1 spec + Swagger UI at /api/openapi.json + /api/docs.
+	// Mounted EARLY (before auth) — public discovery surface for integration partners.
+	.route('/api', createOpenApiRoutes())
+	// Round 13 — MCP server (Model Context Protocol) day-1 canon parity (Apaleo
+	// Sep 2025 first-mover). JSON-RPC 2.0 over HTTP at /api/mcp/rpc + manifest.
+	.route('/api/mcp', createMcpRoutes())
 	.route('/api/otel', otelIngest)
 	// M9.widget.7 / A5.2 — RUM ingest. Public, anonymous, CORS *. Mounted
 	// BEFORE auth middleware so embedded widgets can POST without credentials.
