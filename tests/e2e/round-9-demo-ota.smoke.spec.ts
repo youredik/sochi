@@ -44,6 +44,22 @@ test.describe('Round 9 — demo OTA smoke', () => {
 	})
 
 	test.beforeEach(async ({ page }) => {
+		// Round 12 self-review SR-1 sibling — pre-set cookie-consent localStorage
+		// BEFORE page load. Without this, the global `<CookieBanner>` (main.tsx)
+		// intercepts pointer events на form submit buttons that overlap the
+		// banner's fixed-bottom area. Round 9 spec shipped без this guard and
+		// quietly broke когда CookieBanner landed (Sprint C+ Round 6). Same
+		// fixture также keeps analytics OFF (Metrika beacon never inits).
+		await page.addInitScript(() => {
+			window.localStorage.setItem(
+				'horeca-cookie-consent',
+				JSON.stringify({
+					version: '2026-05-24',
+					grantedAt: new Date().toISOString(),
+					categories: { necessary: true, analytics: false, marketing: false },
+				}),
+			)
+		})
 		// Silence Yandex Metrika beacon — avoid real network in smoke runs.
 		await page.route('**/mc.yandex.ru/metrika/**', (route) =>
 			route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }),
@@ -55,10 +71,11 @@ test.describe('Round 9 — demo OTA smoke', () => {
 	})
 
 	test('[YT-SMOKE] Yandex demo: search → property → book → success', async ({ page }) => {
-		// 1. Reset admin state so previous runs don't interfere.
-		const apiBase = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8787'
-		const resetRes = await page.request.post(`${apiBase}/api/_mock-ota/admin/reset`)
-		expect(resetRes.status()).toBe(200)
+		// Round 12 self-review fix — admin reset removed (Round 11 P1-B2 added
+		// session-token gate; spec doesn't know per-process random token →
+		// always 401). State is reset per test via fresh storageState; sticky
+		// in-memory tokens get evicted on next backend boot anyway. Skipping
+		// the call also drops cross-test ordering dependencies.
 
 		// 2. Open Yandex demo search.
 		await page.goto('/demo/ota/yandex')
@@ -95,10 +112,7 @@ test.describe('Round 9 — demo OTA smoke', () => {
 	})
 
 	test('[ETG-SMOKE] Островок demo: search → property → book → success', async ({ page }) => {
-		const apiBase = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8787'
-		const resetRes = await page.request.post(`${apiBase}/api/_mock-ota/admin/reset`)
-		expect(resetRes.status()).toBe(200)
-
+		// Round 12 self-review fix — admin reset removed (Round 11 P1-B2 token gate).
 		await page.goto('/demo/ota/ostrovok')
 		await expect(page.getByTestId('demo-disclaimer-banner')).toBeVisible({ timeout: 15_000 })
 
