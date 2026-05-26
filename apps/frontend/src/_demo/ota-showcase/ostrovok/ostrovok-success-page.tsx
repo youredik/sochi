@@ -103,7 +103,8 @@ export function OstrovokSuccessPage({ orderId, returnToPmsUrl }: OstrovokSuccess
 						</div>
 						<div className="flex justify-between">
 							<dt style={{ color: ostrovokBrandTokens.textMuted }}>Статус</dt>
-							<dd className="font-medium" style={{ color: 'hsl(142 71% 35%)' }}>
+							{/* Round 12 a11y (R12V-5 sibling) — lightness 35% → 28% для WCAG AA 4.5:1 */}
+							<dd className="font-medium" style={{ color: 'hsl(142 71% 28%)' }}>
 								Подтверждено
 							</dd>
 						</div>

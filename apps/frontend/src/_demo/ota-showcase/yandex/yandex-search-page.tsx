@@ -49,8 +49,22 @@ export function YandexSearchPage({ onSearch }: YandexSearchPageProps) {
 	const [adults, setAdults] = useState(2)
 	const [children, setChildren] = useState(0)
 
+	// Round 12 R12V-1 — client-side validation: checkOut > checkIn. Backend
+	// rejects invalid_date_range gracefully but the user experience is broken
+	// (the property page shows the alert with no clear recovery path).
+	const [dateError, setDateError] = useState<string | null>(null)
+
 	function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
 		e.preventDefault()
+		if (
+			checkinDate.length === 0 ||
+			checkoutDate.length === 0 ||
+			Date.parse(checkoutDate) <= Date.parse(checkinDate)
+		) {
+			setDateError('Дата выезда должна быть позже даты заезда.')
+			return
+		}
+		setDateError(null)
 		onSearch({
 			hotelId: DEFAULT_HOTEL_ID,
 			checkinDate,
@@ -199,6 +213,21 @@ export function YandexSearchPage({ onSearch }: YandexSearchPageProps) {
 							/>
 						</div>
 					</div>
+
+					{dateError !== null && (
+						<p
+							role="alert"
+							data-testid="yandex-search-date-error"
+							className="mt-4 rounded-md border-l-4 p-3 text-sm font-medium"
+							style={{
+								background: 'hsl(11 92% 96%)',
+								color: 'hsl(11 80% 30%)',
+								borderLeftColor: yandexBrandTokens.primary,
+							}}
+						>
+							{dateError}
+						</p>
+					)}
 
 					<button
 						type="submit"

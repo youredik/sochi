@@ -49,8 +49,20 @@ export function OstrovokSearchPage({ onSearch }: OstrovokSearchPageProps) {
 	const [adults, setAdults] = useState(2)
 	const [children, setChildren] = useState(0)
 
+	// Round 12 R12V-1 sibling — client-side date validation (mirrors Yandex).
+	const [dateError, setDateError] = useState<string | null>(null)
+
 	function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
 		e.preventDefault()
+		if (
+			checkinDate.length === 0 ||
+			checkoutDate.length === 0 ||
+			Date.parse(checkoutDate) <= Date.parse(checkinDate)
+		) {
+			setDateError('Дата выезда должна быть позже даты заезда.')
+			return
+		}
+		setDateError(null)
 		onSearch({
 			hid: SANDBOX_DEMO_HID,
 			checkinDate,
@@ -197,6 +209,21 @@ export function OstrovokSearchPage({ onSearch }: OstrovokSearchPageProps) {
 							/>
 						</div>
 					</div>
+
+					{dateError !== null && (
+						<p
+							role="alert"
+							data-testid="ostrovok-search-date-error"
+							className="mt-4 rounded-md border-l-4 p-3 text-sm font-medium"
+							style={{
+								background: 'hsl(354 76% 96%)',
+								color: 'hsl(354 70% 30%)',
+								borderLeftColor: ostrovokBrandTokens.primary,
+							}}
+						>
+							{dateError}
+						</p>
+					)}
 
 					<button
 						type="submit"

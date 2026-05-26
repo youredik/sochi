@@ -29,7 +29,22 @@
  * (`spyOn(globalThis, 'fetch')`).
  */
 
-const BASE = '/api/_mock-ota/ostrovok/v1/api/b2b/v3'
+/**
+ * Round 12 P0 (R12V-2 Preview MCP find) — BASE must match the backend mount
+ * site. `_demo/index.ts:81` mounts `ostrovokRouter` at `/api/_mock-ota/ostrovok/v1`
+ * and its routes are bare (`app.post('/search/hp/')`, `/hotel/order/booking/form/`,
+ * etc — see `mock-ota-server/ostrovok/ostrovok.routes.ts:207-528`).
+ *
+ * Previously this BASE carried an extra `/api/b2b/v3` suffix («mimic real ETG
+ * path») that the backend did NOT serve → every call 404'd with Vite's HTML
+ * fallback («Unexpected non-whitespace character after JSON»). Caught by
+ * Preview MCP UI walk-through; curl tests passed because they used the real
+ * backend path directly. Round 12 fix aligns BASE → backend mount.
+ *
+ * If we later want the ETG-shape path back for adapter parity, do it
+ * symmetrically: add `/api/b2b/v3` BOTH to backend mount AND frontend BASE.
+ */
+const BASE = '/api/_mock-ota/ostrovok/v1'
 const AUTH_HEADER = 'Basic ZGVtbzpkZW1v' // base64('demo:demo'); demo-only literal
 
 // ── Wire types — match backend response shape verbatim ─────────────────

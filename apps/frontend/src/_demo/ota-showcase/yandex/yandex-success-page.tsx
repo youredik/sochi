@@ -103,7 +103,8 @@ export function YandexSuccessPage({ orderId, returnToPmsUrl }: YandexSuccessPage
 						</div>
 						<div className="flex justify-between">
 							<dt style={{ color: yandexBrandTokens.textMuted }}>Статус</dt>
-							<dd className="font-medium" style={{ color: 'hsl(142 71% 35%)' }}>
+							{/* Round 12 a11y (R12V-5) — lightness 35% → 28% для WCAG AA 4.5:1 */}
+							<dd className="font-medium" style={{ color: 'hsl(142 71% 28%)' }}>
 								Подтверждено
 							</dd>
 						</div>

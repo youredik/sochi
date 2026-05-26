@@ -302,6 +302,13 @@ export function ShowcasePage({
 						data-testid="showcase-iframe-ota"
 						src={leftIframeSrc}
 						className="flex-1 w-full border-0"
+						// Round 12 deeper-2 — sandbox attribute (security):
+						// allow-scripts (React app needs JS) +
+						// allow-same-origin (own-origin iframe needs cookies/localStorage) +
+						// allow-forms (demo form submits) +
+						// allow-popups (for trademark-disclaimer links).
+						// NO allow-top-navigation: child cannot redirect parent showcase.
+						sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
 					/>
 				</section>
 				<section className="flex h-full flex-col" aria-label="PMS grid">
@@ -313,6 +320,8 @@ export function ShowcasePage({
 						data-testid="showcase-iframe-pms"
 						src={pmsGridUrl}
 						className="flex-1 w-full border-0"
+						// Round 12 deeper-2 — sandbox same scope as OTA iframe.
+						sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
 					/>
 				</section>
 			</main>

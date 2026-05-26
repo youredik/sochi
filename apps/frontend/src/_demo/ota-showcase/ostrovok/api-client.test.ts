@@ -80,7 +80,7 @@ describe('Ostrovok API client', () => {
 			})
 			expect(fetchSpy).toHaveBeenCalledTimes(1)
 			const call = fetchSpy.mock.calls[0]
-			expect(call?.[0]).toBe('/api/_mock-ota/ostrovok/v1/api/b2b/v3/search/hp/')
+			expect(call?.[0]).toBe('/api/_mock-ota/ostrovok/v1/search/hp/')
 			const init = call?.[1] as RequestInit | undefined
 			expect(init?.method).toBe('POST')
 			const headers = init?.headers as Record<string, string>
@@ -219,7 +219,7 @@ describe('Ostrovok API client', () => {
 				user_ip: '127.0.0.1',
 			})
 			const call = fetchSpy.mock.calls[0]
-			expect(call?.[0]).toBe('/api/_mock-ota/ostrovok/v1/api/b2b/v3/hotel/order/booking/form/')
+			expect(call?.[0]).toBe('/api/_mock-ota/ostrovok/v1/hotel/order/booking/form/')
 			const init = call?.[1] as RequestInit | undefined
 			const body = JSON.parse(init?.body as string) as Record<string, unknown>
 			expect(body.partner_order_id).toBe('11111111-1111-4111-8111-111111111111')
@@ -314,7 +314,7 @@ describe('Ostrovok API client', () => {
 				payment_type: { type: 'now', amount: '14000', currency_code: 'RUB' },
 			})
 			const call = fetchSpy.mock.calls[0]
-			expect(call?.[0]).toBe('/api/_mock-ota/ostrovok/v1/api/b2b/v3/hotel/order/booking/finish/')
+			expect(call?.[0]).toBe('/api/_mock-ota/ostrovok/v1/hotel/order/booking/finish/')
 			const init = call?.[1] as RequestInit | undefined
 			const body = JSON.parse(init?.body as string) as Record<string, unknown>
 			const partner = body.partner as Record<string, unknown>
@@ -369,9 +369,7 @@ describe('Ostrovok API client', () => {
 			)
 			await pollFinishStatus('p-1')
 			const call = fetchSpy.mock.calls[0]
-			expect(call?.[0]).toBe(
-				'/api/_mock-ota/ostrovok/v1/api/b2b/v3/hotel/order/booking/finish/status/',
-			)
+			expect(call?.[0]).toBe('/api/_mock-ota/ostrovok/v1/hotel/order/booking/finish/status/')
 			const init = call?.[1] as RequestInit | undefined
 			const body = JSON.parse(init?.body as string) as Record<string, unknown>
 			expect(body.partner_order_id).toBe('p-1')
@@ -401,7 +399,7 @@ describe('Ostrovok API client', () => {
 			)
 			await cancelBooking('p-1')
 			const call = fetchSpy.mock.calls[0]
-			expect(call?.[0]).toBe('/api/_mock-ota/ostrovok/v1/api/b2b/v3/hotel/order/cancel/')
+			expect(call?.[0]).toBe('/api/_mock-ota/ostrovok/v1/hotel/order/cancel/')
 			const init = call?.[1] as RequestInit | undefined
 			const body = JSON.parse(init?.body as string) as Record<string, unknown>
 			expect(body.partner_order_id).toBe('p-1')

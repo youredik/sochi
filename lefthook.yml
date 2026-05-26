@@ -91,6 +91,16 @@ pre-commit:
       # See `[[dev-server-staleness-canon]]` 2026-05-17.
       run: bash scripts/check-dev-server-age.sh
 
+    - name: check-api-base-consistency
+      # Round 12 R12V-2 systemic gate — assert frontend `_demo/` api-client
+      # BASE constants match backend `_demo/index.ts` mount paths verbatim.
+      # Caught 2026-05-26 by Preview MCP UI walk: Round 9 shipped Ostrovok
+      # api-client с extra `/api/b2b/v3` suffix → all calls 404 → demo UI
+      # completely broken while unit tests greenwashed wrong path. ~50ms
+      # static grep check. See script header для canonical rule.
+      glob: 'apps/{backend,frontend}/src/**/{index.ts,api-client.ts}'
+      run: bash scripts/check-api-base-consistency.sh
+
 # Pre-push: minimal blocking gate (≤5s hard cap).
 # Skip via `LEFTHOOK=0 git push` (built-in env override; не --no-verify).
 #

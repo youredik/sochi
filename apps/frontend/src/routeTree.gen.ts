@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DemoIndexRouteImport } from './routes/demo.index'
 import { Route as WidgetTenantSlugRouteImport } from './routes/widget.$tenantSlug'
 import { Route as DemoShowcaseRouteImport } from './routes/demo.showcase'
 import { Route as BookingJwtRouteImport } from './routes/booking.$jwt'
@@ -82,6 +83,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DemoIndexRoute = DemoIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DemoRoute,
 } as any)
 const WidgetTenantSlugRoute = WidgetTenantSlugRouteImport.update({
   id: '/widget/$tenantSlug',
@@ -274,6 +280,7 @@ export interface FileRoutesByFullPath {
   '/booking/$jwt': typeof BookingJwtRoute
   '/demo/showcase': typeof DemoShowcaseRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
+  '/demo/': typeof DemoIndexRoute
   '/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
@@ -305,7 +312,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/demo': typeof DemoRouteWithChildren
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
@@ -314,6 +320,7 @@ export interface FileRoutesByTo {
   '/booking/$jwt': typeof BookingJwtRoute
   '/demo/showcase': typeof DemoShowcaseRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
+  '/demo': typeof DemoIndexRoute
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
@@ -355,6 +362,7 @@ export interface FileRoutesById {
   '/booking/$jwt': typeof BookingJwtRoute
   '/demo/showcase': typeof DemoShowcaseRoute
   '/widget/$tenantSlug': typeof WidgetTenantSlugRoute
+  '/demo/': typeof DemoIndexRoute
   '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug_/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
@@ -397,6 +405,7 @@ export interface FileRouteTypes {
     | '/booking/$jwt'
     | '/demo/showcase'
     | '/widget/$tenantSlug'
+    | '/demo/'
     | '/o/$orgSlug'
     | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug/$propertyId'
@@ -428,7 +437,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/demo'
     | '/login'
     | '/privacy'
     | '/signup'
@@ -437,6 +445,7 @@ export interface FileRouteTypes {
     | '/booking/$jwt'
     | '/demo/showcase'
     | '/widget/$tenantSlug'
+    | '/demo'
     | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug/$propertyId'
     | '/o/$orgSlug/grid'
@@ -477,6 +486,7 @@ export interface FileRouteTypes {
     | '/booking/$jwt'
     | '/demo/showcase'
     | '/widget/$tenantSlug'
+    | '/demo/'
     | '/_app/o/$orgSlug'
     | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug_/$propertyId'
@@ -573,6 +583,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/demo/': {
+      id: '/demo/'
+      path: '/'
+      fullPath: '/demo/'
+      preLoaderRoute: typeof DemoIndexRouteImport
+      parentRoute: typeof DemoRoute
     }
     '/widget/$tenantSlug': {
       id: '/widget/$tenantSlug'
@@ -874,6 +891,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface DemoRouteChildren {
   DemoShowcaseRoute: typeof DemoShowcaseRoute
+  DemoIndexRoute: typeof DemoIndexRoute
   DemoOtaOstrovokIndexRoute: typeof DemoOtaOstrovokIndexRoute
   DemoOtaYandexIndexRoute: typeof DemoOtaYandexIndexRoute
   DemoOtaOstrovokBookingPartnerOrderIdRoute: typeof DemoOtaOstrovokBookingPartnerOrderIdRoute
@@ -886,6 +904,7 @@ interface DemoRouteChildren {
 
 const DemoRouteChildren: DemoRouteChildren = {
   DemoShowcaseRoute: DemoShowcaseRoute,
+  DemoIndexRoute: DemoIndexRoute,
   DemoOtaOstrovokIndexRoute: DemoOtaOstrovokIndexRoute,
   DemoOtaYandexIndexRoute: DemoOtaYandexIndexRoute,
   DemoOtaOstrovokBookingPartnerOrderIdRoute:

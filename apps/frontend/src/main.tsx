@@ -150,16 +150,42 @@ void import('./lib/yandex-metrika.ts').then((metrika) => {
 	if (counterId === undefined) return
 
 	let initialized = false
+	function isDemoPathname(): boolean {
+		return typeof window !== 'undefined' && window.location.pathname.startsWith('/demo')
+	}
 	function maybeInit(): void {
 		if (initialized) return
 		if (!consentIsGranted('analytics')) return
+		// Round 12 R12V-7 (deeper-2) — defer Metrika init while on /demo/*.
+		// initYandexMetrikaDeferred fires `window.ym(id, 'init', ...)` which
+		// auto-tracks current page as initial pageview. If user lands on
+		// /demo/ota/yandex and accepts cookies, initial pageview leaks the
+		// demo URL to the real Metrika counter. Demo pages mimic real
+		// brand wordmarks (approximate-not-exact); avoid sending these hits
+		// at all. On first non-demo navigation, init runs.
+		if (isDemoPathname()) return
 		initialized = true
 		metrika.initYandexMetrikaDeferred(counterId)
 		router.subscribe('onResolved', ({ toLocation }) => {
+			// Skip subsequent hits too (covers /demo navigations after init).
+			if (toLocation.pathname.startsWith('/demo')) return
 			// `.href` = pathname + searchStr + hash для Метрики 'hit'.
 			metrika.trackPageView(toLocation.href)
 		})
 	}
+
+	// Round 12 R12V-7 — retry init on any non-demo navigation so users that
+	// land on /demo first still get Metrika after they navigate elsewhere
+	// (consent might be granted already).
+	const navUnsub = router.subscribe('onResolved', ({ toLocation }) => {
+		if (initialized) {
+			navUnsub()
+			return
+		}
+		if (!toLocation.pathname.startsWith('/demo')) {
+			maybeInit()
+		}
+	})
 
 	// 1. Try init immediately — user уже decided ранее (return visitor)
 	maybeInit()
