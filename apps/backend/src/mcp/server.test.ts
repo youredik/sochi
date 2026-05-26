@@ -112,6 +112,62 @@ describe('MCP server skeleton (Round 13)', () => {
 		expect(body.error.code).toBe(-32700)
 	})
 
+	test('[MCP-E4-1] tools/call sepshn.demo.get_property_summary', async () => {
+		const app = mount()
+		const res = await app.request('/api/mcp/rpc', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 'e4-1',
+				method: 'tools/call',
+				params: { name: 'sepshn.demo.get_property_summary', arguments: {} },
+			}),
+		})
+		expect(res.status).toBe(200)
+		const body = (await res.json()) as { result: { content: Array<{ text: string }> } }
+		const parsed = JSON.parse(body.result.content[0]?.text ?? '{}') as {
+			property: { id: string; channelIds: string[] }
+		}
+		expect(parsed.property.id).toBe('demo-hotel-sochi')
+		expect(parsed.property.channelIds).toEqual(['YT', 'ETG'])
+	})
+
+	test('[MCP-E4-2] tools/call sepshn.demo.list_recent_demo_bookings respects limit', async () => {
+		const app = mount()
+		const res = await app.request('/api/mcp/rpc', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 'e4-2',
+				method: 'tools/call',
+				params: {
+					name: 'sepshn.demo.list_recent_demo_bookings',
+					arguments: { limit: 2 },
+				},
+			}),
+		})
+		const body = (await res.json()) as { result: { content: Array<{ text: string }> } }
+		const parsed = JSON.parse(body.result.content[0]?.text ?? '{}') as {
+			bookings: ReadonlyArray<{ bookingId: string; guest: { email: string } }>
+		}
+		expect(parsed.bookings.length).toBe(2)
+		// All emails are RFC 2606 reserved-test (no real PII)
+		for (const b of parsed.bookings) {
+			expect(b.guest.email).toMatch(/@example\.com$/)
+		}
+	})
+
+	test('[MCP-E4-3] manifest exposes all 3 demo tools', async () => {
+		const app = mount()
+		const res = await app.request('/api/mcp/manifest')
+		const body = (await res.json()) as { tools: string[] }
+		expect(body.tools).toContain('sepshn.demo.list_demo_routes')
+		expect(body.tools).toContain('sepshn.demo.get_property_summary')
+		expect(body.tools).toContain('sepshn.demo.list_recent_demo_bookings')
+	})
+
 	test('[MCP7] POST /api/mcp/rpc tools/call с unknown tool name → -32601', async () => {
 		const app = mount()
 		const res = await app.request('/api/mcp/rpc', {

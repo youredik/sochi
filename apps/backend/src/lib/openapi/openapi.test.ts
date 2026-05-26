@@ -57,4 +57,36 @@ describe('OpenAPI routes', () => {
 			'Demo Admin',
 		])
 	})
+
+	test('[OAS-E5-1] Round 13/14 added routes present в spec (DCR + MCP + Ostrovok 5-stage + admin)', () => {
+		const requiredPaths = [
+			'/api/oauth/register',
+			'/api/mcp/manifest',
+			'/api/mcp/rpc',
+			'/api/_mock-ota/ostrovok/v1/search/hp/',
+			'/api/_mock-ota/ostrovok/v1/hotel/order/booking/form/',
+			'/api/_mock-ota/ostrovok/v1/hotel/order/booking/finish/',
+			'/api/_mock-ota/admin/seed',
+			'/api/_mock-ota/admin/trigger',
+		]
+		for (const path of requiredPaths) {
+			expect(SEPSHN_OPENAPI_SPEC.paths).toHaveProperty(path)
+		}
+	})
+
+	test('[OAS-E5-2] OAuth DCR + MCP tags defined', () => {
+		const tagNames = SEPSHN_OPENAPI_SPEC.tags.map((t) => t.name)
+		expect(tagNames).toContain('OAuth (DCR)')
+		expect(tagNames).toContain('MCP')
+	})
+
+	test('[OAS-E5-3] DCR register documents 152-ФЗ consent flag', () => {
+		const path = SEPSHN_OPENAPI_SPEC.paths['/api/oauth/register']
+		const bodyProps = path.post.requestBody.content['application/json'].schema.properties
+		expect(bodyProps).toHaveProperty('contacts_consent_152fz')
+		expect(
+			(bodyProps as { contacts_consent_152fz: { description: string } }).contacts_consent_152fz
+				.description,
+		).toContain('152-ФЗ')
+	})
 })

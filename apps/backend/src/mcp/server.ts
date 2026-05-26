@@ -59,7 +59,7 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 	{
 		name: 'sepshn.demo.list_demo_routes',
 		description:
-			'Lists the demo OTA routes mounted by Sepshn (Yandex + Островок mock servers + showcase). Read-only, zero-arg. Useful для AI agents that want to discover the demo surface programmatically.',
+			'Lists the demo OTA routes mounted by Sepshn (Yandex + Островок mock servers + showcase). Read-only, zero-arg.',
 		inputSchema: {
 			type: 'object',
 			properties: {},
@@ -69,7 +69,29 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 				routes: [
 					{ path: '/demo', kind: 'index', description: 'Tile-based demo landing' },
 					{ path: '/demo/ota/yandex', kind: 'demo-ota', brand: 'yandex' },
+					{
+						path: '/demo/ota/yandex/property/{hotelId}',
+						kind: 'demo-property',
+						brand: 'yandex',
+					},
+					{
+						path: '/demo/ota/yandex/booking/{bookingToken}',
+						kind: 'demo-booking',
+						brand: 'yandex',
+					},
+					{ path: '/demo/ota/yandex/success/{orderId}', kind: 'demo-success', brand: 'yandex' },
 					{ path: '/demo/ota/ostrovok', kind: 'demo-ota', brand: 'ostrovok' },
+					{
+						path: '/demo/ota/ostrovok/property/{hid}',
+						kind: 'demo-property',
+						brand: 'ostrovok',
+					},
+					{
+						path: '/demo/ota/ostrovok/booking/{partnerOrderId}',
+						kind: 'demo-booking',
+						brand: 'ostrovok',
+					},
+					{ path: '/demo/ota/ostrovok/success/{orderId}', kind: 'demo-success', brand: 'ostrovok' },
 					{ path: '/demo/showcase', kind: 'split-pane', description: 'OTA + PMS side-by-side' },
 				],
 				notes: [
@@ -77,6 +99,114 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 					'Webhook loop fires CloudEvents 1.0.2 к own /api/channel/webhooks/{channel}',
 					'Round 13 canon: MCP day-1 mounted (Apaleo first-mover parity)',
 				],
+			}
+		},
+	},
+	{
+		name: 'sepshn.demo.get_property_summary',
+		description:
+			'Returns demo property metadata (Sepshn-демо in Sochi). Read-only, zero-arg, no PII. Useful для AI agents demonstrating «hotel listing» search use case.',
+		inputSchema: {
+			type: 'object',
+			properties: {},
+		},
+		async handler() {
+			return {
+				property: {
+					id: 'demo-hotel-sochi',
+					name: 'Гостевой дом «Сэпшн-демо» в Сочи',
+					starRating: 3,
+					address: {
+						country: 'RU',
+						city: 'Сочи',
+						region: 'Краснодарский край',
+					},
+					amenities: ['Wi-Fi бесплатно', 'Завтрак включён', 'Парковка', 'Кондиционер'],
+					numberOfRooms: 8,
+					priceRangeRubPerNight: { min: 6000, max: 14000 },
+					channelIds: ['YT', 'ETG'],
+				},
+				notes: [
+					'Demo / trademark-safe — fictional property, не real Sochi hotel',
+					'JSON-LD schema rendered на /demo/ota/{brand}/property/{id} (Lake.com canon)',
+				],
+			}
+		},
+	},
+	{
+		name: 'sepshn.demo.list_recent_demo_bookings',
+		description:
+			'Returns last 5 demo bookings (fictional). All names are RFC 2606-reserved-test (Иванов/Петров example.com). Useful для AI agents demonstrating «recent reservations» dashboard use case. Read-only.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				limit: {
+					type: 'integer',
+					description: 'Max bookings to return (default 5, max 10).',
+					default: 5,
+				},
+			},
+		},
+		async handler(args: unknown) {
+			const limit = Math.min(10, Math.max(1, (args as { limit?: number })?.limit ?? 5))
+			// Synthetic fictional data — no real-tenant data. PII shape is reserved-test ranges.
+			const demoBookings = [
+				{
+					bookingId: 'demo-bk-001',
+					channelId: 'YT',
+					guest: { firstName: 'Иван', lastName: 'Иванов', email: 'ivan@example.com' },
+					checkIn: '2027-08-15',
+					checkOut: '2027-08-17',
+					totalRub: 12000,
+					status: 'confirmed',
+				},
+				{
+					bookingId: 'demo-bk-002',
+					channelId: 'ETG',
+					guest: { firstName: 'Пётр', lastName: 'Петров', email: 'petr@example.com' },
+					checkIn: '2027-08-18',
+					checkOut: '2027-08-20',
+					totalRub: 14000,
+					status: 'confirmed',
+				},
+				{
+					bookingId: 'demo-bk-003',
+					channelId: 'YT',
+					guest: { firstName: 'Анна', lastName: 'Сидорова', email: 'anna@example.com' },
+					checkIn: '2027-08-22',
+					checkOut: '2027-08-25',
+					totalRub: 21000,
+					status: 'pending',
+				},
+				{
+					bookingId: 'demo-bk-004',
+					channelId: 'TL',
+					guest: { firstName: 'Сергей', lastName: 'Кузнецов', email: 'sergey@example.com' },
+					checkIn: '2027-09-01',
+					checkOut: '2027-09-03',
+					totalRub: 13000,
+					status: 'confirmed',
+				},
+				{
+					bookingId: 'demo-bk-005',
+					channelId: 'ETG',
+					guest: { firstName: 'Елена', lastName: 'Смирнова', email: 'elena@example.com' },
+					checkIn: '2027-09-10',
+					checkOut: '2027-09-12',
+					totalRub: 14000,
+					status: 'cancelled',
+				},
+			]
+			return {
+				bookings: demoBookings.slice(0, limit),
+				meta: {
+					tenant: 'demo-tenant',
+					generatedAt: new Date().toISOString(),
+					notes: [
+						'Fictional data — all guests use RFC 2606 reserved-test emails (@example.com)',
+						'Real production tool would require auth + tenant scoping (Phase-2)',
+					],
+				},
 			}
 		},
 	},
