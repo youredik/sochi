@@ -21,6 +21,7 @@
 import { useId, useState } from 'react'
 import { yandexBrandTokens } from '../shared/brand-tokens.ts'
 import { DemoDisclaimerBanner, type DemoOtaBrand } from '../shared/demo-disclaimer-banner.tsx'
+import { dateRangeErrorMessage, validateDateRange } from '../shared/validate-date-range.ts'
 import { DEFAULT_HOTEL_ID } from './api-client.ts'
 
 const BRAND: DemoOtaBrand = 'yandex'
@@ -49,19 +50,14 @@ export function YandexSearchPage({ onSearch }: YandexSearchPageProps) {
 	const [adults, setAdults] = useState(2)
 	const [children, setChildren] = useState(0)
 
-	// Round 12 R12V-1 — client-side validation: checkOut > checkIn. Backend
-	// rejects invalid_date_range gracefully but the user experience is broken
-	// (the property page shows the alert with no clear recovery path).
+	// Round 12 R12V-1 + self-review SR-4 — shared validator (drift-proof).
 	const [dateError, setDateError] = useState<string | null>(null)
 
 	function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
 		e.preventDefault()
-		if (
-			checkinDate.length === 0 ||
-			checkoutDate.length === 0 ||
-			Date.parse(checkoutDate) <= Date.parse(checkinDate)
-		) {
-			setDateError('Дата выезда должна быть позже даты заезда.')
+		const validation = validateDateRange(checkinDate, checkoutDate)
+		if (!validation.ok) {
+			setDateError(dateRangeErrorMessage(validation.reason))
 			return
 		}
 		setDateError(null)

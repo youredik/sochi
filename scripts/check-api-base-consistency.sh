@@ -8,25 +8,24 @@
 #
 # Backend mount canonical site:
 #   apps/backend/src/domains/_demo/index.ts → app.route('/api/_mock-ota/<channel>/v1', ...)
-# Frontend BASE canonical sites:
-#   apps/frontend/src/_demo/ota-showcase/yandex/api-client.ts → `const API_BASE = '...'`
-#   apps/frontend/src/_demo/ota-showcase/ostrovok/api-client.ts → `const BASE = '...'`
+# Frontend BASE canonical sites (discovered via glob — Round 12 self-review SR-3):
+#   apps/frontend/src/_demo/**/api-client.ts → `const [BASE|API_BASE] = '...'`
 #
 # Algorithm:
 #   1. Grep backend mount lines, extract path strings.
-#   2. Grep frontend BASE/API_BASE lines, extract path strings.
+#   2. Glob ALL frontend `_demo/**/api-client.ts` files (covers future channels
+#      added beyond yandex/ostrovok — was hardcoded к 2 files в первой версии,
+#      catched by self-review as P1 brittleness).
 #   3. For each frontend BASE, check it MATCHES exactly one backend mount.
 #   4. Print mismatches + exit 1.
 #
-# This is a STATIC check (~50ms) — safe для pre-commit. Layered into ratchet.
+# This is a STATIC check (~50ms) — safe для pre-commit.
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 BACKEND_FILE='apps/backend/src/domains/_demo/index.ts'
-YANDEX_FILE='apps/frontend/src/_demo/ota-showcase/yandex/api-client.ts'
-OSTROVOK_FILE='apps/frontend/src/_demo/ota-showcase/ostrovok/api-client.ts'
 
 if [ ! -f "$BACKEND_FILE" ]; then
 	echo "WARN: $BACKEND_FILE missing — skipping API-BASE consistency check"
@@ -43,32 +42,40 @@ if [ -z "$backend_mounts" ]; then
 	exit 0
 fi
 
+# Round 12 self-review SR-3 — glob discover ALL api-client.ts files в _demo
+# subtrees. Catches future channels (travel-line/booking-com/etc) added beyond
+# the two hardcoded paths. Skips api-client.test.ts (tests pin URLs, не source).
+frontend_files=$(
+	find apps/frontend/src/_demo -name 'api-client.ts' -not -name '*.test.ts' 2>/dev/null || true
+)
+
+if [ -z "$frontend_files" ]; then
+	echo "WARN: no frontend api-client.ts found via glob — skipping"
+	exit 0
+fi
+
 fail=0
-check_frontend() {
-	local file="$1"
-	local label="$2"
-	if [ ! -f "$file" ]; then return; fi
-	# Match `const FOO_BASE = '...'` OR `const BASE = '...'`
-	local frontend_bases
+checked=0
+while IFS= read -r file; do
+	[ -z "$file" ] && continue
 	frontend_bases=$(
 		grep -oE "^const [A-Z_]*BASE\s*=\s*'[^']+'" "$file" | grep -oE "'[^']+'" | tr -d "'" || true
 	)
 	if [ -z "$frontend_bases" ]; then
-		echo "[$label] no BASE constant grepped from $file"
-		return
+		echo "[skip] $file — no BASE constant grepped"
+		continue
 	fi
 	while IFS= read -r base; do
+		[ -z "$base" ] && continue
+		checked=$((checked + 1))
 		if ! echo "$backend_mounts" | grep -qx "$base"; then
-			echo "[$label] FAIL: frontend BASE='$base' does NOT match any backend mount"
+			echo "[$file] FAIL: frontend BASE='$base' does NOT match any backend mount"
 			echo "  backend mounts:"
 			echo "$backend_mounts" | sed 's/^/    /'
 			fail=1
 		fi
 	done <<<"$frontend_bases"
-}
-
-check_frontend "$YANDEX_FILE" yandex
-check_frontend "$OSTROVOK_FILE" ostrovok
+done <<<"$frontend_files"
 
 if [ "$fail" -ne 0 ]; then
 	echo
@@ -78,4 +85,5 @@ if [ "$fail" -ne 0 ]; then
 	exit 1
 fi
 
-echo "API-BASE consistency OK ($(echo "$backend_mounts" | wc -l | tr -d ' ') backend mounts, frontend bases aligned)"
+backend_count=$(echo "$backend_mounts" | wc -l | tr -d ' ')
+echo "API-BASE consistency OK ($backend_count backend mounts <-> $checked frontend bases aligned)"

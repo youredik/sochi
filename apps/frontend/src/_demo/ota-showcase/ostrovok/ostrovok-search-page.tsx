@@ -21,6 +21,7 @@
 import { useId, useState } from 'react'
 import { ostrovokBrandTokens } from '../shared/brand-tokens.ts'
 import { DemoDisclaimerBanner, type DemoOtaBrand } from '../shared/demo-disclaimer-banner.tsx'
+import { dateRangeErrorMessage, validateDateRange } from '../shared/validate-date-range.ts'
 import { SANDBOX_DEMO_HID } from './api-client.ts'
 
 const BRAND: DemoOtaBrand = 'ostrovok'
@@ -49,17 +50,14 @@ export function OstrovokSearchPage({ onSearch }: OstrovokSearchPageProps) {
 	const [adults, setAdults] = useState(2)
 	const [children, setChildren] = useState(0)
 
-	// Round 12 R12V-1 sibling — client-side date validation (mirrors Yandex).
+	// Round 12 R12V-1 + self-review SR-4 — shared validator (drift-proof).
 	const [dateError, setDateError] = useState<string | null>(null)
 
 	function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
 		e.preventDefault()
-		if (
-			checkinDate.length === 0 ||
-			checkoutDate.length === 0 ||
-			Date.parse(checkoutDate) <= Date.parse(checkinDate)
-		) {
-			setDateError('Дата выезда должна быть позже даты заезда.')
+		const validation = validateDateRange(checkinDate, checkoutDate)
+		if (!validation.ok) {
+			setDateError(dateRangeErrorMessage(validation.reason))
 			return
 		}
 		setDateError(null)

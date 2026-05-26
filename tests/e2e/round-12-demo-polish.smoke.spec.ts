@@ -32,6 +32,24 @@ test.describe('Round 12 — demo polish regression', () => {
 	})
 
 	test.beforeEach(async ({ page }) => {
+		// Round 12 self-review SR-1 fix — pre-set cookie-consent localStorage
+		// BEFORE any page load. Without it, the global `<CookieBanner>` (mounted
+		// at app root via main.tsx) intercepts pointer events на form submit
+		// buttons that overlap the banner's `position: fixed bottom-4` area.
+		// All Round 12 tests that click submit buttons require banner dismissal.
+		// Set «necessary only» state (matches «Только необходимые» button) —
+		// keeps analytics OFF, so the same fixture also doubles as Metrika
+		// guard for R12V-7.
+		await page.addInitScript(() => {
+			window.localStorage.setItem(
+				'horeca-cookie-consent',
+				JSON.stringify({
+					version: '2026-05-24',
+					grantedAt: new Date().toISOString(),
+					categories: { necessary: true, analytics: false, marketing: false },
+				}),
+			)
+		})
 		// Silence Yandex Metrika beacon — avoid real network in smoke runs.
 		await page.route('**/mc.yandex.ru/metrika/**', (route) =>
 			route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }),

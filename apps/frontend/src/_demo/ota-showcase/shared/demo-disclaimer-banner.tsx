@@ -57,8 +57,12 @@ export function DemoDisclaimerBanner({ brand, footerNote }: DemoDisclaimerBanner
 				role="status"
 				aria-label="Демонстрационный режим"
 			>
-				<span className="mr-2 inline-block rounded bg-amber-300/80 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-amber-950">
-					Демо
+				{/* Round 12 self-review SR-1 — literal «ДЕМО» в текст (не CSS uppercase).
+				    Playwright textContent() returns the raw string, не CSS-transformed.
+				    Round 12 R12-9 test caught: `expect(text).toContain('ДЕМО')` failed
+				    when source text was «Демо» с `.uppercase` Tailwind class. */}
+				<span className="mr-2 inline-block rounded bg-amber-300/80 px-1.5 py-0.5 text-xs font-bold tracking-wide text-amber-950">
+					ДЕМО
 				</span>
 				<strong>Демонстрация Sepshn</strong> — это не настоящий {label}. Все данные — тестовые,
 				бронирования не имеют юридической силы.

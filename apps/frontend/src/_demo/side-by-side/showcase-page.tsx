@@ -288,7 +288,10 @@ export function ShowcasePage({
 				</div>
 			)}
 
-			<main className="grid flex-1 grid-cols-2 divide-x divide-neutral-200">
+			{/* Round 12 self-review SR-2 — mobile fallback. Below md (768px) stack
+			    vertically; iframes get min-height so each is still scrollable on
+			    narrow viewports. На desktop остаётся side-by-side grid с divider. */}
+			<main className="flex flex-1 flex-col md:grid md:grid-cols-2 md:divide-x divide-neutral-200">
 				<section
 					className="flex h-full flex-col"
 					aria-label={`Demo OTA — ${CHANNEL_LABELS[channel]}`}
@@ -301,7 +304,7 @@ export function ShowcasePage({
 						title={`Demo OTA ${CHANNEL_LABELS[channel]}`}
 						data-testid="showcase-iframe-ota"
 						src={leftIframeSrc}
-						className="flex-1 w-full border-0"
+						className="min-h-[400px] flex-1 w-full border-0"
 						// Round 12 deeper-2 — sandbox attribute (security):
 						// allow-scripts (React app needs JS) +
 						// allow-same-origin (own-origin iframe needs cookies/localStorage) +
@@ -319,7 +322,7 @@ export function ShowcasePage({
 						title="PMS Grid"
 						data-testid="showcase-iframe-pms"
 						src={pmsGridUrl}
-						className="flex-1 w-full border-0"
+						className="min-h-[400px] flex-1 w-full border-0"
 						// Round 12 deeper-2 — sandbox same scope as OTA iframe.
 						sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
 					/>
