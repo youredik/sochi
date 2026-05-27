@@ -22,9 +22,24 @@
 # Rotation: yc lockbox secret add-version sepshn-sws-bypass-token → SC PUT new
 # value → push (single ci.yaml change, no app redeploy needed).
 #
-# Cost (2026-05): 10k req/мес free + ARL не billed. Demo ~10k/мес → ₽0/мес.
-# Production tier 1M req/мес → ~₽27k/мес. Subscription Start (~₽91k/мес) only
-# at 80M+ req/мес — defer для прода.
+# Cost canon (2026-05-27 — empirical correction после billing audit):
+#   - Тариф: 27,45 ₽/1000 финальных ALLOW запросов на тире 1М/мес
+#   - Free tier: 10 000 запросов/мес (НЕ /день — был мой просчёт в Round 7 v3)
+#   - ARL processing официально НЕ тарифицируется (docs: «не учитываются»)
+#   - Blocked (DENY) запросы НЕ тарифицируются; dry_run-passed = тарифицируются
+#
+# Empirical 26.05.2026: 12 000 req/день × 27,45 ₽/1000 = 331 ₽/день = ~10к ₽/мес.
+# Старый канон «Demo ~10k/мес → ₽0/мес» опровергнут — был наивный расчёт.
+#
+# Optimization (Round 14.5 2026-05-27):
+#   1. ARL ALLOW shadow для static (priority 50) → static не доходит до
+#      Security Profile → 0 ₽ за static traffic (~50-70% запросов).
+#   2. Smart Protection API scope к /api/* — ML только на XHR/fetch.
+#   3. Smart Protection FULL scope к non-/api — ML только на HTML pages.
+#
+# Expected post-optimization: ~140-500 ₽/мес на demo baseline.
+# Production (1M+ req/мес app.sepshn.ru future): ~27 000 ₽/мес default tier;
+# Subscription Start ₽50 833/мес break-even at ~1,85M req/мес.
 #
 # Reference: yandex-cloud-examples/yc-serverless-gateway-protection-with-sws,
 # terraform-yc-modules/terraform-yc-sws, yandex.cloud/docs/smartwebsecurity.
@@ -66,21 +81,25 @@ locals {
 }
 
 # -----------------------------------------------------------------------------
-# ARL — Advanced Rate Limiter (edge rate-limiting, free)
+# ARL — Advanced Rate Limiter (edge rate-limiting + cost-exempt static shadow)
 # -----------------------------------------------------------------------------
-# CANON 2026-05-25 (hardened после Run #97 prod incident — initial limit
-# 5/10min/IP throttled real users from dev IP HTTP 429):
+# CANON 2026-05-27 (cost optimization после 27.05 billing audit — 12k req/день
+# ALLOW × 27,45 ₽/1000 = 331 ₽/день, free tier 10k/мес исчерпан за час):
 #
-# 1. `dry_run = true` — first 14 days log-only, no DENY actions reach real
-#    users. Mirror canon WAF soak pattern (see WAF deferred block above).
-#    После audit logs clean → flip к dry_run=false.
+# ARL processing официально НЕ тарифицируется per yandex.cloud/ru/docs/
+# smartwebsecurity/pricing: «Обработка запроса правилами из профилей ARL не
+# учитываются в потреблении». Static-assets ALLOW rule в ARL = единственный
+# документированный способ снять конкретные пути со счёта Security Profile.
 #
-# 2. Header-conditional bypass: ARL rule applies ONLY когда X-Bypass-Token
-#    отсутствует или mismatch. Trusted callers (CI smoke + AI agent) skip
-#    edge throttle entirely. Defense-in-depth с backend timing-safe check.
+# Two rules:
+#   1. static-allow-exempt (priority 50, ALLOW) — assets/favicon/pwa/logo →
+#      ARL processes → НЕ доходит до Security Profile → 0 ₽ за static traffic.
+#   2. magic-link-ip-throttle (priority 100, DENY) — abuse-targeted rate-limit
+#      на signup endpoint. `dry_run=true` first 14 days log-only (canonical
+#      soak). Header-conditional bypass для CI smoke + AI agent X-Bypass-Token.
 #
-# 3. Limit raised 5 → 100 per 10min (still catches bot floods, much more
-#    forgiving для legit traffic + dev/CI iteration).
+# Priority semantic в ARL: lower wins. Static rule 50 < throttle 100 — static
+# matched first → ALLOW → ARL processing done → exempt billing.
 #
 # App-layer auth-signup-rate-limit.ts retained as defense-in-depth (app
 # catches single-instance bursts ARL не видит, per [[feedback_token_bucket_
@@ -88,8 +107,33 @@ locals {
 resource "yandex_sws_advanced_rate_limiter_profile" "demo" {
   folder_id   = yandex_resourcemanager_folder.demo.id
   name        = "sepshn-demo-arl"
-  description = "Edge rate-limiter — magic-link 100/10min/IP (dry_run 14-day soak) + X-Bypass-Token exempt"
+  description = "Edge rate-limiter + static-cost-exempt — magic-link 100/10min/IP + ARL ALLOW shadow для static"
 
+  # Rule 1: ARL ALLOW shadow для static assets — снимает биллинг Security
+  # Profile per Yandex docs «ARL processing не учитывается в потреблении».
+  # PIRE regex covers: /assets/* (Vite chunks), /favicon.ico, /pwa-*.png,
+  # /apple-touch-icon-*.png, /logo.svg, /manifest.*, /theme-init.js,
+  # /robots.txt, /sitemap.xml, /.well-known/* (security.txt + acme).
+  advanced_rate_limiter_rule {
+    name        = "static-allow-exempt"
+    description = "ARL ALLOW для static paths → exempt из Security Profile billing (27,45 ₽/1000 ALLOW saved)"
+    priority    = 50
+    dry_run     = false
+    static_quota {
+      action = "ALLOW"
+      limit  = 1000000 # эффективно «всегда ALLOW» для static
+      period = 60
+      condition {
+        request_uri {
+          path {
+            pire_regex_match = "^/(assets/|favicon\\.ico|favicon|pwa-[0-9]+x[0-9]+\\.png|apple-touch-icon|logo\\.svg|manifest\\.webmanifest|manifest\\.json|theme-init\\.js|robots\\.txt|sitemap\\.xml|\\.well-known/).*"
+          }
+        }
+      }
+    }
+  }
+
+  # Rule 2: magic-link signup throttle — defense-in-depth с app-layer limiter.
   advanced_rate_limiter_rule {
     name        = "magic-link-ip-throttle"
     description = "100 magic-link calls / 10 minutes / source IP — dry_run soak first 14 days, X-Bypass-Token exempt"
@@ -246,29 +290,46 @@ resource "yandex_sws_security_profile" "demo" {
 
   # Rule 2: Smart Protection mode=API для /api/* — JSON endpoints get verdict
   # без redirect-к-captcha (would break API semantics).
+  #
+  # CANON 2026-05-27 cost optimization: condition.request_uri.path.prefix_match
+  # = "/api/" — ML scoring применяется ТОЛЬКО к /api/* (XHR/fetch endpoints).
+  # Provider это поддерживает (опровергнут старый комментарий «не поддерживает»
+  # на основе terraform-yc-modules/terraform-yc-sws variables.tf schema +
+  # cloudapi proto security_profile.proto). Static via ARL exempt (priority 50).
   security_rule {
     name        = "smart-protection-api"
-    description = "ML bot scoring для /api/* — verdict в response header, no captcha redirect"
+    description = "ML bot scoring для /api/* only — XHR/fetch endpoints с JSON verdict"
     priority    = 999900
     smart_protection {
       mode = "API"
+      condition {
+        request_uri {
+          path {
+            prefix_match = "/api/"
+          }
+        }
+      }
     }
-    # Note: SWS provider не поддерживает path scoping на smart_protection rules
-    # напрямую. Per-rule path filtering достигается через separate rules с
-    # rule_condition для conditional bypass или DENY. API mode применяется ко
-    # всем path; FULL mode (rule 3) тоже — но FULL подразумевает редирект
-    # которого нет в API. Yandex docs canon: оба обычно coexist, FULL wins
-    # для browser navigation, API для XHR/fetch (auto-detected by User-Agent).
   }
 
-  # Rule 3: Smart Protection mode=FULL для browser navigation — suspect requests
-  # redirected к SmartCaptcha challenge (captcha_id привязан above).
+  # Rule 3: Smart Protection mode=FULL для browser navigation (non-/api).
+  # Suspect requests redirected к SmartCaptcha challenge.
+  #
+  # prefix_not_match "/api/" — FULL mode применяется к HTML page loads
+  # (`/`, `/o/{slug}`, `/demo/*`). Static уже на ARL exempt — сюда не попадёт.
   security_rule {
     name        = "smart-protection-full"
-    description = "ML bot scoring + SmartCaptcha redirect для browser navigation"
+    description = "ML bot scoring + SmartCaptcha redirect для browser navigation (non-/api/)"
     priority    = 999990
     smart_protection {
       mode = "FULL"
+      condition {
+        request_uri {
+          path {
+            prefix_not_match = "/api/"
+          }
+        }
+      }
     }
   }
 
