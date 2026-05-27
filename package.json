@@ -57,7 +57,6 @@
 	"devDependencies": {
 		"@axe-core/playwright": "4.11.3",
 		"@biomejs/biome": "^2.4.15",
-		"@browserbasehq/stagehand": "^3.4.0",
 		"@horeca/shared": "workspace:*",
 		"@lhci/cli": "0.15.1",
 		"@playwright/test": "1.60.0",
@@ -77,8 +76,7 @@
 		"oxlint-tsgolint": "^0.23.0",
 		"sherif": "^1.11.1",
 		"size-limit": "^12.1.0",
-		"typescript": "^6.0.3",
-		"zod": "4.5.0-canary.20260504T180558"
+		"typescript": "^6.0.3"
 	},
 	"engines": {
 		"node": ">=24.0.0"
