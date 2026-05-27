@@ -1,12 +1,14 @@
 openapi: 3.0.0
 
-# Round 7 v3 2026-05-25 — Yandex Smart Web Security edge integration.
-# Root-level extension applies SWS profile к ALL paths (DDoS L7 + ARL + Smart
-# Protection bot ML + WAF when flipped). См. infra/sws.tf для rule config.
-# Reference: yandex.cloud/en/docs/api-gateway/concepts/extensions/sws
-x-yc-apigateway:
-  smartWebSecurity:
-    securityProfileId: ${sws_security_profile_id}
+# Round 14.5 2026-05-27 — Smart Web Security removed (cost optimization).
+# Empirical billing audit показал ~10к₽/мес on demo (12k req/день × 27,45 ₽/1000
+# финальных ALLOW). Yandex SWS pricing model = per-final-ALLOW reaching origin,
+# НЕ per-rule-matched — path-scope не снижает биллинг. ARL static_quota.action
+# в cloudapi proto поддерживает только DENY (не ALLOW) — shadow-exempt трюк
+# не работает по design. Защита переходит на app-layer (rate-limiter + captcha-
+# gate). SWS reactivation запланирован к app.sepshn.ru prod launch когда
+# revenue justify ~₽27k/мес tier.
+# Reference: yandex.cloud/ru/docs/smartwebsecurity/pricing (empirical 27.05.2026)
 
 info:
   title: Sochi HoReCa Demo Gateway
