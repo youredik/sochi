@@ -87,11 +87,10 @@ resource "yandex_storage_bucket" "demo_passport_scans" {
 
   default_storage_class = "STANDARD"
 
-  # Round 2 self-review YDB P0: explicit `acl = "private"` — даже если default
-  # это private, explicit signal к operator audit + defends против Terraform
-  # state drift где default может shift в future provider versions. 152-ФЗ
-  # PII bucket MUST never anonymous-readable.
-  acl = "private"
+  # Round 14.5 2026-05-27 — `acl` attribute deprecated в yandex-cloud/yandex
+  # >= v0.145.0 (Jul 2025). Migration к dedicated `yandex_storage_bucket_grant`
+  # resource ниже. 152-ФЗ PII bucket MUST never anonymous-readable — explicit
+  # private ACL retained via separate grant resource (drift-defence canon).
 
   # Sprint C+ Round 6 5-expert audit fix 2026-05-24 (YC ecosystem #19):
   # Object Lock COMPLIANCE mode + 90-day retention = legally-immutable objects.
@@ -154,6 +153,17 @@ resource "yandex_storage_bucket" "demo_passport_scans" {
       }
     }
   }
+}
+
+# Round 14.5 2026-05-27 — explicit private ACL via dedicated grant resource
+# (replaces deprecated inline `acl = "private"` in yandex_storage_bucket).
+# Schema canon: provider v0.205.0 docs/resources/storage_bucket_grant.md —
+# `acl` shorthand + no `grant` blocks = owner-only, IAM-authoritative access.
+# 152-ФЗ ст.18+19 PII bucket explicit-private signal к operator audit + drift-
+# defence (default may shift в future provider versions).
+resource "yandex_storage_bucket_grant" "demo_passport_scans_private" {
+  bucket = yandex_storage_bucket.demo_passport_scans.bucket
+  acl    = "private"
 }
 
 # Dedicated KMS key для passport-scans bucket SSE — separate blast radius vs
