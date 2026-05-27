@@ -11,6 +11,13 @@ packages:
 # через compromised maintainer account → publish → vendor разработчик install.
 minimumReleaseAge: 1440
 
+# Security-fix exclusions — packages где cooldown impedes critical CVE fix.
+# 2026-05-27: tmp@0.2.6 (GHSA-ph9p-34f9-6g65 high severity path traversal,
+# fix needed для прохождения ratchet audit gate). Re-evaluate after 24h
+# release age достигнут.
+minimumReleaseAgeExclude:
+  - tmp
+
 # Запретить exotic subdeps (git:/tarball: URL в transitive deps) — vector для
 # typosquat-attacks через compromised package.json subdeps.
 blockExoticSubdeps: true

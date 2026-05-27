@@ -11,7 +11,7 @@ overrides:
   glob@<13: ^13.0.6
   uuid@<11: ^11.1.0
   workbox-build>source-map: ^0.7.6
-  tmp@<0.2.4: ^0.2.4
+  tmp@<0.2.6: ^0.2.6
   ws@<8.20.1: ^8.20.1
   qs@<6.15.2: ^6.15.2
   langsmith@<0.6.0: ^0.6.0
@@ -8057,8 +8057,8 @@ packages:
     resolution: {integrity: sha512-ELrFxuqsDdHUwoh0XxDbxuLD3Wnz49Z57IFvTtvWy1hJdcMZjXLIuonjilCiWHlT2GbE4Wlv1wKVTzDFnXH1aw==}
     hasBin: true
 
-  tmp@0.2.5:
-    resolution: {integrity: sha512-voyz6MApa1rQGUxT3E+BK7/ROe8itEx7vD8/HEvt4xwXucvQ5G5oeEiHkmHZJuBO21RpOf+YYm9MOivj709jow==}
+  tmp@0.2.6:
+    resolution: {integrity: sha512-5sJPdPjfI5Kx+qbrDesxkglRBxW//g7hCsqspEjwkewGvBMGIKMOTKzLt1hFVJzyadba3lDUN20O9qhvbQUSTA==}
     engines: {node: '>=14.14'}
 
   to-data-view@1.1.0:
@@ -10492,7 +10492,7 @@ snapshots:
       lighthouse-logger: 1.2.0
       open: 7.4.2
       proxy-agent: 6.5.0
-      tmp: 0.2.5
+      tmp: 0.2.6
       uuid: 11.1.1
       yargs: 15.4.1
       yargs-parser: 13.1.2
@@ -14048,7 +14048,7 @@ snapshots:
     dependencies:
       chardet: 0.7.0
       iconv-lite: 0.4.24
-      tmp: 0.2.5
+      tmp: 0.2.6
 
   extract-zip@2.0.1:
     dependencies:
@@ -16547,7 +16547,7 @@ snapshots:
     dependencies:
       tldts-core: 7.0.30
 
-  tmp@0.2.5: {}
+  tmp@0.2.6: {}
 
   to-data-view@1.1.0: {}
 
