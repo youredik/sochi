@@ -111,6 +111,17 @@ describe('registerDemoRoutes — permissive anonymous fallback', () => {
 		expect(res.status).toBe(413)
 	})
 
+	it('[RDR6] body-cap → POST exceeding 64 KB returns 413 (admin /trigger)', async () => {
+		const { app } = buildApp({ anonymousFallbackTenantId: 'demo-tenant' })
+		const bigPayload = 'a'.repeat(100 * 1024)
+		const res = await app.request('/api/_mock-ota/admin/trigger', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: bigPayload,
+		})
+		expect(res.status).toBe(413)
+	})
+
 	it('[RDR3] permissive mode → anonymous Ostrovok /search/hp/ reaches handler (no auth wall)', async () => {
 		// Path matches Round 12 pass-2 P0 fix — mount /api/_mock-ota/ostrovok/v1
 		// + internal POST /search/hp/ = full URL /api/_mock-ota/ostrovok/v1/search/hp/.

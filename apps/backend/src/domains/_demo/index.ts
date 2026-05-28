@@ -197,7 +197,15 @@ export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOp
 		.use('/*', authOrAnonymous)
 		.use('/*', demoCaptchaMiddleware())
 		.route('/', ostrovokRouter)
-	const adminWrapped = new Hono<AppEnv>().use('/*', authOrAnonymous).route('/', adminRouter)
+	// Round 14.6.4 final-final sweep (2026-05-29) — admin route ALSO capped.
+	// Pre-fix had `c.req.json()` без cap (admin.routes.ts:221 `/trigger`); my
+	// own comment said «trusted admin operators». Defense-in-depth canon =
+	// parity matters more than trust assumption — admin token leak is real
+	// risk vector. Cap = 64 KB matches other mock-OTA mounts.
+	const adminWrapped = new Hono<AppEnv>()
+		.use('/*', demoOtaBodyCap)
+		.use('/*', authOrAnonymous)
+		.route('/', adminRouter)
 
 	app.route('/api/_mock-ota/yandex/v1', yandexWrapped)
 	app.route('/api/_mock-ota/ostrovok/v1', ostrovokWrapped)
