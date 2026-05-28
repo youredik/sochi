@@ -28,6 +28,7 @@
  * events, low bot-spam value, would hurt UX.
  */
 
+import crypto from 'node:crypto'
 import { z } from 'zod'
 import { env } from '../env.ts'
 import { factory } from '../factory.ts'
@@ -70,6 +71,31 @@ export function demoCaptchaMiddleware() {
 			)
 			await next()
 			return
+		}
+
+		// Round 7 v3 SWS bypass token — same canonical header pattern as
+		// `lib/auth/captcha-gate.ts`. E2E smoke tests + SWS edge allow-rule
+		// both send `X-Bypass-Token` с the shared 32-byte secret from
+		// `env.SWS_BYPASS_TOKEN` (Lockbox-mounted). Timing-safe compare
+		// prevents leak via response-time оракул. Without this, SC deploy
+		// playwright-smoke (demo OTA POST endpoints) fails 422 captcha_
+		// required — discovered empirically Run #125 2026-05-28.
+		const provided = c.req.header('x-bypass-token')?.trim() ?? ''
+		const expectedToken = env.SWS_BYPASS_TOKEN ?? ''
+		if (expectedToken.length > 0 && provided.length > 0) {
+			const expectedBuf = Buffer.from(expectedToken, 'utf8')
+			const providedBuf = Buffer.from(provided, 'utf8')
+			if (
+				expectedBuf.length === providedBuf.length &&
+				crypto.timingSafeEqual(expectedBuf, providedBuf)
+			) {
+				logger.info(
+					{ event: 'demo.captcha.bypass_token', path: c.req.path },
+					'Demo captcha bypass via X-Bypass-Token (E2E/SWS canon Round 7 v3)',
+				)
+				await next()
+				return
+			}
 		}
 
 		// Parse body — Hono c.req.json() is idempotent (parsed body cached).

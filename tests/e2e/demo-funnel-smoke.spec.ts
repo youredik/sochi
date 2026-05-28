@@ -108,16 +108,20 @@ test.describe('Demo funnel — empirical против prod', () => {
 		return undefined
 	}
 
-	test('[E1] fresh signup → magic-link → /welcome → org create → /setup → DaData lookup', async ({
+	test('[E1] fresh signup → magic-link → auto-create org → /setup → DaData lookup', async ({
 		page,
 		request,
 	}) => {
 		const ts = Date.now()
 		const email = `e2e-fresh-${ts}@example.invalid`
-		const orgName = `Тестовый отель ${ts}`
 
-		// POST magic-link signin с callbackURL → /welcome?n=<orgName>
-		const callbackURL = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName)}`
+		// Round 14.6.2 — signup form dropped orgName + URL `?n=` param. Magic-
+		// link callbackURL points к bare `/welcome`; route's beforeLoad auto-
+		// creates org с `DEFAULT_WELCOME_ORG_NAME` placeholder, redirects к
+		// /o/{slug}/ → dashboard sees 0 properties → redirects к /setup
+		// IdentifyStep. Single source of truth для hotel name = DaData party
+		// lookup в IdentifyStep (canon 2026-05-22 «DaData party wins»).
+		const callbackURL = `${PROD_BASE}/welcome`
 		// Retry magic-link POST до 5 раз с 3s backoff — backend бывает
 		// intermittently 5xx (rate-limit demo-inbox MAX_TOTAL_RECIPIENTS=500
 		// ИЛИ cold-start serverless container ~5s).
@@ -137,53 +141,17 @@ test.describe('Demo funnel — empirical против prod', () => {
 		expect(magicLink, 'Magic-link не captured в DemoInbox в timeout').toBeTruthy()
 		const magicLinkUrl = magicLink?.url
 
-		// Visit verify URL — sets session cookie + redirects к callbackURL
-		// === Regression guard: NO org-scoped /api/v1/* calls на /welcome ===
-		// canonical fix 34adc1e 2026-05-21 — `tenantMiddleware` requires
-		// `session.activeOrganizationId`, которое null для fresh-signup.
-		// Любой `/api/v1/*` fetch на /welcome → 403 console-noise + wasted
-		// round-trip. WelcomeForm must use BA-level `authClient.organization
-		// .list()` для membership questions, NOT `/api/v1/properties`.
-		const tenantScopedCalls: string[] = []
-		const tenantScopedListener = (response: import('@playwright/test').Response) => {
-			const url = response.url()
-			if (url.includes('/api/v1/') && new URL(page.url()).pathname === '/welcome') {
-				tenantScopedCalls.push(`${response.status()} ${url}`)
-			}
-		}
-		page.on('response', tenantScopedListener)
-
+		// Visit verify URL — sets session cookie + redirects к callbackURL.
+		// /welcome beforeLoad calls organization.create + redirects к
+		// /o/{slug}/ (без user interaction). Dashboard's guard sees zero
+		// properties → bounces к /setup IdentifyStep. The chain is fully
+		// async-await driven; no form to fill on /welcome anymore.
 		await page.goto(magicLinkUrl as string)
 
-		// Should land на /welcome (fresh-signup, no existing orgs)
-		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })
-		// Race-tolerant: heading visibility check после TanStack Router beforeLoad
-		// guard + React hydration. Default 5s toBeVisible timeout may be too tight
-		// для cold-start CI runs (especially on serverless container scale-from-1).
-		// 15s leaves margin для full SPA hydrate cycle.
-		await expect(page.getByRole('heading', { name: /Почти готово/ })).toBeVisible({
-			timeout: 15_000,
-		})
-
-		// Settle — defensive queries fire on mount, give them chance to land.
-		await page.waitForLoadState('networkidle', { timeout: 5_000 })
-
-		// Assert NO /api/v1/* calls happened while on /welcome. If this fails,
-		// some new component sneaked in an org-scoped fetch on a pre-org route.
-		expect(
-			tenantScopedCalls,
-			'/welcome must not call any org-scoped /api/v1/* endpoint — session.activeOrganizationId is null',
-		).toEqual([])
-		page.off('response', tenantScopedListener)
-
-		// Submit form (orgName prefilled from query)
-		await page.getByRole('button', { name: /Создать гостиницу/ }).click()
-
-		// Wait для FINAL /setup URL. Full chain: BA create-org → reload →
-		// `_app.o.$orgSlug` setActive + invalidate session → /o/{slug}/ index
-		// guard checks properties.list (idempotent retry on YDB hiccup) → если
-		// empty → redirect /setup. Timing варьируется от 1s (warm cache) до
-		// ~10s (cold YDB reconnect + retry). 30s safe ceiling.
+		// Wait для FINAL /setup URL. Full chain timing: BA verify → /welcome →
+		// auto-create-org (BA org.create) → setActive → invalidate session →
+		// /o/{slug}/ index guard checks properties.list → empty → /setup.
+		// Cold-start: ~10s; warm: ~1s. 30s safe ceiling.
 		await page.waitForURL(/\/o\/[^/]+\/setup/, { timeout: 30_000 })
 		await page.waitForLoadState('networkidle', { timeout: 10_000 })
 
@@ -214,9 +182,9 @@ test.describe('Demo funnel — empirical против prod', () => {
 		const ts = Date.now()
 		const email = `e2e-return-${ts}@example.invalid`
 
-		// === FIRST VISIT — create tenant ===
-		const orgName1 = `Первый отель ${ts}`
-		const callbackURL1 = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName1)}`
+		// === FIRST VISIT — auto-create tenant via /welcome beforeLoad ===
+		// Round 14.6.2 — no orgName URL param; placeholder applied automatically.
+		const callbackURL1 = `${PROD_BASE}/welcome`
 		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 			data: { email, callbackURL: callbackURL1 },
 			headers: getSmokeHeaders(),
@@ -225,20 +193,18 @@ test.describe('Demo funnel — empirical против prod', () => {
 		expect(magicLink1, 'First visit: magic-link не captured').toBeTruthy()
 
 		await page.goto(magicLink1!.url)
-		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })
-		await page.getByRole('button', { name: /Создать гостиницу/ }).click()
-		await expect(page).toHaveURL(/\/o\/[^/]+/, { timeout: 15_000 })
+		// /welcome auto-creates org + redirects к /o/{slug}/ → /setup. No form.
+		await page.waitForURL(/\/o\/[^/]+/, { timeout: 30_000 })
 
 		const orgSlug1 = page.url().match(/\/o\/([^/]+)/)?.[1]
 		expect(orgSlug1, 'First visit: orgSlug должен быть в URL').toBeTruthy()
 
 		// === RETURN VISIT — clear cookies, signup again same email ===
 		await page.context().clearCookies()
-		// Try to confuse the system — different orgName на этот раз. Real return
-		// visitor might type a different name OR same name; either way data
-		// should NOT duplicate.
-		const orgName2 = `Совершенно другое название ${ts}`
-		const callbackURL2 = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName2)}`
+		// Round 14.6.2 — bare /welcome callback. Return-visit canonical path:
+		// resolveWelcomeRedirect sees orgs.length > 0 → set-active-and-redirect
+		// → SAME tenant (no auto-create-org duplicate).
+		const callbackURL2 = `${PROD_BASE}/welcome`
 		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
 			data: { email, callbackURL: callbackURL2 },
 			headers: getSmokeHeaders(),
@@ -307,7 +273,6 @@ test.describe('Demo funnel — empirical против prod', () => {
 	}) => {
 		const ts = Date.now()
 		const email = `e2e-localhost-${ts}@example.invalid`
-		const orgName = `Локхост-страж ${ts}`
 
 		// Listener — captures ANY request whose URL contains localhost,
 		// regardless of port. Storing rather than failing on-event keeps
@@ -318,8 +283,8 @@ test.describe('Demo funnel — empirical против prod', () => {
 			if (url.includes('localhost')) localhostFetches.push(`${req.method()} ${url}`)
 		})
 
-		// Magic-link signup
-		const callbackURL = `${PROD_BASE}/welcome?n=${encodeURIComponent(orgName)}`
+		// Round 14.6.2 — bare /welcome callback; auto-create runs in beforeLoad.
+		const callbackURL = `${PROD_BASE}/welcome`
 		let signupRes: import('@playwright/test').APIResponse | undefined
 		for (let attempt = 0; attempt < 5; attempt++) {
 			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
@@ -335,14 +300,10 @@ test.describe('Demo funnel — empirical против prod', () => {
 		expect(magicLink, 'Magic-link не captured').toBeTruthy()
 		await page.goto(magicLink!.url)
 
-		// /welcome — fires WelcomeForm защитный orgList query (BA, не /api/v1)
-		await expect(page).toHaveURL(/\/welcome/, { timeout: 10_000 })
-		await page.waitForLoadState('networkidle', { timeout: 5_000 })
-
-		// /setup — fires content-wizard hooks (media/amenities), а на /grid
-		// загружается chessboard SSE EventSource — все 5 sibling targets
+		// /welcome auto-creates org + redirects к /o/{slug}/ → /setup.
+		// /setup loads content-wizard hooks (media/amenities), а на /grid
+		// загружается chessboard SSE EventSource — all 5 sibling targets
 		// touched by walking through this flow.
-		await page.getByRole('button', { name: /Создать гостиницу/ }).click()
 		await page.waitForURL(/\/o\/[^/]+\/setup/, { timeout: 30_000 })
 		await page.waitForLoadState('networkidle', { timeout: 10_000 })
 

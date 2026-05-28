@@ -65,7 +65,19 @@ export default defineConfig({
 		},
 		{
 			name: 'smoke',
-			use: { ...devices['Desktop Chrome'] },
+			use: {
+				...devices['Desktop Chrome'],
+				// Round 14.5 v2 (post-Run-#125 fix) — pass `X-Bypass-Token` on
+				// every request so the demo-captcha middleware (Round 14.5)
+				// admits smoke-test XHRs against prod. Token mirrors
+				// `env.SWS_BYPASS_TOKEN` (Lockbox-mounted в backend; SC secret
+				// `SWS_BYPASS_TOKEN` mirrors на runner). Without this header,
+				// any XHR к `/api/_mock-ota/{yt,etg}/v1/*` POST returns 422
+				// `captcha_required` — playwright-smoke fails wholesale.
+				...(process.env.SWS_BYPASS_TOKEN
+					? { extraHTTPHeaders: { 'X-Bypass-Token': process.env.SWS_BYPASS_TOKEN } }
+					: {}),
+			},
 			testMatch: /(smoke|embed|perf-a11y|iframe-noscript|demo-tour|onboarding-90s)\.spec\.ts/,
 		},
 	],
