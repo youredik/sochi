@@ -120,6 +120,29 @@ describe('WelcomeForm — successful submit', () => {
 		expect(call[0].name).toBe('Гостиница Ромашка') // trimmed
 		expect(call[0].slug.length >= 1).toBe(true)
 	})
+
+	// Round 14.6 Phase C — magic-link wow redirect lands user on per-tenant
+	// demo OTA, not dashboard. Closes `feedback_critical_fix_test_coverage`
+	// canon: every onSuccess branch needs assertion.
+	it('[P2.bis] onSuccess navigates к /o/$orgSlug/demo (wow flow, not dashboard)', async () => {
+		organizationCreateMock.mockResolvedValueOnce({
+			data: { id: 'org-1', slug: 'gostinitsa-romashka' },
+			error: null,
+		})
+		renderWithQuery(<WelcomeForm prefillOrgName="Гостиница Ромашка" />)
+		await userEvent.setup().click(screen.getByRole('button', { name: 'Создать гостиницу →' }))
+
+		await waitFor(() => {
+			expect(navigateMock).toHaveBeenCalled()
+		})
+		const navCall = navigateMock.mock.calls[0] as [
+			{ to: string; params: { orgSlug: string }; reloadDocument?: boolean },
+		]
+		expect(navCall[0].to).toBe('/o/$orgSlug/demo')
+		expect(navCall[0].params.orgSlug).toBe('gostinitsa-romashka')
+		// Reload document forces fresh session bootstrap (org now active).
+		expect(navCall[0].reloadDocument).toBe(true)
+	})
 })
 
 describe('WelcomeForm — error path', () => {

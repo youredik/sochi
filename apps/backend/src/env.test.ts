@@ -230,4 +230,47 @@ describe('envSchema', () => {
 			expect(env.APP_MODE).toBe('production')
 		})
 	})
+
+	// Round 14.6 Phase E — demo channel env vars (single source of truth)
+	describe('DEMO_WEBHOOK_SECRET (Round 14.6)', () => {
+		it('defaults к placeholder when unset (non-prod parity)', () => {
+			const env = envSchema.parse({ ...REQUIRED_FIELDS })
+			expect(env.DEMO_WEBHOOK_SECRET).toBe('demo-mock-ota-webhook-secret-do-not-use-in-prod')
+		})
+
+		it('accepts override (operator Lockbox value)', () => {
+			const env = envSchema.parse({
+				...REQUIRED_FIELDS,
+				DEMO_WEBHOOK_SECRET: 'whsec_production_value_'.padEnd(48, 'x'),
+			})
+			expect(env.DEMO_WEBHOOK_SECRET.startsWith('whsec_production_value_')).toBe(true)
+		})
+
+		it('rejects values shorter than 16 chars (canon: prevent fragile secrets)', () => {
+			expect(() =>
+				envSchema.parse({ ...REQUIRED_FIELDS, DEMO_WEBHOOK_SECRET: 'tooshort' }),
+			).toThrowError()
+		})
+	})
+
+	describe('DEMO_WEBHOOK_TARGET_BASE_URL (Round 14.6)', () => {
+		it('defaults к http://localhost:8787 (local dev parity)', () => {
+			const env = envSchema.parse({ ...REQUIRED_FIELDS })
+			expect(env.DEMO_WEBHOOK_TARGET_BASE_URL).toBe('http://localhost:8787')
+		})
+
+		it('accepts production override URL', () => {
+			const env = envSchema.parse({
+				...REQUIRED_FIELDS,
+				DEMO_WEBHOOK_TARGET_BASE_URL: 'https://app.sepshn.ru',
+			})
+			expect(env.DEMO_WEBHOOK_TARGET_BASE_URL).toBe('https://app.sepshn.ru')
+		})
+
+		it('rejects non-URL string', () => {
+			expect(() =>
+				envSchema.parse({ ...REQUIRED_FIELDS, DEMO_WEBHOOK_TARGET_BASE_URL: 'not-a-url' }),
+			).toThrowError()
+		})
+	})
 })
