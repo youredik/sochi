@@ -259,7 +259,7 @@ export function InventoryStep() {
 					← Назад
 				</Button>
 				<Button type="submit" size="lg" disabled={!canSubmit}>
-					{bulk.isPending ? 'Создаём…' : `Готово → /o/${orgSlug}/grid`}
+					{bulk.isPending ? 'Создаём…' : `Готово → /o/${orgSlug}/demo`}
 				</Button>
 			</div>
 
@@ -269,7 +269,7 @@ export function InventoryStep() {
 			 * для prospect'a — даёт сигнал что wizard это quick-start, не
 			 * финальная конфигурация. Все advanced features (категории, гибкие
 			 * тарифы, сезонные цены, каналы дистрибуции, турналог) живут в
-			 * обычных разделах после /grid landing.
+			 * обычных разделах после /demo landing (Round 14.6.2 wow effect).
 			 */}
 			<p className="text-xs text-muted-foreground">
 				Категории номеров, тарифы и каналы продаж добавите позже — в настройках гостиницы.

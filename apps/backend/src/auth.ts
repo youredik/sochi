@@ -269,12 +269,20 @@ export const auth = betterAuth({
 				afterCreateOrganization: async ({ organization: org }) => {
 					const now = new Date()
 					const trialEndsAt = new Date(now.getTime() + TRIAL_MS)
+					// Round 14.6.2 — new orgs seed `mode='demo'` so DemoModeBadge
+					// renders amber ДЕМО pill (not emerald LIVE). Stripe canonical
+					// 2026 pattern: «accounts default к test/demo mode; live mode
+					// is explicit opt-in after payment-method verification».
+					// Empirically caught на demo.sepshn.ru live browser walk
+					// 2026-05-28 — fresh signup showed «LIVE» badge despite no
+					// activation. Demo mode also gates `production-guards.ts` +
+					// `useTenantMode()` consumers downstream.
 					await sql`
 						UPSERT INTO organizationProfile (
-							\`organizationId\`, \`plan\`, \`trialEndsAt\`,
+							\`organizationId\`, \`plan\`, \`trialEndsAt\`, \`mode\`,
 							\`createdAt\`, \`updatedAt\`
 						) VALUES (
-							${org.id}, ${'free'}, ${toTs(trialEndsAt)},
+							${org.id}, ${'free'}, ${toTs(trialEndsAt)}, ${'demo'},
 							${toTs(now)}, ${toTs(now)}
 						)
 					`
