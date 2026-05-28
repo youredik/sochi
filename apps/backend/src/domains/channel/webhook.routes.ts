@@ -4,16 +4,21 @@
  * Mounted at `/api/channel/webhooks/:channelId` PUBLIC (no auth — webhook
  * sender is the channel itself, not an authenticated user).
  *
- * Pipeline (per request):
+ * Pipeline (per request, **Round 14.6.4 ordering**):
  *   1. Read raw body bytes (Hono `c.req.raw.arrayBuffer()`) — MUST be raw,
  *      never parsed-then-restringified (signature verifies opaque bytes).
- *   2. Verify Standard Webhooks signature with multi-key candidate list
- *      (`webhook-secret.repo.ts.listAccepted`).
- *   3. Optional IP allowlist fallback for non-HMAC channels (ЮKassa parity).
- *   4. Parse CloudEvents 1.0.2 envelope.
- *   5. Classify via inbox repo: `accepted` | `duplicate` (return cached 200) |
+ *   2. Parse CloudEvents 1.0.2 envelope FIRST (Round 14.6.4 reorder) so the
+ *      tenantId in source URN is known before we narrow accepted secrets.
+ *   3. Extract tenantId + channelCode from source URN; reject URN-injection
+ *      attempts (newline/control chars per Round 10 P1-B1).
+ *   4. Verify Standard Webhooks signature against `listAccepted(channelId,
+ *      tenantId)` — tenant-narrowed multi-key candidate list. Prevents
+ *      per-tenant demo OTA cross-match silent break (Round 14.6.4 fix —
+ *      см. middle-of-handler comment block).
+ *   5. Optional IP allowlist fallback for non-HMAC channels (ЮKassa parity).
+ *   6. Classify via inbox repo: `accepted` | `duplicate` (return cached 200) |
  *      `tampered` (400, alert-emit).
- *   6. On `accepted` — emit downstream domain event (А7.5 sync orchestrator
+ *   7. On `accepted` — emit downstream domain event (А7.5 sync orchestrator
  *      consumes); persist responseJson via `inbox.markProcessed`.
  *
  * Failure surface:
