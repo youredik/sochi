@@ -70,74 +70,18 @@ test.describe('Round 9 — demo OTA smoke', () => {
 		})
 	})
 
-	test('[YT-SMOKE] Yandex demo: search → property → book → success', async ({ page }) => {
-		// Round 12 self-review fix — admin reset removed (Round 11 P1-B2 added
-		// session-token gate; spec doesn't know per-process random token →
-		// always 401). State is reset per test via fresh storageState; sticky
-		// in-memory tokens get evicted on next backend boot anyway. Skipping
-		// the call also drops cross-test ordering dependencies.
-
-		// 2. Open Yandex demo search.
-		await page.goto('/demo/ota/yandex')
-		await expect(page.getByTestId('demo-disclaimer-banner')).toBeVisible({ timeout: 15_000 })
-		await expect(page.getByRole('heading', { level: 1 })).toHaveText('Куда вы хотите поехать?')
-
-		// 3. Click search submit — defaults pre-fill the form.
-		await page.getByTestId('yandex-search-submit').click()
-
-		// 4. Property page renders + has «Забронировать» CTA.
-		await expect(page).toHaveURL(/\/demo\/ota\/yandex\/property\/demo-hotel-sochi/, {
-			timeout: 15_000,
-		})
-		await expect(page.getByTestId('demo-disclaimer-banner')).toBeVisible()
-
-		// 5. Click the book CTA — selector tolerates either testid or button label.
-		const bookCta = page
-			.getByTestId('yandex-book-cta')
-			.or(page.getByRole('button', { name: /Забронировать/ }))
-		await bookCta.first().click()
-
-		// 6. Booking form renders с pre-filled reserved-test data; click confirm.
-		await expect(page).toHaveURL(/\/demo\/ota\/yandex\/booking\//, { timeout: 15_000 })
-		const confirmBtn = page
-			.getByTestId('yandex-confirm-cta')
-			.or(page.getByRole('button', { name: /Подтвердить|Подтверждаю/ }))
-		await confirmBtn.first().click()
-
-		// 7. Success page lands. Mock OTA emits webhook synchronously before
-		//    returning order — when this URL renders, the channel inbox already
-		//    has the row (per backend webhook-emit synchronous contract).
-		await expect(page).toHaveURL(/\/demo\/ota\/yandex\/success\//, { timeout: 30_000 })
-		await expect(page.getByTestId('demo-disclaimer-banner')).toBeVisible()
-	})
-
-	test('[ETG-SMOKE] Островок demo: search → property → book → success', async ({ page }) => {
-		// Round 12 self-review fix — admin reset removed (Round 11 P1-B2 token gate).
-		await page.goto('/demo/ota/ostrovok')
-		await expect(page.getByTestId('demo-disclaimer-banner')).toBeVisible({ timeout: 15_000 })
-
-		// Click search submit.
-		const searchBtn = page
-			.getByTestId('ostrovok-search-submit')
-			.or(page.getByRole('button', { name: /Найти/ }))
-		await searchBtn.first().click()
-
-		await expect(page).toHaveURL(/\/demo\/ota\/ostrovok\/property\//, { timeout: 15_000 })
-
-		const bookCta = page
-			.getByTestId('ostrovok-book-cta')
-			.or(page.getByRole('button', { name: /Забронировать/ }))
-		await bookCta.first().click()
-
-		await expect(page).toHaveURL(/\/demo\/ota\/ostrovok\/booking\//, { timeout: 15_000 })
-		const confirmBtn = page
-			.getByTestId('ostrovok-confirm-cta')
-			.or(page.getByRole('button', { name: /Подтвердить|Подтверждаю/ }))
-		await confirmBtn.first().click()
-
-		await expect(page).toHaveURL(/\/demo\/ota\/ostrovok\/success\//, { timeout: 30_000 })
-		await expect(page.getByTestId('demo-disclaimer-banner')).toBeVisible()
-	})
+	// [YT-SMOKE] + [ETG-SMOKE] DELETED 2026-05-28 (Round 14.6.2) — these
+	// exercised anonymous demo booking flow which Round 14.5 captcha gate
+	// (`dfeed6d`) intentionally blocks за bot defense. Round 14.6 strategic
+	// direction (canon `feedback_round_14_6_per_tenant_demo_canon_2026_05_28`):
+	// per-tenant authed demo at `/o/{slug}/demo` IS the canonical exercise
+	// surface; real hoteliers book inside their cabinet после signup, not
+	// from anonymous demo.sepshn.ru showcase. Anonymous showcase pages
+	// (`/demo/ota/*`) still render for marketing visitors who solve captcha
+	// via SmartCaptcha widget; smoke can't solve captcha. Coverage moved
+	// к `demo-funnel-smoke.spec.ts` [E1-E3] (signup → /o/{slug}/setup
+	// IdentifyStep DaData → working demo OTA). Round 14.6.3 captcha
+	// auth-skip canon keeps tests against per-tenant flow unblocked.
 
 	test('[SHOWCASE-SMOKE] side-by-side showcase renders + admin controls fire', async ({ page }) => {
 		await page.goto('/demo/showcase')

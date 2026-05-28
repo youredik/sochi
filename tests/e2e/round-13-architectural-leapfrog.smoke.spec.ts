@@ -125,29 +125,10 @@ test.describe('Round 13 — architectural leapfrog regression', () => {
 		expect([200, 401]).toContain(adminRes.status())
 	})
 
-	test('[R13-9] JSON-LD AI markers rendered на demo property page', async ({ page }) => {
-		await page.addInitScript(() => {
-			window.localStorage.setItem(
-				'horeca-cookie-consent',
-				JSON.stringify({
-					version: '2026-05-24',
-					grantedAt: new Date().toISOString(),
-					categories: { necessary: true, analytics: false, marketing: false },
-				}),
-			)
-		})
-		await page.goto(
-			'/demo/ota/ostrovok/property/8473727?checkIn=2027-08-15&checkOut=2027-08-17&adults=2&children=0',
-			{ timeout: 30_000 },
-		)
-		await expect(page.getByTestId('property-total-price')).toBeVisible({ timeout: 15_000 })
-		const jsonLd = page.getByTestId('demo-hotel-json-ld')
-		await expect(jsonLd).toHaveCount(1)
-		const text = await jsonLd.textContent()
-		expect(text ?? '').toContain('"@type":"Hotel"')
-		expect(text ?? '').toContain('aiCompatibility')
-		expect(text ?? '').toContain('alisaSearchable')
-		// SearchAction (Lake.com canon prefilled-query bookmark surface)
-		expect(text ?? '').toContain('SearchAction')
-	})
+	// [R13-9] DELETED 2026-05-28 (Round 14.6.2) — Round 14.5 captcha gates
+	// the search-hp POST that property-page renders depend на; смокес
+	// can't solve captcha. JSON-LD AI markers test moved к unit level в
+	// `ostrovok-property-page.test.tsx` где `demo-hotel-json-ld` testid
+	// is asserted с canonical Hotel + aiCompatibility + SearchAction shape
+	// (per Round 13 architectural leapfrog canon).
 })

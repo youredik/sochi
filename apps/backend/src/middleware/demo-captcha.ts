@@ -28,7 +28,6 @@
  * events, low bot-spam value, would hurt UX.
  */
 
-import crypto from 'node:crypto'
 import { z } from 'zod'
 import { env } from '../env.ts'
 import { factory } from '../factory.ts'
@@ -62,6 +61,22 @@ export function demoCaptchaMiddleware() {
 			return
 		}
 
+		// Round 14.6.3 canonical 2026 pattern — authed users skip bot defenses.
+		// `authOrAnonymous` upstream sets `c.var.user` IFF Better Auth session
+		// resolved. Active session = empirical human signal stronger than
+		// SmartCaptcha widget; rate-limit + captcha exist для anonymous bot
+		// spam (Round 14.5 dfeed6d). Mirrors Stripe/Linear/Notion 2026 canon:
+		// «captcha applies к signup/anonymous flows; authenticated users skip».
+		// Closes Round 14.5 v2 SC playwright-smoke regression — per-tenant
+		// /o/{slug}/demo authed flow no longer 422s; anonymous demo.sepshn.ru
+		// fallback path retains captcha protection (anonymousFallbackTenantId
+		// path keeps `c.var.user` undefined → captcha enforced).
+		const userVar = (c as { var?: { user?: unknown } }).var
+		if (userVar?.user !== undefined) {
+			await next()
+			return
+		}
+
 		const serverKey = env.SMARTCAPTCHA_SERVER_KEY ?? ''
 		if (serverKey.length === 0) {
 			// Dev / CI — bypass с structured log signal.
@@ -71,45 +86,6 @@ export function demoCaptchaMiddleware() {
 			)
 			await next()
 			return
-		}
-
-		// Round 7 v3 SWS bypass token — same canonical header pattern as
-		// `lib/auth/captcha-gate.ts`. E2E smoke tests + SWS edge allow-rule
-		// both send `X-Bypass-Token` с the shared 32-byte secret from
-		// `env.SWS_BYPASS_TOKEN` (Lockbox-mounted). Timing-safe compare
-		// prevents leak via response-time оракул. Without this, SC deploy
-		// playwright-smoke (demo OTA POST endpoints) fails 422 captcha_
-		// required — discovered empirically Run #125 2026-05-28.
-		const provided = c.req.header('x-bypass-token')?.trim() ?? ''
-		const expectedToken = env.SWS_BYPASS_TOKEN ?? ''
-		// Empirical diagnostic Run #126+ — structured log every bypass attempt
-		// (3 outcomes: no-header / mismatch / match) so production smoke
-		// failures can be diagnosed via container logs without guessing.
-		// Token VALUES не logged — только length + match-or-not.
-		logger.info(
-			{
-				event: 'demo.captcha.bypass_attempt',
-				path: c.req.path,
-				providedLen: provided.length,
-				expectedLen: expectedToken.length,
-				envSet: expectedToken.length > 0,
-			},
-			'Demo captcha bypass attempt diagnostics',
-		)
-		if (expectedToken.length > 0 && provided.length > 0) {
-			const expectedBuf = Buffer.from(expectedToken, 'utf8')
-			const providedBuf = Buffer.from(provided, 'utf8')
-			if (
-				expectedBuf.length === providedBuf.length &&
-				crypto.timingSafeEqual(expectedBuf, providedBuf)
-			) {
-				logger.info(
-					{ event: 'demo.captcha.bypass_token', path: c.req.path },
-					'Demo captcha bypass via X-Bypass-Token (E2E/SWS canon Round 7 v3)',
-				)
-				await next()
-				return
-			}
 		}
 
 		// Parse body — Hono c.req.json() is idempotent (parsed body cached).

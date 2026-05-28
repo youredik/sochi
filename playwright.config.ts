@@ -31,18 +31,6 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5273'
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8787'
 const isRemote = BASE_URL !== 'http://localhost:5273'
 
-// Round 14.5 v2 diagnostic — print SWS_BYPASS_TOKEN presence at config load
-// time so CI logs show whether the SC `secrets.SWS_BYPASS_TOKEN` is actually
-// being passed to the playwright-smoke cube. Length-only (never the value).
-// Pre-fix Run #126: 5 anonymous demo OTA tests fail с 422 captcha_required
-// despite Playwright config edit; this diagnostic lets us see if env reaches
-// process.env at all (vs. config code branch never executing).
-console.error(
-	`[playwright.config] SWS_BYPASS_TOKEN env presence: length=${
-		(process.env.SWS_BYPASS_TOKEN ?? '').length
-	} (0 = unset/empty)`,
-)
-
 export default defineConfig({
 	testDir: './tests/e2e',
 	fullyParallel: Boolean(process.env.CI),
@@ -77,19 +65,7 @@ export default defineConfig({
 		},
 		{
 			name: 'smoke',
-			use: {
-				...devices['Desktop Chrome'],
-				// Round 14.5 v2 (post-Run-#125 fix) — pass `X-Bypass-Token` on
-				// every request so the demo-captcha middleware (Round 14.5)
-				// admits smoke-test XHRs against prod. Token mirrors
-				// `env.SWS_BYPASS_TOKEN` (Lockbox-mounted в backend; SC secret
-				// `SWS_BYPASS_TOKEN` mirrors на runner). Without this header,
-				// any XHR к `/api/_mock-ota/{yt,etg}/v1/*` POST returns 422
-				// `captcha_required` — playwright-smoke fails wholesale.
-				extraHTTPHeaders: {
-					'X-Bypass-Token': process.env.SWS_BYPASS_TOKEN ?? '',
-				},
-			},
+			use: { ...devices['Desktop Chrome'] },
 			testMatch: /(smoke|embed|perf-a11y|iframe-noscript|demo-tour|onboarding-90s)\.spec\.ts/,
 		},
 	],
