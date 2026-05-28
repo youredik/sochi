@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -48,6 +48,16 @@ export function DemoInboxPanel({
 }: DemoInboxPanelProps) {
 	const [latestUrl, setLatestUrl] = useState<string | null>(null)
 	const [error, setError] = useState<string | null>(null)
+	// Round 14.6.4 follow-up — synchronous halt flag. Pre-fix the polling
+	// interval read `latestUrl` from STALE closure: React 18+ batches state
+	// updates as microtasks; на быстром CI runner с aggressive pollIntervalMs
+	// the `setInterval` callback fires BEFORE React re-renders + cleanup
+	// runs, читая старое `latestUrl=null` → extra fetch call → test [F4]
+	// flake. Ref-based halt is synchronous + closure-free — tick() mutates
+	// `haltedRef.current = true` immediately on success, next interval
+	// читает fresh value через `.current` access. Canon `feedback_no_preexisting`
+	// — каждый red мой, даже если flaky CI; deterministic fix > tolerance.
+	const haltedRef = useRef(false)
 
 	useEffect(() => {
 		if (!email) return
@@ -65,6 +75,7 @@ export function DemoInboxPanel({
 				const body = (await res.json()) as { data: DemoInboxResponse }
 				if (cancelled) return
 				if (body.data.latestUrl) {
+					haltedRef.current = true
 					setLatestUrl(body.data.latestUrl)
 				}
 			} catch (e) {
@@ -75,7 +86,7 @@ export function DemoInboxPanel({
 		// Fire immediately, then on interval. Stop polling once URL arrives.
 		void tick()
 		const id = setInterval(() => {
-			if (latestUrl !== null) return
+			if (haltedRef.current) return
 			void tick()
 		}, pollIntervalMs)
 
@@ -83,7 +94,7 @@ export function DemoInboxPanel({
 			cancelled = true
 			clearInterval(id)
 		}
-	}, [email, latestUrl, pollIntervalMs, apiBase])
+	}, [email, pollIntervalMs, apiBase])
 
 	if (latestUrl) {
 		return (
