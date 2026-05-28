@@ -6,3 +6,8 @@
 # в order; sharing modules between entries безопасно.
 [test]
 preload = ["./src/tests/env-defaults.ts", "./src/tests/preload-driver-mock.ts"]
+
+# NB: bun's `coverageThreshold` is checked PER-FILE (every file must meet it),
+# not aggregate — empirically unusable as a project floor (any low-coverage file
+# fails any positive threshold). Aggregate floor enforced instead by
+# `scripts/coverage-gate.sh` (parses the «All files» row). CI audit 2026-05-29.

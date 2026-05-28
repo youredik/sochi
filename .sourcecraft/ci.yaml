@@ -197,6 +197,26 @@ tasks:
           - chmod +x /usr/local/bin/osv-scanner
           - osv-scanner --lockfile=pnpm-lock.yaml --format=table
 
+      # coverage — aggregate backend coverage floor (CI audit 2026-05-29).
+      # Closes the lefthook «coverage переезжают в async CI» promise that never
+      # landed. bun's per-file coverageThreshold is unusable as a project floor
+      # (empirical), so `scripts/coverage-gate.sh` parses the «All files» row and
+      # enforces aggregate funcs/lines floors (74/80, calibrated just below
+      # measured 76.24/82.56 — ratchet canon). lcov.info published as artifact.
+      # Shares install's workspace (node_modules). bun via npm -g (node:24-slim
+      # has no bun — same pattern as test-fast).
+      - name: coverage
+        needs: [install]
+        image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
+        script:
+          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - npm install -g bun@1.3.14
+          - bun --version
+          - bash scripts/coverage-gate.sh
+        artifacts:
+          paths:
+            - apps/backend/coverage/lcov.info
+
   # ---------------------------------------------------------------------------
   # INFRA — tofu plan/apply (auth via get-iam-token cube → IAM_TOKEN)
   # ---------------------------------------------------------------------------
