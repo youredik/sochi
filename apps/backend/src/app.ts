@@ -167,9 +167,11 @@ if (env.APP_MODE !== 'production') {
 	// Round 14.6 — stores are tenant-agnostic (tenantId per method call).
 	const ostrovokStore = createYdbOstrovokStore(sql)
 	const yandexStore = createYdbYandexStore(sql)
+	// Round 14.6.4 — `yandexPropertyId`/`ostrovokPropertyId` dropped:
+	// routes derive per-tenant propertyId via `resolveDemoPropertyId(tenantId)`
+	// (lib/demo-channel-seed.ts). Canonical 2026 pattern — never mount-time
+	// constants для per-tenant identity (see Round 14.6.4 canon).
 	registerDemoRoutes(app, {
-		yandexPropertyId: LEGACY_DEMO_PROPERTY_ID,
-		ostrovokPropertyId: LEGACY_DEMO_PROPERTY_ID,
 		webhookTargetBaseUrl: env.DEMO_WEBHOOK_TARGET_BASE_URL,
 		webhookSecret: env.DEMO_WEBHOOK_SECRET,
 		adminSessionToken,

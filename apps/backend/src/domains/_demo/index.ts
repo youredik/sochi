@@ -44,9 +44,12 @@ export interface RegisterDemoRoutesOptions {
 	 * Round 14.6 — tenantId no longer wired here. Each request derives
 	 * tenantId from Better Auth session via `tenantMiddleware()` mounted
 	 * on each demo OTA sub-router. Multi-tenant by design (Stripe 2026 canon).
+	 *
+	 * Round 14.6.4 — `yandexPropertyId`/`ostrovokPropertyId` removed: routes
+	 * now derive propertyId per-tenant via `resolveDemoPropertyId(tenantId)`
+	 * (lib/demo-channel-seed.ts). Closes silent identity drift между
+	 * channelConnection.propertyId (per-tenant) и mock-adapter state.
 	 */
-	readonly yandexPropertyId: string
-	readonly ostrovokPropertyId: string
 	readonly webhookTargetBaseUrl: string
 	readonly webhookSecret: string
 	/**
@@ -100,13 +103,11 @@ export interface RegisterDemoRoutesOptions {
  */
 export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOptions): void {
 	const yandexRouter = createYandexMockOtaRoutes({
-		propertyId: opts.yandexPropertyId,
 		webhookTargetUrl: `${opts.webhookTargetBaseUrl}/api/channel/webhooks/YT`,
 		webhookSecret: opts.webhookSecret,
 		store: opts.yandexStore,
 	})
 	const ostrovokRouter = createOstrovokMockOtaRoutes({
-		propertyId: opts.ostrovokPropertyId,
 		webhookTargetUrl: `${opts.webhookTargetBaseUrl}/api/channel/webhooks/ETG`,
 		webhookSecret: opts.webhookSecret,
 		store: opts.ostrovokStore,

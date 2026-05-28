@@ -47,6 +47,7 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from '../../../../factory.ts'
+import { resolveDemoPropertyId } from '../../../../lib/demo-channel-seed.ts'
 import {
 	isReservedTestDomain,
 	isReservedTestPhone,
@@ -120,8 +121,11 @@ export interface OstrovokMockOtaDeps {
 	/**
 	 * Round 14.6 — tenantId derived per-request from `c.var.tenantId`
 	 * (`tenantMiddleware`). Not injected here. Multi-tenant by design.
+	 *
+	 * Round 14.6.4 — `propertyId` field DROPPED: was mount-time constant
+	 * causing silent identity drift с per-tenant `channelConnection`.
+	 * Routes now derive propertyId via `resolveDemoPropertyId(tenantId)`.
 	 */
-	readonly propertyId: string
 	/**
 	 * Store (multi-tenant; tenantId per-method). Single shared instance.
 	 */
@@ -476,7 +480,9 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono<App
 				customer_phone: booking.customerPhone,
 				guests: booking.guests,
 				channel_id: 'ETG' as const,
-				property_id: deps.propertyId,
+				// Round 14.6.4 — per-tenant propertyId (was: deps.propertyId
+				// mount-time constant breaking per-tenant identity).
+				property_id: resolveDemoPropertyId(c.var.tenantId),
 			},
 			targetUrlOverride: deps.webhookTargetUrl,
 			secretOverride: deps.webhookSecret,
@@ -564,7 +570,9 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono<App
 					currency_code: booking.currency,
 					total_amount: booking.totalAmount,
 					channel_id: 'ETG' as const,
-					property_id: deps.propertyId,
+					// Round 14.6.4 — per-tenant propertyId (was: deps.propertyId
+					// mount-time constant breaking per-tenant identity).
+					property_id: resolveDemoPropertyId(c.var.tenantId),
 				},
 				targetUrlOverride: deps.webhookTargetUrl,
 				secretOverride: deps.webhookSecret,

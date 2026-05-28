@@ -25,9 +25,9 @@ import { registerDemoRoutes } from './index.ts'
 import { createInMemoryOstrovokStore } from './mock-ota-server/ostrovok/store.ts'
 import { createInMemoryYandexStore } from './mock-ota-server/yandex/store.ts'
 
+// Round 14.6.4 — propertyId no longer wired here; routes derive per-tenant
+// via resolveDemoPropertyId(tenantId).
 const COMMON_OPTS = {
-	yandexPropertyId: 'demo-hotel-sochi',
-	ostrovokPropertyId: 'demo-hotel-sochi',
 	webhookTargetBaseUrl: 'http://test.invalid',
 	webhookSecret: 'whsec_test_only',
 } as const

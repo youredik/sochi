@@ -60,8 +60,9 @@ function buildFetchSpy(opts: { respond?: (call: FetchCall) => Response | Promise
 let currentStore: YandexStore = createInMemoryYandexStore()
 
 function mountApp(deps: { fetchImpl?: typeof fetch; tenantId?: string } = {}) {
+	// Round 14.6.4 — propertyId no longer injected; routes derive per-tenant
+	// via `resolveDemoPropertyId(c.var.tenantId)` (see yandex.routes.ts).
 	const router = createYandexMockOtaRoutes({
-		propertyId: TEST_HOTEL,
 		webhookTargetUrl: 'http://test.invalid/api/channel/webhooks/YT',
 		webhookSecret: 'whsec_demo_test_only',
 		store: currentStore,

@@ -40,7 +40,7 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from '../../../factory.ts'
-import { LEGACY_DEMO_PROPERTY_ID } from '../../../lib/demo-channel-seed.ts'
+import { resolveDemoPropertyId } from '../../../lib/demo-channel-seed.ts'
 import type { OstrovokStore } from '../mock-ota-server/ostrovok/store.ts'
 import type { YandexStore } from '../mock-ota-server/yandex/store.ts'
 
@@ -177,12 +177,15 @@ export function createDemoAdminRoutes(opts: DemoAdminRoutesOptions): Hono<AppEnv
 			const iso = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
 			seededDates.push(iso)
 		}
+		// Round 14.6.4 — per-tenant propertyId derivation (was: mount-time
+		// `LEGACY_DEMO_PROPERTY_ID` constant). The admin /seed echoes the
+		// tenant-correct value so presenter UI reflects per-tenant identity.
 		return c.json(
 			{
 				ok: true,
 				seeded: {
 					property: {
-						id: LEGACY_DEMO_PROPERTY_ID,
+						id: resolveDemoPropertyId(c.var.tenantId),
 						name: demoPropertyName,
 					},
 					availabilityDates: seededDates,

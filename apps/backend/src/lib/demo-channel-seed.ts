@@ -157,3 +157,31 @@ export async function seedDemoChannelInfraCore(
 export function demoPropertyIdForOrg(orgId: string): string {
 	return `demoprop_${orgId}`
 }
+
+/**
+ * Round 14.6.4 — resolve demo propertyId per-tenant.
+ *
+ * Single source of truth для derive(tenantId → demo propertyId). Used by
+ * mock-OTA route handlers (yandex/ostrovok) к compute per-tenant propertyId
+ * at request time (was: mount-time `opts.propertyId` constant = `demo-hotel-
+ * sochi`). The mount-time constant caused per-tenant `channelConnection` row
+ * (seeded в `afterCreateOrganization` с `propertyId='demoprop_<orgId>'`) к
+ * NOT match the mock-adapter's internal reservation state keyed by the wrong
+ * `'demo-hotel-sochi'` literal — silent identity drift across the per-tenant
+ * scope.
+ *
+ * Legacy anonymous-fallback (`DEMO_FALLBACK_TENANT_ID='demo-tenant'`)
+ * preserves the historic `LEGACY_DEMO_PROPERTY_ID='demo-hotel-sochi'` so
+ * existing demo.sepshn.ru anonymous-showcase rows still resolve. New tenants
+ * get per-org synthetic via `demoPropertyIdForOrg(orgId)`.
+ *
+ * Canon: `feedback_round_14_6_per_tenant_demo_canon_2026_05_28.md` (Round
+ * 14.6.4 aggressive-delegacy sweep). Mirror of `demoWebhookKidForTenant`
+ * structure — both derive per-tenant identifiers с legacy carve-out.
+ */
+export function resolveDemoPropertyId(tenantId: string): string {
+	if (tenantId === DEMO_FALLBACK_TENANT_ID) {
+		return LEGACY_DEMO_PROPERTY_ID
+	}
+	return demoPropertyIdForOrg(tenantId)
+}

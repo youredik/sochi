@@ -37,7 +37,9 @@ let currentStore: OstrovokStore = createInMemoryOstrovokStore()
 
 const TEST_TENANT = 'org_demo_etg'
 const TEST_TENANT_B = 'org_demo_etg_b'
-const TEST_PROPERTY = 'prop_demo_ostrovok'
+// Round 14.6.4 — TEST_PROPERTY constant DELETED. routes derive per-tenant
+// propertyId via resolveDemoPropertyId(tenantId); tests assert against
+// `demoprop_${TEST_TENANT}` directly.
 const TEST_AUTH = `Basic ${Buffer.from('etg-key:etg-uuid', 'utf-8').toString('base64')}`
 const SANDBOX_HID = 8473727
 
@@ -95,8 +97,9 @@ function mountApp(
 		tenantId?: string
 	} = {},
 ) {
+	// Round 14.6.4 — propertyId field dropped from OstrovokMockOtaDeps;
+	// routes derive per-tenant via resolveDemoPropertyId(tenantId).
 	const router = createOstrovokMockOtaRoutes({
-		propertyId: TEST_PROPERTY,
 		webhookTargetUrl: 'http://test.invalid/api/channel/webhooks/ETG',
 		webhookSecret: 'whsec_demo_test_only',
 		store: currentStore,
@@ -427,14 +430,21 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 
 		// Round 8 bug compensation: status MUST be 'completed' (canonical ETG
 		// terminal state per real docs), NOT 'confirmed' (Round 8 mock bug).
+		// Round 14.6.4: property_id MUST be per-tenant derived
+		// (`demoprop_<tenantId>`), NOT the mount-time `deps.propertyId` constant.
+		// Pins the aggressive-delegacy sweep — был silent identity drift между
+		// channelConnection.propertyId (per-tenant, seeded в afterCreateOrganization)
+		// и event.data.property_id (was mount-time `TEST_PROPERTY` constant).
 		const data = parsed.data as {
 			status: string
 			partner_order_id: string
 			channel_id: string
+			property_id: string
 		}
 		expect(data.status).toBe('completed')
 		expect(data.partner_order_id).toBe(partnerOrderId)
 		expect(data.channel_id).toBe('ETG')
+		expect(data.property_id).toBe(`demoprop_${TEST_TENANT}`)
 	})
 
 	// ── OSTR7 — Stage 4 status polling ─────────────────────────────────────
@@ -545,9 +555,15 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		const parsed = parseCloudEvent(JSON.parse(rawBody))
 		if (parsed === null) throw new Error('parsed envelope null')
 		expect(parsed.type).toBe('app.sochi.channel.booking.cancelled.v1')
-		const data = parsed.data as { status: string; channel_id: string }
+		const data = parsed.data as {
+			status: string
+			channel_id: string
+			property_id: string
+		}
 		expect(data.status).toBe('completed') // Round 8 bug compensation
 		expect(data.channel_id).toBe('ETG')
+		// Round 14.6.4 — cancel webhook also carries per-tenant propertyId.
+		expect(data.property_id).toBe(`demoprop_${TEST_TENANT}`)
 
 		// Booking state mutation persisted.
 		const stored = (await currentStore.__listBookings(TEST_TENANT))[0]

@@ -133,7 +133,9 @@ describe('demo OTA admin routes', () => {
 			}
 		}
 		expect(body.ok).toBe(true)
-		expect(body.seeded.property.id).toBe('demo-hotel-sochi')
+		// Round 14.6.4 — per-tenant propertyId; admin /seed echoes the
+		// tenant-correct value (was: mount-time `LEGACY_DEMO_PROPERTY_ID`).
+		expect(body.seeded.property.id).toBe(`demoprop_${TEST_TENANT}`)
 		expect(body.seeded.property.name).toBe('Sochi Demo Hotel')
 		expect(body.seeded.availabilityDates.length).toBe(3)
 		expect(body.seeded.channels).toEqual(['yandex', 'ostrovok'])

@@ -40,6 +40,7 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from '../../../../factory.ts'
+import { resolveDemoPropertyId } from '../../../../lib/demo-channel-seed.ts'
 import { logger } from '../../../../logger.ts'
 import {
 	isReservedTestDomain,
@@ -59,8 +60,14 @@ export interface YandexMockOtaRoutesOptions {
 	/**
 	 * Round 14.6 — tenantId derived per-request via `c.var.tenantId`
 	 * (`tenantMiddleware`). Not injected here.
+	 *
+	 * Round 14.6.4 — `propertyId` removed: was mount-time constant (=
+	 * `'demo-hotel-sochi'`) causing per-tenant `channelConnection` row
+	 * keyed by `demoprop_<orgId>` to NEVER match the mock-adapter's
+	 * internal reservation state. propertyId теперь derived per-call
+	 * via `resolveDemoPropertyId(c.var.tenantId)` — single source of
+	 * truth lives в `lib/demo-channel-seed.ts`.
 	 */
-	readonly propertyId: string
 	/**
 	 * Store (multi-tenant; tenantId per-method). Single shared instance.
 	 */
@@ -121,13 +128,16 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 
 	// Round 14.6 — per-tenant mockAdapter cache. Each tenant gets own FSM
 	// + HMAC + sequence machinery; lazy-instantiated on first request.
+	// Round 14.6.4 — propertyId derived per-tenant via `resolveDemoPropertyId`
+	// (was mount-time constant, breaking per-tenant identity — см. options
+	// docstring above).
 	const mockAdapterCache = new Map<string, ReturnType<typeof createYandexTravelMock>>()
 	function getMockAdapter(tenantId: string): ReturnType<typeof createYandexTravelMock> {
 		let a = mockAdapterCache.get(tenantId)
 		if (!a) {
 			a = createYandexTravelMock({
 				tenantId,
-				propertyId: opts.propertyId,
+				propertyId: resolveDemoPropertyId(tenantId),
 				nightRateMicros: DEMO_NIGHT_RATE_MICROS,
 			})
 			mockAdapterCache.set(tenantId, a)
@@ -298,10 +308,11 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		}
 
 		// Step 4 — verify + create через production-grade Round 8 adapter.
+		// Round 14.6.4 — propertyId per-tenant via resolveDemoPropertyId.
 		const mockAdapter = getMockAdapter(c.var.tenantId)
 		const verifyResult = await mockAdapter.verifyBooking({
 			tenantId: c.var.tenantId,
-			propertyId: opts.propertyId,
+			propertyId: resolveDemoPropertyId(c.var.tenantId),
 			roomTypeId: 'yt_rt',
 			ratePlanId: 'yt_rp',
 			checkIn: tokenCtx.checkinDate,
