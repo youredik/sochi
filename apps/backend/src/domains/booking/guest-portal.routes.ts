@@ -25,6 +25,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from '../../factory.ts'
 import { guestSessionMiddleware } from '../../middleware/guest-session.ts'
+import { publicBodyCap } from '../../middleware/public-body-cap.ts'
 import type { BookingService } from './booking.service.ts'
 import type { GuestPortalRepo, GuestPortalView } from './guest-portal.repo.ts'
 
@@ -142,6 +143,11 @@ export function createGuestPortalRoutes(deps: GuestPortalRoutesDeps) {
 		})
 		.post(
 			'/booking/guest-portal/:bookingId/cancel',
+			// Round 14.6.4 adversarial-sweep #6 (2026-05-29) — cookie-gated (sessionMw
+			// 401s before parse) so lower-risk than fully-anonymous endpoints, но
+			// defense-in-depth: a valid-cookie guest can still send oversized body.
+			// 64 KB ≫ cancel reason payload.
+			publicBodyCap(),
 			zValidator('json', cancelInputSchema),
 			async (c) => {
 				const session = c.var.guestSession

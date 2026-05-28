@@ -15,6 +15,7 @@
 
 import { Hono } from 'hono'
 import { describe, expect, it } from 'bun:test'
+import { onError } from '../../errors/on-error.ts'
 import type { AppEnv } from '../../factory.ts'
 import { RumBuffer } from './rum.repo.ts'
 import { createRumRoutes } from './rum.routes.ts'
@@ -23,6 +24,7 @@ function buildApp() {
 	const buffer = new RumBuffer({ capacity: 100 })
 	const root = new Hono<AppEnv>()
 	root.route('/api/rum', createRumRoutes({ buffer, disableRateLimit: true }))
+	root.onError(onError)
 	return { buffer, app: root }
 }
 
@@ -162,5 +164,19 @@ describe('POST /api/rum/v1/web-vitals', () => {
 			})
 			expect(res.status, `slug="${slug}"`).toBe(400)
 		}
+	})
+
+	it('[RUM5] body > 64 KB → 413 payload_too_large (DoS guard)', async () => {
+		// Round 14.6.4 adversarial-sweep #6 (2026-05-29) — anonymous telemetry
+		// endpoint MUST cap body BEFORE zValidator buffers it. onError mounted
+		// in buildApp so HTTPException(413) propagates verbatim (prod parity).
+		const { app } = buildApp()
+		const bigPayload = 'a'.repeat(100 * 1024)
+		const res = await app.request('/api/rum/v1/web-vitals', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: bigPayload,
+		})
+		expect(res.status).toBe(413)
 	})
 })

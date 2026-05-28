@@ -31,7 +31,19 @@
 
 import { bodyLimit } from 'hono/body-limit'
 
+/** Default cap для JSON control-plane endpoints (DCR / MCP / booking / RUM). */
 export const MAX_PUBLIC_BODY_BYTES = 64 * 1024
 
-/** Hono middleware factory — apply via `.use('/*', publicBodyCap())`. */
-export const publicBodyCap = () => bodyLimit({ maxSize: MAX_PUBLIC_BODY_BYTES })
+/**
+ * Telemetry cap — OTLP trace batches (browser OTel Web SDK) legitimately
+ * exceed 64 KB when a page session accumulates many spans before flush.
+ * 512 KB keeps the DoS ceiling sane while not truncating real export batches.
+ */
+export const MAX_TELEMETRY_BODY_BYTES = 512 * 1024
+
+/**
+ * Hono middleware factory — apply via `.use('/*', publicBodyCap())`.
+ * @param maxBytes override the 64 KB default (e.g. `MAX_TELEMETRY_BODY_BYTES`).
+ */
+export const publicBodyCap = (maxBytes: number = MAX_PUBLIC_BODY_BYTES) =>
+	bodyLimit({ maxSize: maxBytes })

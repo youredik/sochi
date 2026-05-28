@@ -25,6 +25,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { rateLimiter } from 'hono-rate-limiter'
 import type { AppEnv } from '../../factory.ts'
+import { publicBodyCap } from '../../middleware/public-body-cap.ts'
 import { extractClientIp } from '../../middleware/widget-rate-limit.ts'
 import type { RumBuffer } from './rum.repo.ts'
 
@@ -43,6 +44,12 @@ const RATE_LIMIT_MESSAGE = {
  */
 export function createRumRoutes(deps: RumRoutesDeps): Hono<AppEnv> {
 	const app = new Hono<AppEnv>()
+
+	// Round 14.6.4 adversarial-sweep #6 (2026-05-29) — anonymous telemetry POST
+	// needs body cap BEFORE zValidator parses (zValidator buffers full body).
+	// Closes gap missed by sweep #5 (capped только DCR+MCP, не RUM). 64 KB ≫
+	// realistic web-vitals batch (max 16 metrics × structural field caps).
+	app.use('/*', publicBodyCap())
 
 	// Permissive CORS — RUM is anonymous telemetry; embedded widget on third-
 	// party origin MUST be able to POST without credentials.

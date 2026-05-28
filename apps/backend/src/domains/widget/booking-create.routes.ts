@@ -31,6 +31,7 @@ import { env } from '../../env.ts'
 import type { AppEnv } from '../../factory.ts'
 import { extractClientIpFromContext } from '../../lib/net/client-ip.ts'
 import type { idempotencyMiddleware } from '../../middleware/idempotency.ts'
+import { publicBodyCap } from '../../middleware/public-body-cap.ts'
 import {
 	widgetBurstRateLimiter,
 	widgetSteadyRateLimiter,
@@ -95,6 +96,11 @@ export function createWidgetBookingCreateRoutes(deps: WidgetBookingCreateRoutesD
 		})
 		.post(
 			'/:tenantSlug/booking',
+			// Round 14.6.4 adversarial-sweep #6 (2026-05-29) — anonymous public
+			// booking POST. Cap BEFORE idempotency (reads body via c.req.text())
+			// + zValidator (buffers full JSON). 64 KB ≫ booking commit payload.
+			// Sweep #5 missed this — same DoS class as DCR/MCP/RUM.
+			publicBodyCap(),
 			burst,
 			steady,
 			widgetTenantResolverMiddleware(),
