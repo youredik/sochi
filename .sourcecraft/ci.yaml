@@ -401,8 +401,80 @@ tasks:
             -t ${REGISTRY}/${IMAGE_NAME}:latest
             --push .
 
-      - name: revision-deploy
+      # -----------------------------------------------------------------------
+      # SCAN-GATE — YC Container Registry vulnerability scan (CI audit 2026-05-29)
+      #
+      # Closes the «we push :SHA and deploy without CVE check» gap. Yandex has a
+      # NATIVE scanner (OS-packages + npm/language deps); TF provider ~>0.204 has
+      # no scan-policy resource (см. registry.tf TODO), so we gate IN CI: scan the
+      # exact image we are about to deploy, block on CRITICAL.
+      #
+      # All steps verified EMPIRICALLY 2026-05-29 against the live image:
+      #   - awk image-id-by-tag parser (yc-cli has no jq — canon)
+      #   - `yc container image scan` sync ≈ 60s, returns scan_result_id as .id
+      #   - filter syntax `severity="CRITICAL"` (double-quotes; bare `=CRITICAL`
+      #     errors InvalidArgument)
+      #   - our current backend image = 0 CVE → gate PASSES today, no deploy break
+      #
+      # Auth: claude SA (deploy-connection) holds cloud-level container-registry.admin
+      # (verified) → scanner permission covered, no extra IAM binding needed.
+      #
+      # Policy: CRITICAL = hard fail; HIGH = warn (visibility without blocking
+      # hot-fixes). Tighten to fail-on-HIGH later if the image stays clean.
+      # Adds ~60s to deploy chain — acceptable for supply-chain gate.
+      # -----------------------------------------------------------------------
+      - name: scan-gate
         needs: [build-push]
+        image:
+          name: cr.yandex/sourcecraft/yc-cli:latest
+          entrypoint: ''
+        env:
+          YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
+        script:
+          - set -e
+          - SHA=$(git rev-parse --short HEAD)
+          - 'test -n "$YC_TOKEN" || { echo "FAIL: IAM token empty"; exit 1; }'
+          - 'echo "Vulnerability scan-gate for ${REGISTRY}/${IMAGE_NAME}:${SHA}"'
+          # Resolve image id by SHA tag. yc-cli:latest has no jq → awk on --format
+          # json (same canon as revision-deploy Lockbox version awk).
+          - |
+            IMAGE_ID=$(yc --token "$YC_TOKEN" container image list \
+              --repository-name crp4um8fg84qoro1voi6/backend --format json \
+              | awk -v sha="\"${SHA}\"" '
+                  /"id":/ { line=$0; gsub(/[",]/,"",line); split(line,a,":"); id=a[2]; gsub(/ /,"",id) }
+                  $0 ~ ("^[[:space:]]*" sha "[,]?[[:space:]]*$") { print id; exit }
+                ')
+            test -n "$IMAGE_ID" || { echo "FAIL: image for tag ${SHA} not found"; exit 1; }
+            echo "image_id=${IMAGE_ID}"
+          # Sync scan (no --async) → top-level .id is the scan_result_id (~60s).
+          - |
+            SCAN_OUT=$(yc --token "$YC_TOKEN" container image scan --id "$IMAGE_ID" --format json)
+            SCAN_ID=$(echo "$SCAN_OUT" | awk -F'"' '/"id":/ {print $4; exit}')
+            test -n "$SCAN_ID" || { echo "FAIL: scan returned no result id"; echo "$SCAN_OUT"; exit 1; }
+            echo "scan_result_id=${SCAN_ID}"
+          # Count by severity. Filter expr `severity="LEVEL"` verified empirically.
+          # grep -c '"severity"' counts JSON vuln entries (no jq dependency).
+          - |
+            CRIT=$(yc --token "$YC_TOKEN" container image list-vulnerabilities \
+              --scan-result-id "$SCAN_ID" --filter 'severity="CRITICAL"' --format json \
+              | grep -c '"severity"' || true)
+            HIGH=$(yc --token "$YC_TOKEN" container image list-vulnerabilities \
+              --scan-result-id "$SCAN_ID" --filter 'severity="HIGH"' --format json \
+              | grep -c '"severity"' || true)
+            echo "CVE summary — CRITICAL=${CRIT} HIGH=${HIGH}"
+            if [ "${CRIT:-0}" -gt 0 ]; then
+              echo "BLOCKED: ${CRIT} CRITICAL vulnerabilities — deploy halted"
+              yc --token "$YC_TOKEN" container image list-vulnerabilities \
+                --scan-result-id "$SCAN_ID" --filter 'severity="CRITICAL"' --format table
+              exit 1
+            fi
+            if [ "${HIGH:-0}" -gt 0 ]; then
+              echo "WARN: ${HIGH} HIGH vulnerabilities (non-blocking) — review recommended"
+            fi
+            echo "scan-gate PASSED (no CRITICAL)"
+
+      - name: revision-deploy
+        needs: [scan-gate]
         image:
           name: cr.yandex/sourcecraft/yc-cli:latest
           entrypoint: ''

@@ -37,8 +37,13 @@ resource "yandex_container_repository" "backend" {
 # Policy runs nightly via YC scheduler — declarative canon (no imperative
 # `yc image delete` loops, which safety classifier blocks anyway).
 #
-# TODO (prod): enable vulnerability scanner via console UI (Q2 2026 — нет TF
-# resource yet, see github.com/yandex-cloud/terraform-provider-yandex issue).
+# Vulnerability scanning: DONE via CI scan-gate 2026-05-29 (NOT scan-on-push
+# policy — TF provider ~>0.204 has no scan-policy resource). The `.sourcecraft/
+# ci.yaml` deploy-backend `scan-gate` cube runs `yc container image scan` on the
+# exact :SHA image between build-push and revision-deploy, blocking on CRITICAL.
+# Empirical: claude SA holds container-registry.admin (scanner covered); current
+# backend image = 0 CVE. Prefer-CI-gate over registry policy = scans the precise
+# artifact being deployed, no provider dependency.
 resource "yandex_container_repository_lifecycle_policy" "backend_retention" {
   name          = "backend-stankoff-canon"
   status        = "active"

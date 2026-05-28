@@ -107,12 +107,13 @@ resource "yandex_audit_trails_trail" "demo_trail" {
   ]
 }
 
-# Out-of-band TODO (TF не поддерживает Q2 2026):
-#   - yandex_container_registry_scanner — vulnerability scan-on-push: ENABLE
-#     через UI или `yc container image scan` cron. Issue: scan-on-push toggle
-#     отсутствует в provider v0.204.
-#   - yandex_monitoring_alert — Issue #166 (May 2021) still open. Alerts на
-#     revision deploy failures + error rates — через UI / monitoring CLI.
+# Out-of-band (TF provider ~>0.204 gaps):
+#   - vulnerability scanner: DONE 2026-05-29 via CI scan-gate (см. registry.tf +
+#     `.sourcecraft/ci.yaml` deploy-backend `scan-gate` cube). NOT scan-on-push
+#     policy (no TF resource) — CI-gate scans exact deployed :SHA, blocks CRITICAL.
+#   - yandex_monitoring_alert — Issue #166 still open. Alerts на revision deploy
+#     failures + error rates — через UI / monitoring CLI. (P1 backlog: CI failure
+#     notifications via SourceCraft webhooks — Q4'25 feature, см. ci-audit canon.)
 
 output "audit_trail_id" {
   value = yandex_audit_trails_trail.demo_trail.id
