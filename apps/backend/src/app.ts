@@ -175,6 +175,14 @@ if (env.APP_MODE !== 'production') {
 		adminSessionToken,
 		ostrovokStore,
 		yandexStore,
+		// Round 14.6 — public showcase fallback. `demo.sepshn.ru` serves anonymous
+		// visitors who interact с the OTA façade without signup; their requests
+		// pin к 'demo-tenant' (legacy seed row, webhookSecret + channelConnection
+		// already populated via `seedDemoChannelInfra` below). `app.sepshn.ru`
+		// прод-deploys could omit this option (set undefined) to require auth.
+		// Current single-deploy posture: keep fallback enabled — auth still wins
+		// when caller HAS a session с active org (per-tenant scope kicks in).
+		anonymousFallbackTenantId: 'demo-tenant',
 	})
 	// Round 12 polish — promise captured, NOT fire-and-forget. `index.ts`
 	// awaits before `serve()` to close the 100 ms cold-start race window

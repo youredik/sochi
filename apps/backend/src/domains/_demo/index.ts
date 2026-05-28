@@ -22,7 +22,8 @@
  */
 
 import { Hono } from 'hono'
-import type { AppEnv } from '../../factory.ts'
+import { auth } from '../../auth.ts'
+import { type AppEnv, factory } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import { demoCaptchaMiddleware } from '../../middleware/demo-captcha.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
@@ -64,6 +65,23 @@ export interface RegisterDemoRoutesOptions {
 	 * showcase UI. Prevents multi-tenant cross-reset attacks.
 	 */
 	readonly adminSessionToken?: string
+	/**
+	 * Round 14.6 — anonymous-fallback tenantId for `demo.sepshn.ru` showcase.
+	 *
+	 * When set: requests без Better Auth session bypass auth + tenant middleware
+	 *   and pin to this tenantId. Used для public always-on demo URL where
+	 *   guests interact с the OTA façade as anonymous visitors (no signup).
+	 *
+	 * When undefined: full strict path — auth + tenantMiddleware required;
+	 *   anonymous calls return 401. Production `app.sepshn.ru` deploys without
+	 *   this option set.
+	 *
+	 * Empirical rationale: bot-spam shield (Round 14.5 captcha gate) still
+	 * applies; auth bypass только impacts session lookup, not POST mutation
+	 * defense. Stripe pattern — public demo endpoints use a designated
+	 * "demo-tenant" fixture; production endpoints require live auth session.
+	 */
+	readonly anonymousFallbackTenantId?: string
 }
 
 /**
@@ -100,36 +118,69 @@ export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOp
 	})
 
 	// Round 14.6 strategic — per-tenant authenticated demo OTA. Hierarchy:
-	//   authMiddleware → sets c.var.session + c.var.user from Better Auth.
-	//   tenantMiddleware → sets c.var.tenantId from session.activeOrganizationId
-	//     + role gate via membership row.
+	//   authOrAnonymous → sets c.var.session + tenantId; anonymous fallback if
+	//     `anonymousFallbackTenantId` option supplied (public demo URL).
 	//   demoCaptchaMiddleware → bot-shield POST mutations (Round 14.5 retained).
 	//   router → reads c.var.tenantId; stores per-method tenant scope.
 	//
-	// Empirical rationale: demo OTA endpoints are called by authenticated PMS
-	// users from inside their tenant dashboard (`/o/{slug}/demo/*`). Multi-tenant
-	// 2026 canon (Stripe-style) — caller's session is the only source of truth
-	// для tenantId. Bot spam (28.05.2026 incident, 130 bookings/час) is closed
-	// twice: (1) auth required = no anonymous traffic, (2) captcha gate retained
-	// for layered defense.
+	// Empirical rationale: demo OTA endpoints serve TWO audiences:
+	//   1. `demo.sepshn.ru` (anonymous public showcase) — caller has no session;
+	//      fallback to demo-tenant fixture so the always-on URL keeps working.
+	//   2. `app.sepshn.ru` (per-tenant production) — caller has Better Auth
+	//      session with active organization; tenantId derives from session.
+	//
+	// Stripe 2026 canon — multi-tenant by design; bot defense layered via
+	// auth + captcha + reserved-test-ranges. 28.05.2026 incident (130
+	// bookings/час bot spam) closed by captcha gate + (на app.sepshn.ru) auth.
 	//
 	// Test ergonomics: unit tests mount routers directly via
 	// `new Hono().route(path, router)` + inject `tenantId` via test middleware,
-	// bypassing this auth+tenant gate. Production path mounts всю стек.
+	// bypassing this gate. Production path mounts всю стек.
+	const fallbackTenantId = opts.anonymousFallbackTenantId
+	const strictAuth = authMiddleware()
+	const strictTenant = tenantMiddleware()
+	const authOrAnonymous = factory.createMiddleware(async (c, next) => {
+		// Strict path: no fallback configured → require auth + tenant.
+		if (fallbackTenantId === undefined) {
+			await strictAuth(c, async () => {
+				await strictTenant(c, next)
+			})
+			return
+		}
+		// Permissive path: try auth; if no session, pin to fallback.
+		const result = await auth.api.getSession({ headers: c.req.raw.headers })
+		if (!result) {
+			c.set('tenantId', fallbackTenantId)
+			await next()
+			return
+		}
+		c.set('user', result.user)
+		c.set(
+			'session',
+			result.session as typeof result.session & { activeOrganizationId: string | null },
+		)
+		const orgId = result.session.activeOrganizationId
+		// Session exists но no active org → fall back (anonymous-equivalent semantics).
+		if (!orgId) {
+			c.set('tenantId', fallbackTenantId)
+			await next()
+			return
+		}
+		// Session + active org → defer к tenantMiddleware membership-role gate
+		// (matches strict path). Closes role-escalation gap on authed-but-unmember
+		// callers (e.g. lapsed invites).
+		await strictTenant(c, next)
+	})
+
 	const yandexWrapped = new Hono<AppEnv>()
-		.use('/*', authMiddleware())
-		.use('/*', tenantMiddleware())
+		.use('/*', authOrAnonymous)
 		.use('/*', demoCaptchaMiddleware())
 		.route('/', yandexRouter)
 	const ostrovokWrapped = new Hono<AppEnv>()
-		.use('/*', authMiddleware())
-		.use('/*', tenantMiddleware())
+		.use('/*', authOrAnonymous)
 		.use('/*', demoCaptchaMiddleware())
 		.route('/', ostrovokRouter)
-	const adminWrapped = new Hono<AppEnv>()
-		.use('/*', authMiddleware())
-		.use('/*', tenantMiddleware())
-		.route('/', adminRouter)
+	const adminWrapped = new Hono<AppEnv>().use('/*', authOrAnonymous).route('/', adminRouter)
 
 	app.route('/api/_mock-ota/yandex/v1', yandexWrapped)
 	app.route('/api/_mock-ota/ostrovok/v1', ostrovokWrapped)
