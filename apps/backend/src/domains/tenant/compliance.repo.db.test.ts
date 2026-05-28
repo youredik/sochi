@@ -275,12 +275,16 @@ describe('tenant.compliance.repo', () => {
 	test('[V1] patch input is parseable through Zod (contract enforcement)', () => {
 		// At service boundary, every patch input MUST go through Zod.
 		// Verify the schema accepts our test fixtures.
+		// Round 14.6.4 follow-up — fixture aligned to canonical ksrRegistryId
+		// shape `^С\d{12}$` (Cyrillic С + 12 digits per ПП-1951 + Sprint C+
+		// Round 6 Legal P0 canon). Был `'KSR-001'` (Latin K) → rejected by
+		// Zod 4.5 strict refinement → red. Updated to real format example.
 		const valid = tenantCompliancePatchSchema.parse({
-			ksrRegistryId: 'KSR-001',
+			ksrRegistryId: 'С782031059672',
 			ksrCategory: 'hotel',
 			annualRevenueEstimateMicroRub: USN_THRESHOLD_2026_MICRO_RUB,
 		})
-		expect(valid.ksrRegistryId).toBe('KSR-001')
+		expect(valid.ksrRegistryId).toBe('С782031059672')
 		expect(valid.ksrCategory).toBe('hotel')
 		expect(valid.annualRevenueEstimateMicroRub).toBe(USN_THRESHOLD_2026_MICRO_RUB)
 	})

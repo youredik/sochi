@@ -24,6 +24,7 @@ import { createBookingRoutes } from './domains/booking/booking.routes.ts'
 import { createGuestPortalRepo } from './domains/booking/guest-portal.repo.ts'
 import { createGuestPortalRoutes } from './domains/booking/guest-portal.routes.ts'
 import { createChannelFactory } from './domains/channel/channel.factory.ts'
+import { createInboundBookingHandler } from './domains/channel/inbound-booking-handler.ts'
 import { registerOstrovokEtgWithChannelFactory } from './domains/channel/ostrovok-etg/ostrovok-etg.factory.ts'
 import { registerTravellineWithChannelFactory } from './domains/channel/travelline/travelline.factory.ts'
 import { registerYandexTravelWithChannelFactory } from './domains/channel/yandex-travel/yandex-travel.factory.ts'
@@ -468,8 +469,18 @@ const rumBuffer = new RumBuffer({ capacity: 5000 })
 // (Ostrovok ETG) — they call channelFactory.registerAdapterFactory() +
 // .registerHttpAttempt() at module-eval. Dispatcher is OFF in tests (NODE_ENV=test
 // integration calls dispatcher.processRow directly with inline mocks).
+// Round 14.6.4 A7.5 wow-effect — wire onAcceptedWebhook handler so the inbound
+// channelInbox row turns into a real `booking` row that the PMS Шахматка grid
+// renders. Only fires для `organizationProfile.mode='demo'` tenants —
+// production tenants ('live') get the inbox row + activity log but no
+// auto-created booking (their real-channel writes flow через outbound dispatch).
+const inboundBookingHandler = createInboundBookingHandler({
+	sql,
+	bookingService: bookingFactory.service,
+})
 const channelFactory = createChannelFactory(sql, {
 	enableDispatcher: process.env.NODE_ENV !== 'test',
+	onAcceptedWebhook: inboundBookingHandler,
 })
 
 // M10 / A7.2 — TravelLine Mock adapter registered. Live-flip = swap factory body

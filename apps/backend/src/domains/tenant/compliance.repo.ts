@@ -148,6 +148,7 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 			const [rows = []] = await sql<
 				[
 					{
+						mode: string | null
 						ksrRegistryId: string | null
 						ksrCategory: string | null
 						legalEntityType: string | null
@@ -155,7 +156,7 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 					},
 				]
 			>`
-				SELECT ksrRegistryId, ksrCategory, legalEntityType, guestHouseFz127Registered
+				SELECT mode, ksrRegistryId, ksrCategory, legalEntityType, guestHouseFz127Registered
 				FROM organizationProfile
 				WHERE organizationId = ${tenantId}
 				LIMIT 1
@@ -170,6 +171,17 @@ export function createTenantComplianceRepo(sql: SqlInstance) {
 				// = throw ПП-1951 missing. Operator-friendly default; can't заранее
 				// know which regulatory path applies без profile data.
 				throw new KsrRegistryNumberMissingError(tenantId)
+			}
+			// Round 14.6.4 follow-up — demo-mode short-circuit. Per-tenant demo
+			// OTA в кабинете (Round 14.6 strategic) генерит mock-бронирования
+			// от reserved-test guests (RFC 2606 emails, ITU-T E.164.3 phones)
+			// без legal compliance need. organizationProfile.mode='demo' (seeded
+			// в afterCreateOrganization для new orgs since Round 14.6.4) gates
+			// out compliance — production ('live') tenants STILL hit ПП-1951.
+			// Canon: `feedback_round_14_6_per_tenant_demo_canon_2026_05_28.md`
+			// section «demo vs live mode separation».
+			if (row.mode === 'demo') {
+				return
 			}
 			const decision = checkBookingComplianceGate(tenantId, {
 				ksrRegistryId: row.ksrRegistryId,
