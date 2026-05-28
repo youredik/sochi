@@ -140,6 +140,19 @@ resource "yandex_serverless_container" "backend" {
       # inbox `hi@sepshn.ru` (manual setup в admin.yandex.ru — см. bootstrap.md
       # шаг 2.3). До настройки inbox — отвечать будут bounce'ить, no harm.
       EMAIL_REPLY_TO_ADDRESS = "hi@sepshn.ru"
+
+      # Round 14.6.4 follow-up — demo OTA webhook target.
+      # `_demo/mock-ota-server/{yandex,ostrovok}/routes.ts` emits self-loop
+      # webhook к `<DEMO_WEBHOOK_TARGET_BASE_URL>/api/channel/webhooks/<channelId>`.
+      # Default в env.ts is `http://localhost:8787` for local dev. On YC
+      # Serverless prod the container has no localhost service → webhook POST
+      # fails silently → channelInbox row never created → A7.5 handler never
+      # fires → PMS Шахматка stays empty.
+      # Empirically caught на demo.sepshn.ru 2026-05-28 browser walk: booking
+      # POST returned 200 + order_id, but `SELECT * FROM channelInbox`
+      # returned zero rows → wow-effect silent break root cause.
+      # Fix: point self-loop URL к public origin so the receiver is reachable.
+      DEMO_WEBHOOK_TARGET_BASE_URL = "https://demo.sepshn.ru"
     }
   }
 
