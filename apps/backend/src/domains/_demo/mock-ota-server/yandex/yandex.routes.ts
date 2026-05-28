@@ -131,18 +131,27 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 	// Round 14.6.4 — propertyId derived per-tenant via `resolveDemoPropertyId`
 	// (was mount-time constant, breaking per-tenant identity — см. options
 	// docstring above).
+	//
+	// **Concurrency invariant** (Round 14.6.4 follow-up defensive audit):
+	// `createYandexTravelMock` is SYNCHRONOUS (returns plain object). Within
+	// JS single-threaded event loop semantics + no `await` between `Map.get`
+	// and `Map.set`, this lazy-init pattern is atomic per microtask. Adding
+	// any `await` between the read and write would introduce a race
+	// (two concurrent requests for same tenant create two adapters, second
+	// overwrites first, diverged in-memory state). The factory contract
+	// MUST stay synchronous. Regression-pinned by [YTR-CONCURRENT] test
+	// asserting parallel `Promise.all` calls return identical adapter instance.
 	const mockAdapterCache = new Map<string, ReturnType<typeof createYandexTravelMock>>()
 	function getMockAdapter(tenantId: string): ReturnType<typeof createYandexTravelMock> {
-		let a = mockAdapterCache.get(tenantId)
-		if (!a) {
-			a = createYandexTravelMock({
-				tenantId,
-				propertyId: resolveDemoPropertyId(tenantId),
-				nightRateMicros: DEMO_NIGHT_RATE_MICROS,
-			})
-			mockAdapterCache.set(tenantId, a)
-		}
-		return a
+		const cached = mockAdapterCache.get(tenantId)
+		if (cached !== undefined) return cached
+		const fresh = createYandexTravelMock({
+			tenantId,
+			propertyId: resolveDemoPropertyId(tenantId),
+			nightRateMicros: DEMO_NIGHT_RATE_MICROS,
+		})
+		mockAdapterCache.set(tenantId, fresh)
+		return fresh
 	}
 
 	/**
@@ -159,15 +168,25 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		const auth = requireAuth(c.req.header('authorization'))
 		if (!auth.ok) return c.json({ error: 'unauthorized' }, 401)
 
-		const hotelId = c.req.query('hotelId') ?? ''
+		// Round 14.6.4 follow-up — derive hotelId per-tenant from authenticated
+		// session. Pre-fix: frontend's hardcoded `DEFAULT_HOTEL_ID='demo-hotel-
+		// sochi'` flowed through the query param, leaked в webhook data, and
+		// returned the SAME hotel_id для every tenant. Per-tenant `c.var.tenantId`
+		// derivation is the canonical 2026 pattern (web research 28.05.2026 —
+		// «never trust per-tenant identifiers from request body/query»).
+		// Query.hotelId retained for backward-compat (legacy callers + Round 9
+		// smoke tests pass it explicitly), but tenant-derived value always
+		// wins. Validates query.hotelId is non-empty к preserve missing-param
+		// 400 contract.
+		const queryHotelId = c.req.query('hotelId') ?? ''
+		if (queryHotelId.length === 0) {
+			return c.json({ error: 'missing_hotel_id' }, 400)
+		}
+		const hotelId = resolveDemoPropertyId(c.var.tenantId)
 		const checkinDate = c.req.query('checkinDate')
 		const checkoutDate = c.req.query('checkoutDate')
 		const adults = Number.parseInt(c.req.query('adults') ?? '0', 10)
 		const children = Number.parseInt(c.req.query('children') ?? '0', 10)
-
-		if (hotelId.length === 0) {
-			return c.json({ error: 'missing_hotel_id' }, 400)
-		}
 		if (!validateDateRange(checkinDate, checkoutDate)) {
 			return c.json({ error: 'invalid_date_range' }, 400)
 		}

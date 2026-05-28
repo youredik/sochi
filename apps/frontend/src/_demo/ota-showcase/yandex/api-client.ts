@@ -19,6 +19,20 @@
 const API_BASE = '/api/_mock-ota/yandex/v1'
 const DEMO_AUTH_TOKEN = 'OAuth demo-test-token'
 
+/**
+ * Round 14.6.4 follow-up — frontend hotelId placeholder.
+ *
+ * Pre-Round-14.6.4 this constant flowed as the authoritative hotelId через
+ * query param; backend echoed it в webhook data → identical hotel_id для
+ * every tenant. Round 14.6.4 backend now DERIVES the hotelId per-tenant
+ * from authenticated session (`c.var.tenantId` → `resolveDemoPropertyId`).
+ * Backend ignores query.hotelId value but still validates non-empty
+ * (legacy callers + Round 9 smoke tests pass it explicitly).
+ *
+ * Frontend retains this placeholder ONLY to satisfy that non-empty contract.
+ * Canonical 2026 multi-tenant pattern — server-side identity derivation is
+ * the only authority (web research 28.05.2026).
+ */
 export const DEFAULT_HOTEL_ID = 'demo-hotel-sochi'
 
 export interface YandexOffer {

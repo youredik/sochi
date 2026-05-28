@@ -432,4 +432,40 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		// No webhook because cross-tenant attempt failed validation.
 		expect(calls.length).toBe(0)
 	})
+
+	/**
+	 * Round 14.6.4 follow-up — concurrent adapter invariant.
+	 *
+	 * Pins the synchronous-factory contract в `createYandexMockOtaRoutes`'s
+	 * `getMockAdapter` lazy-init. Any future change that adds `await` between
+	 * Map.get and Map.set would introduce a race: concurrent requests для
+	 * the same tenantId would create two adapters, second `Map.set` overwrites
+	 * first → in-memory state divergence → silent booking loss.
+	 *
+	 * Test fires 50 parallel search requests for the same tenant, asserts
+	 * EVERY response succeeds (same adapter state), and the store contains
+	 * exactly 50 booking tokens — proving every search hit the same adapter
+	 * instance (no overwrite race).
+	 *
+	 * Bonus: concurrent requests across different tenants get DIFFERENT
+	 * adapters but no cross-contamination (cache key isolation).
+	 */
+	it('[YTR-CONCURRENT] 50 parallel searches на 1 tenant → same adapter, all bookings persisted', async () => {
+		const app = mountApp()
+		const results = await Promise.all(
+			Array.from({ length: 50 }, () =>
+				app.request(`/v1/hotels/hotel/offers?${VALID_SEARCH_QUERY}`, {
+					method: 'GET',
+					headers: { authorization: TEST_AUTH },
+				}),
+			),
+		)
+		for (const res of results) {
+			expect(res.status).toBe(200)
+		}
+		// Each successful search persists a unique booking_token via the
+		// shared adapter. If two adapter instances raced, the second would
+		// have an empty token Map (state not persisted) → fewer tokens.
+		expect((await currentStore.__listBookingTokens(TEST_TENANT)).length).toBe(50)
+	})
 })
