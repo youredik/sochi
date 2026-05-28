@@ -34,6 +34,7 @@ import type {
 	ChannelErrorCategory,
 	ChannelManagerAdapter,
 } from '../../../lib/channel-manager/adapter.ts'
+import { resolveDemoPropertyId } from '../../../lib/demo-channel-seed.ts'
 import { logger } from '../../../logger.ts'
 import type { HttpAttemptResult } from '../../../workers/channel-dispatcher.ts'
 import {
@@ -48,7 +49,11 @@ import {
 } from './travelline-mock.ts'
 
 export interface TravellineRegistrationOptions {
-	/** Demo property fallback when tenant has no per-tenant config (Always-on demo). */
+	/**
+	 * Round 14.6.4 follow-up — DEPRECATED + IGNORED. Factory derives propertyId
+	 * per-tenant via `resolveDemoPropertyId(orgId)` at adapter creation time
+	 * (canonical 2026 multi-tenant pattern — `feedback_round_14_6_per_tenant_demo_canon`).
+	 */
 	readonly demoPropertyId?: string
 }
 
@@ -430,16 +435,16 @@ async function dispatchAriDelta(
  */
 export function registerTravellineWithChannelFactory(
 	channelFactory: ChannelFactory,
-	opts: TravellineRegistrationOptions = {},
+	_opts: TravellineRegistrationOptions = {},
 ): void {
-	const demoPropertyId = opts.demoPropertyId ?? 'demo-prop-sirius-main'
-
+	// Round 14.6.4 follow-up — derive propertyId per-tenant. `opts.demoPropertyId`
+	// (deprecated) is intentionally ignored (см. interface docstring).
 	channelFactory.registerAdapterFactory('TL', async ({ organizationId }) => {
-		// In Mock mode, propertyId is per-tenant config; for demo tenant default fallback.
-		// Live-flip: read TL credentials via channelFactory.secretRepo + Lockbox.
+		// In Mock mode, propertyId is per-tenant config; live-flip reads TL
+		// credentials via channelFactory.secretRepo + Lockbox.
 		return createTravellineMock({
 			tenantId: organizationId,
-			propertyId: demoPropertyId,
+			propertyId: resolveDemoPropertyId(organizationId),
 			seedAvailability: buildDemoAvailability(),
 		})
 	})

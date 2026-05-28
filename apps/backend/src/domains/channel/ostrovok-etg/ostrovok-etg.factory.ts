@@ -24,12 +24,18 @@ import {
 	isReservedTestPhone,
 } from '../../../workers/lib/reserved-test-ranges.ts'
 import type { ChannelErrorCategory } from '../../../lib/channel-manager/adapter.ts'
+import { resolveDemoPropertyId } from '../../../lib/demo-channel-seed.ts'
 import { logger } from '../../../logger.ts'
 import type { HttpAttemptResult } from '../../../workers/channel-dispatcher.ts'
 import type { ChannelFactory } from '../channel.factory.ts'
 import { createOstrovokEtgMock } from './ostrovok-etg-mock.ts'
 
 export interface OstrovokEtgRegistrationOptions {
+	/**
+	 * Round 14.6.4 follow-up — DEPRECATED + IGNORED. Factory derives
+	 * propertyId per-tenant via `resolveDemoPropertyId(orgId)` at adapter
+	 * creation time (canonical 2026 multi-tenant pattern).
+	 */
 	readonly demoPropertyId?: string
 	readonly mode?: 'sandbox' | 'live'
 }
@@ -86,13 +92,14 @@ export function registerOstrovokEtgWithChannelFactory(
 	channelFactory: ChannelFactory,
 	opts: OstrovokEtgRegistrationOptions = {},
 ): void {
-	const demoPropertyId = opts.demoPropertyId ?? 'demo-prop-sirius-main'
 	const mode = opts.mode ?? 'sandbox'
 
+	// Round 14.6.4 follow-up — derive propertyId per-tenant. `opts.demoPropertyId`
+	// (deprecated) is intentionally ignored (см. interface docstring).
 	channelFactory.registerAdapterFactory('ETG', async ({ organizationId }) => {
 		return createOstrovokEtgMock({
 			tenantId: organizationId,
-			propertyId: demoPropertyId,
+			propertyId: resolveDemoPropertyId(organizationId),
 			mode,
 		})
 	})

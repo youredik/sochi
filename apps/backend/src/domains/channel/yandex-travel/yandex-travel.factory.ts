@@ -34,10 +34,19 @@ import {
 	isReservedTestDomain,
 	isReservedTestPhone,
 } from '../../../workers/lib/reserved-test-ranges.ts'
+import { resolveDemoPropertyId } from '../../../lib/demo-channel-seed.ts'
 import type { ChannelFactory } from '../channel.factory.ts'
 import { createYandexTravelMock, YandexTravelApiError } from './yandex-travel-mock.ts'
 
 export interface YandexTravelRegistrationOptions {
+	/**
+	 * Round 14.6.4 follow-up — `demoPropertyId` is DEPRECATED and IGNORED.
+	 * Factory derives propertyId per-tenant via `resolveDemoPropertyId(orgId)`
+	 * at adapter creation time (canon `feedback_round_14_6_per_tenant_demo_canon`
+	 * — «derive identifiers from auth token, never mount-time»). Retained as
+	 * optional field только для backward source-compat; future cleanup will drop
+	 * the interface entirely once no external callers reference it.
+	 */
 	readonly demoPropertyId?: string
 }
 
@@ -386,14 +395,16 @@ async function dispatchAriDelta(
 
 export function registerYandexTravelWithChannelFactory(
 	channelFactory: ChannelFactory,
-	opts: YandexTravelRegistrationOptions = {},
+	_opts: YandexTravelRegistrationOptions = {},
 ): void {
-	const demoPropertyId = opts.demoPropertyId ?? 'demo-prop-sirius-main'
-
+	// Round 14.6.4 follow-up — derive propertyId per-tenant inside the factory
+	// lambda. `opts.demoPropertyId` (deprecated) is intentionally ignored —
+	// canonical 2026 pattern: never trust mount-time identifiers for per-tenant
+	// state (см. `feedback_round_14_6_per_tenant_demo_canon`).
 	channelFactory.registerAdapterFactory('YT', async ({ organizationId }) => {
 		return createYandexTravelMock({
 			tenantId: organizationId,
-			propertyId: demoPropertyId,
+			propertyId: resolveDemoPropertyId(organizationId),
 		})
 	})
 
