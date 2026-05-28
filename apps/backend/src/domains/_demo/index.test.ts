@@ -86,6 +86,31 @@ describe('registerDemoRoutes — permissive anonymous fallback', () => {
 		expect((await yandexStore.__listBookingTokens(otherTenant)).length).toBe(1)
 	})
 
+	it('[RDR4] body-cap → POST exceeding 64 KB returns 413 (Yandex)', async () => {
+		const { app } = buildApp({ anonymousFallbackTenantId: 'demo-tenant' })
+		// 100 KB body — well над 64 KB cap. Hono bodyLimit reads content-length
+		// header first; falls back to streaming length. Tests both paths via
+		// explicit content-length-derived body.
+		const bigPayload = 'a'.repeat(100 * 1024)
+		const res = await app.request('/api/_mock-ota/yandex/v1/search', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: bigPayload,
+		})
+		expect(res.status).toBe(413)
+	})
+
+	it('[RDR5] body-cap → POST exceeding 64 KB returns 413 (Ostrovok)', async () => {
+		const { app } = buildApp({ anonymousFallbackTenantId: 'demo-tenant' })
+		const bigPayload = 'a'.repeat(100 * 1024)
+		const res = await app.request('/api/_mock-ota/ostrovok/v1/search/hp/', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: bigPayload,
+		})
+		expect(res.status).toBe(413)
+	})
+
 	it('[RDR3] permissive mode → anonymous Ostrovok /search/hp/ reaches handler (no auth wall)', async () => {
 		// Path matches Round 12 pass-2 P0 fix — mount /api/_mock-ota/ostrovok/v1
 		// + internal POST /search/hp/ = full URL /api/_mock-ota/ostrovok/v1/search/hp/.

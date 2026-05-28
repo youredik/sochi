@@ -167,10 +167,18 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 		inputSchema: { type: 'object', properties: {}, additionalProperties: false },
 		annotations: { readOnlyHint: true, openWorldHint: false, idempotentHint: true },
 		async handler() {
+			// Round 14.6.4 final-sweep (2026-05-29) — slug renamed `demo-hotel-sochi`
+			// → `sepshn-fictional-demo` to remove last visible carbon copy of the
+			// legacy `LEGACY_DEMO_PROPERTY_ID` literal. MCP tool returns FICTIONAL
+			// demo metadata for AI-agent discovery; the slug must never collide
+			// с real or anonymous-fallback tenant identity. Disambiguates from
+			// `demoprop_<orgId>` (per-tenant synthetic) и `LEGACY_DEMO_PROPERTY_ID`
+			// (anonymous-fallback carve-out в `app.ts`). Empirically caught
+			// adversarial-audit 2026-05-29 — see `feedback_systematic_halfmeasure_pattern_2026_05_28`.
 			return {
 				structured: {
 					property: {
-						id: 'demo-hotel-sochi',
+						id: 'sepshn-fictional-demo',
 						name: 'Гостевой дом «Сэпшн-демо» в Сочи',
 						starRating: 3,
 						address: {
@@ -186,6 +194,7 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 					notes: [
 						'Demo / trademark-safe — fictional property, не real Sochi hotel',
 						'JSON-LD schema rendered на /demo/ota/{brand}/property/{id} (Lake.com canon)',
+						'`id` is FICTIONAL (`sepshn-fictional-demo`) — does NOT match per-tenant `demoprop_<orgId>` or anonymous-fallback `LEGACY_DEMO_PROPERTY_ID`',
 					],
 				},
 			}

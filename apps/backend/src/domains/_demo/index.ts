@@ -22,6 +22,7 @@
  */
 
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { auth } from '../../auth.ts'
 import { type AppEnv, factory } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
@@ -173,11 +174,26 @@ export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOp
 		await strictTenant(c, next)
 	})
 
+	// Round 14.6.4 follow-up DoS guard parity (2026-05-29) — mirror webhook
+	// `MAX_WEBHOOK_BODY_BYTES = 64 KB` cap on ALL demo OTA mock routes. Public
+	// `demo.sepshn.ru` reachable без auth (anonymous fallback enabled); without
+	// this cap an attacker can send JSON bomb / quadratic blow-up / BigInt CPU
+	// burn at any `c.req.json()` site (5 в Ostrovok routes + 4 в Yandex routes).
+	// 64 KB = same envelope budget as webhook receiver — search/availability/
+	// book payloads fit comfortably в 4-8 KB; 8× safety margin. `hono/body-limit`
+	// canonical middleware (returns 413 «Payload Too Large» via HTTPException).
+	// Captcha gate placed AFTER размер cap так attacker can't burn captcha
+	// service via oversized payloads. Admin routes uncapped (Better-Auth gated;
+	// admin operators are trusted).
+	const MAX_DEMO_OTA_BODY_BYTES = 64 * 1024
+	const demoOtaBodyCap = bodyLimit({ maxSize: MAX_DEMO_OTA_BODY_BYTES })
 	const yandexWrapped = new Hono<AppEnv>()
+		.use('/*', demoOtaBodyCap)
 		.use('/*', authOrAnonymous)
 		.use('/*', demoCaptchaMiddleware())
 		.route('/', yandexRouter)
 	const ostrovokWrapped = new Hono<AppEnv>()
+		.use('/*', demoOtaBodyCap)
 		.use('/*', authOrAnonymous)
 		.use('/*', demoCaptchaMiddleware())
 		.route('/', ostrovokRouter)

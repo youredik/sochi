@@ -154,7 +154,7 @@ describe('MCP server (Round 13 + Round 14 self-review #3 + #4)', () => {
 		const body = (await res.json()) as {
 			result: { structuredContent: { property: { id: string; channelIds: string[] } } }
 		}
-		expect(body.result.structuredContent.property.id).toBe('demo-hotel-sochi')
+		expect(body.result.structuredContent.property.id).toBe('sepshn-fictional-demo')
 		expect(body.result.structuredContent.property.channelIds).toEqual(['YT', 'ETG'])
 	})
 
