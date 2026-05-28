@@ -82,6 +82,20 @@ export function demoCaptchaMiddleware() {
 		// required — discovered empirically Run #125 2026-05-28.
 		const provided = c.req.header('x-bypass-token')?.trim() ?? ''
 		const expectedToken = env.SWS_BYPASS_TOKEN ?? ''
+		// Empirical diagnostic Run #126+ — structured log every bypass attempt
+		// (3 outcomes: no-header / mismatch / match) so production smoke
+		// failures can be diagnosed via container logs without guessing.
+		// Token VALUES не logged — только length + match-or-not.
+		logger.info(
+			{
+				event: 'demo.captcha.bypass_attempt',
+				path: c.req.path,
+				providedLen: provided.length,
+				expectedLen: expectedToken.length,
+				envSet: expectedToken.length > 0,
+			},
+			'Demo captcha bypass attempt diagnostics',
+		)
 		if (expectedToken.length > 0 && provided.length > 0) {
 			const expectedBuf = Buffer.from(expectedToken, 'utf8')
 			const providedBuf = Buffer.from(provided, 'utf8')
