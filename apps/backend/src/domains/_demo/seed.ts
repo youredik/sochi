@@ -1,20 +1,16 @@
 /**
  * Round 10 P0-1 + P0-2 fix — env-gated idempotent seed для demo webhook loop.
  *
- * Canon: `feedback_round_10_truthful_post_review_canon_2026_05_25.md`.
+ * Round 14.6 refactor: core UPSERT logic relocated к `src/lib/demo-channel-
+ * seed.ts` (production-safe; allows `auth.ts.afterCreateOrganization` to seed
+ * per-org channel infra without violating `_demo/` import boundary). This
+ * file retains:
+ *   - Legacy `seedDemoChannelInfra` shim around the lib function
+ *   - Audit-table reachability smoke-test (Round 13 / migration 0078)
+ *     — мis _demo-specific because the audit repo lives под `_demo/`.
  *
- * **Problem solved**: до Round 10 demo webhook loop был broken в cold-start —
- * mock-OTA fired CloudEvents webhook к own `/api/channel/webhooks/{channel}`,
- * но receiver проверял webhookSecret table (Round 8 P1-6) → no rows → 401.
- * Затем проверял connectionRepo.listByTenant('demo-tenant') → no rows → 403.
- * E2E spec проходил из-за fetch-mock, real curl failed.
- *
- * **This module fixes both**: at backend boot (когда APP_MODE !== production)
- * вызывается `seedDemoChannelInfra` который idempotently UPSERTs:
- *   - webhookSecret(channelId='YT', kid='kid_demo_v1', secret=<from-opts>, status='active')
- *   - webhookSecret(channelId='ETG', ...) mirror
- *   - channelConnection(tenantId='demo-tenant', propertyId='demo-hotel-sochi', channelId='YT', mode='mock', isEnabled=true)
- *   - channelConnection(... ETG mirror)
+ * Canon: `feedback_round_10_truthful_post_review_canon_2026_05_25.md` +
+ *        `feedback_round_14_6_per_tenant_demo_canon_2026_05_28.md`.
  *
  * **Idempotency**: UPSERT semantics. Re-running seed на каждом boot — safe.
  * Cron `demo-refresh` (project_demo_strategy.md) tolerates this too.
@@ -24,70 +20,32 @@
  */
 
 import { sql } from '../../db/index.ts'
+import {
+	seedDemoChannelInfraCore,
+	type SeedDemoChannelInfraOptions,
+} from '../../lib/demo-channel-seed.ts'
 import { createMockOtaAuditRepo } from './mock-ota-server/shared/mock-ota-audit.repo.ts'
 
-export interface SeedDemoChannelInfraOptions {
-	readonly tenantId: string
-	readonly propertyId: string
-	readonly webhookSecret: string
-	/** Both YT and ETG channels are seeded; opt-out parameter если future нужно. */
-	readonly channels?: ReadonlyArray<'YT' | 'ETG'>
-}
-
-const DEFAULT_CHANNELS = ['YT', 'ETG'] as const
-const DEMO_WEBHOOK_KID = 'kid_demo_v1'
+export type { SeedDemoChannelInfraOptions } from '../../lib/demo-channel-seed.ts'
 
 /**
- * Idempotent seed for demo webhook receiver infrastructure.
+ * Idempotent seed for demo webhook receiver infrastructure +
+ * mockOta audit table reachability smoke-test. The latter touches
+ * tables once at boot via 0-arg countLastHours read → catches missing
+ * migration или RLS misconfig at boot, not при first request.
  *
- * Returns counts so caller can log + assert deterministic seed at boot.
- * Throws на DB error (caller should NOT mask — boot failure preferable to
- * silent broken-demo state).
+ * Returns counts + reachability flag so caller can log + assert
+ * deterministic seed at boot. Throws on DB error (caller should NOT
+ * mask — boot failure preferable to silent broken-demo state).
  */
 export async function seedDemoChannelInfra(opts: SeedDemoChannelInfraOptions): Promise<{
 	readonly secretsSeeded: number
 	readonly connectionsSeeded: number
 	readonly auditTablesReachable: boolean
 }> {
-	const channels = opts.channels ?? DEFAULT_CHANNELS
-	const now = new Date()
-	let secretsSeeded = 0
-	let connectionsSeeded = 0
-
-	for (const channelId of channels) {
-		// webhookSecret: PK=(channelId, kid); status='active' means receiver accepts.
-		// Round 11 P1-B3 — bind secret к demo-tenant explicitly (migration 0077).
-		// Cross-tenant URN forgery now rejected at signature-vs-row tenantId match.
-		await sql`
-			UPSERT INTO webhookSecret (
-				\`channelId\`, \`kid\`, \`secret\`, \`status\`, \`activatedAt\`, \`tenantId\`
-			) VALUES (
-				${channelId}, ${DEMO_WEBHOOK_KID}, ${opts.webhookSecret}, ${'active'}, ${now}, ${opts.tenantId}
-			)
-		`
-		secretsSeeded++
-
-		// channelConnection: PK=(tenantId, propertyId, channelId); role='independent_operator'
-		// per Round 8 canon (YT + ETG are independent operators, not processors).
-		// mode='mock' — Round 9 demo flow uses Mock adapter even в cold-start.
-		await sql`
-			UPSERT INTO channelConnection (
-				\`tenantId\`, \`propertyId\`, \`channelId\`,
-				\`mode\`, \`role\`, \`syncStatus\`, \`isEnabled\`,
-				\`createdAt\`, \`updatedAt\`
-			) VALUES (
-				${opts.tenantId}, ${opts.propertyId}, ${channelId},
-				${'mock'}, ${'independent_operator'}, ${'idle'}, ${true},
-				${now}, ${now}
-			)
-		`
-		connectionsSeeded++
-	}
+	const { secretsSeeded, connectionsSeeded } = await seedDemoChannelInfraCore(opts)
 
 	// Round 13 — verify mockOta audit tables reachable (migration 0078).
-	// Touch tables once at boot via 0-arg countLastHours read → catches missing
-	// migration или RLS misconfig at boot, не при first request. Closes Round 9
-	// «triple defense» claim functionally — TTL P1D on populated table.
 	const auditRepo = createMockOtaAuditRepo(sql)
 	let auditTablesReachable = false
 	try {

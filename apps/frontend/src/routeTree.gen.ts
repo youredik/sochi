@@ -32,6 +32,7 @@ import { Route as WidgetTenantSlugPropertyIdExtrasRouteImport } from './routes/w
 import { Route as AppOOrgSlugSetupRouteImport } from './routes/_app.o.$orgSlug.setup'
 import { Route as AppOOrgSlugReceivablesRouteImport } from './routes/_app.o.$orgSlug.receivables'
 import { Route as AppOOrgSlugGridRouteImport } from './routes/_app.o.$orgSlug.grid'
+import { Route as AppOOrgSlugDemoRouteImport } from './routes/_app.o.$orgSlug.demo'
 import { Route as DemoOtaYandexSuccessOrderIdRouteImport } from './routes/demo.ota.yandex.success.$orderId'
 import { Route as DemoOtaYandexPropertyIdRouteImport } from './routes/demo.ota.yandex.property.$id'
 import { Route as DemoOtaYandexBookingBookingTokenRouteImport } from './routes/demo.ota.yandex.booking.$bookingToken'
@@ -168,6 +169,11 @@ const AppOOrgSlugGridRoute = AppOOrgSlugGridRouteImport.update({
   path: '/grid',
   getParentRoute: () => AppOOrgSlugRoute,
 } as any)
+const AppOOrgSlugDemoRoute = AppOOrgSlugDemoRouteImport.update({
+  id: '/demo',
+  path: '/demo',
+  getParentRoute: () => AppOOrgSlugRoute,
+} as any)
 const DemoOtaYandexSuccessOrderIdRoute =
   DemoOtaYandexSuccessOrderIdRouteImport.update({
     id: '/ota/yandex/success/$orderId',
@@ -284,6 +290,7 @@ export interface FileRoutesByFullPath {
   '/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
+  '/o/$orgSlug/demo': typeof AppOOrgSlugDemoRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
@@ -323,6 +330,7 @@ export interface FileRoutesByTo {
   '/demo': typeof DemoIndexRoute
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
+  '/o/$orgSlug/demo': typeof AppOOrgSlugDemoRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
@@ -366,6 +374,7 @@ export interface FileRoutesById {
   '/_app/o/$orgSlug': typeof AppOOrgSlugRouteWithChildren
   '/booking/guest-portal/$bookingId': typeof BookingGuestPortalBookingIdRoute
   '/widget/$tenantSlug_/$propertyId': typeof WidgetTenantSlugPropertyIdRoute
+  '/_app/o/$orgSlug/demo': typeof AppOOrgSlugDemoRoute
   '/_app/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/_app/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
   '/_app/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
@@ -409,6 +418,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug'
     | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug/$propertyId'
+    | '/o/$orgSlug/demo'
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
@@ -448,6 +458,7 @@ export interface FileRouteTypes {
     | '/demo'
     | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug/$propertyId'
+    | '/o/$orgSlug/demo'
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
     | '/o/$orgSlug/setup'
@@ -490,6 +501,7 @@ export interface FileRouteTypes {
     | '/_app/o/$orgSlug'
     | '/booking/guest-portal/$bookingId'
     | '/widget/$tenantSlug_/$propertyId'
+    | '/_app/o/$orgSlug/demo'
     | '/_app/o/$orgSlug/grid'
     | '/_app/o/$orgSlug/receivables'
     | '/_app/o/$orgSlug/setup'
@@ -696,6 +708,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugGridRouteImport
       parentRoute: typeof AppOOrgSlugRoute
     }
+    '/_app/o/$orgSlug/demo': {
+      id: '/_app/o/$orgSlug/demo'
+      path: '/demo'
+      fullPath: '/o/$orgSlug/demo'
+      preLoaderRoute: typeof AppOOrgSlugDemoRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
+    }
     '/demo/ota/yandex/success/$orderId': {
       id: '/demo/ota/yandex/success/$orderId'
       path: '/ota/yandex/success/$orderId'
@@ -840,6 +859,7 @@ const AppOOrgSlugPropertiesPropertyIdInventoryRouteWithChildren =
   )
 
 interface AppOOrgSlugRouteChildren {
+  AppOOrgSlugDemoRoute: typeof AppOOrgSlugDemoRoute
   AppOOrgSlugGridRoute: typeof AppOOrgSlugGridRoute
   AppOOrgSlugReceivablesRoute: typeof AppOOrgSlugReceivablesRoute
   AppOOrgSlugSetupRoute: typeof AppOOrgSlugSetupRoute
@@ -855,6 +875,7 @@ interface AppOOrgSlugRouteChildren {
 }
 
 const AppOOrgSlugRouteChildren: AppOOrgSlugRouteChildren = {
+  AppOOrgSlugDemoRoute: AppOOrgSlugDemoRoute,
   AppOOrgSlugGridRoute: AppOOrgSlugGridRoute,
   AppOOrgSlugReceivablesRoute: AppOOrgSlugReceivablesRoute,
   AppOOrgSlugSetupRoute: AppOOrgSlugSetupRoute,

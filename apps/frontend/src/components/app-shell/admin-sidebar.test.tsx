@@ -187,13 +187,14 @@ function getRenderedSectionIds(): string[] {
 /* -------------------------------------------------------------------------- */
 
 describe('AdminSidebar — RBAC × 3 roles (mounted section ids)', () => {
-	it('[R-owner] role=owner → 8 sections rendered (full)', () => {
+	it('[R-owner] role=owner → 9 sections rendered (full incl. demo)', () => {
 		seed({ role: 'owner' })
 		renderSidebar()
 		const ids = getRenderedSectionIds().sort()
 		expect(ids).toEqual(
 			[
 				'channels',
+				'demo',
 				'grid',
 				'guests',
 				'inventory',
@@ -205,13 +206,14 @@ describe('AdminSidebar — RBAC × 3 roles (mounted section ids)', () => {
 		)
 	})
 
-	it('[R-manager] role=manager → 8 sections rendered (full)', () => {
+	it('[R-manager] role=manager → 9 sections rendered (full incl. demo)', () => {
 		seed({ role: 'manager' })
 		renderSidebar()
 		const ids = getRenderedSectionIds().sort()
 		expect(ids).toEqual(
 			[
 				'channels',
+				'demo',
 				'grid',
 				'guests',
 				'inventory',
@@ -256,9 +258,11 @@ describe('AdminSidebar — loading states', () => {
 		renderSidebar()
 		const ids = getRenderedSectionIds()
 		expect(ids).not.toContain('profile')
-		// Other 6 sections still rendered (owner has all permissions).
+		// Other 7 sections still rendered (owner has all permissions); inventory
+		// also hidden because it needsPropertyId per I7 canon. demo doesn't need
+		// propertyId → renders.
 		expect(ids.sort()).toEqual(
-			['channels', 'grid', 'guests', 'notifications', 'receivables', 'tax'].sort(),
+			['channels', 'demo', 'grid', 'guests', 'notifications', 'receivables', 'tax'].sort(),
 		)
 	})
 
@@ -281,7 +285,7 @@ describe('AdminSidebar — composition / structure', () => {
 		seed({ role: 'owner' })
 		renderSidebar()
 		const items = document.querySelectorAll('[data-sidebar="menu-item"]')
-		expect(items.length).toBe(8)
+		expect(items.length).toBe(9)
 		for (const item of items) {
 			const link = item.querySelector('[data-section-id]')
 			expect(link).not.toBeNull()

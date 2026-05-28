@@ -37,6 +37,7 @@ import {
 	LayersIcon,
 	type LucideIcon,
 	NetworkIcon,
+	SparklesIcon,
 	UsersIcon,
 	WalletIcon,
 } from 'lucide-react'
@@ -142,6 +143,18 @@ export const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
 		icon: BellIcon,
 		to: '/o/$orgSlug/admin/notifications',
 		isVisible: (role) => hasPermission(role, { notification: ['read'] }),
+	},
+	{
+		// Round 14.6 — per-tenant demo OTA в кабинете. Каждый отель видит
+		// свою копию демо OTA façade (YT + ETG mocks) + свою шахматку справа.
+		// Visibility = owner+manager only (staff не нужен demo инструмент;
+		// тот же RBAC predicate как inventory — `room:update`).
+		id: 'demo',
+		labelRu: 'Демо OTA',
+		ariaLabelRu: 'Демо-интеграции с Яндекс.Путешествия и Островком — Sandbox для тренинга команды',
+		icon: SparklesIcon,
+		to: '/o/$orgSlug/demo',
+		isVisible: (role) => hasPermission(role, { room: ['update'] }),
 	},
 ] as const
 

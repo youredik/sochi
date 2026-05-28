@@ -11,6 +11,7 @@ import { toTs } from './db/ydb-helpers.ts'
 import { env } from './env.ts'
 import { evaluateCaptchaGate, extractClientIp } from './lib/auth/captcha-gate.ts'
 import { magicLinkEmail } from './lib/auth/magic-link-email.ts'
+import { demoPropertyIdForOrg, seedDemoChannelInfraCore } from './lib/demo-channel-seed.ts'
 import { logger } from './logger.ts'
 import { createEmailAdapter } from './workers/lib/postbox-adapter.ts'
 
@@ -277,6 +278,60 @@ export const auth = betterAuth({
 							${toTs(now)}, ${toTs(now)}
 						)
 					`
+
+					/**
+					 * Round 14.6 — per-tenant demo OTA seed.
+					 *
+					 * Each new organization receives working demo OTA in their cabinet
+					 * immediately: `webhookSecret` + `channelConnection` rows для YT +
+					 * ETG channels keyed on (orgId, synthetic demoPropertyId).
+					 *
+					 * Synthetic property allows the seed to run BEFORE the user creates
+					 * any real property in M5c setup wizard — the demo OTA flow is
+					 * decoupled from real-property setup. When the user later creates
+					 * their real property, it has its own (real) channelConnection rows
+					 * via different onboarding paths.
+					 *
+					 * Webhook secret matches the legacy `demo-tenant` constant so the
+					 * same `_demo/index.ts` route handlers work для both anonymous-
+					 * fallback (demo.sepshn.ru) and per-tenant authed flows.
+					 *
+					 * Fail-soft semantics: errors logged but do NOT block org creation —
+					 * the org + organizationProfile must persist regardless of demo
+					 * seed outcome. Demo OTA can be re-seeded later via admin command
+					 * if needed. This trade-off matches Round 14 self-review canon:
+					 * onboarding completion is higher priority than demo readiness.
+					 *
+					 * Canon: `feedback_round_14_6_per_tenant_demo_canon_2026_05_28.md`.
+					 */
+					try {
+						const result = await seedDemoChannelInfraCore({
+							tenantId: org.id,
+							propertyId: demoPropertyIdForOrg(org.id),
+							webhookSecret: 'demo-mock-ota-webhook-secret-do-not-use-in-prod',
+						})
+						logger.info(
+							{
+								event: 'demo_seed_per_org_complete',
+								orgId: org.id,
+								secrets: result.secretsSeeded,
+								connections: result.connectionsSeeded,
+							},
+							'per-tenant demo OTA infra seeded',
+						)
+					} catch (e: unknown) {
+						logger.error(
+							{
+								event: 'demo_seed_per_org_failed',
+								orgId: org.id,
+								err:
+									e instanceof Error
+										? { name: e.name, message: e.message.slice(0, 200) }
+										: { name: 'unknown', message: String(e).slice(0, 200) },
+							},
+							'per-tenant demo OTA seed failed — org created, demo flow needs re-seed',
+						)
+					}
 				},
 			},
 		}),
