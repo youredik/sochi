@@ -5,7 +5,6 @@ import { authClient, sessionQueryOptions } from '../../../lib/auth-client.ts'
 import { broadcastLogout } from '../../../lib/broadcast-auth.ts'
 import { logger } from '../../../lib/logger.ts'
 import { type LocalizedError, mapAuthError } from '../lib/errors.ts'
-import { slugify } from '../lib/slugify.ts'
 
 type BAError = {
 	message?: string | undefined
@@ -67,47 +66,12 @@ export function useSignInMagicLink() {
 	})
 }
 
-/**
- * Create the user's first organization. Called from `/welcome` after the
- * magic-link verify-hop established the session — the user is authenticated
- * but has no organization yet (zero-org tenant). On success this kick-starts
- * the `afterCreateOrganization` BA hook (auto-populates organizationProfile +
- * attaches 14-day trial) and lands the operator at the onboarding wizard.
- */
-export function useCreateOrganization() {
-	const queryClient = useQueryClient()
-	const navigate = useNavigate()
-	return useMutation<{ orgSlug: string }, LocalizedError, { orgName: string }>({
-		mutationFn: async ({ orgName }) => {
-			const slug = slugify(orgName)
-			const orgRes = await authClient.organization.create({
-				name: orgName,
-				slug: slug.length > 0 ? slug : `org-${Date.now().toString(36)}`,
-			})
-			if (orgRes.error) throw mapAuthError(orgRes.error as BAError)
-			return { orgSlug: orgRes.data?.slug ?? slug }
-		},
-		onSuccess: async ({ orgSlug }) => {
-			await queryClient.invalidateQueries({ queryKey: sessionQueryOptions.queryKey })
-			toast.success('Гостиница создана')
-			// Round 14.6 — wow-effect magic-link landing. После создания org
-			// сразу попадаем на per-tenant demo OTA вместо dashboard. Hotelier
-			// видит работающую интеграцию с Яндекс.Путешествия / Островком в
-			// первые секунды (afterCreateOrganization hook уже зарегистрировал
-			// per-org demo channel infra). User then navigates к /setup из
-			// sidebar когда готов заводить реальную property. Канон:
-			// `feedback_round_14_6_per_tenant_demo_canon_2026_05_28`.
-			void navigate({
-				to: '/o/$orgSlug/demo',
-				params: { orgSlug },
-				reloadDocument: true,
-			})
-		},
-		onError: (err) => {
-			logger.warn('auth.createOrganization failed', { code: err.title })
-		},
-	})
-}
+// Round 14.6.2 — `useCreateOrganization` hook DELETED (was only consumed by
+// the legacy `WelcomeForm` which is also deleted). Org creation moved
+// inline to `routes/welcome.tsx` beforeLoad: `authClient.organization.create
+// ({ name: DEFAULT_WELCOME_ORG_NAME, slug: 'org-<base36>' })` runs during
+// the navigation guard, no React component round-trip. Canon
+// `feedback_aggressive_delegacy`.
 
 /**
  * Sign out, invalidate session cache, broadcast to peer tabs, redirect to

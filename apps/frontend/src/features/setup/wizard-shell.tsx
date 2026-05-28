@@ -12,8 +12,15 @@ const STEP_LABELS: Record<'identify' | 'inventory', string> = {
 
 /**
  * 2-screen onboarding wizard shell. Tracks the two real steps (identify →
- * inventory) and auto-navigates to `/o/$orgSlug/grid` once the inventory
+ * inventory) and auto-navigates to `/o/$orgSlug/demo` once the inventory
  * mutation flips state to `done`.
+ *
+ * **Round 14.6.2 wow landing:** finish redirect goes to per-tenant demo
+ * OTA (was: /grid). After ИНН lookup + property creation, the hotelier
+ * lands on a working OTA façade с their real legal entity name + a real
+ * PMS grid iframe — concrete wow effect demonstrating the integration
+ * loop end-to-end. They can then dismiss and head к /grid manually
+ * (sidebar nav or /o/$slug/ dashboard).
  *
  * Cache eviction: `removeQueries({queryKey: ['properties']})` deletes the
  * dashboard guard's cached empty list so its next `ensureQueryData` re-
@@ -34,7 +41,7 @@ export function WizardShell() {
 		if (step !== 'done') return
 		reset()
 		queryClient.removeQueries({ queryKey: ['properties'] })
-		void navigate({ to: '/o/$orgSlug/grid', params: { orgSlug } })
+		void navigate({ to: '/o/$orgSlug/demo', params: { orgSlug } })
 	}, [step, navigate, orgSlug, reset, queryClient])
 
 	return (

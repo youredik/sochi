@@ -4,10 +4,13 @@
  * Invariants:
  *   - I1 No session → redirect-login (gate /welcome behind auth)
  *   - I2 Session + activeOrg → redirect-home (prevents accidental re-create)
- *   - I3 Session + no active + 0 orgs → render-form (true new-user path)
+ *   - I3 Session + no active + 0 orgs → **auto-create-org** (Round 14.6.2
+ *        — caller invokes authClient.organization.create с placeholder
+ *        `DEFAULT_WELCOME_ORG_NAME` + slug `org-<base36>`, redirects к
+ *        /o/{slug}/. Replaces pre-Round-14.6.2 form-based path)
  *   - I4 Session + no active + ≥1 orgs → set-active-and-redirect
  *        (RETURN-VISIT canon — Bug fix 2026-05-21 per demo-funnel-smoke [E2])
- *   - I5 Fail-open: orgs=null/undefined → render-form (transient backend
+ *   - I5 Fail-open: orgs=null/undefined → auto-create-org (transient backend
  *        не блокирует true new-user)
  *
  * Test matrix:
@@ -19,10 +22,10 @@
  *   ─── I2 redirect-home ────────────────────────────────────────
  *     [W4] activeOrgId="org_X" → home (regardless orgs list)
  *
- *   ─── I3 render-form (true new-user) ──────────────────────────
+ *   ─── I3 auto-create-org (true new-user) ──────────────────────
  *     [W5] no active + orgs=[] empty
  *
- *   ─── I5 fail-open render-form ────────────────────────────────
+ *   ─── I5 fail-open auto-create-org ────────────────────────────
  *     [W6] orgs=null (fetch failed)
  *     [W7] orgs=undefined
  *
@@ -71,7 +74,7 @@ describe('resolveWelcomeRedirect (lib)', () => {
 				session: { session: { activeOrganizationId: null } },
 				orgs: [],
 			}),
-		).toEqual({ kind: 'render-form' })
+		).toEqual({ kind: 'auto-create-org' })
 	})
 
 	test('[W6] no active + orgs=null (fetch failed) → render-form (fail-open)', () => {
@@ -80,7 +83,7 @@ describe('resolveWelcomeRedirect (lib)', () => {
 				session: { session: { activeOrganizationId: undefined } },
 				orgs: null,
 			}),
-		).toEqual({ kind: 'render-form' })
+		).toEqual({ kind: 'auto-create-org' })
 	})
 
 	test('[W7] no active + orgs=undefined → render-form (fail-open)', () => {
@@ -89,7 +92,7 @@ describe('resolveWelcomeRedirect (lib)', () => {
 				session: { session: { activeOrganizationId: null } },
 				orgs: undefined,
 			}),
-		).toEqual({ kind: 'render-form' })
+		).toEqual({ kind: 'auto-create-org' })
 	})
 
 	test('[W8] no active + orgs=[org_A] → set-active-and-redirect (RETURN-VISIT canon)', () => {

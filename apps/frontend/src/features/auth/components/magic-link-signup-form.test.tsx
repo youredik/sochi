@@ -1,20 +1,22 @@
 /**
  * MagicLinkSignUpForm — strict tests (passwordless canon 2026-05-13 per
- * `[[auth-passwordless-canon]]`).
+ * `[[auth-passwordless-canon]]` + Round 14.6.2 «DaData party wins» canon
+ * 2026-05-22 — orgName dropped from signup form per
+ * `feedback_round_14_6_per_tenant_demo_canon_2026_05_28.md` Phase 14.6.2).
  *
  * Pre-done audit:
- *   [R1] form renders email + orgName inputs + consent checkbox + captcha
- *        widget + «Получить ссылку для регистрации» submit
+ *   [R1] form renders email input + consent checkbox + captcha widget +
+ *        «Получить ссылку для регистрации» submit. No orgName field
+ *        (Round 14.6.2 — DaData supplies legal name in setup wizard).
  *   [R2] CaptchaField rendered when captchaEnforced (mocked true)
- *   [R3] slug preview updates live as user types orgName
- *   [P1] submit disabled while orgName < 2 chars (form-level minLength)
+ *   [P1] submit disabled while email empty
  *   [P2] submit disabled while consent unchecked (152-ФЗ hard gate)
  *   [P3] submit disabled while captcha enforced + token empty
- *   [P4] happy path: signIn.magicLink called with email + callbackURL
- *        `/welcome?n=<encoded orgName>` + captchaToken merged into body
+ *   [P4] happy path: signIn.magicLink called с email + callbackURL
+ *        `/welcome` (no `?n=…` param) + captchaToken merged into body
  *        per captchaFetchOptions canon
- *   [P5] success response → confirmation state с typed email + orgName
- *        rendered for re-confirmation
+ *   [P5] success → confirmation state с typed email rendered for
+ *        re-confirmation + copy referencing ИНН next step
  *   [P6] BA error → localized banner + captcha cleared (next attempt
  *        requires fresh challenge per single-use Yandex SmartCaptcha token)
  *
@@ -74,16 +76,14 @@ afterEach(() => {
 })
 
 describe('MagicLinkSignUpForm — initial render', () => {
-	it('[R1] renders email + orgName inputs + consent checkbox + submit button', () => {
+	it('[R1] renders email input + consent checkbox + submit; NO orgName field', () => {
 		renderWithQuery(<MagicLinkSignUpForm />)
 		const email = screen.getByLabelText('Email') as HTMLInputElement
 		expect(email.type).toBe('email')
 		expect(email.required).toBe(true)
-		const orgName = screen.getByLabelText('Название гостиницы') as HTMLInputElement
-		expect(orgName.type).toBe('text')
-		expect(orgName.required).toBe(true)
-		expect(orgName.minLength).toBe(2)
-		expect(orgName.maxLength).toBe(80)
+		// Round 14.6.2 — orgName field dropped per DaData party wins canon.
+		// Asserting its absence prevents accidental re-introduction.
+		expect(screen.queryByLabelText('Название гостиницы')).toBe(null)
 		const submit = screen.getByRole('button', { name: 'Получить ссылку для регистрации' })
 		expect((submit as HTMLButtonElement).disabled).toBe(true) // every gate empty
 	})
@@ -94,22 +94,12 @@ describe('MagicLinkSignUpForm — initial render', () => {
 		expect(captchaButton.tagName).toBe('BUTTON')
 		expect((captchaButton as HTMLButtonElement).type).toBe('button')
 	})
-
-	it('[R3] slug preview updates live as user types orgName', async () => {
-		renderWithQuery(<MagicLinkSignUpForm />)
-		await userEvent.setup().type(screen.getByLabelText('Название гостиницы'), 'Гостиница Ромашка')
-		const slugSpan = screen.getByText(/\/o\//)
-		expect(slugSpan.textContent?.startsWith('/o/')).toBe(true)
-		expect(slugSpan.textContent).not.toBe('/o/…')
-	})
 })
 
 describe('MagicLinkSignUpForm — submit gating', () => {
-	it('[P1] submit disabled while orgName too short (<2 chars)', async () => {
+	it('[P1] submit disabled while email empty', async () => {
 		renderWithQuery(<MagicLinkSignUpForm />)
 		const user = userEvent.setup()
-		await user.type(screen.getByLabelText('Email'), 'jane@example.com')
-		await user.type(screen.getByLabelText('Название гостиницы'), 'X') // single char
 		await user.click(screen.getByLabelText(/согласие/))
 		await user.click(screen.getByTestId('cap-success'))
 		const submit = screen.getByRole('button', { name: 'Получить ссылку для регистрации' })
@@ -120,7 +110,6 @@ describe('MagicLinkSignUpForm — submit gating', () => {
 		renderWithQuery(<MagicLinkSignUpForm />)
 		const user = userEvent.setup()
 		await user.type(screen.getByLabelText('Email'), 'jane@example.com')
-		await user.type(screen.getByLabelText('Название гостиницы'), 'Гостиница Ромашка')
 		await user.click(screen.getByTestId('cap-success'))
 		// Deliberately NOT checking consent.
 		const submit = screen.getByRole('button', { name: 'Получить ссылку для регистрации' })
@@ -131,7 +120,6 @@ describe('MagicLinkSignUpForm — submit gating', () => {
 		renderWithQuery(<MagicLinkSignUpForm />)
 		const user = userEvent.setup()
 		await user.type(screen.getByLabelText('Email'), 'jane@example.com')
-		await user.type(screen.getByLabelText('Название гостиницы'), 'Гостиница Ромашка')
 		await user.click(screen.getByLabelText(/согласие/))
 		const submit = screen.getByRole('button', { name: 'Получить ссылку для регистрации' })
 		expect((submit as HTMLButtonElement).disabled).toBe(true)
@@ -139,12 +127,11 @@ describe('MagicLinkSignUpForm — submit gating', () => {
 })
 
 describe('MagicLinkSignUpForm — successful submit', () => {
-	it('[P4] calls signIn.magicLink with email + callbackURL=/welcome?n=<encoded> + captchaToken in 2nd-arg body', async () => {
+	it('[P4] calls signIn.magicLink с email + callbackURL=/welcome + captchaToken in 2nd-arg body', async () => {
 		magicLinkMock.mockResolvedValueOnce({ data: { status: true }, error: null })
 		renderWithQuery(<MagicLinkSignUpForm />)
 		const user = userEvent.setup()
 		await user.type(screen.getByLabelText('Email'), 'jane@example.com')
-		await user.type(screen.getByLabelText('Название гостиницы'), 'Гостиница Ромашка')
 		await user.click(screen.getByLabelText(/согласие/))
 		await user.click(screen.getByTestId('cap-success'))
 		await user.click(screen.getByRole('button', { name: 'Получить ссылку для регистрации' }))
@@ -152,19 +139,19 @@ describe('MagicLinkSignUpForm — successful submit', () => {
 		await waitFor(() => {
 			expect(magicLinkMock).toHaveBeenCalledTimes(1)
 		})
-		const expectedCallback = `http://localhost/welcome?n=${encodeURIComponent('Гостиница Ромашка')}`
+		// Round 14.6.2 — callbackURL has no `?n=` param (orgName dropped).
+		const expectedCallback = 'http://localhost/welcome'
 		expect(magicLinkMock).toHaveBeenCalledWith(
 			{ email: 'jane@example.com', callbackURL: expectedCallback },
 			{ body: { captchaToken: 'tok-signup-magic-789' } },
 		)
 	})
 
-	it('[P5] success → confirmation state с typed email AND orgName rendered for re-confirmation', async () => {
+	it('[P5] success → confirmation state с typed email + ИНН next-step copy', async () => {
 		magicLinkMock.mockResolvedValueOnce({ data: { status: true }, error: null })
 		renderWithQuery(<MagicLinkSignUpForm />)
 		const user = userEvent.setup()
 		await user.type(screen.getByLabelText('Email'), 'jane@example.com')
-		await user.type(screen.getByLabelText('Название гостиницы'), 'Гостиница Ромашка')
 		await user.click(screen.getByLabelText(/согласие/))
 		await user.click(screen.getByTestId('cap-success'))
 		await user.click(screen.getByRole('button', { name: 'Получить ссылку для регистрации' }))
@@ -172,13 +159,13 @@ describe('MagicLinkSignUpForm — successful submit', () => {
 		await waitFor(() => {
 			expect(screen.queryByText('Письмо отправлено')).not.toBe(null)
 		})
-		// Email and orgName both rendered inside <strong> tags in confirmation
-		// copy so user sees BOTH for re-verification before clicking the
-		// magic-link in their inbox.
+		// Email rendered inside <strong> для re-verification before clicking
+		// the magic-link in inbox.
 		const emailEl = screen.getByText('jane@example.com')
 		expect(emailEl.tagName).toBe('STRONG')
-		const orgEl = screen.getByText('Гостиница Ромашка')
-		expect(orgEl.tagName).toBe('STRONG')
+		// Round 14.6.2 — copy now mentions ИНН next step (no orgName).
+		const copyEl = screen.getByText(/ИНН/)
+		expect(copyEl).not.toBe(null)
 	})
 })
 
@@ -191,7 +178,6 @@ describe('MagicLinkSignUpForm — error path', () => {
 		renderWithQuery(<MagicLinkSignUpForm />)
 		const user = userEvent.setup()
 		await user.type(screen.getByLabelText('Email'), 'jane@example.com')
-		await user.type(screen.getByLabelText('Название гостиницы'), 'Гостиница Ромашка')
 		await user.click(screen.getByLabelText(/согласие/))
 		await user.click(screen.getByTestId('cap-success'))
 		await user.click(screen.getByRole('button', { name: 'Получить ссылку для регистрации' }))

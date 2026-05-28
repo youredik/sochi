@@ -55,19 +55,19 @@ export const Route = createFileRoute('/_app')({
 				// callback ALWAYS lands users here briefly because org creation
 				// happens AFTER session is established, in `/welcome`. Reached via
 				// two flows:
-				//   • /signup → magic-link → /welcome?n=<orgName>  (carries name)
+				//   • /signup → magic-link → /welcome (no params; auto-creates org)
 				//   • /login  → magic-link → /  (JIT user via `disableSignUp:false`)
 				// Both converge on `/welcome` — the dedicated org-creation surface.
 				// Sending к `/signup` instead would ping-pong because /signup's
 				// inverse guard bounces signed-in users back to /.
-				throw redirect({ to: '/welcome', search: { n: undefined } })
+				throw redirect({ to: '/welcome' })
 			}
 			if (orgs.length === 1) {
 				const firstOrg = orgs[0]
 				// length===1 guarantees orgs[0] exists; this branch satisfies
 				// TS's `noUncheckedIndexedAccess` and is defensively re-routed
 				// to /welcome rather than asserting non-null.
-				if (!firstOrg) throw redirect({ to: '/welcome', search: { n: undefined } })
+				if (!firstOrg) throw redirect({ to: '/welcome' })
 				await authClient.organization.setActive({ organizationId: firstOrg.id })
 				await context.queryClient.invalidateQueries({ queryKey: sessionQueryOptions.queryKey })
 				throw redirect({

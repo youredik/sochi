@@ -8,8 +8,13 @@
  *   1. No session → redirect к /login (user needs to sign in)
  *   2. Session has activeOrganizationId → redirect к / (already settled,
  *      bouncing prevents accidental re-create from bookmark/back-button)
- *   3. Session valid + no active + orgs.length === 0 → render /welcome form
- *      (true new-user — must create first org)
+ *   3. Session valid + no active + orgs.length === 0 → **auto-create-org**
+ *      (Round 14.6.2 — caller authClient.organization.create() с placeholder
+ *      `DEFAULT_WELCOME_ORG_NAME` + slug `org-<base36>`, then redirects к
+ *      /o/{slug}/. Dashboard's beforeLoad sees 0 properties → /setup
+ *      IdentifyStep — natural flow. Replaces pre-Round-14.6.2 form-based
+ *      flow which asked orgName upfront only для DaData lookup to overwrite
+ *      it inside setup).
  *   4. **RETURN-VISIT case** (added 2026-05-21): session valid + no active +
  *      orgs.length > 0 → caller must `setActive(firstOrg)` + redirect к
  *      /o/{slug}. Без этого guard'а existing user который вернулся после
@@ -18,8 +23,8 @@
  *      tests/e2e/demo-funnel-smoke.spec.ts [E2].
  *
  * Function returns a DECISION (intent) not a side-effect — caller (route
- * beforeLoad) executes setActive call + throws redirect. Pure-vs-impure
- * separation enables strict unit-testing of all 5 branches без mocking
+ * beforeLoad) executes setActive / create call + throws redirect. Pure-vs-
+ * impure separation enables strict unit-testing of all branches без mocking
  * authClient.
  *
  * See sibling: `lib/landing-redirect.ts` (same pattern для / route).
@@ -40,7 +45,7 @@ export type WelcomeRedirectDecision =
 			readonly orgId: string
 			readonly orgSlug: string
 	  }
-	| { readonly kind: 'render-form' }
+	| { readonly kind: 'auto-create-org' }
 
 export function resolveWelcomeRedirect(
 	input: ResolveWelcomeRedirectInput,
@@ -54,13 +59,13 @@ export function resolveWelcomeRedirect(
 	if (session.session.activeOrganizationId) return { kind: 'redirect-home' }
 
 	// 3. + 4. Determine based on orgs list
-	// Fail-open: if orgs fetch failed (null/undefined) → render form so user
+	// Fail-open: if orgs fetch failed (null/undefined) → auto-create so user
 	// isn't blocked from creating their first org. Worst case: duplicate
 	// org on transient backend hiccup (acceptable vs hard error-page).
-	if (!orgs || orgs.length === 0) return { kind: 'render-form' }
+	if (!orgs || orgs.length === 0) return { kind: 'auto-create-org' }
 
 	const firstOrg = orgs[0]
-	if (!firstOrg) return { kind: 'render-form' }
+	if (!firstOrg) return { kind: 'auto-create-org' }
 
 	// 4. Return-visit: setActive first org + redirect к /o/{slug}.
 	// Multi-org (>1) edge case: forces first org. User can still use
