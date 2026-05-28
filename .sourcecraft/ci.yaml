@@ -454,13 +454,15 @@ tasks:
           name: cr.yandex/sourcecraft/yc-cli:latest
           entrypoint: ''
         env:
+          # Belt-and-suspenders auth — ОБА env + --token флаг в script. Это
+          # проверенный revision-deploy паттерн (Run #7-9 показали fail даже с
+          # одним из них; yc-cli:latest image reads YC_IAM_TOKEN convention).
+          # Run #149/#150 empirical: только YC_TOKEN → yc fallback'ит к oauth-
+          # exchange → "OAuth token invalid". YC_IAM_TOKEN обязателен.
           YC_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
-          # YC_FOLDER_ID — yc reads it as default folder для ВСЕХ вызовов
-          # (image list/scan/list-vulnerabilities). MANDATORY: registry sepshn-cr
-          # живёт в infra-folder; без folder yc fallback'ит к profile → oauth →
-          # "token invalid" (Run #149 empirical: local прошло т.к. мой profile
-          # default = эта folder, CI без profile → fail). claude SA = cloud-level
-          # container-registry.admin → доступ к infra-folder registry есть.
+          YC_IAM_TOKEN: ${{ cubes.get-iam-token.outputs.IAM_TOKEN }}
+          # YC_FOLDER_ID — default folder для image list (registry sepshn-cr в
+          # infra-folder). claude SA = cloud-level container-registry.admin.
           YC_FOLDER_ID: b1gp4bo808jr6qvrnltu
         script:
           - set -e
