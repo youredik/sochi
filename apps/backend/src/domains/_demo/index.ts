@@ -21,8 +21,9 @@
  * integration test that the wow-effect.
  */
 
-import type { Hono } from 'hono'
+import { Hono } from 'hono'
 import type { AppEnv } from '../../factory.ts'
+import { demoCaptchaMiddleware } from '../../middleware/demo-captcha.ts'
 import { createDemoAdminRoutes } from './admin/admin.routes.ts'
 import { createOstrovokMockOtaRoutes } from './mock-ota-server/ostrovok/ostrovok.routes.ts'
 import type { OstrovokStore } from './mock-ota-server/ostrovok/store.ts'
@@ -94,7 +95,25 @@ export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOp
 		yandexStore: opts.yandexStore,
 	})
 
-	app.route('/api/_mock-ota/yandex/v1', yandexRouter)
-	app.route('/api/_mock-ota/ostrovok/v1', ostrovokRouter)
+	// Round 14.5 tactical — captcha gate на ALL demo OTA POST mutations.
+	// Empirical 28.05.2026: боты атакуют demo POST endpoints без friction
+	// (SmartCaptcha widget стоит только на /sign-in/magic-link). Wrap demo
+	// routers через captcha middleware — POST blocked если no/invalid token,
+	// GET pass-through (no body, no state change).
+	//
+	// Activation: `SMARTCAPTCHA_SERVER_KEY` env (production) → enforce;
+	// unset (dev/CI/tests) → bypass с structured log warn.
+	//
+	// Strategic refactor (per-tenant /o/{slug}/demo + magic-link onboarding +
+	// Stripe livemode marker) deferred к dedicated session с ADR upfront.
+	const yandexWrapped = new Hono<AppEnv>()
+		.use('/*', demoCaptchaMiddleware())
+		.route('/', yandexRouter)
+	const ostrovokWrapped = new Hono<AppEnv>()
+		.use('/*', demoCaptchaMiddleware())
+		.route('/', ostrovokRouter)
+
+	app.route('/api/_mock-ota/yandex/v1', yandexWrapped)
+	app.route('/api/_mock-ota/ostrovok/v1', ostrovokWrapped)
 	app.route('/api/_mock-ota/admin', adminRouter)
 }
