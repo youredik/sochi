@@ -90,7 +90,18 @@ export function useCreateOrganization() {
 		onSuccess: async ({ orgSlug }) => {
 			await queryClient.invalidateQueries({ queryKey: sessionQueryOptions.queryKey })
 			toast.success('Гостиница создана')
-			void navigate({ to: '/o/$orgSlug', params: { orgSlug }, reloadDocument: true })
+			// Round 14.6 — wow-effect magic-link landing. После создания org
+			// сразу попадаем на per-tenant demo OTA вместо dashboard. Hotelier
+			// видит работающую интеграцию с Яндекс.Путешествия / Островком в
+			// первые секунды (afterCreateOrganization hook уже зарегистрировал
+			// per-org demo channel infra). User then navigates к /setup из
+			// sidebar когда готов заводить реальную property. Канон:
+			// `feedback_round_14_6_per_tenant_demo_canon_2026_05_28`.
+			void navigate({
+				to: '/o/$orgSlug/demo',
+				params: { orgSlug },
+				reloadDocument: true,
+			})
 		},
 		onError: (err) => {
 			logger.warn('auth.createOrganization failed', { code: err.title })

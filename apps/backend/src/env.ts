@@ -185,6 +185,33 @@ export const envSchema = z.object({
 	// AND the gate refuses non-tokened requests.
 	DEMO_DEPLOYMENT: booleanEnv(false),
 
+	/**
+	 * Round 14.6 — webhook signing secret for demo OTA mock channels (`YT`
+	 * + `ETG` per-tenant + legacy `demo-tenant` showcase row). Single source
+	 * of truth — `app.ts` + `auth.ts.afterCreateOrganization` both seed
+	 * `webhookSecret` rows с этим значением; eliminates the prior
+	 * three-copies-of-literal halfmeasure caught by canon
+	 * `feedback_aggressive_delegacy`.
+	 *
+	 * Default placeholder marks the value as non-production explicitly.
+	 * Deploy operator MUST override via Lockbox secret для any environment
+	 * where prod-mode real channel integration coexists с demo OTA. In
+	 * `APP_MODE=production` deploys где demo OTA disabled entirely, value
+	 * is unused (мis `_demo/` mount env-gated).
+	 */
+	DEMO_WEBHOOK_SECRET: z
+		.string()
+		.min(16)
+		.default('demo-mock-ota-webhook-secret-do-not-use-in-prod'),
+
+	/**
+	 * Round 14.6 — base URL targeted by demo OTA mock webhook emitters.
+	 * Defaults к `http://localhost:8787` для local dev parity. Production
+	 * deploy sets к the backend's own public-facing URL (so `/api/channel/
+	 * webhooks/YT|ETG` receives the loopback CloudEvent).
+	 */
+	DEMO_WEBHOOK_TARGET_BASE_URL: z.string().url().default('http://localhost:8787'),
+
 	// Sprint C+ Round 6 P1 fix 2026-05-24 (Performance scale architect):
 	// Migration apply на cold start = 72 migrations × ~50ms checksum read = 3.6s
 	// wall-clock в best case + risk of DDL race при multi-instance scaling.

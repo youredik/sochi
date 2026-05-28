@@ -89,6 +89,7 @@ import { createMagicLinkConsumeRoutes } from './domains/widget/magic-link-consum
 import { createWidgetFactory } from './domains/widget/widget.factory.ts'
 import { createWidgetRoutes } from './domains/widget/widget.routes.ts'
 import { env } from './env.ts'
+import { DEMO_FALLBACK_TENANT_ID, LEGACY_DEMO_PROPERTY_ID } from './lib/demo-channel-seed.ts'
 import { onError } from './errors/on-error.ts'
 import type { AppEnv } from './factory.ts'
 import { listAdapters, registerAdapter } from './lib/adapters/index.ts'
@@ -154,11 +155,10 @@ const app = new Hono<AppEnv>()
 // no «presenter natural pause» hand-waving).
 let demoBootPromiseInternal: Promise<void> = Promise.resolve()
 if (env.APP_MODE !== 'production') {
-	const demoWebhookSecret = 'demo-mock-ota-webhook-secret-do-not-use-in-prod'
-	const demoPropertyId = 'demo-hotel-sochi'
-	// Round 14.6 — `demoTenantId` no longer hardcoded. Each request derives
-	// tenantId from Better Auth session via `tenantMiddleware()`. Stores +
-	// adapters scope per-tenant (Stripe-style multi-tenant boundary 2026 canon).
+	// Round 14.6 — single source of truth для demo constants. Pre-cleanup
+	// каждое значение было literal-duplicated across app.ts + auth.ts +
+	// _demo/index.ts comments → drift risk. Canon `feedback_aggressive_delegacy`
+	// + `feedback_no_halfway` — extract to env vars + lib constants.
 	const adminSessionToken = `demo_admin_${crypto.randomUUID().slice(0, 16)}`
 	logger.info(
 		{ token: adminSessionToken },
@@ -168,21 +168,22 @@ if (env.APP_MODE !== 'production') {
 	const ostrovokStore = createYdbOstrovokStore(sql)
 	const yandexStore = createYdbYandexStore(sql)
 	registerDemoRoutes(app, {
-		yandexPropertyId: demoPropertyId,
-		ostrovokPropertyId: demoPropertyId,
-		webhookTargetBaseUrl: 'http://localhost:8787',
-		webhookSecret: demoWebhookSecret,
+		yandexPropertyId: LEGACY_DEMO_PROPERTY_ID,
+		ostrovokPropertyId: LEGACY_DEMO_PROPERTY_ID,
+		webhookTargetBaseUrl: env.DEMO_WEBHOOK_TARGET_BASE_URL,
+		webhookSecret: env.DEMO_WEBHOOK_SECRET,
 		adminSessionToken,
 		ostrovokStore,
 		yandexStore,
 		// Round 14.6 — public showcase fallback. `demo.sepshn.ru` serves anonymous
 		// visitors who interact с the OTA façade without signup; their requests
-		// pin к 'demo-tenant' (legacy seed row, webhookSecret + channelConnection
-		// already populated via `seedDemoChannelInfra` below). `app.sepshn.ru`
-		// прод-deploys could omit this option (set undefined) to require auth.
-		// Current single-deploy posture: keep fallback enabled — auth still wins
-		// when caller HAS a session с active org (per-tenant scope kicks in).
-		anonymousFallbackTenantId: 'demo-tenant',
+		// pin к `DEMO_FALLBACK_TENANT_ID` (legacy seed row, webhookSecret +
+		// channelConnection already populated via `seedDemoChannelInfra` below).
+		// `app.sepshn.ru` прод-deploys could omit this option (set undefined) to
+		// require auth. Current single-deploy posture: keep fallback enabled —
+		// auth still wins when caller HAS a session с active org (per-tenant
+		// scope kicks in).
+		anonymousFallbackTenantId: DEMO_FALLBACK_TENANT_ID,
 	})
 	// Round 12 polish — promise captured, NOT fire-and-forget. `index.ts`
 	// awaits before `serve()` to close the 100 ms cold-start race window
@@ -193,9 +194,9 @@ if (env.APP_MODE !== 'production') {
 	// demo-tenant rows). New per-org seed happens in afterCreateOrganization
 	// hook (см. auth.ts). Phase deferred — этот call станет no-op после migration.
 	demoBootPromiseInternal = seedDemoChannelInfra({
-		tenantId: 'demo-tenant',
-		propertyId: demoPropertyId,
-		webhookSecret: demoWebhookSecret,
+		tenantId: DEMO_FALLBACK_TENANT_ID,
+		propertyId: LEGACY_DEMO_PROPERTY_ID,
+		webhookSecret: env.DEMO_WEBHOOK_SECRET,
 	}).then(
 		(r) => {
 			logger.info(

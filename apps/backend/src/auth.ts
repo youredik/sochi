@@ -280,11 +280,17 @@ export const auth = betterAuth({
 					`
 
 					/**
-					 * Round 14.6 — per-tenant demo OTA seed.
+					 * Round 14.6 — per-tenant demo OTA seed (non-production только).
 					 *
 					 * Each new organization receives working demo OTA in their cabinet
 					 * immediately: `webhookSecret` + `channelConnection` rows для YT +
 					 * ETG channels keyed on (orgId, synthetic demoPropertyId).
+					 *
+					 * **Env-gate**: `APP_MODE !== 'production'`. Mirrors the env-gate
+					 * на `_demo/` route mount (см. `app.ts`) — в production режиме
+					 * routes `/api/_mock-ota/*` не зарегистрированы, поэтому seed
+					 * orphan rows бесполезны и shouldn't be created. Defense-in-depth
+					 * против accidental demo-data leak в production tenant.
 					 *
 					 * Synthetic property allows the seed to run BEFORE the user creates
 					 * any real property in M5c setup wizard — the demo OTA flow is
@@ -304,33 +310,35 @@ export const auth = betterAuth({
 					 *
 					 * Canon: `feedback_round_14_6_per_tenant_demo_canon_2026_05_28.md`.
 					 */
-					try {
-						const result = await seedDemoChannelInfraCore({
-							tenantId: org.id,
-							propertyId: demoPropertyIdForOrg(org.id),
-							webhookSecret: 'demo-mock-ota-webhook-secret-do-not-use-in-prod',
-						})
-						logger.info(
-							{
-								event: 'demo_seed_per_org_complete',
-								orgId: org.id,
-								secrets: result.secretsSeeded,
-								connections: result.connectionsSeeded,
-							},
-							'per-tenant demo OTA infra seeded',
-						)
-					} catch (e: unknown) {
-						logger.error(
-							{
-								event: 'demo_seed_per_org_failed',
-								orgId: org.id,
-								err:
-									e instanceof Error
-										? { name: e.name, message: e.message.slice(0, 200) }
-										: { name: 'unknown', message: String(e).slice(0, 200) },
-							},
-							'per-tenant demo OTA seed failed — org created, demo flow needs re-seed',
-						)
+					if (env.APP_MODE !== 'production') {
+						try {
+							const result = await seedDemoChannelInfraCore({
+								tenantId: org.id,
+								propertyId: demoPropertyIdForOrg(org.id),
+								webhookSecret: env.DEMO_WEBHOOK_SECRET,
+							})
+							logger.info(
+								{
+									event: 'demo_seed_per_org_complete',
+									orgId: org.id,
+									secrets: result.secretsSeeded,
+									connections: result.connectionsSeeded,
+								},
+								'per-tenant demo OTA infra seeded',
+							)
+						} catch (e: unknown) {
+							logger.error(
+								{
+									event: 'demo_seed_per_org_failed',
+									orgId: org.id,
+									err:
+										e instanceof Error
+											? { name: e.name, message: e.message.slice(0, 200) }
+											: { name: 'unknown', message: String(e).slice(0, 200) },
+								},
+								'per-tenant demo OTA seed failed — org created, demo flow needs re-seed',
+							)
+						}
 					}
 				},
 			},

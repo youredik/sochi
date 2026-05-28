@@ -40,6 +40,7 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from '../../../factory.ts'
+import { LEGACY_DEMO_PROPERTY_ID } from '../../../lib/demo-channel-seed.ts'
 import type { OstrovokStore } from '../mock-ota-server/ostrovok/store.ts'
 import type { YandexStore } from '../mock-ota-server/yandex/store.ts'
 
@@ -181,7 +182,7 @@ export function createDemoAdminRoutes(opts: DemoAdminRoutesOptions): Hono<AppEnv
 				ok: true,
 				seeded: {
 					property: {
-						id: 'demo-hotel-sochi',
+						id: LEGACY_DEMO_PROPERTY_ID,
 						name: demoPropertyName,
 					},
 					availabilityDates: seededDates,

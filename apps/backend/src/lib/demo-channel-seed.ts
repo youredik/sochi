@@ -39,8 +39,37 @@ export interface SeedDemoChannelInfraOptions {
 }
 
 const DEFAULT_CHANNELS = ['YT', 'ETG'] as const
-const LEGACY_DEMO_TENANT_ID = 'demo-tenant'
-const LEGACY_DEMO_WEBHOOK_KID = 'kid_demo_v1'
+
+/**
+ * Single source of truth for the legacy anonymous-demo tenant identifier.
+ *
+ * `demo-tenant` is the fixture row used by `demo.sepshn.ru` always-on
+ * public showcase. Anonymous visitors pin к this tenantId via
+ * `_demo/index.ts.anonymousFallbackTenantId`. Per-tenant demos (Round 14.6
+ * auth-gated path) use the requesting org's `org.id` as tenantId instead.
+ *
+ * Exported (not module-private) so `app.ts` + `_demo/index.ts` reference
+ * the same constant. Avoids 3-copies-of-string-literal halfmeasure caught
+ * by canon `feedback_aggressive_delegacy`.
+ */
+export const DEMO_FALLBACK_TENANT_ID = 'demo-tenant' as const
+
+/**
+ * Legacy property identifier for the anonymous showcase fixture row. Paired
+ * с `DEMO_FALLBACK_TENANT_ID` — together они scope the seed UPSERT to the
+ * single demo property visible на demo.sepshn.ru. New tenants получают a
+ * per-org synthetic property ID (см. `demoPropertyIdForOrg`).
+ */
+export const LEGACY_DEMO_PROPERTY_ID = 'demo-hotel-sochi' as const
+
+/**
+ * Legacy webhook kid для anonymous-showcase tenant. Pre-Round-14.6 ALL demo
+ * traffic went through this single kid. Round 14.6 introduces per-tenant
+ * kid derivation (см. `demoWebhookKidForTenant`) so each org owns its own
+ * `webhookSecret` row. Legacy kid retained so existing CloudEvents replays
+ * still verify (long-tail in-flight events).
+ */
+export const LEGACY_DEMO_WEBHOOK_KID = 'kid_demo_v1' as const
 
 /**
  * Round 14.6 — derive a per-tenant `kid` for the demo webhookSecret row.
@@ -55,7 +84,7 @@ const LEGACY_DEMO_WEBHOOK_KID = 'kid_demo_v1'
  * verify против the same row. Other tenants get a deterministic per-org kid.
  */
 export function demoWebhookKidForTenant(tenantId: string): string {
-	if (tenantId === LEGACY_DEMO_TENANT_ID) {
+	if (tenantId === DEMO_FALLBACK_TENANT_ID) {
 		return LEGACY_DEMO_WEBHOOK_KID
 	}
 	return `kid_demo_${tenantId}`
