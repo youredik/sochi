@@ -68,13 +68,18 @@ on:
     # (image is pinned in ci.yaml). Previous canon `pnpm-lock.yaml` was
     # mis-targeted — fired on every routine dep bump (false positives) and
     # crowded out the 3-workflow-per-push SC limit на multi-path commits.
-    # SC limit: 3 workflows per push event. С новым filter typical paths:
-    #   - apps/** change → quality + deploy (2)
-    #   - infra/** change → quality + infra-apply (2)
+    # SC limit: 3 workflows per push event. ВАЖНО: `deploy` срабатывает и на
+    # `.sourcecraft/ci.yaml` (см. deploy filter выше) — это легко забыть.
+    # CORRECTED 2026-05-29 (Run #148 rejected «workflows found - 4, 3 allowed»):
+    # предыдущая таблица говорила «ci.yaml + infra → 3», но забывала deploy → было 4.
+    # Точная матрица triggered-workflows по изменённым путям:
+    #   - apps/** | packages/** | lockfile → quality + deploy (2)
+    #   - infra/** only → quality + infra-apply (2)
     #   - apps + infra → quality + deploy + infra-apply (3)
-    #   - ci.yaml + apps → quality + deploy + mirror-images (3)
-    #   - ci.yaml + infra → quality + infra-apply + mirror-images (3)
-    #   - ci.yaml + apps + infra → 4 (still over — split commits if hit).
+    #   - ci.yaml only (±apps) → quality + deploy + mirror-images (3)
+    #   - ci.yaml + infra → quality + deploy + infra-apply + mirror-images (4) ← OVER!
+    # ⇒ НИКОГДА не бандлить `.sourcecraft/ci.yaml` + `infra/**` в один push.
+    #   Канон feedback_sc_workflows_3_limit_2026_05_21 — split commits.
     # Idempotent — crane copy skips если src/dst digests match (~5s when match).
     - workflows: [mirror-images]
       filter:
