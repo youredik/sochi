@@ -6,10 +6,16 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from '../../factory.ts'
+import { publicBodyCap } from '../../middleware/public-body-cap.ts'
 import { type DcrStore, validateClientMetadata } from './dcr.ts'
 
 export function createDcrRoutes(store: DcrStore) {
 	const app = new Hono<AppEnv>()
+
+	// Round 14.6.4 adversarial-sweep #5 (2026-05-29) — public RFC 7591 DCR
+	// endpoint reachable anonymously by spec. Без cap → JSON-bomb DoS vector.
+	// 64 KB ≫ typical client metadata payload (< 4 KB). Returns 413 на breach.
+	app.use('/*', publicBodyCap())
 
 	app.post('/register', async (c) => {
 		let body: unknown

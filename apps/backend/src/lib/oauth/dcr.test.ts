@@ -4,6 +4,8 @@
 
 import { afterEach, describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
+import type { AppEnv } from '../../factory.ts'
+import { onError } from '../../errors/on-error.ts'
 import {
 	createInMemoryDcrStore,
 	generateClientId,
@@ -194,5 +196,21 @@ describe('DCR (RFC 7591) routes', () => {
 		const fetched = await store.get(body.client_id)
 		expect(fetched).not.toBeNull()
 		expect(fetched?.client_name).toBe('Acme')
+	})
+
+	test('[DCR15] body > 64 KB → 413 payload_too_large (DoS guard)', async () => {
+		// Round 14.6.4 adversarial-sweep #5 (2026-05-29) — public RFC 7591 endpoint
+		// MUST cap body size. Test mounts onError so HTTPException(413) propagates
+		// verbatim (mirrors prod app.ts pipeline).
+		const appWithOnError = new Hono<AppEnv>()
+			.route('/api/oauth', createDcrRoutes(store))
+			.onError(onError)
+		const bigPayload = 'a'.repeat(100 * 1024)
+		const res = await appWithOnError.request('/api/oauth/register', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: bigPayload,
+		})
+		expect(res.status).toBe(413)
 	})
 })

@@ -49,6 +49,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../factory.ts'
 import { chatCompletion, readConfigFromEnv } from '../lib/ai/yandex-ai-studio.ts'
+import { publicBodyCap } from '../middleware/public-body-cap.ts'
 import { extractClientIp } from '../middleware/widget-rate-limit.ts'
 import { checkAiRateLimit, MCP_AI_RATE_LIMIT_MESSAGE, mcpRpcRateLimit } from './rate-limit.ts'
 
@@ -506,6 +507,12 @@ function isNotification(method: string): boolean {
 
 export function createMcpRoutes() {
 	const app = new Hono<AppEnv>()
+
+	// Round 14.6.4 adversarial-sweep #5 (2026-05-29) — MCP JSON-RPC endpoint
+	// publicly reachable per spec (no auth gate в transport layer; auth happens
+	// at tool-call level for sensitive tools). Без cap → JSON-bomb DoS на MCP
+	// agent traffic. Typical RPC request < 8 KB; 64 KB ≫ realistic envelopes.
+	app.use('/*', publicBodyCap())
 
 	// Apply rate-limit на все RPC traffic + extra stricter limit для sepshn.ai.*
 	// tools-call branch. Middleware ordering: broad RPC limit first → tool-name

@@ -189,7 +189,10 @@ export const SEPSHN_OPENAPI_SPEC = {
 						name: 'hotelId',
 						in: 'query',
 						required: true,
-						schema: { type: 'string', example: 'demo-hotel-sochi' },
+						// Round 14.6.4 adversarial-sweep #5 (2026-05-29) — disambiguate
+						// example от `LEGACY_DEMO_PROPERTY_ID='demo-hotel-sochi'` к
+						// signal что endpoint accepts per-tenant derived IDs.
+						schema: { type: 'string', example: 'sepshn-fictional-demo' },
 					},
 					{
 						name: 'checkinDate',

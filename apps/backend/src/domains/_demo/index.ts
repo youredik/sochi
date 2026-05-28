@@ -22,11 +22,11 @@
  */
 
 import { Hono } from 'hono'
-import { bodyLimit } from 'hono/body-limit'
 import { auth } from '../../auth.ts'
 import { type AppEnv, factory } from '../../factory.ts'
 import { authMiddleware } from '../../middleware/auth.ts'
 import { demoCaptchaMiddleware } from '../../middleware/demo-captcha.ts'
+import { publicBodyCap } from '../../middleware/public-body-cap.ts'
 import { tenantMiddleware } from '../../middleware/tenant.ts'
 import { createDemoAdminRoutes } from './admin/admin.routes.ts'
 import { createOstrovokMockOtaRoutes } from './mock-ota-server/ostrovok/ostrovok.routes.ts'
@@ -185,25 +185,22 @@ export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOp
 	// Captcha gate placed AFTER размер cap так attacker can't burn captcha
 	// service via oversized payloads. Admin routes uncapped (Better-Auth gated;
 	// admin operators are trusted).
-	const MAX_DEMO_OTA_BODY_BYTES = 64 * 1024
-	const demoOtaBodyCap = bodyLimit({ maxSize: MAX_DEMO_OTA_BODY_BYTES })
+	// Round 14.6.4 adversarial-sweep #5 (2026-05-29) — extracted к shared
+	// `publicBodyCap` middleware (см. `middleware/public-body-cap.ts`). Same
+	// 64 KB cap, теперь reused by DCR + MCP endpoints (sweep widened from
+	// demo-only к ALL public POST surfaces).
 	const yandexWrapped = new Hono<AppEnv>()
-		.use('/*', demoOtaBodyCap)
+		.use('/*', publicBodyCap())
 		.use('/*', authOrAnonymous)
 		.use('/*', demoCaptchaMiddleware())
 		.route('/', yandexRouter)
 	const ostrovokWrapped = new Hono<AppEnv>()
-		.use('/*', demoOtaBodyCap)
+		.use('/*', publicBodyCap())
 		.use('/*', authOrAnonymous)
 		.use('/*', demoCaptchaMiddleware())
 		.route('/', ostrovokRouter)
-	// Round 14.6.4 final-final sweep (2026-05-29) — admin route ALSO capped.
-	// Pre-fix had `c.req.json()` без cap (admin.routes.ts:221 `/trigger`); my
-	// own comment said «trusted admin operators». Defense-in-depth canon =
-	// parity matters more than trust assumption — admin token leak is real
-	// risk vector. Cap = 64 KB matches other mock-OTA mounts.
 	const adminWrapped = new Hono<AppEnv>()
-		.use('/*', demoOtaBodyCap)
+		.use('/*', publicBodyCap())
 		.use('/*', authOrAnonymous)
 		.route('/', adminRouter)
 

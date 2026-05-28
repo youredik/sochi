@@ -528,6 +528,25 @@ describe('MCP server (Round 13 + Round 14 self-review #3 + #4)', () => {
 		expect(res.status).toBe(200)
 	})
 
+	test('[MCP-DOS1] body > 64 KB → 413 payload_too_large (DoS guard)', async () => {
+		// Round 14.6.4 adversarial-sweep #5 (2026-05-29) — public JSON-RPC endpoint
+		// MUST cap body size. Test mounts onError so HTTPException(413) propagates
+		// verbatim (mirrors prod app.ts pipeline).
+		const { Hono: HonoApp } = await import('hono')
+		const { onError: errH } = await import('../errors/on-error.ts')
+		const appWithOnError = new HonoApp()
+			.route('/api/mcp', createMcpRoutes())
+			// biome-ignore lint/suspicious/noExplicitAny: Hono generic-narrow для cross-file test wiring; production app.ts handles это natively.
+			.onError(errH as any)
+		const bigPayload = 'a'.repeat(100 * 1024)
+		const res = await appWithOnError.request('/api/mcp/rpc', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: bigPayload,
+		})
+		expect(res.status).toBe(413)
+	})
+
 	test('[MCP-ADV1] tools/call limit NaN-slip defense → fallback 5', async () => {
 		// Adversarial reading checklist #6 — Math.min/max propagate NaN.
 		// Caller passing `limit: NaN` would otherwise hit `slice(0, NaN) === []`
