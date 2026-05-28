@@ -19,7 +19,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { Hono } from 'hono'
 import { parseCloudEvent } from '../../../../lib/channel-manager/cloud-events.ts'
-import { __listBookingTokens, __listOrders, __resetState } from './state.ts'
+import { createInMemoryYandexStore, type YandexStore } from './store.ts'
 import { createYandexMockOtaRoutes } from './yandex.routes.ts'
 
 const TEST_TENANT = 'org_demo_yt'
@@ -50,12 +50,17 @@ function buildFetchSpy(opts: { respond?: (call: FetchCall) => Response | Promise
 	return { calls, fetchImpl }
 }
 
+// Round 14.5 — module-scoped store shared by mountApp + test body assertions.
+// Reset in beforeEach guarantees test isolation despite shared reference.
+let currentStore: YandexStore = createInMemoryYandexStore()
+
 function mountApp(deps: { fetchImpl?: typeof fetch } = {}) {
 	const router = createYandexMockOtaRoutes({
 		tenantId: TEST_TENANT,
 		propertyId: TEST_HOTEL,
 		webhookTargetUrl: 'http://test.invalid/api/channel/webhooks/YT',
 		webhookSecret: 'whsec_demo_test_only',
+		store: currentStore,
 		...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
 	})
 	return new Hono().route('/v1', router)
@@ -100,11 +105,11 @@ async function searchOnce(app: Hono): Promise<{
 }
 
 describe('Yandex mock-OTA HTTP routes', () => {
-	beforeEach(() => {
-		__resetState()
+	beforeEach(async () => {
+		currentStore = createInMemoryYandexStore()
 	})
-	afterEach(() => {
-		__resetState()
+	afterEach(async () => {
+		await currentStore.__reset()
 	})
 
 	it('[YTR1] GET /hotels/hotel/offers returns offers with valid booking_token', async () => {
@@ -121,8 +126,9 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		expect(offer.daily_prices.length).toBe(2) // 2 nights between 15→17
 		expect(offer.total_price).toBe(offer.daily_prices.reduce((s, p) => s + p, 0))
 		// Booking token persisted в state так POST /orders может его консьюмить.
-		expect(__listBookingTokens().length).toBe(1)
-		const stored = __listBookingTokens()[0]
+		const tokens = await currentStore.__listBookingTokens()
+		expect(tokens.length).toBe(1)
+		const stored = tokens[0]
 		expect(stored === undefined).toBe(false)
 		if (stored === undefined) throw new Error('unreachable')
 		expect(stored.token).toBe(offer.booking_token)
@@ -144,7 +150,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		expect(res.status).toBe(400)
 		const body = (await res.json()) as { error: string }
 		expect(body.error).toBe('invalid_date_range')
-		expect(__listBookingTokens().length).toBe(0)
+		expect((await currentStore.__listBookingTokens()).length).toBe(0)
 	})
 
 	it('[YTR3] POST /hotels/booking/orders requires valid booking_token (400 invalid_booking_token)', async () => {
@@ -168,7 +174,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		expect(body.error).toBe('invalid_booking_token')
 		// No webhook fired когда token не valid.
 		expect(calls.length).toBe(0)
-		expect(__listOrders().length).toBe(0)
+		expect((await currentStore.__listOrders()).length).toBe(0)
 	})
 
 	it('[YTR4] POST /hotels/booking/orders with valid token returns CONFIRMED + fires CloudEvents webhook', async () => {
@@ -226,9 +232,9 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		expect(data.order_id).toBe(body.order_id)
 		expect(data.channel_id).toBe('YT')
 
-		expect(__listOrders().length).toBe(1)
+		expect((await currentStore.__listOrders()).length).toBe(1)
 		// Token consumed — single-use semantics.
-		expect(__listBookingTokens().length).toBe(0)
+		expect((await currentStore.__listBookingTokens()).length).toBe(0)
 	})
 
 	it('[YTR5] POST /payment/cancel returns CANCELLED + fires CloudEvents webhook', async () => {

@@ -40,8 +40,8 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from '../../../factory.ts'
-import { __resetState as __resetOstrovokState } from '../mock-ota-server/ostrovok/state.ts'
-import { __resetState as __resetYandexState } from '../mock-ota-server/yandex/state.ts'
+import type { OstrovokStore } from '../mock-ota-server/ostrovok/store.ts'
+import type { YandexStore } from '../mock-ota-server/yandex/store.ts'
 
 /**
  * Valid scenario identifiers для `POST /trigger`. Const-union enforced at
@@ -78,6 +78,13 @@ export interface DemoAdminRoutesOptions {
 	 * mid-demo для другого tenant. Token gate restores tenant isolation.
 	 */
 	readonly sessionToken?: string
+	/**
+	 * Round 14.5 — store DI. `__reset()` on each store clears all state in
+	 * tenant scope (in-memory wipes Maps; YDB issues `DELETE WHERE tenantId`).
+	 * Required — admin reset endpoint cannot функционировать без stores.
+	 */
+	readonly ostrovokStore: OstrovokStore
+	readonly yandexStore: YandexStore
 }
 
 /**
@@ -85,7 +92,7 @@ export interface DemoAdminRoutesOptions {
  * onto `/api/_mock-ota/admin` (Batch-3 wiring); tests mount onto a fresh
  * `Hono()` at `/admin`.
  */
-export function createDemoAdminRoutes(opts: DemoAdminRoutesOptions = {}): Hono<AppEnv> {
+export function createDemoAdminRoutes(opts: DemoAdminRoutesOptions): Hono<AppEnv> {
 	const app = new Hono<AppEnv>()
 	const demoPropertyName = opts.demoPropertyName ?? 'Sochi Demo Hotel'
 	const seedDateCount = opts.seedDateCount ?? 3
@@ -133,9 +140,9 @@ export function createDemoAdminRoutes(opts: DemoAdminRoutesOptions = {}): Hono<A
 	 * immediately — the `cleared` field carries a boolean per channel as
 	 * audit indicator that the call reached both modules.
 	 */
-	app.post('/reset', (c) => {
-		__resetYandexState()
-		__resetOstrovokState()
+	app.post('/reset', async (c) => {
+		await opts.yandexStore.__reset()
+		await opts.ostrovokStore.__reset()
 		return c.json(
 			{
 				ok: true,

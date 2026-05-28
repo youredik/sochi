@@ -28,7 +28,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { Hono } from 'hono'
 import { parseCloudEvent } from '../../../../lib/channel-manager/cloud-events.ts'
 import { createOstrovokMockOtaRoutes } from './ostrovok.routes.ts'
-import { __listBookHashes, __listBookings, __listFormStages, __resetState } from './state.ts'
+import { createInMemoryOstrovokStore, type OstrovokStore } from './store.ts'
+
+// Round 14.5 — module-scoped store shared by mountApp + test assertions.
+// beforeEach replaces with fresh store для test isolation.
+let currentStore: OstrovokStore = createInMemoryOstrovokStore()
 
 const TEST_TENANT = 'org_demo_etg'
 const TEST_PROPERTY = 'prop_demo_ostrovok'
@@ -93,6 +97,7 @@ function mountApp(
 		propertyId: TEST_PROPERTY,
 		webhookTargetUrl: 'http://test.invalid/api/channel/webhooks/ETG',
 		webhookSecret: 'whsec_demo_test_only',
+		store: currentStore,
 		...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
 		...(deps.logWarn !== undefined ? { logWarn: deps.logWarn } : {}),
 		...(deps.nowMs !== undefined ? { nowMs: deps.nowMs } : {}),
@@ -154,11 +159,11 @@ async function postJson(
 }
 
 describe('Островок / ETG mock-OTA HTTP routes', () => {
-	beforeEach(() => {
-		__resetState()
+	beforeEach(async () => {
+		currentStore = createInMemoryOstrovokStore()
 	})
-	afterEach(() => {
-		__resetState()
+	afterEach(async () => {
+		await currentStore.__reset()
 	})
 
 	// ── OSTR1 — Stage 1 happy path ─────────────────────────────────────────
@@ -194,7 +199,7 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		expect(rate.daily_prices.length).toBe(2) // 2 nights
 		expect(rate.currency_code).toBe('RUB')
 		expect(rate.total_price).toBe(28000) // 2 nights × 7000 × 2 adults
-		expect(__listBookHashes().length).toBe(1)
+		expect((await currentStore.__listBookHashes()).length).toBe(1)
 	})
 
 	// ── OSTR2 — Stage 2 happy path ─────────────────────────────────────────
@@ -245,7 +250,7 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		expect(pt.currency_code).toBe('RUB')
 		expect(pt.is_need_credit_card_data).toBe(true)
 		expect(pt.is_need_cvc).toBe(true)
-		expect(__listFormStages().length).toBe(1)
+		expect((await currentStore.__listFormStages()).length).toBe(1)
 	})
 
 	// ── OSTR3 — book_hash validation ───────────────────────────────────────
@@ -260,7 +265,7 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		})
 		expect(status).toBe(400)
 		expect(json).toEqual({ status: 'error', error: 'rate_not_found' })
-		expect(__listFormStages().length).toBe(0)
+		expect((await currentStore.__listFormStages()).length).toBe(0)
 	})
 
 	// ── OSTR4 — partner_order_id UUIDv4 validation ─────────────────────────
@@ -268,7 +273,7 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		const app = mountApp()
 		// First create a valid book_hash so the failure is shape-only.
 		await postJson(app, '/api/b2b/v3/search/hp/', SEARCH_BODY)
-		const bookHashes = __listBookHashes()
+		const bookHashes = await currentStore.__listBookHashes()
 		const bookHash = bookHashes[0]?.bookHash
 		if (bookHash === undefined) throw new Error('book_hash missing in state')
 
@@ -310,7 +315,7 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 			language: 'ru',
 			user_ip: '127.0.0.1',
 		})
-		expect(__listFormStages().length).toBe(1)
+		expect((await currentStore.__listFormStages()).length).toBe(1)
 
 		// Advance clock 61 minutes — form-stage now expired.
 		currentMs = baseMs + 61 * 60 * 1000
@@ -324,7 +329,7 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		})
 		expect(finish.status).toBe(400)
 		expect(finish.json).toEqual({ status: 'error', error: 'order_not_found' })
-		expect(__listBookings().length).toBe(0)
+		expect((await currentStore.__listBookings()).length).toBe(0)
 	})
 
 	// ── OSTR6 — Stage 3 happy path + webhook emission ──────────────────────
@@ -379,9 +384,9 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		})
 
 		// Booking persisted; form-stage consumed.
-		expect(__listBookings().length).toBe(1)
-		expect(__listFormStages().length).toBe(0)
-		const booking = __listBookings()[0]
+		expect((await currentStore.__listBookings()).length).toBe(1)
+		expect((await currentStore.__listFormStages()).length).toBe(0)
+		const booking = (await currentStore.__listBookings())[0]
 		if (booking === undefined) throw new Error('booking undefined')
 		expect(booking.partnerOrderId).toBe(partnerOrderId)
 		expect(booking.status).toBe('confirmed')
@@ -536,7 +541,7 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		expect(data.channel_id).toBe('ETG')
 
 		// Booking state mutation persisted.
-		const stored = __listBookings()[0]
+		const stored = (await currentStore.__listBookings())[0]
 		if (stored === undefined) throw new Error('stored undefined')
 		expect(stored.status).toBe('cancelled')
 	})
@@ -717,7 +722,7 @@ describe('Островок / ETG mock-OTA HTTP routes', () => {
 		expect(status).toBe(200)
 		const body = json as { data: { hotels: ReadonlyArray<unknown> } }
 		expect(body.data.hotels).toEqual([])
-		expect(__listBookHashes().length).toBe(0)
+		expect((await currentStore.__listBookHashes()).length).toBe(0)
 	})
 
 	// ── OSTR13 — Cancel non-existent → 404 ─────────────────────────────────

@@ -20,35 +20,40 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { Hono } from 'hono'
 import {
-	__listBookHashes,
-	__resetState as __resetOstrovok,
-	storeBookHash,
-} from '../mock-ota-server/ostrovok/state.ts'
-import {
-	__listBookingTokens,
-	__resetState as __resetYandex,
-	storeBookingToken,
-} from '../mock-ota-server/yandex/state.ts'
+	createInMemoryOstrovokStore,
+	type OstrovokStore,
+} from '../mock-ota-server/ostrovok/store.ts'
+import { createInMemoryYandexStore, type YandexStore } from '../mock-ota-server/yandex/store.ts'
 import { createDemoAdminRoutes, TRIGGER_SCENARIOS } from './admin.routes.ts'
 
-function mountApp() {
-	const router = createDemoAdminRoutes()
+// Round 14.5 — module-scoped stores shared by mountApp + test assertions.
+// beforeEach replaces with fresh instances для test isolation.
+let ostrovokStore: OstrovokStore = createInMemoryOstrovokStore()
+let yandexStore: YandexStore = createInMemoryYandexStore()
+
+function mountApp(opts: { sessionToken?: string; seedDateCount?: number } = {}) {
+	const router = createDemoAdminRoutes({
+		ostrovokStore,
+		yandexStore,
+		...(opts.sessionToken !== undefined && { sessionToken: opts.sessionToken }),
+		...(opts.seedDateCount !== undefined && { seedDateCount: opts.seedDateCount }),
+	})
 	return new Hono().route('/admin', router)
 }
 
 describe('demo OTA admin routes', () => {
-	beforeEach(() => {
-		__resetYandex()
-		__resetOstrovok()
+	beforeEach(async () => {
+		ostrovokStore = createInMemoryOstrovokStore()
+		yandexStore = createInMemoryYandexStore()
 	})
-	afterEach(() => {
-		__resetYandex()
-		__resetOstrovok()
+	afterEach(async () => {
+		await yandexStore.__reset()
+		await ostrovokStore.__reset()
 	})
 
 	it('[ADM1] POST /reset clears state в обоих modules', async () => {
-		// Seed some state directly via state helpers (bypass HTTP layer).
-		storeBookingToken({
+		// Seed some state directly via store helpers (bypass HTTP layer).
+		await yandexStore.storeBookingToken({
 			token: 'PRE_RESET_TOK',
 			hotelId: 'h1',
 			checkinDate: '2027-06-15',
@@ -57,7 +62,7 @@ describe('demo OTA admin routes', () => {
 			children: 0,
 			totalPriceMicros: 6_000_000_000n,
 		})
-		storeBookHash({
+		await ostrovokStore.storeBookHash({
 			bookHash: 'a'.repeat(32),
 			hid: 8473727,
 			checkin: '2027-06-15',
@@ -70,8 +75,8 @@ describe('demo OTA admin routes', () => {
 			roomName: 'Стандарт',
 			mealName: 'Без питания',
 		})
-		expect(__listBookingTokens().length).toBe(1)
-		expect(__listBookHashes().length).toBe(1)
+		expect((await yandexStore.__listBookingTokens()).length).toBe(1)
+		expect((await ostrovokStore.__listBookHashes()).length).toBe(1)
 
 		const app = mountApp()
 		const res = await app.request('/admin/reset', { method: 'POST' })
@@ -85,8 +90,8 @@ describe('demo OTA admin routes', () => {
 		expect(body.cleared.ostrovok).toBe(true)
 
 		// Verify state actually empty after reset.
-		expect(__listBookingTokens().length).toBe(0)
-		expect(__listBookHashes().length).toBe(0)
+		expect((await yandexStore.__listBookingTokens()).length).toBe(0)
+		expect((await ostrovokStore.__listBookHashes()).length).toBe(0)
 	})
 
 	it('[ADM2] POST /reset is idempotent (second call also returns 200)', async () => {
@@ -202,7 +207,7 @@ describe('demo OTA admin routes', () => {
 	})
 
 	it('[ADM10] POST /seed accepts seedDateCount override via factory', async () => {
-		const router = createDemoAdminRoutes({ seedDateCount: 5 })
+		const router = createDemoAdminRoutes({ ostrovokStore, yandexStore, seedDateCount: 5 })
 		const app = new Hono().route('/admin', router)
 		const res = await app.request('/admin/seed', { method: 'POST' })
 		const body = (await res.json()) as {
@@ -214,14 +219,18 @@ describe('demo OTA admin routes', () => {
 	// ── Round 11 P1-B2 — admin session token gate ─────────────────────────
 	describe('Round 11 P1-B2 — session token gating', () => {
 		it('[ADM11] sessionToken empty → unauthenticated request passes (test mode)', async () => {
-			const router = createDemoAdminRoutes() // no token
+			const router = createDemoAdminRoutes({ ostrovokStore, yandexStore }) // no token
 			const app = new Hono().route('/admin', router)
 			const res = await app.request('/admin/reset', { method: 'POST' })
 			expect(res.status).toBe(200)
 		})
 
 		it('[ADM12] sessionToken set + missing header → 401', async () => {
-			const router = createDemoAdminRoutes({ sessionToken: 'demo_admin_abc123' })
+			const router = createDemoAdminRoutes({
+				ostrovokStore,
+				yandexStore,
+				sessionToken: 'demo_admin_abc123',
+			})
 			const app = new Hono().route('/admin', router)
 			const res = await app.request('/admin/reset', { method: 'POST' })
 			expect(res.status).toBe(401)
@@ -230,7 +239,11 @@ describe('demo OTA admin routes', () => {
 		})
 
 		it('[ADM13] sessionToken set + wrong header → 401', async () => {
-			const router = createDemoAdminRoutes({ sessionToken: 'demo_admin_abc123' })
+			const router = createDemoAdminRoutes({
+				ostrovokStore,
+				yandexStore,
+				sessionToken: 'demo_admin_abc123',
+			})
 			const app = new Hono().route('/admin', router)
 			const res = await app.request('/admin/reset', {
 				method: 'POST',
@@ -240,7 +253,11 @@ describe('demo OTA admin routes', () => {
 		})
 
 		it('[ADM14] sessionToken set + correct header → 200', async () => {
-			const router = createDemoAdminRoutes({ sessionToken: 'demo_admin_abc123' })
+			const router = createDemoAdminRoutes({
+				ostrovokStore,
+				yandexStore,
+				sessionToken: 'demo_admin_abc123',
+			})
 			const app = new Hono().route('/admin', router)
 			const res = await app.request('/admin/reset', {
 				method: 'POST',

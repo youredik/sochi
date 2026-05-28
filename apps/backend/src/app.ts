@@ -12,6 +12,8 @@ import { auth } from './auth.ts'
 import { startMigrationDeadlineMonitor } from './cron/epgu-deadline-monitor.ts'
 import { driver, sql } from './db/index.ts'
 import { registerDemoRoutes } from './domains/_demo/index.ts'
+import { createYdbOstrovokStore } from './domains/_demo/mock-ota-server/ostrovok/store.ydb.ts'
+import { createYdbYandexStore } from './domains/_demo/mock-ota-server/yandex/store.ydb.ts'
 import { seedDemoChannelInfra } from './domains/_demo/seed.ts'
 import { createActivityFactory } from './domains/activity/activity.factory.ts'
 import { createActivityRoutes } from './domains/activity/activity.routes.ts'
@@ -163,6 +165,12 @@ if (env.APP_MODE !== 'production') {
 		{ token: adminSessionToken },
 		'Round 11 P1-B2 — demo admin session token (use as X-Demo-Session-Token header)',
 	)
+	// Round 14.5 — YDB-backed stores закрывают multi-instance race (canon
+	// feedback_round_14_self_review_6_rollback_lessons_2026_05_27). Both
+	// stores scope to `demo-tenant`; YC Serverless container scale-out
+	// teперь shares state via central YDB instead of per-instance Maps.
+	const ostrovokStore = createYdbOstrovokStore(sql, { tenantId: demoTenantId })
+	const yandexStore = createYdbYandexStore(sql, { tenantId: demoTenantId })
 	registerDemoRoutes(app, {
 		tenantId: demoTenantId,
 		yandexPropertyId: demoPropertyId,
@@ -170,6 +178,8 @@ if (env.APP_MODE !== 'production') {
 		webhookTargetBaseUrl: 'http://localhost:8787',
 		webhookSecret: demoWebhookSecret,
 		adminSessionToken,
+		ostrovokStore,
+		yandexStore,
 	})
 	// Round 12 polish — promise captured, NOT fire-and-forget. `index.ts`
 	// awaits before `serve()` to close the 100 ms cold-start race window
