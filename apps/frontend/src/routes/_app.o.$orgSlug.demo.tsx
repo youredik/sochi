@@ -13,9 +13,9 @@
  * see a banner directing them к `/setup` wizard. Closes UX trap caught
  * post-Phase-C self-review — magic-link wow redirect lands здесь без
  * properties, sidebar items needing propertyId render hidden/disabled,
- * user could get stuck not knowing how to onboard. Banner is dismissable
- * (visit-scope only — re-shows after page reload) so a hotelier ходящий
- * по demo flow без commit could revisit setup later.
+ * user could get stuck not knowing how to onboard. Banner deferred к
+ * `OnboardingHintBanner` standalone component (Phase F.bis) for test
+ * isolation — its test does not need to mock the route runtime.
  *
  * Architectural rationale: каждый отель имеет свою копию demo OTA в
  * своём кабинете (user strategic vision 2026-05-28). Webhook secret +
@@ -25,9 +25,10 @@
  * Canon: `feedback_round_14_6_per_tenant_demo_canon_2026_05_28.md`.
  */
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { z } from 'zod'
+import { OnboardingHintBanner } from '../_demo/onboarding/onboarding-hint-banner.tsx'
 import { ShowcasePage } from '../_demo/side-by-side/showcase-page.tsx'
 import { propertiesQueryOptions } from '../features/receivables/hooks/use-receivables.ts'
 
@@ -54,33 +55,11 @@ function TenantDemoRoute() {
 
 	return (
 		<div className="flex h-screen flex-col">
-			{showOnboardingHint ? (
-				<div
-					role="status"
-					data-testid="demo-onboarding-hint"
-					className="flex items-center justify-between gap-3 border-amber-200 border-b bg-amber-50 px-4 py-2 text-amber-900 text-sm dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
-				>
-					<p>
-						Это демо-режим — брони не настоящие. Чтобы начать принимать настоящие бронирования,{' '}
-						<Link
-							to="/o/$orgSlug/setup"
-							params={{ orgSlug }}
-							className="underline underline-offset-2 hover:no-underline"
-						>
-							создайте свою гостиницу
-						</Link>
-						.
-					</p>
-					<button
-						type="button"
-						onClick={() => setBannerDismissed(true)}
-						className="shrink-0 rounded px-2 py-1 hover:bg-amber-100 dark:hover:bg-amber-900"
-						aria-label="Скрыть подсказку"
-					>
-						×
-					</button>
-				</div>
-			) : null}
+			<OnboardingHintBanner
+				visible={showOnboardingHint}
+				orgSlug={orgSlug}
+				onDismiss={() => setBannerDismissed(true)}
+			/>
 			<div className="min-h-0 flex-1">
 				<ShowcasePage
 					initialChannel={search.channel ?? 'yandex'}
