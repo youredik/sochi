@@ -22,6 +22,12 @@ const STEP_LABELS: Record<'identify' | 'inventory', string> = {
  * loop end-to-end. They can then dismiss and head к /grid manually
  * (sidebar nav or /o/$slug/ dashboard).
  *
+ * **Round 14.6.4 copy fix:** subtitle no longer promises «шахматка» — that
+ * was stale copy от pre-Round-14.6.2 flow когда finish redirect шёл в /grid.
+ * Сейчас destination = `/o/$orgSlug/demo` (живая демо OTA + PMS split-pane),
+ * subtitle сменён на «свой демо-кабинет» canon. Caught empirical browser
+ * walk 2026-05-28 — копи drift между подзаголовком и cursor-trail.
+ *
  * Cache eviction: `removeQueries({queryKey: ['properties']})` deletes the
  * dashboard guard's cached empty list so its next `ensureQueryData` re-
  * runs the queryFn and sees the newly-created property. Without this, the
@@ -48,7 +54,7 @@ export function WizardShell() {
 		<main className="mx-auto max-w-xl px-6 py-12">
 			<header className="space-y-1">
 				<h1 className="text-2xl font-semibold tracking-tight">Заводим гостиницу</h1>
-				<p className="text-sm text-muted-foreground">Два шага — и вы в шахматке.</p>
+				<p className="text-sm text-muted-foreground">Два шага — и попадёте в свой демо-кабинет.</p>
 			</header>
 
 			<ProgressIndicator currentStep={step === 'done' ? 'inventory' : step} />

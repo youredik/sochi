@@ -1,5 +1,4 @@
 import type { City } from '@horeca/shared'
-import { useParams } from '@tanstack/react-router'
 import { type FormEvent, useEffect, useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -49,7 +48,6 @@ export function InventoryStep() {
 	const nameId = useId()
 	const addressId = useId()
 	const cityId = useId()
-	const { orgSlug } = useParams({ from: '/_app/o/$orgSlug/setup' })
 	const party = useWizardStore((s) => s.party)
 	const manualOverride = useWizardStore((s) => s.manualOverride)
 	const rooms = useWizardStore((s) => s.rooms)
@@ -259,7 +257,7 @@ export function InventoryStep() {
 					← Назад
 				</Button>
 				<Button type="submit" size="lg" disabled={!canSubmit}>
-					{bulk.isPending ? 'Создаём…' : `Готово → /o/${orgSlug}/demo`}
+					{bulk.isPending ? 'Создаём…' : 'Готово → Демо OTA'}
 				</Button>
 			</div>
 

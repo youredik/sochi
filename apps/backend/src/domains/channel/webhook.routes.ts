@@ -102,11 +102,67 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
 		const rawBuffer = await c.req.raw.arrayBuffer()
 		const rawBody = new Uint8Array(rawBuffer)
 
-		// Step 2 — signature verification.
+		// Step 2 — parse CloudEvents envelope FIRST so we can extract tenantId
+		// from source URN BEFORE narrowing accepted secrets. Round 14.6.4 fix
+		// (2026-05-28) per `feedback_round_14_6_per_tenant_demo_canon`: the
+		// previous order called `listAccepted(channelId)` UNFILTERED, so the
+		// verifier saw every tenant's `kid_demo_<orgId>` row. With N per-tenant
+		// demo orgs all sharing `env.DEMO_WEBHOOK_SECRET` value, multiple slots
+		// matched the same signature → first-match wins (newest activatedAt) →
+		// matched.kid belonged to a DIFFERENT tenant → Round 11 P1-B3 binding
+		// check fired 403 `webhook_secret_tenant_mismatch` for legitimate
+		// per-tenant demos. Empirically caught browser walk на demo.sepshn.ru
+		// after 2+ orgs signed up — wow-effect silently broken (booking returned
+		// 200 to OTA frontend but inbox row never landed → PMS grid stayed empty).
+		//
+		// Narrowing `listAccepted(channelId, tenantId)` to (tenantId OR NULL) at
+		// step 6 below ensures the verifier ONLY considers candidates bound к the
+		// claimed source-URN tenant. Cross-tenant URN forgery still rejected, but
+		// status surfaces as 401 `no_matching_secret` (verifier never saw a
+		// candidate to match) — стрictly safer than the prior 403 path.
+		const decoder = new TextDecoder('utf-8', { fatal: false })
+		let parsedJson: unknown
+		try {
+			parsedJson = JSON.parse(decoder.decode(rawBody))
+		} catch {
+			return c.json({ error: 'malformed_json' }, 400)
+		}
+		const event = parseCloudEvent(parsedJson)
+		if (event === null) {
+			return c.json({ error: 'malformed_envelope' }, 400)
+		}
+
+		// Step 3 — extract tenantId + channelCode from source URN.
+		const tenantId = extractTenantId(event.source)
+		if (tenantId === null) {
+			return c.json({ error: 'malformed_source' }, 400)
+		}
+		const channelCodeFromSource = extractChannelCode(event.source)
+		if (channelCodeFromSource === null) {
+			return c.json({ error: 'malformed_source' }, 400)
+		}
+		// Round 8 P1-6 — channelCode-vs-route guard (URN-injection defense).
+		if (channelCodeFromSource !== channelId) {
+			return c.json(
+				{
+					error: 'channel_mismatch',
+					expectedChannelId: channelId,
+					sourceChannelCode: channelCodeFromSource,
+				},
+				400,
+			)
+		}
+
+		// Step 4 — signature verification, tenant-scoped.
 		const webhookId = c.req.header('webhook-id') ?? ''
 		const timestamp = c.req.header('webhook-timestamp') ?? ''
 		const signature = c.req.header('webhook-signature') ?? ''
-		const acceptedSecrets = await deps.secretRepo.listAccepted(channelId)
+		// Round 14.6.4 — narrow к tenantId so per-tenant demo OTA's
+		// kid_demo_<orgId> rows (all sharing the same secret VALUE via
+		// `env.DEMO_WEBHOOK_SECRET`) don't cross-match each other. NULL-tenantId
+		// rows (legacy back-compat — pre-Round-11) remain candidates per
+		// listAccepted semantics, preserving WHR14 contract.
+		const acceptedSecrets = await deps.secretRepo.listAccepted(channelId, tenantId)
 
 		let verifyResult: VerifyResult | null = null
 		let usedIpFallback = false
@@ -122,7 +178,7 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
 				acceptedSecrets,
 			)
 		} else {
-			// Step 3 — IP-allowlist fallback (signature header absent).
+			// Step 4.b — IP-allowlist fallback (signature header absent).
 			const allow = deps.ipAllowlist?.get(channelId) ?? []
 			if (allow.length === 0) {
 				return c.json({ error: 'missing_signature' }, 400)
@@ -144,42 +200,8 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
 		}
 		const matchedKid = verifyResult?.ok ? verifyResult.kid : null
 
-		// Step 4 — parse CloudEvents envelope.
-		const decoder = new TextDecoder('utf-8', { fatal: false })
-		let parsedJson: unknown
-		try {
-			parsedJson = JSON.parse(decoder.decode(rawBody))
-		} catch {
-			return c.json({ error: 'malformed_json' }, 400)
-		}
-		const event = parseCloudEvent(parsedJson)
-		if (event === null) {
-			return c.json({ error: 'malformed_envelope' }, 400)
-		}
-
-		// Step 5 — classify.
+		// Step 5 — classify-prep + body-hash.
 		const bodyHash = computeBodyHash(rawBody)
-		const tenantId = extractTenantId(event.source)
-		if (tenantId === null) {
-			return c.json({ error: 'malformed_source' }, 400)
-		}
-
-		// Round 8 P1-6: verify channelCode in source URN matches route channelId
-		// (prevents URN-injection that re-routes to wrong adapter).
-		const channelCodeFromSource = extractChannelCode(event.source)
-		if (channelCodeFromSource === null) {
-			return c.json({ error: 'malformed_source' }, 400)
-		}
-		if (channelCodeFromSource !== channelId) {
-			return c.json(
-				{
-					error: 'channel_mismatch',
-					expectedChannelId: channelId,
-					sourceChannelCode: channelCodeFromSource,
-				},
-				400,
-			)
-		}
 
 		// Round 8 P1-6: verify (tenantId-from-URN, channelId-from-route) has an
 		// active enabled connection. Without this, a forged source URN с valid
@@ -213,11 +235,11 @@ export function createChannelWebhookRoutes(deps: ChannelWebhookHandlerDeps) {
 			)
 		}
 
-		// Round 11 P1-B3 — verify matched-secret's tenantId binding.
-		// Round 8 P1-6 alone insufficient: when BOTH attacker + victim have
-		// enabled YT connections, channel-shared secret allowed cross-tenant URN
-		// forge. Round 11 binds secret к (channelId, tenantId): NULL row =
-		// legacy back-compat (any tenant); explicit row must match URN tenantId.
+		// Round 11 P1-B3 — verify matched-secret's tenantId binding. Defense-
+		// in-depth: после Round 14.6.4 listAccepted уже narrows к tenantId so
+		// этот check теоретически redundant для non-NULL rows; kept as belt-and-
+		// suspenders against `listAccepted` regression. NULL tenantId guard
+		// preserves WHR14 legacy back-compat path.
 		if (matchedKid !== null) {
 			const matched = await deps.secretRepo.getByKid({ channelId, kid: matchedKid })
 			if (matched !== null && matched.tenantId !== null && matched.tenantId !== tenantId) {
