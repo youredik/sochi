@@ -49,6 +49,15 @@ tmp/
 # Reports rotate per-run + uploaded ad-hoc; not source-of-truth state.
 .lighthouseci/
 
+# Playwright MCP debug artifacts (page snapshots, console logs от Claude
+# Code Playwright MCP server runs — regenerable, не для repo).
+.playwright-mcp/
+
+# Local ad-hoc debug screenshots (prod-*, local-*, *-screenshot.png).
+local-*.png
+prod-*.png
+*-screenshot.png
+
 # Misc
 *.log
 .DS_Store
