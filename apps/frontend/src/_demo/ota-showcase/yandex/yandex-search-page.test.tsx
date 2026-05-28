@@ -11,8 +11,10 @@
  *   [R7] footer disclaimer with «ООО „Яндекс.Путешествия"» legal note present
  */
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { DEFAULT_HOTEL_ID } from './api-client.ts'
 import { YandexSearchPage } from './yandex-search-page.tsx'
 
@@ -20,21 +22,37 @@ afterEach(() => {
 	cleanup()
 })
 
+/**
+ * Round 14.6.4 follow-up — `<YandexSearchPage>` now consumes session via
+ * `useDemoHotelIdForSession` hook (`useQuery(sessionQueryOptions)`). Tests
+ * MUST wrap render с QueryClientProvider. Each test instantiates a fresh
+ * client to ensure isolation (no shared cache state across tests). The
+ * fresh client returns `undefined` для sessionQueryOptions until queryFn
+ * resolves — the hook's fallback path (`DEFAULT_HOTEL_ID`) covers this
+ * pre-fetch state, so the submit shape matches the historical expectation.
+ */
+function renderWithQueryClient(node: ReactNode) {
+	const client = new QueryClient({
+		defaultOptions: { queries: { retry: false, gcTime: 0 } },
+	})
+	return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>)
+}
+
 describe('<YandexSearchPage>', () => {
 	test('[R1] DemoDisclaimerBanner present', () => {
-		render(<YandexSearchPage onSearch={() => {}} />)
+		renderWithQueryClient(<YandexSearchPage onSearch={() => {}} />)
 		expect(screen.getByTestId('demo-disclaimer-banner').textContent).toContain(
 			'Демонстрация Sepshn',
 		)
 	})
 
 	test('[R2] h1 exact text', () => {
-		render(<YandexSearchPage onSearch={() => {}} />)
+		renderWithQueryClient(<YandexSearchPage onSearch={() => {}} />)
 		expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Куда вы хотите поехать?')
 	})
 
 	test('[R3] all 4 form inputs render', () => {
-		render(<YandexSearchPage onSearch={() => {}} />)
+		renderWithQueryClient(<YandexSearchPage onSearch={() => {}} />)
 		expect(screen.getByLabelText('Заезд').getAttribute('type')).toBe('date')
 		expect(screen.getByLabelText('Выезд').getAttribute('type')).toBe('date')
 		expect(screen.getByLabelText('Взрослые').getAttribute('type')).toBe('number')
@@ -42,7 +60,7 @@ describe('<YandexSearchPage>', () => {
 	})
 
 	test('[R4] inputs have non-empty default values', () => {
-		render(<YandexSearchPage onSearch={() => {}} />)
+		renderWithQueryClient(<YandexSearchPage onSearch={() => {}} />)
 		const checkin = screen.getByLabelText('Заезд') as HTMLInputElement
 		const checkout = screen.getByLabelText('Выезд') as HTMLInputElement
 		const adults = screen.getByLabelText('Взрослые') as HTMLInputElement
@@ -54,13 +72,13 @@ describe('<YandexSearchPage>', () => {
 	})
 
 	test('[R5] Yandex.Путешествия wordmark rendered', () => {
-		render(<YandexSearchPage onSearch={() => {}} />)
+		renderWithQueryClient(<YandexSearchPage onSearch={() => {}} />)
 		expect(screen.getByTestId('yandex-wordmark').textContent).toBe('Yandex.Путешествия')
 	})
 
 	test('[R6] submit invokes onSearch with form values', () => {
 		let captured: Parameters<Parameters<typeof YandexSearchPage>[0]['onSearch']>[0] | null = null
-		render(<YandexSearchPage onSearch={(p) => (captured = p)} />)
+		renderWithQueryClient(<YandexSearchPage onSearch={(p) => (captured = p)} />)
 		const checkin = screen.getByLabelText('Заезд') as HTMLInputElement
 		const checkout = screen.getByLabelText('Выезд') as HTMLInputElement
 		const adults = screen.getByLabelText('Взрослые') as HTMLInputElement
@@ -86,7 +104,7 @@ describe('<YandexSearchPage>', () => {
 		// incorrect (ИНН 7704735704 belongs to ООО „ЯНДЕКС.ТАКСИ"). New
 		// phrasing is jurisdiction-neutral and includes «ООО „Яндекс"» without
 		// inventing a specific subsidiary entity that may not exist.
-		render(<YandexSearchPage onSearch={() => {}} />)
+		renderWithQueryClient(<YandexSearchPage onSearch={() => {}} />)
 		const footer = screen.getByTestId('demo-disclaimer-footer')
 		expect(footer.textContent).toContain('ООО „Яндекс"')
 		expect(footer.textContent).toContain('собственность соответствующих правообладателей')
