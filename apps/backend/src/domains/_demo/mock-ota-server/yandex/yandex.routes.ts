@@ -129,27 +129,29 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 	// Round 14.6 — per-tenant mockAdapter cache. Each tenant gets own FSM
 	// + HMAC + sequence machinery; lazy-instantiated on first request.
 	// Round 14.6.4 — propertyId derived per-tenant via `resolveDemoPropertyId`
-	// (was mount-time constant, breaking per-tenant identity — см. options
-	// docstring above).
+	// (was mount-time constant, breaking per-tenant identity).
 	//
-	// **Concurrency invariant** (Round 14.6.4 follow-up defensive audit):
-	// `createYandexTravelMock` is SYNCHRONOUS (returns plain object). Within
-	// JS single-threaded event loop semantics + no `await` between `Map.get`
-	// and `Map.set`, this lazy-init pattern is atomic per microtask. Adding
-	// any `await` between the read and write would introduce a race
-	// (two concurrent requests for same tenant create two adapters, second
-	// overwrites first, diverged in-memory state). The factory contract
-	// MUST stay synchronous. Regression-pinned by [YTR-CONCURRENT] test
-	// asserting parallel `Promise.all` calls return identical adapter instance.
-	const mockAdapterCache = new Map<string, ReturnType<typeof createYandexTravelMock>>()
-	function getMockAdapter(tenantId: string): ReturnType<typeof createYandexTravelMock> {
+	// **Concurrency invariant** (Round 14.6.4 follow-up defensive fix):
+	// Cache stores `Promise<Adapter>` (not bare adapter). Lazy-init wraps
+	// the factory call в IIFE — Promise stored synchronously inside the
+	// `get`/`set` boundary, so concurrent requests for the same tenantId
+	// receive the SAME Promise instance regardless of whether the factory
+	// becomes async later. Adds one microtask k-each-call cost (negligible
+	// vs HTTP roundtrip + YDB write) but eliminates ANY race possibility
+	// — including hypothetical future `async createYandexTravelMock`.
+	// Canonical 2026 lazy-init memoization pattern (web research 28.05.2026).
+	// Regression-pinned by [YTR-CONCURRENT] test asserting 50 parallel
+	// `Promise.all` calls share the same adapter state.
+	const mockAdapterCache = new Map<string, Promise<ReturnType<typeof createYandexTravelMock>>>()
+	function getMockAdapter(tenantId: string): Promise<ReturnType<typeof createYandexTravelMock>> {
 		const cached = mockAdapterCache.get(tenantId)
 		if (cached !== undefined) return cached
-		const fresh = createYandexTravelMock({
-			tenantId,
-			propertyId: resolveDemoPropertyId(tenantId),
-			nightRateMicros: DEMO_NIGHT_RATE_MICROS,
-		})
+		const fresh = (async () =>
+			createYandexTravelMock({
+				tenantId,
+				propertyId: resolveDemoPropertyId(tenantId),
+				nightRateMicros: DEMO_NIGHT_RATE_MICROS,
+			}))()
 		mockAdapterCache.set(tenantId, fresh)
 		return fresh
 	}
@@ -328,7 +330,7 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 
 		// Step 4 — verify + create через production-grade Round 8 adapter.
 		// Round 14.6.4 — propertyId per-tenant via resolveDemoPropertyId.
-		const mockAdapter = getMockAdapter(c.var.tenantId)
+		const mockAdapter = await getMockAdapter(c.var.tenantId)
 		const verifyResult = await mockAdapter.verifyBooking({
 			tenantId: c.var.tenantId,
 			propertyId: resolveDemoPropertyId(c.var.tenantId),
@@ -445,7 +447,7 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		// First successful cancel — propagate к Round 8 adapter (so its FSM also
 		// transitions) и fire CloudEvents webhook.
 		const idempotencyKey = `demo-cancel-${orderId}`
-		const mockAdapter = getMockAdapter(c.var.tenantId)
+		const mockAdapter = await getMockAdapter(c.var.tenantId)
 		await mockAdapter.cancelReservation({
 			tenantId: c.var.tenantId,
 			externalId: order.externalReservationId,

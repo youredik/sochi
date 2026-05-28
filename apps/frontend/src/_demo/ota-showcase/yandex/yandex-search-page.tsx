@@ -18,11 +18,41 @@
  *   - footer affiliation disclaimer
  */
 
+import { useQuery } from '@tanstack/react-query'
 import { useId, useState } from 'react'
+import { sessionQueryOptions } from '../../../lib/auth-client.ts'
 import { yandexBrandTokens } from '../shared/brand-tokens.ts'
 import { DemoDisclaimerBanner, type DemoOtaBrand } from '../shared/demo-disclaimer-banner.tsx'
 import { dateRangeErrorMessage, validateDateRange } from '../shared/validate-date-range.ts'
 import { DEFAULT_HOTEL_ID } from './api-client.ts'
+
+/**
+ * Round 14.6.4 follow-up — derive hotelId per-tenant from authed session.
+ *
+ * Pre-fix: hotelId was hardcoded к `DEFAULT_HOTEL_ID='demo-hotel-sochi'` для
+ * EVERY visitor → URL `/property/demo-hotel-sochi` rendered identically для
+ * anonymous AND authed cabinet visitors. Backend now derives propertyId from
+ * `c.var.tenantId` (Round 14.6.4 `resolveDemoPropertyId(c.var.tenantId)`) so
+ * webhook + booking row land под the correct per-tenant scope, but frontend
+ * URL slug stayed legacy → cosmetic drift.
+ *
+ * Canonical fix — frontend reads session via Better Auth `sessionQueryOptions`.
+ * If active org present → derive matching per-tenant value (`demoprop_<orgId>`).
+ * If anonymous → fall back к `DEFAULT_HOTEL_ID` (`'demo-hotel-sochi'`) which
+ * mirrors backend's `resolveDemoPropertyId('demo-tenant')` legacy carve-out.
+ *
+ * Single source of truth canon — both sides derive from same authenticated
+ * tenant identifier (web research 28.05.2026 «never trust per-tenant
+ * identifier from request body/query; always derive from auth token»).
+ */
+function useDemoHotelIdForSession(): string {
+	const session = useQuery(sessionQueryOptions)
+	const activeOrgId = session.data?.session?.activeOrganizationId
+	if (typeof activeOrgId === 'string' && activeOrgId.length > 0) {
+		return `demoprop_${activeOrgId}`
+	}
+	return DEFAULT_HOTEL_ID
+}
 
 const BRAND: DemoOtaBrand = 'yandex'
 
@@ -52,6 +82,8 @@ export function YandexSearchPage({ onSearch }: YandexSearchPageProps) {
 
 	// Round 12 R12V-1 + self-review SR-4 — shared validator (drift-proof).
 	const [dateError, setDateError] = useState<string | null>(null)
+	// Round 14.6.4 follow-up — per-tenant hotelId from session.
+	const hotelId = useDemoHotelIdForSession()
 
 	function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
 		e.preventDefault()
@@ -62,7 +94,7 @@ export function YandexSearchPage({ onSearch }: YandexSearchPageProps) {
 		}
 		setDateError(null)
 		onSearch({
-			hotelId: DEFAULT_HOTEL_ID,
+			hotelId,
 			checkinDate,
 			checkoutDate,
 			adults,

@@ -38,6 +38,7 @@ import { InvalidBookingTransitionError, NoInventoryError } from '../errors/domai
 import { frozenTimeProvider } from '../lib/time-provider.ts'
 import { sql } from './index.ts'
 import { assertSeedState } from './verify-seed.ts'
+import { demoPropertyIdForOrg } from '../lib/demo-channel-seed.ts'
 import { dateFromIso, NULL_INT32, NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from './ydb-helpers.ts'
 
 const TENANT_ID = 'demo-sochi-sirius'
@@ -46,7 +47,14 @@ const SLUG = 'demo-sirius'
 // M9.widget.1 — MVP property + roomTypes для public widget endpoint.
 // Полный polish (5-7 rooms + photos + 14d availability + reviews + JSON-LD)
 // — М9.widget.8 demo polish sub-phase.
-const DEMO_PROPERTY_ID = 'demo-prop-sirius-main'
+//
+// Round 14.6.4 follow-up — derive via canonical `demoPropertyIdForOrg`
+// helper (single source of truth для per-tenant demo property shape).
+// Pre-fix this was a 4th hardcoded `'demo-prop-sirius-main'` literal I
+// missed in the propertyId sweep (commit 85c5bf8) — caught by adversarial
+// self-review per `feedback_self_review_finds_halfmeasure`. Grepping the
+// codebase confirmed zero external references к the old literal value.
+const DEMO_PROPERTY_ID = demoPropertyIdForOrg(TENANT_ID)
 const DEMO_ROOM_TYPE_DELUXE_ID = 'demo-roomtype-deluxe'
 const DEMO_ROOM_TYPE_STANDARD_ID = 'demo-roomtype-standard'
 
