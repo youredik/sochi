@@ -233,43 +233,37 @@ export function createInboundBookingHandler(deps: InboundBookingHandlerDeps) {
 			return { handled: false, skipReason: 'malformed_data' }
 		}
 
-		// Look up tenant's inventory — first roomType + ratePlan for the
-		// per-tenant property. Demo bookings land on whatever inventory the
-		// hotelier set up в setup wizard (one roomType + one ratePlan typical).
-		const [roomTypeRows = []] = await deps.sql<[{ id: string }]>`
-			SELECT id FROM roomType
-			WHERE tenantId = ${tenantId} AND propertyId = ${propertyId}
-			ORDER BY createdAt ASC
-			LIMIT 1
-		`
-			.isolation('snapshotReadOnly')
-			.idempotent(true)
-		const roomTypeId = roomTypeRows[0]?.id
-		if (roomTypeId === undefined) {
+		// Round 14.6.4 follow-up — resolve inventory с tenant-wide fallback.
+		//
+		// Round 14.6 `afterCreateOrganization` seeds `channelConnection.propertyId
+		// = demoprop_<orgId>` (synthetic ID). Wizard later creates a REAL property
+		// (с typeid `prop_<...>`) and bulk-creates roomType + ratePlan под
+		// REAL propertyId. Synthetic ID has no inventory.
+		//
+		// Empirically caught на demo.sepshn.ru 2026-05-28 browser walk: signup
+		// → wizard → demo booking → A7.5 handler looked up roomType under
+		// synthetic `demoprop_<orgId>` → no rows → handler skip с
+		// `no_inventory` → booking row never created → PMS Шахматка пустая →
+		// wow-effect silent break.
+		//
+		// Fix: prefer inventory under `channelConnection.propertyId` (synthetic
+		// per-tenant scope canon); fall back к tenant's FIRST property с
+		// inventory if synthetic has none. Logs the fallback decision for
+		// operator visibility.
+		const inventory = await resolveTenantInventory(deps.sql, tenantId, propertyId)
+		if (inventory === null) {
 			logger.warn(
 				{ tenantId, propertyId },
-				'inbound_booking_handler_no_room_type — tenant inventory empty',
+				'inbound_booking_handler_no_inventory — tenant has no roomType/ratePlan',
 			)
 			return { handled: false, skipReason: 'no_inventory' }
 		}
-
-		const [ratePlanRows = []] = await deps.sql<[{ id: string }]>`
-			SELECT id FROM ratePlan
-			WHERE tenantId = ${tenantId}
-			  AND propertyId = ${propertyId}
-			  AND roomTypeId = ${roomTypeId}
-			ORDER BY createdAt ASC
-			LIMIT 1
-		`
-			.isolation('snapshotReadOnly')
-			.idempotent(true)
-		const ratePlanId = ratePlanRows[0]?.id
-		if (ratePlanId === undefined) {
-			logger.warn(
-				{ tenantId, propertyId, roomTypeId },
-				'inbound_booking_handler_no_rate_plan — tenant inventory incomplete',
+		const { roomTypeId, ratePlanId, resolvedPropertyId } = inventory
+		if (resolvedPropertyId !== propertyId) {
+			logger.info(
+				{ tenantId, synthetic: propertyId, resolved: resolvedPropertyId },
+				'inbound_booking_handler_property_fallback — demoprop has no inventory; using tenant first property',
 			)
-			return { handled: false, skipReason: 'no_inventory' }
 		}
 
 		// Synthetic primary guest — for demo bookings we generate a guest
@@ -295,7 +289,7 @@ export function createInboundBookingHandler(deps: InboundBookingHandlerDeps) {
 		try {
 			const booking = await deps.bookingService.create(
 				tenantId,
-				propertyId,
+				resolvedPropertyId,
 				{
 					roomTypeId,
 					ratePlanId,
@@ -318,7 +312,7 @@ export function createInboundBookingHandler(deps: InboundBookingHandlerDeps) {
 			logger.info(
 				{
 					tenantId,
-					propertyId,
+					propertyId: resolvedPropertyId,
 					bookingId: booking.id,
 					channelId,
 					externalId: normalized.externalId,
@@ -347,6 +341,91 @@ export function createInboundBookingHandler(deps: InboundBookingHandlerDeps) {
 			)
 			throw e
 		}
+	}
+}
+
+/**
+ * Round 14.6.4 follow-up — resolve tenant inventory с fallback.
+ *
+ * Returns the first available (roomTypeId, ratePlanId) tuple for the tenant,
+ * preferring the channelConnection-scoped `preferredPropertyId` (synthetic
+ * Round 14.6 demoprop) but falling back к ANY tenant property с inventory
+ * if synthetic is empty. Returns null если tenant has zero inventory.
+ *
+ * Resolution path:
+ *   1. Try `preferredPropertyId` (channelConnection canonical scope).
+ *   2. If empty, query tenant's roomTypes ordered by createdAt, pick first.
+ *   3. Look up matching ratePlan для that roomType.
+ *
+ * Logs at info level when fallback fires so operators can see the synthetic-
+ * vs-real property drift (Round 14.6.4 wow-effect chain known issue —
+ * `afterCreateOrganization` seeds synthetic but wizard creates real).
+ */
+export async function resolveTenantInventory(
+	sql: ReturnType<typeof query>,
+	tenantId: string,
+	preferredPropertyId: string,
+): Promise<{ roomTypeId: string; ratePlanId: string; resolvedPropertyId: string } | null> {
+	// Step 1 — try preferred propertyId scope.
+	const [preferredRoomTypes = []] = await sql<[{ id: string }]>`
+		SELECT id FROM roomType
+		WHERE tenantId = ${tenantId} AND propertyId = ${preferredPropertyId}
+		ORDER BY createdAt ASC
+		LIMIT 1
+	`
+		.isolation('snapshotReadOnly')
+		.idempotent(true)
+	const preferredRoomTypeId = preferredRoomTypes[0]?.id
+	if (preferredRoomTypeId !== undefined) {
+		const [preferredRatePlans = []] = await sql<[{ id: string }]>`
+			SELECT id FROM ratePlan
+			WHERE tenantId = ${tenantId}
+			  AND propertyId = ${preferredPropertyId}
+			  AND roomTypeId = ${preferredRoomTypeId}
+			ORDER BY createdAt ASC
+			LIMIT 1
+		`
+			.isolation('snapshotReadOnly')
+			.idempotent(true)
+		const preferredRatePlanId = preferredRatePlans[0]?.id
+		if (preferredRatePlanId !== undefined) {
+			return {
+				roomTypeId: preferredRoomTypeId,
+				ratePlanId: preferredRatePlanId,
+				resolvedPropertyId: preferredPropertyId,
+			}
+		}
+	}
+
+	// Step 2 — fallback: tenant's first property с inventory.
+	const [fallbackRoomTypes = []] = await sql<[{ id: string; propertyId: string }]>`
+		SELECT id, propertyId FROM roomType
+		WHERE tenantId = ${tenantId}
+		ORDER BY createdAt ASC
+		LIMIT 1
+	`
+		.isolation('snapshotReadOnly')
+		.idempotent(true)
+	const fallbackRow = fallbackRoomTypes[0]
+	if (fallbackRow === undefined) return null
+
+	const [fallbackRatePlans = []] = await sql<[{ id: string }]>`
+		SELECT id FROM ratePlan
+		WHERE tenantId = ${tenantId}
+		  AND propertyId = ${fallbackRow.propertyId}
+		  AND roomTypeId = ${fallbackRow.id}
+		ORDER BY createdAt ASC
+		LIMIT 1
+	`
+		.isolation('snapshotReadOnly')
+		.idempotent(true)
+	const fallbackRatePlanId = fallbackRatePlans[0]?.id
+	if (fallbackRatePlanId === undefined) return null
+
+	return {
+		roomTypeId: fallbackRow.id,
+		ratePlanId: fallbackRatePlanId,
+		resolvedPropertyId: fallbackRow.propertyId,
 	}
 }
 

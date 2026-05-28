@@ -121,3 +121,97 @@ describe('createInboundBookingHandler — Round 14.6.4 A7.5 wow-effect', () => {
 		expect(result.skipReason).toBe('malformed_data')
 	})
 })
+
+/**
+ * Round 14.6.4 follow-up — tenant inventory resolver с fallback.
+ *
+ * Pins the synthetic-vs-real property mismatch fix (browser walk
+ * 2026-05-28 caught wow-effect silent break: `afterCreateOrganization`
+ * seeds channelConnection с synthetic `demoprop_<orgId>` ДО wizard
+ * creates real property; A7.5 handler looked up inventory under
+ * synthetic → empty → skip → booking never в `booking` table).
+ *
+ * Behaviour matrix:
+ *   - Preferred has BOTH roomType + ratePlan → return preferred tuple
+ *   - Preferred has roomType but NO ratePlan → fall back to tenant scope
+ *   - Preferred empty + tenant has inventory → return fallback (с logged drift)
+ *   - Tenant has nothing → return null
+ */
+describe('resolveTenantInventory — Round 14.6.4 fallback resolver', () => {
+	function buildResolverSqlStub(opts: {
+		preferredRoomType?: { id: string } | null
+		preferredRatePlan?: { id: string } | null
+		fallbackRoomType?: { id: string; propertyId: string } | null
+		fallbackRatePlan?: { id: string } | null
+	}) {
+		// biome-ignore lint/suspicious/noExplicitAny: test stub mirroring runtime template-tag + chainable shape.
+		const stub: any = (strings: TemplateStringsArray, ..._values: unknown[]) => {
+			const q = strings.join('?')
+			let response: unknown[] = []
+			if (q.includes('FROM roomType') && q.includes('AND propertyId')) {
+				const r = opts.preferredRoomType
+				response = [r === null || r === undefined ? [] : [r]]
+			} else if (q.includes('FROM ratePlan') && q.includes('roomTypeId')) {
+				// First call = preferred ratePlan; second call (after fallback
+				// roomType) = fallback ratePlan. Helper-call-order pin.
+				const r = opts.preferredRatePlan ?? opts.fallbackRatePlan
+				response = [r === null || r === undefined ? [] : [r]]
+			} else if (q.includes('FROM roomType') && !q.includes('AND propertyId')) {
+				const r = opts.fallbackRoomType
+				response = [r === null || r === undefined ? [] : [r]]
+			} else {
+				response = [[]]
+			}
+			// Chainable thenable — `.isolation()` + `.idempotent()` + `await`
+			// all return self / resolve к response, mirroring @ydbjs/query shape.
+			// biome-ignore lint/suspicious/noExplicitAny: thenable shape mirrors @ydbjs/query QueryBuilder.
+			const chainable: any = {
+				isolation: () => chainable,
+				idempotent: () => chainable,
+				// biome-ignore lint/suspicious/noThenProperty: thenable shape mandatory for await semantics.
+				then: (resolve: (v: unknown) => void) => Promise.resolve(response).then(resolve),
+			}
+			return chainable
+		}
+		stub.isolation = () => stub
+		stub.idempotent = () => stub
+		return stub
+	}
+
+	it('[IBH3a] preferred property has full inventory → returns preferred tuple', async () => {
+		const sqlStub = buildResolverSqlStub({
+			preferredRoomType: { id: 'rmt_synth' },
+			preferredRatePlan: { id: 'rtp_synth' },
+		})
+		const { resolveTenantInventory } = await import('./inbound-booking-handler.ts')
+		const result = await resolveTenantInventory(sqlStub, 'org_x', 'demoprop_org_x')
+		expect(result).not.toBeNull()
+		expect(result?.roomTypeId).toBe('rmt_synth')
+		expect(result?.ratePlanId).toBe('rtp_synth')
+		expect(result?.resolvedPropertyId).toBe('demoprop_org_x')
+	})
+
+	it('[IBH3b] preferred empty → falls back к tenant first property', async () => {
+		const sqlStub = buildResolverSqlStub({
+			preferredRoomType: null,
+			fallbackRoomType: { id: 'rmt_real', propertyId: 'prop_real_xyz' },
+			fallbackRatePlan: { id: 'rtp_real' },
+		})
+		const { resolveTenantInventory } = await import('./inbound-booking-handler.ts')
+		const result = await resolveTenantInventory(sqlStub, 'org_x', 'demoprop_org_x')
+		expect(result).not.toBeNull()
+		expect(result?.roomTypeId).toBe('rmt_real')
+		expect(result?.ratePlanId).toBe('rtp_real')
+		expect(result?.resolvedPropertyId).toBe('prop_real_xyz')
+	})
+
+	it('[IBH3c] tenant has zero inventory → returns null', async () => {
+		const sqlStub = buildResolverSqlStub({
+			preferredRoomType: null,
+			fallbackRoomType: null,
+		})
+		const { resolveTenantInventory } = await import('./inbound-booking-handler.ts')
+		const result = await resolveTenantInventory(sqlStub, 'org_x', 'demoprop_org_x')
+		expect(result).toBeNull()
+	})
+})

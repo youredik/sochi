@@ -241,6 +241,43 @@ export function createOnboardingService(sql: SqlInstance): OnboardingService {
 						)
 					`
 				}
+
+				// 7. Round 14.6.4 follow-up — re-point demo channelConnection
+				// rows к the newly-created REAL propertyId.
+				//
+				// `afterCreateOrganization` seeds demo `channelConnection` с
+				// synthetic propertyId (`demoprop_<orgId>`) ДО того как
+				// existed any real property. Per-tenant demo OTA emits
+				// webhooks scoped к the synthetic ID; A7.5 inbound-booking-
+				// handler then looks up roomType/ratePlan under synthetic →
+				// empty → handler skips → wow-effect silent break.
+				//
+				// Empirically caught на demo.sepshn.ru 2026-05-28 browser walk:
+				// signup → wizard → demo booking succeeded в mock-OTA route
+				// but never landed в `booking` table → PMS Шахматка empty.
+				//
+				// Architectural fix: after wizard creates real property с
+				// inventory, UPDATE the demo channelConnection rows к point
+				// at the real property. Idempotent UPSERT keyed on
+				// (tenantId, propertyId, channelId). Old synthetic rows stay
+				// in place but A7.5 handler now finds inventory under the
+				// real ID. Defense-in-depth: `inbound-booking-handler.ts`
+				// also adds a tenant-wide fallback if channelConnection is
+				// missing inventory.
+				const demoChannels = ['YT', 'ETG'] as const
+				for (const channelId of demoChannels) {
+					await tx`
+						UPSERT INTO channelConnection (
+							\`tenantId\`, \`propertyId\`, \`channelId\`,
+							\`mode\`, \`role\`, \`syncStatus\`, \`isEnabled\`,
+							\`createdAt\`, \`updatedAt\`
+						) VALUES (
+							${tenantId}, ${propertyId}, ${channelId},
+							${'mock'}, ${'independent_operator'}, ${'idle'}, ${isActive},
+							${nowTs}, ${nowTs}
+						)
+					`
+				}
 			})
 
 			// `avgPriceRub` persists as `RATE_SEED_DAYS` rate rows (step 5);
