@@ -1,13 +1,7 @@
 /**
- * Yandex.Путешествия mock-OTA state store — YDB implementation.
+ * Yandex.Путешествия mock-OTA state store — YDB implementation, multi-tenant.
  *
- * Closes multi-instance race (Round 14.5 re-do). See sibling
- * `ostrovok/store.ydb.ts` для full architecture canon — identical pattern,
- * Yandex shapes (booking_token + order map only, no 5-stage prebook FSM).
- *
- * Schema: migration `0080_mock_ota_state_tables.sql` creates
- *   - `mockOtaYandexBookingToken` (P1D TTL on expiresAt)
- *   - `mockOtaYandexOrder`        (P7D TTL on createdAt)
+ * Round 14.6 — store is tenant-agnostic. `tenantId` passed per method call.
  */
 
 import type { query } from '@ydbjs/query'
@@ -22,14 +16,9 @@ import type {
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 
-export function createYdbYandexStore(
-	sql: ReturnType<typeof query>,
-	opts: { tenantId: string },
-): YandexStore {
-	const { tenantId } = opts
-
+export function createYdbYandexStore(sql: ReturnType<typeof query>): YandexStore {
 	return {
-		async storeBookingToken(input: StoreBookingTokenInput): Promise<void> {
+		async storeBookingToken(tenantId, input: StoreBookingTokenInput) {
 			const now = input.nowMs ?? Date.now()
 			const expiresAtMs = now + TOKEN_TTL_MS
 			const ctx: BookingTokenContext = {
@@ -47,7 +36,7 @@ export function createYdbYandexStore(
 			`
 		},
 
-		async getBookingToken(token: string, nowMs?: number): Promise<BookingTokenContext | null> {
+		async getBookingToken(tenantId, token, nowMs) {
 			const now = nowMs ?? Date.now()
 			const [rows = []] = await sql<{ contextJson: unknown }[]>`
 				SELECT contextJson
@@ -59,16 +48,14 @@ export function createYdbYandexStore(
 			const row = rows[0]
 			if (!row || row.contextJson == null) return null
 			const parsed = row.contextJson as BookingTokenContext
-			// JSON.parse turns bigint serialized as string back to string; restore
-			// `totalPriceMicros` to bigint per BookingTokenContext shape.
 			return {
 				...parsed,
 				totalPriceMicros: BigInt(parsed.totalPriceMicros as unknown as string),
 			}
 		},
 
-		async consumeBookingToken(token: string, nowMs?: number): Promise<BookingTokenContext | null> {
-			const ctx = await this.getBookingToken(token, nowMs)
+		async consumeBookingToken(tenantId, token, nowMs) {
+			const ctx = await this.getBookingToken(tenantId, token, nowMs)
 			if (ctx === null) return null
 			await sql`
 				DELETE FROM mockOtaYandexBookingToken
@@ -77,14 +64,14 @@ export function createYdbYandexStore(
 			return ctx
 		},
 
-		async storeOrder(order: MockOtaOrder): Promise<void> {
+		async storeOrder(tenantId, order: MockOtaOrder) {
 			await sql`
 				UPSERT INTO mockOtaYandexOrder (tenantId, orderId, orderJson, status, createdAt)
 				VALUES (${tenantId}, ${order.orderId}, ${toJson(order)}, ${order.status}, ${toTs(new Date(order.createdAtMs))})
 			`
 		},
 
-		async getOrder(orderId: string): Promise<MockOtaOrder | null> {
+		async getOrder(tenantId, orderId) {
 			const [rows = []] = await sql<{ orderJson: unknown }[]>`
 				SELECT orderJson
 				FROM mockOtaYandexOrder
@@ -96,7 +83,7 @@ export function createYdbYandexStore(
 			return row.orderJson as MockOtaOrder
 		},
 
-		async cancelOrder(orderId: string): Promise<CancelOutcome> {
+		async cancelOrder(tenantId, orderId): Promise<CancelOutcome> {
 			const [rows = []] = await sql<{ orderJson: unknown; status: string }[]>`
 				SELECT orderJson, status
 				FROM mockOtaYandexOrder
@@ -115,12 +102,12 @@ export function createYdbYandexStore(
 			return 'cancelled'
 		},
 
-		async __reset(): Promise<void> {
+		async __reset(tenantId) {
 			await sql`DELETE FROM mockOtaYandexBookingToken WHERE tenantId = ${tenantId}`
 			await sql`DELETE FROM mockOtaYandexOrder WHERE tenantId = ${tenantId}`
 		},
 
-		async __listBookingTokens() {
+		async __listBookingTokens(tenantId) {
 			const [rows = []] = await sql<{ bookingToken: string; contextJson: unknown }[]>`
 				SELECT bookingToken, contextJson
 				FROM mockOtaYandexBookingToken
@@ -140,7 +127,7 @@ export function createYdbYandexStore(
 				})
 		},
 
-		async __listOrders() {
+		async __listOrders(tenantId) {
 			const [rows = []] = await sql<{ orderJson: unknown }[]>`
 				SELECT orderJson
 				FROM mockOtaYandexOrder

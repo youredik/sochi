@@ -141,8 +141,8 @@ export function createDemoAdminRoutes(opts: DemoAdminRoutesOptions): Hono<AppEnv
 	 * audit indicator that the call reached both modules.
 	 */
 	app.post('/reset', async (c) => {
-		await opts.yandexStore.__reset()
-		await opts.ostrovokStore.__reset()
+		await opts.yandexStore.__reset(c.var.tenantId)
+		await opts.ostrovokStore.__reset(c.var.tenantId)
 		return c.json(
 			{
 				ok: true,

@@ -23,7 +23,9 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from '../../factory.ts'
+import { authMiddleware } from '../../middleware/auth.ts'
 import { demoCaptchaMiddleware } from '../../middleware/demo-captcha.ts'
+import { tenantMiddleware } from '../../middleware/tenant.ts'
 import { createDemoAdminRoutes } from './admin/admin.routes.ts'
 import { createOstrovokMockOtaRoutes } from './mock-ota-server/ostrovok/ostrovok.routes.ts'
 import type { OstrovokStore } from './mock-ota-server/ostrovok/store.ts'
@@ -37,7 +39,11 @@ import { createYandexMockOtaRoutes } from './mock-ota-server/yandex/yandex.route
  * (Round 14.5 — YDB for production multi-instance, in-memory for tests).
  */
 export interface RegisterDemoRoutesOptions {
-	readonly tenantId: string
+	/**
+	 * Round 14.6 — tenantId no longer wired here. Each request derives
+	 * tenantId from Better Auth session via `tenantMiddleware()` mounted
+	 * on each demo OTA sub-router. Multi-tenant by design (Stripe 2026 canon).
+	 */
 	readonly yandexPropertyId: string
 	readonly ostrovokPropertyId: string
 	readonly webhookTargetBaseUrl: string
@@ -76,14 +82,12 @@ export interface RegisterDemoRoutesOptions {
  */
 export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOptions): void {
 	const yandexRouter = createYandexMockOtaRoutes({
-		tenantId: opts.tenantId,
 		propertyId: opts.yandexPropertyId,
 		webhookTargetUrl: `${opts.webhookTargetBaseUrl}/api/channel/webhooks/YT`,
 		webhookSecret: opts.webhookSecret,
 		store: opts.yandexStore,
 	})
 	const ostrovokRouter = createOstrovokMockOtaRoutes({
-		tenantId: opts.tenantId,
 		propertyId: opts.ostrovokPropertyId,
 		webhookTargetUrl: `${opts.webhookTargetBaseUrl}/api/channel/webhooks/ETG`,
 		webhookSecret: opts.webhookSecret,
@@ -95,25 +99,39 @@ export function registerDemoRoutes(app: Hono<AppEnv>, opts: RegisterDemoRoutesOp
 		yandexStore: opts.yandexStore,
 	})
 
-	// Round 14.5 tactical — captcha gate на ALL demo OTA POST mutations.
-	// Empirical 28.05.2026: боты атакуют demo POST endpoints без friction
-	// (SmartCaptcha widget стоит только на /sign-in/magic-link). Wrap demo
-	// routers через captcha middleware — POST blocked если no/invalid token,
-	// GET pass-through (no body, no state change).
+	// Round 14.6 strategic — per-tenant authenticated demo OTA. Hierarchy:
+	//   authMiddleware → sets c.var.session + c.var.user from Better Auth.
+	//   tenantMiddleware → sets c.var.tenantId from session.activeOrganizationId
+	//     + role gate via membership row.
+	//   demoCaptchaMiddleware → bot-shield POST mutations (Round 14.5 retained).
+	//   router → reads c.var.tenantId; stores per-method tenant scope.
 	//
-	// Activation: `SMARTCAPTCHA_SERVER_KEY` env (production) → enforce;
-	// unset (dev/CI/tests) → bypass с structured log warn.
+	// Empirical rationale: demo OTA endpoints are called by authenticated PMS
+	// users from inside their tenant dashboard (`/o/{slug}/demo/*`). Multi-tenant
+	// 2026 canon (Stripe-style) — caller's session is the only source of truth
+	// для tenantId. Bot spam (28.05.2026 incident, 130 bookings/час) is closed
+	// twice: (1) auth required = no anonymous traffic, (2) captcha gate retained
+	// for layered defense.
 	//
-	// Strategic refactor (per-tenant /o/{slug}/demo + magic-link onboarding +
-	// Stripe livemode marker) deferred к dedicated session с ADR upfront.
+	// Test ergonomics: unit tests mount routers directly via
+	// `new Hono().route(path, router)` + inject `tenantId` via test middleware,
+	// bypassing this auth+tenant gate. Production path mounts всю стек.
 	const yandexWrapped = new Hono<AppEnv>()
+		.use('/*', authMiddleware())
+		.use('/*', tenantMiddleware())
 		.use('/*', demoCaptchaMiddleware())
 		.route('/', yandexRouter)
 	const ostrovokWrapped = new Hono<AppEnv>()
+		.use('/*', authMiddleware())
+		.use('/*', tenantMiddleware())
 		.use('/*', demoCaptchaMiddleware())
 		.route('/', ostrovokRouter)
+	const adminWrapped = new Hono<AppEnv>()
+		.use('/*', authMiddleware())
+		.use('/*', tenantMiddleware())
+		.route('/', adminRouter)
 
 	app.route('/api/_mock-ota/yandex/v1', yandexWrapped)
 	app.route('/api/_mock-ota/ostrovok/v1', ostrovokWrapped)
-	app.route('/api/_mock-ota/admin', adminRouter)
+	app.route('/api/_mock-ota/admin', adminWrapped)
 }

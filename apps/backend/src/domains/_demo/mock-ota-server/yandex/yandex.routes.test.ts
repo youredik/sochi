@@ -1,6 +1,9 @@
 /**
  * Round 9 — Yandex.Путешествия mock OTA HTTP-routes strict tests.
  *
+ * Round 14.6 multi-tenant — tenantId injected via test middleware
+ * mirrors production wiring (`tenantMiddleware()` at mount layer).
+ *
  * Wraps the Round 8 production-grade `YandexTravelMock` adapter with a
  * guest-facing HTTP surface that mirrors the real Yandex.Путешествия API
  * shape (`whitelabel.travel.yandex-net.ru`). Demo guest creates an order
@@ -18,11 +21,13 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { Hono } from 'hono'
+import type { AppEnv } from '../../../../factory.ts'
 import { parseCloudEvent } from '../../../../lib/channel-manager/cloud-events.ts'
 import { createInMemoryYandexStore, type YandexStore } from './store.ts'
 import { createYandexMockOtaRoutes } from './yandex.routes.ts'
 
 const TEST_TENANT = 'org_demo_yt'
+const TEST_TENANT_B = 'org_demo_yt_b'
 const TEST_HOTEL = 'hotel_demo_42'
 const TEST_AUTH = 'OAuth demo-mock-token-1234'
 
@@ -44,26 +49,31 @@ function buildFetchSpy(opts: { respond?: (call: FetchCall) => Response | Promise
 		})
 	}
 	// `typeof fetch` includes `preconnect` (Bun's WHATWG fetch); test spy doesn't
-	// need it — cast through `unknown` to satisfy strict TS without violating
+	// need it — cast through `unknown` to satisfy strict TS без violating
 	// any runtime contract (route handler only calls the function variant).
 	const fetchImpl = spy as unknown as typeof fetch
 	return { calls, fetchImpl }
 }
 
 // Round 14.5 — module-scoped store shared by mountApp + test body assertions.
-// Reset in beforeEach guarantees test isolation despite shared reference.
+// Reset в beforeEach guarantees test isolation despite shared reference.
 let currentStore: YandexStore = createInMemoryYandexStore()
 
-function mountApp(deps: { fetchImpl?: typeof fetch } = {}) {
+function mountApp(deps: { fetchImpl?: typeof fetch; tenantId?: string } = {}) {
 	const router = createYandexMockOtaRoutes({
-		tenantId: TEST_TENANT,
 		propertyId: TEST_HOTEL,
 		webhookTargetUrl: 'http://test.invalid/api/channel/webhooks/YT',
 		webhookSecret: 'whsec_demo_test_only',
 		store: currentStore,
 		...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
 	})
-	return new Hono().route('/v1', router)
+	const app = new Hono<AppEnv>()
+	const tenantId = deps.tenantId ?? TEST_TENANT
+	app.use('/v1/*', async (c, next) => {
+		c.set('tenantId', tenantId)
+		await next()
+	})
+	return app.route('/v1', router)
 }
 
 const VALID_SEARCH_QUERY = new URLSearchParams({
@@ -74,7 +84,7 @@ const VALID_SEARCH_QUERY = new URLSearchParams({
 	children: '0',
 }).toString()
 
-async function searchOnce(app: Hono): Promise<{
+async function searchOnce(app: Hono<AppEnv>): Promise<{
 	status: number
 	body: {
 		offers: ReadonlyArray<{
@@ -109,7 +119,8 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		currentStore = createInMemoryYandexStore()
 	})
 	afterEach(async () => {
-		await currentStore.__reset()
+		await currentStore.__reset(TEST_TENANT)
+		await currentStore.__reset(TEST_TENANT_B)
 	})
 
 	it('[YTR1] GET /hotels/hotel/offers returns offers with valid booking_token', async () => {
@@ -126,7 +137,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		expect(offer.daily_prices.length).toBe(2) // 2 nights between 15→17
 		expect(offer.total_price).toBe(offer.daily_prices.reduce((s, p) => s + p, 0))
 		// Booking token persisted в state так POST /orders может его консьюмить.
-		const tokens = await currentStore.__listBookingTokens()
+		const tokens = await currentStore.__listBookingTokens(TEST_TENANT)
 		expect(tokens.length).toBe(1)
 		const stored = tokens[0]
 		expect(stored === undefined).toBe(false)
@@ -150,7 +161,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		expect(res.status).toBe(400)
 		const body = (await res.json()) as { error: string }
 		expect(body.error).toBe('invalid_date_range')
-		expect((await currentStore.__listBookingTokens()).length).toBe(0)
+		expect((await currentStore.__listBookingTokens(TEST_TENANT)).length).toBe(0)
 	})
 
 	it('[YTR3] POST /hotels/booking/orders requires valid booking_token (400 invalid_booking_token)', async () => {
@@ -174,7 +185,7 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		expect(body.error).toBe('invalid_booking_token')
 		// No webhook fired когда token не valid.
 		expect(calls.length).toBe(0)
-		expect((await currentStore.__listOrders()).length).toBe(0)
+		expect((await currentStore.__listOrders(TEST_TENANT)).length).toBe(0)
 	})
 
 	it('[YTR4] POST /hotels/booking/orders with valid token returns CONFIRMED + fires CloudEvents webhook', async () => {
@@ -232,9 +243,9 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		expect(data.order_id).toBe(body.order_id)
 		expect(data.channel_id).toBe('YT')
 
-		expect((await currentStore.__listOrders()).length).toBe(1)
+		expect((await currentStore.__listOrders(TEST_TENANT)).length).toBe(1)
 		// Token consumed — single-use semantics.
-		expect((await currentStore.__listBookingTokens()).length).toBe(0)
+		expect((await currentStore.__listBookingTokens(TEST_TENANT)).length).toBe(0)
 	})
 
 	it('[YTR5] POST /payment/cancel returns CANCELLED + fires CloudEvents webhook', async () => {
@@ -386,6 +397,38 @@ describe('Yandex mock-OTA HTTP routes', () => {
 		expect(res.status).toBe(404)
 		const body = (await res.json()) as { error: string }
 		expect(body.error).toBe('order_not_found')
+		expect(calls.length).toBe(0)
+	})
+
+	// ── Round 14.6 — cross-tenant isolation proof ──────────────────────
+	it('[YTR9] Cross-tenant isolation — tenantA token invisible к tenantB POST /orders', async () => {
+		const { fetchImpl, calls } = buildFetchSpy()
+		// Search в tenantA → stores token для TEST_TENANT.
+		const appA = mountApp({ fetchImpl, tenantId: TEST_TENANT })
+		const { body: searchBody } = await searchOnce(appA)
+		const token = searchBody.offers[0]?.booking_token
+		if (token === undefined) throw new Error('unreachable')
+
+		// POST /orders из tenantB → token не visible → 400.
+		const appB = mountApp({ fetchImpl, tenantId: TEST_TENANT_B })
+		const res = await appB.request('/v1/hotels/booking/orders', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', authorization: TEST_AUTH },
+			body: JSON.stringify({
+				booking_token: token,
+				customer_email: 'guest@example.com',
+				customer_phone: '+70000000001',
+				guests: [{ first_name: 'Иван', last_name: 'Иванов' }],
+			}),
+		})
+		expect(res.status).toBe(400)
+		const body = (await res.json()) as { error: string }
+		expect(body.error).toBe('invalid_booking_token')
+
+		// Token in tenantA остался (cross-leakage было бы prevented anyway).
+		expect((await currentStore.__listBookingTokens(TEST_TENANT)).length).toBe(1)
+		expect((await currentStore.__listBookingTokens(TEST_TENANT_B)).length).toBe(0)
+		// No webhook because cross-tenant attempt failed validation.
 		expect(calls.length).toBe(0)
 	})
 })

@@ -46,6 +46,7 @@
  */
 
 import { Hono } from 'hono'
+import type { AppEnv } from '../../../../factory.ts'
 import {
 	isReservedTestDomain,
 	isReservedTestPhone,
@@ -116,12 +117,13 @@ function errorEnvelope(code: string): {
 }
 
 export interface OstrovokMockOtaDeps {
-	readonly tenantId: string
+	/**
+	 * Round 14.6 — tenantId derived per-request from `c.var.tenantId`
+	 * (`tenantMiddleware`). Not injected here. Multi-tenant by design.
+	 */
 	readonly propertyId: string
 	/**
-	 * Store implementation — DI swap point between in-memory (tests, dev) and
-	 * YDB (production multi-instance). Round 14.5 re-do closure for
-	 * `feedback_round_14_self_review_6_rollback_lessons_2026_05_27`.
+	 * Store (multi-tenant; tenantId per-method). Single shared instance.
 	 */
 	readonly store: OstrovokStore
 	/**
@@ -152,8 +154,8 @@ export interface OstrovokMockOtaDeps {
  * `/api/_mock-ota/ostrovok/v1` (Batch-3 wiring); tests mount onto a fresh
  * `Hono()` at `/v1`.
  */
-export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
-	const app = new Hono()
+export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono<AppEnv> {
+	const app = new Hono<AppEnv>()
 	const fetchImpl = deps.fetchImpl ?? globalThis.fetch
 	const nowMs = deps.nowMs ?? (() => Date.now())
 	const logWarn =
@@ -250,7 +252,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		const bookHash = generateBookHash()
 		const dailyPrices = buildDailyPrices(nights)
 		const totalPrice = dailyPrices.reduce((acc, p) => acc + p, 0) * adults
-		await deps.store.storeBookHash({
+		await deps.store.storeBookHash(c.var.tenantId, {
 			bookHash,
 			hid,
 			checkin,
@@ -320,7 +322,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 			return c.json(errorEnvelope('invalid_payload'), 400)
 		}
 
-		const bookHashContext = await deps.store.getBookHash(bookHash, nowMs())
+		const bookHashContext = await deps.store.getBookHash(c.var.tenantId, bookHash, nowMs())
 		if (bookHashContext === null) {
 			return c.json(errorEnvelope('rate_not_found'), 400)
 		}
@@ -328,11 +330,11 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		// If a form-stage already exists for the same partner_order_id, return
 		// it idempotently rather than re-creating — matches real ETG behaviour
 		// when client retries the same prebook call.
-		const existing = await deps.store.getFormStage(partnerOrderId, nowMs())
+		const existing = await deps.store.getFormStage(c.var.tenantId, partnerOrderId, nowMs())
 		const orderId = existing !== null ? existing.orderId : generateOrderId()
 		const itemId = existing !== null ? existing.itemId : generateItemId()
 		if (existing === null) {
-			await deps.store.storeFormStage({
+			await deps.store.storeFormStage(c.var.tenantId, {
 				partnerOrderId,
 				bookHash,
 				orderId,
@@ -389,12 +391,12 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 			return c.json(errorEnvelope('invalid_payload'), 400)
 		}
 
-		const form = await deps.store.getFormStage(partnerOrderId, nowMs())
+		const form = await deps.store.getFormStage(c.var.tenantId, partnerOrderId, nowMs())
 		if (form === null) {
 			return c.json(errorEnvelope('order_not_found'), 400)
 		}
 
-		const bookHashContext = await deps.store.getBookHash(form.bookHash, nowMs())
+		const bookHashContext = await deps.store.getBookHash(c.var.tenantId, form.bookHash, nowMs())
 		if (bookHashContext === null) {
 			// Edge case: book_hash expired between form-stage creation и finish.
 			return c.json(errorEnvelope('rate_not_found'), 400)
@@ -441,7 +443,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 			})
 			.filter((g): g is NonNullable<typeof g> => g !== null)
 
-		const booking = await deps.store.finalizeBooking({
+		const booking = await deps.store.finalizeBooking(c.var.tenantId, {
 			form,
 			bookHashContext,
 			customerEmail: email,
@@ -457,7 +459,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		// PMS split-pane to render без an extra fetch.
 		await emitDemoWebhook({
 			channelId: 'ETG',
-			tenantId: deps.tenantId,
+			tenantId: c.var.tenantId,
 			externalReservationId: String(booking.orderId),
 			action: 'created',
 			data: {
@@ -507,7 +509,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		}
 		// Demo simplification: always return 'ok' immediately if the booking exists
 		// (real ETG может вернуть 'processing' first, then 'ok' on subsequent poll).
-		const booking = await deps.store.getBooking(partnerOrderId)
+		const booking = await deps.store.getBooking(c.var.tenantId, partnerOrderId)
 		if (booking === null) {
 			return c.json(errorEnvelope('order_not_found'), 404)
 		}
@@ -534,11 +536,11 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		if (partnerOrderId === '') {
 			return c.json(errorEnvelope('invalid_payload'), 400)
 		}
-		const result = await deps.store.cancelBooking(partnerOrderId)
+		const result = await deps.store.cancelBooking(c.var.tenantId, partnerOrderId)
 		if (result === 'not_found') {
 			return c.json(errorEnvelope('order_not_found'), 404)
 		}
-		const booking = await deps.store.getBooking(partnerOrderId)
+		const booking = await deps.store.getBooking(c.var.tenantId, partnerOrderId)
 		if (booking === null) {
 			// Defensive: cancelBooking returned a non-not_found status, so booking
 			// MUST exist — unreachable in practice but typescript narrows safer.
@@ -550,7 +552,7 @@ export function createOstrovokMockOtaRoutes(deps: OstrovokMockOtaDeps): Hono {
 		if (result === 'cancelled') {
 			await emitDemoWebhook({
 				channelId: 'ETG',
-				tenantId: deps.tenantId,
+				tenantId: c.var.tenantId,
 				externalReservationId: String(booking.orderId),
 				action: 'cancelled',
 				data: {

@@ -1,6 +1,9 @@
 /**
  * Round 9 — demo OTA admin control HTTP routes strict tests.
  *
+ * Round 14.6 multi-tenant — `c.var.tenantId` injected via test middleware
+ * mirrors production wiring (`tenantMiddleware()` at mount layer).
+ *
  * Coverage:
  *   [ADM1] POST /reset clears Yandex + Островок state
  *   [ADM2] POST /reset is idempotent (second call also returns 200)
@@ -10,6 +13,7 @@
  *   [ADM6] POST /trigger with invalid scenario → 400 invalid_scenario
  *   [ADM7] POST /trigger with malformed JSON → 400 malformed_json
  *   [ADM8] POST /trigger validates all 3 canonical scenarios
+ *   [ADM15] POST /reset scopes to caller tenantId only (cross-tenant isolation)
  *
  * Strict-tests canon (`feedback_strict_tests`):
  *   - Exact-value `.toBe(...)` / `.toEqual(...)` only
@@ -19,6 +23,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { Hono } from 'hono'
+import type { AppEnv } from '../../../factory.ts'
 import {
 	createInMemoryOstrovokStore,
 	type OstrovokStore,
@@ -26,19 +31,28 @@ import {
 import { createInMemoryYandexStore, type YandexStore } from '../mock-ota-server/yandex/store.ts'
 import { createDemoAdminRoutes, TRIGGER_SCENARIOS } from './admin.routes.ts'
 
+const TEST_TENANT = 'test_admin_tenant_alpha'
+const TEST_TENANT_B = 'test_admin_tenant_beta'
+
 // Round 14.5 — module-scoped stores shared by mountApp + test assertions.
 // beforeEach replaces with fresh instances для test isolation.
 let ostrovokStore: OstrovokStore = createInMemoryOstrovokStore()
 let yandexStore: YandexStore = createInMemoryYandexStore()
 
-function mountApp(opts: { sessionToken?: string; seedDateCount?: number } = {}) {
+function mountApp(opts: { sessionToken?: string; seedDateCount?: number; tenantId?: string } = {}) {
 	const router = createDemoAdminRoutes({
 		ostrovokStore,
 		yandexStore,
 		...(opts.sessionToken !== undefined && { sessionToken: opts.sessionToken }),
 		...(opts.seedDateCount !== undefined && { seedDateCount: opts.seedDateCount }),
 	})
-	return new Hono().route('/admin', router)
+	const app = new Hono<AppEnv>()
+	const tenantId = opts.tenantId ?? TEST_TENANT
+	app.use('/admin/*', async (c, next) => {
+		c.set('tenantId', tenantId)
+		await next()
+	})
+	return app.route('/admin', router)
 }
 
 describe('demo OTA admin routes', () => {
@@ -47,13 +61,15 @@ describe('demo OTA admin routes', () => {
 		yandexStore = createInMemoryYandexStore()
 	})
 	afterEach(async () => {
-		await yandexStore.__reset()
-		await ostrovokStore.__reset()
+		await yandexStore.__reset(TEST_TENANT)
+		await ostrovokStore.__reset(TEST_TENANT)
+		await yandexStore.__reset(TEST_TENANT_B)
+		await ostrovokStore.__reset(TEST_TENANT_B)
 	})
 
 	it('[ADM1] POST /reset clears state в обоих modules', async () => {
 		// Seed some state directly via store helpers (bypass HTTP layer).
-		await yandexStore.storeBookingToken({
+		await yandexStore.storeBookingToken(TEST_TENANT, {
 			token: 'PRE_RESET_TOK',
 			hotelId: 'h1',
 			checkinDate: '2027-06-15',
@@ -62,7 +78,7 @@ describe('demo OTA admin routes', () => {
 			children: 0,
 			totalPriceMicros: 6_000_000_000n,
 		})
-		await ostrovokStore.storeBookHash({
+		await ostrovokStore.storeBookHash(TEST_TENANT, {
 			bookHash: 'a'.repeat(32),
 			hid: 8473727,
 			checkin: '2027-06-15',
@@ -75,8 +91,8 @@ describe('demo OTA admin routes', () => {
 			roomName: 'Стандарт',
 			mealName: 'Без питания',
 		})
-		expect((await yandexStore.__listBookingTokens()).length).toBe(1)
-		expect((await ostrovokStore.__listBookHashes()).length).toBe(1)
+		expect((await yandexStore.__listBookingTokens(TEST_TENANT)).length).toBe(1)
+		expect((await ostrovokStore.__listBookHashes(TEST_TENANT)).length).toBe(1)
 
 		const app = mountApp()
 		const res = await app.request('/admin/reset', { method: 'POST' })
@@ -90,8 +106,8 @@ describe('demo OTA admin routes', () => {
 		expect(body.cleared.ostrovok).toBe(true)
 
 		// Verify state actually empty after reset.
-		expect((await yandexStore.__listBookingTokens()).length).toBe(0)
-		expect((await ostrovokStore.__listBookHashes()).length).toBe(0)
+		expect((await yandexStore.__listBookingTokens(TEST_TENANT)).length).toBe(0)
+		expect((await ostrovokStore.__listBookHashes(TEST_TENANT)).length).toBe(0)
 	})
 
 	it('[ADM2] POST /reset is idempotent (second call also returns 200)', async () => {
@@ -207,8 +223,7 @@ describe('demo OTA admin routes', () => {
 	})
 
 	it('[ADM10] POST /seed accepts seedDateCount override via factory', async () => {
-		const router = createDemoAdminRoutes({ ostrovokStore, yandexStore, seedDateCount: 5 })
-		const app = new Hono().route('/admin', router)
+		const app = mountApp({ seedDateCount: 5 })
 		const res = await app.request('/admin/seed', { method: 'POST' })
 		const body = (await res.json()) as {
 			seeded: { availabilityDates: ReadonlyArray<string> }
@@ -219,19 +234,13 @@ describe('demo OTA admin routes', () => {
 	// ── Round 11 P1-B2 — admin session token gate ─────────────────────────
 	describe('Round 11 P1-B2 — session token gating', () => {
 		it('[ADM11] sessionToken empty → unauthenticated request passes (test mode)', async () => {
-			const router = createDemoAdminRoutes({ ostrovokStore, yandexStore }) // no token
-			const app = new Hono().route('/admin', router)
+			const app = mountApp() // no token
 			const res = await app.request('/admin/reset', { method: 'POST' })
 			expect(res.status).toBe(200)
 		})
 
 		it('[ADM12] sessionToken set + missing header → 401', async () => {
-			const router = createDemoAdminRoutes({
-				ostrovokStore,
-				yandexStore,
-				sessionToken: 'demo_admin_abc123',
-			})
-			const app = new Hono().route('/admin', router)
+			const app = mountApp({ sessionToken: 'demo_admin_abc123' })
 			const res = await app.request('/admin/reset', { method: 'POST' })
 			expect(res.status).toBe(401)
 			const body = (await res.json()) as { error: string }
@@ -239,12 +248,7 @@ describe('demo OTA admin routes', () => {
 		})
 
 		it('[ADM13] sessionToken set + wrong header → 401', async () => {
-			const router = createDemoAdminRoutes({
-				ostrovokStore,
-				yandexStore,
-				sessionToken: 'demo_admin_abc123',
-			})
-			const app = new Hono().route('/admin', router)
+			const app = mountApp({ sessionToken: 'demo_admin_abc123' })
 			const res = await app.request('/admin/reset', {
 				method: 'POST',
 				headers: { 'x-demo-session-token': 'wrong_token' },
@@ -253,12 +257,7 @@ describe('demo OTA admin routes', () => {
 		})
 
 		it('[ADM14] sessionToken set + correct header → 200', async () => {
-			const router = createDemoAdminRoutes({
-				ostrovokStore,
-				yandexStore,
-				sessionToken: 'demo_admin_abc123',
-			})
-			const app = new Hono().route('/admin', router)
+			const app = mountApp({ sessionToken: 'demo_admin_abc123' })
 			const res = await app.request('/admin/reset', {
 				method: 'POST',
 				headers: { 'x-demo-session-token': 'demo_admin_abc123' },
@@ -267,5 +266,36 @@ describe('demo OTA admin routes', () => {
 			const body = (await res.json()) as { ok: boolean }
 			expect(body.ok).toBe(true)
 		})
+	})
+
+	// ── Round 14.6 multi-tenant — cross-tenant isolation proof ──────────
+	it('[ADM15] POST /reset scopes к caller tenantId only — другой tenant intact', async () => {
+		// Seed both tenants. Reset called as tenantA → tenantB state unchanged.
+		await yandexStore.storeBookingToken(TEST_TENANT, {
+			token: 'tenantA_token',
+			hotelId: 'hA',
+			checkinDate: '2027-06-15',
+			checkoutDate: '2027-06-17',
+			adults: 2,
+			children: 0,
+			totalPriceMicros: 5_000_000_000n,
+		})
+		await yandexStore.storeBookingToken(TEST_TENANT_B, {
+			token: 'tenantB_token',
+			hotelId: 'hB',
+			checkinDate: '2027-06-15',
+			checkoutDate: '2027-06-17',
+			adults: 1,
+			children: 0,
+			totalPriceMicros: 4_000_000_000n,
+		})
+
+		const appA = mountApp({ tenantId: TEST_TENANT })
+		const res = await appA.request('/admin/reset', { method: 'POST' })
+		expect(res.status).toBe(200)
+
+		// tenantA wiped; tenantB intact.
+		expect((await yandexStore.__listBookingTokens(TEST_TENANT)).length).toBe(0)
+		expect((await yandexStore.__listBookingTokens(TEST_TENANT_B)).length).toBe(1)
 	})
 })

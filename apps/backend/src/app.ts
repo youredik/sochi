@@ -155,24 +155,19 @@ const app = new Hono<AppEnv>()
 let demoBootPromiseInternal: Promise<void> = Promise.resolve()
 if (env.APP_MODE !== 'production') {
 	const demoWebhookSecret = 'demo-mock-ota-webhook-secret-do-not-use-in-prod'
-	const demoTenantId = 'demo-tenant'
 	const demoPropertyId = 'demo-hotel-sochi'
-	// Round 11 P1-B2 — per-process admin session token. Printed at boot;
-	// regenerated на каждый restart → previous demos invalidated. Presenter
-	// copies token into showcase UI / curl X-Demo-Session-Token header.
+	// Round 14.6 — `demoTenantId` no longer hardcoded. Each request derives
+	// tenantId from Better Auth session via `tenantMiddleware()`. Stores +
+	// adapters scope per-tenant (Stripe-style multi-tenant boundary 2026 canon).
 	const adminSessionToken = `demo_admin_${crypto.randomUUID().slice(0, 16)}`
 	logger.info(
 		{ token: adminSessionToken },
-		'Round 11 P1-B2 — demo admin session token (use as X-Demo-Session-Token header)',
+		'Round 11 P1-B2 — demo admin session token (legacy; new code uses Better Auth session)',
 	)
-	// Round 14.5 — YDB-backed stores закрывают multi-instance race (canon
-	// feedback_round_14_self_review_6_rollback_lessons_2026_05_27). Both
-	// stores scope to `demo-tenant`; YC Serverless container scale-out
-	// teперь shares state via central YDB instead of per-instance Maps.
-	const ostrovokStore = createYdbOstrovokStore(sql, { tenantId: demoTenantId })
-	const yandexStore = createYdbYandexStore(sql, { tenantId: demoTenantId })
+	// Round 14.6 — stores are tenant-agnostic (tenantId per method call).
+	const ostrovokStore = createYdbOstrovokStore(sql)
+	const yandexStore = createYdbYandexStore(sql)
 	registerDemoRoutes(app, {
-		tenantId: demoTenantId,
 		yandexPropertyId: demoPropertyId,
 		ostrovokPropertyId: demoPropertyId,
 		webhookTargetBaseUrl: 'http://localhost:8787',
@@ -186,8 +181,11 @@ if (env.APP_MODE !== 'production') {
 	// where webhook receiver returned 401 (no `webhookSecret`) or 403 (no
 	// `channelConnection`) before seed completed. Errors logged + rethrown
 	// so boot fails-loud instead of silent-broken-demo.
+	// Round 14.6 — legacy global seed retained for backwards-compat (existing
+	// demo-tenant rows). New per-org seed happens in afterCreateOrganization
+	// hook (см. auth.ts). Phase deferred — этот call станет no-op после migration.
 	demoBootPromiseInternal = seedDemoChannelInfra({
-		tenantId: demoTenantId,
+		tenantId: 'demo-tenant',
 		propertyId: demoPropertyId,
 		webhookSecret: demoWebhookSecret,
 	}).then(

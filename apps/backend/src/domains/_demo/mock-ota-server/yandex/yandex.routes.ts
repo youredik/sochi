@@ -56,11 +56,13 @@ const DEMO_NIGHT_RATE_MICROS = 6_000_000_000n // 6000 RUB / night
 const DEMO_ROOM_NAME = 'Стандартный номер с видом на горы'
 
 export interface YandexMockOtaRoutesOptions {
-	readonly tenantId: string
+	/**
+	 * Round 14.6 — tenantId derived per-request via `c.var.tenantId`
+	 * (`tenantMiddleware`). Not injected here.
+	 */
 	readonly propertyId: string
 	/**
-	 * Store implementation — DI swap point between in-memory (tests, dev) and
-	 * YDB (production multi-instance). Round 14.5 re-do closure.
+	 * Store (multi-tenant; tenantId per-method). Single shared instance.
 	 */
 	readonly store: YandexStore
 	/** Override webhook target URL — typically `http://localhost:8787/api/channel/webhooks/YT`. */
@@ -117,13 +119,21 @@ function validateDateRange(checkin: string | undefined, checkout: string | undef
 export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hono<AppEnv> {
 	const app = new Hono<AppEnv>()
 
-	// Per-router YandexTravelMock instance gives us a real FSM + HMAC + sequence
-	// machinery without re-implementation. We delegate createBooking / cancel.
-	const mockAdapter = createYandexTravelMock({
-		tenantId: opts.tenantId,
-		propertyId: opts.propertyId,
-		nightRateMicros: DEMO_NIGHT_RATE_MICROS,
-	})
+	// Round 14.6 — per-tenant mockAdapter cache. Each tenant gets own FSM
+	// + HMAC + sequence machinery; lazy-instantiated on first request.
+	const mockAdapterCache = new Map<string, ReturnType<typeof createYandexTravelMock>>()
+	function getMockAdapter(tenantId: string): ReturnType<typeof createYandexTravelMock> {
+		let a = mockAdapterCache.get(tenantId)
+		if (!a) {
+			a = createYandexTravelMock({
+				tenantId,
+				propertyId: opts.propertyId,
+				nightRateMicros: DEMO_NIGHT_RATE_MICROS,
+			})
+			mockAdapterCache.set(tenantId, a)
+		}
+		return a
+	}
 
 	/**
 	 * Route 1 — search availability.
@@ -166,7 +176,7 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		const totalPrice = dailyPrices.reduce((s, p) => s + p, 0)
 
 		const token = generateBookingToken()
-		await opts.store.storeBookingToken({
+		await opts.store.storeBookingToken(c.var.tenantId, {
 			token,
 			hotelId,
 			checkinDate: checkin,
@@ -244,7 +254,7 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		if (token.length === 0) {
 			return c.json({ error: 'missing_booking_token' }, 400)
 		}
-		const tokenCtx = await opts.store.consumeBookingToken(token, opts.nowMs?.())
+		const tokenCtx = await opts.store.consumeBookingToken(c.var.tenantId, token, opts.nowMs?.())
 		if (tokenCtx === null) {
 			return c.json({ error: 'invalid_booking_token' }, 400)
 		}
@@ -288,8 +298,9 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		}
 
 		// Step 4 — verify + create через production-grade Round 8 adapter.
+		const mockAdapter = getMockAdapter(c.var.tenantId)
 		const verifyResult = await mockAdapter.verifyBooking({
-			tenantId: opts.tenantId,
+			tenantId: c.var.tenantId,
 			propertyId: opts.propertyId,
 			roomTypeId: 'yt_rt',
 			ratePlanId: 'yt_rp',
@@ -311,7 +322,7 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 
 		// Step 5 — persist order locally + fire CloudEvents webhook.
 		const orderId = generateOrderId()
-		await opts.store.storeOrder({
+		await opts.store.storeOrder(c.var.tenantId, {
 			orderId,
 			bookingToken: token,
 			customerEmail,
@@ -329,7 +340,7 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 
 		const webhookResult = await emitDemoWebhook({
 			channelId: 'YT',
-			tenantId: opts.tenantId,
+			tenantId: c.var.tenantId,
 			externalReservationId: orderId,
 			action: 'created',
 			...(opts.webhookTargetUrl !== undefined ? { targetUrlOverride: opts.webhookTargetUrl } : {}),
@@ -386,12 +397,12 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		if (!auth.ok) return c.json({ error: 'unauthorized' }, 401)
 
 		const orderId = c.req.param('order_id')
-		const order = await opts.store.getOrder(orderId)
+		const order = await opts.store.getOrder(c.var.tenantId, orderId)
 		if (order === null) {
 			return c.json({ error: 'order_not_found' }, 404)
 		}
 
-		const cancelStatus = await opts.store.cancelOrder(orderId)
+		const cancelStatus = await opts.store.cancelOrder(c.var.tenantId, orderId)
 		if (cancelStatus === 'not_found') {
 			// Lost a race с another cancel? Treat as not_found.
 			return c.json({ error: 'order_not_found' }, 404)
@@ -404,15 +415,16 @@ export function createYandexMockOtaRoutes(opts: YandexMockOtaRoutesOptions): Hon
 		// First successful cancel — propagate к Round 8 adapter (so its FSM also
 		// transitions) и fire CloudEvents webhook.
 		const idempotencyKey = `demo-cancel-${orderId}`
+		const mockAdapter = getMockAdapter(c.var.tenantId)
 		await mockAdapter.cancelReservation({
-			tenantId: opts.tenantId,
+			tenantId: c.var.tenantId,
 			externalId: order.externalReservationId,
 			idempotencyKey,
 		})
 
 		const webhookResult = await emitDemoWebhook({
 			channelId: 'YT',
-			tenantId: opts.tenantId,
+			tenantId: c.var.tenantId,
 			externalReservationId: orderId,
 			action: 'cancelled',
 			...(opts.webhookTargetUrl !== undefined ? { targetUrlOverride: opts.webhookTargetUrl } : {}),

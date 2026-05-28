@@ -1,22 +1,25 @@
 /**
- * Yandex.Путешествия mock-OTA state store — interface + in-memory impl.
+ * Yandex.Путешествия mock-OTA state store — multi-tenant interface.
  *
- * Round 14.5 re-do — replaces module-scoped `Map<>` from `state.ts` with
- * DI Store pattern. See `_demo/mock-ota-server/ostrovok/store.ts` for the
- * full architectural justification — both channels follow the same
- * pattern с per-channel data shapes.
+ * Round 14.6 strategic refactor — store methods accept `tenantId` per call
+ * (was: tenantId baked at store creation). Single store instance shared
+ * across tenants; isolation via WHERE clause filter on tenantId. Matches
+ * canonical multi-tenant repository pattern (idempotency.repo.ts).
+ *
+ * Canon refs:
+ *   - `feedback_no_halfway` (user trigger «без полумер»)
+ *   - Stripe livemode 2026 (web research 28.05.2026 confirms canonical)
  */
 
 import { randomBytes, randomUUID } from 'node:crypto'
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000
-
 const TOKEN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 
 export interface BookingTokenContext {
 	readonly hotelId: string
-	readonly checkinDate: string // YYYY-MM-DD
-	readonly checkoutDate: string // YYYY-MM-DD
+	readonly checkinDate: string
+	readonly checkoutDate: string
 	readonly adults: number
 	readonly children: number
 	readonly totalPriceMicros: bigint
@@ -53,24 +56,28 @@ export interface StoreBookingTokenInput {
 export type CancelOutcome = 'cancelled' | 'already_cancelled' | 'not_found'
 
 export interface YandexStore {
-	storeBookingToken(input: StoreBookingTokenInput): Promise<void>
-	getBookingToken(token: string, nowMs?: number): Promise<BookingTokenContext | null>
-	consumeBookingToken(token: string, nowMs?: number): Promise<BookingTokenContext | null>
-	storeOrder(order: MockOtaOrder): Promise<void>
-	getOrder(orderId: string): Promise<MockOtaOrder | null>
-	cancelOrder(orderId: string): Promise<CancelOutcome>
+	storeBookingToken(tenantId: string, input: StoreBookingTokenInput): Promise<void>
+	getBookingToken(
+		tenantId: string,
+		token: string,
+		nowMs?: number,
+	): Promise<BookingTokenContext | null>
+	consumeBookingToken(
+		tenantId: string,
+		token: string,
+		nowMs?: number,
+	): Promise<BookingTokenContext | null>
+	storeOrder(tenantId: string, order: MockOtaOrder): Promise<void>
+	getOrder(tenantId: string, orderId: string): Promise<MockOtaOrder | null>
+	cancelOrder(tenantId: string, orderId: string): Promise<CancelOutcome>
 
-	// Test / admin helpers.
-	__reset(): Promise<void>
-	__listBookingTokens(): Promise<ReadonlyArray<{ token: string; context: BookingTokenContext }>>
-	__listOrders(): Promise<ReadonlyArray<MockOtaOrder>>
+	__reset(tenantId: string): Promise<void>
+	__listBookingTokens(
+		tenantId: string,
+	): Promise<ReadonlyArray<{ token: string; context: BookingTokenContext }>>
+	__listOrders(tenantId: string): Promise<ReadonlyArray<MockOtaOrder>>
 }
 
-/**
- * Generate a 12-char alphanumeric booking token, mirroring observed
- * Yandex.Путешествия `booking_token` shape. Uses `randomBytes` to avoid
- * collisions across concurrent search requests.
- */
 export function generateBookingToken(): string {
 	const bytes = randomBytes(12)
 	let out = ''
@@ -85,18 +92,26 @@ export function generateOrderId(): string {
 	return `yt-order-${randomUUID().replace(/-/g, '').slice(0, 12)}`
 }
 
-/**
- * In-memory implementation — preserves Phase-1 behaviour. Used by unit
- * tests + single-instance dev environments.
- */
 export function createInMemoryYandexStore(): YandexStore {
-	const bookingTokens = new Map<string, BookingTokenContext>()
-	const orders = new Map<string, MockOtaOrder>()
+	type TenantState = {
+		bookingTokens: Map<string, BookingTokenContext>
+		orders: Map<string, MockOtaOrder>
+	}
+	const tenants = new Map<string, TenantState>()
+
+	function tenantState(tenantId: string): TenantState {
+		let s = tenants.get(tenantId)
+		if (!s) {
+			s = { bookingTokens: new Map(), orders: new Map() }
+			tenants.set(tenantId, s)
+		}
+		return s
+	}
 
 	return {
-		async storeBookingToken(input) {
+		async storeBookingToken(tenantId, input) {
 			const now = input.nowMs ?? Date.now()
-			bookingTokens.set(input.token, {
+			tenantState(tenantId).bookingTokens.set(input.token, {
 				hotelId: input.hotelId,
 				checkinDate: input.checkinDate,
 				checkoutDate: input.checkoutDate,
@@ -107,54 +122,60 @@ export function createInMemoryYandexStore(): YandexStore {
 			})
 		},
 
-		async getBookingToken(token, nowMs) {
-			const ctx = bookingTokens.get(token)
+		async getBookingToken(tenantId, token, nowMs) {
+			const s = tenantState(tenantId)
+			const ctx = s.bookingTokens.get(token)
 			if (ctx === undefined) return null
 			const now = nowMs ?? Date.now()
 			if (ctx.expiresAtMs < now) {
-				bookingTokens.delete(token)
+				s.bookingTokens.delete(token)
 				return null
 			}
 			return ctx
 		},
 
-		async consumeBookingToken(token, nowMs) {
-			const ctx = await this.getBookingToken(token, nowMs)
+		async consumeBookingToken(tenantId, token, nowMs) {
+			const ctx = await this.getBookingToken(tenantId, token, nowMs)
 			if (ctx === null) return null
-			bookingTokens.delete(token)
+			tenantState(tenantId).bookingTokens.delete(token)
 			return ctx
 		},
 
-		async storeOrder(order) {
-			orders.set(order.orderId, order)
+		async storeOrder(tenantId, order) {
+			tenantState(tenantId).orders.set(order.orderId, order)
 		},
 
-		async getOrder(orderId) {
-			return orders.get(orderId) ?? null
+		async getOrder(tenantId, orderId) {
+			return tenantState(tenantId).orders.get(orderId) ?? null
 		},
 
-		async cancelOrder(orderId) {
-			const existing = orders.get(orderId)
+		async cancelOrder(tenantId, orderId) {
+			const s = tenantState(tenantId)
+			const existing = s.orders.get(orderId)
 			if (existing === undefined) return 'not_found'
 			if (existing.status === 'CANCELLED') return 'already_cancelled'
-			orders.set(orderId, { ...existing, status: 'CANCELLED' })
+			s.orders.set(orderId, { ...existing, status: 'CANCELLED' })
 			return 'cancelled'
 		},
 
-		async __reset() {
-			bookingTokens.clear()
-			orders.clear()
+		async __reset(tenantId) {
+			const s = tenants.get(tenantId)
+			if (s) {
+				s.bookingTokens.clear()
+				s.orders.clear()
+			}
 		},
 
-		async __listBookingTokens() {
-			return Array.from(bookingTokens.entries()).map(([token, context]) => ({
-				token,
-				context,
-			}))
+		async __listBookingTokens(tenantId) {
+			const s = tenants.get(tenantId)
+			if (!s) return []
+			return Array.from(s.bookingTokens.entries()).map(([token, context]) => ({ token, context }))
 		},
 
-		async __listOrders() {
-			return Array.from(orders.values())
+		async __listOrders(tenantId) {
+			const s = tenants.get(tenantId)
+			if (!s) return []
+			return Array.from(s.orders.values())
 		},
 	}
 }
