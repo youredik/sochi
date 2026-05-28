@@ -12,14 +12,14 @@
 	"dependencies": {
 		"@horeca/shared": "workspace:*",
 		"@lit-labs/ssr-client": "^1.1.8",
-		"lit": "3.3.2"
+		"lit": "3.3.3"
 	},
 	"devDependencies": {
-		"@vitest/browser-playwright": "^4.1.6",
+		"@vitest/browser-playwright": "^4.1.7",
 		"rollup-plugin-visualizer": "^7.0.1",
 		"terser": "^5.47.1",
 		"vite": "^8.0.12",
-		"vitest": "^4.1.6",
+		"vitest": "^4.1.7",
 		"vitest-browser-lit": "^1.0.1"
 	}
 }
