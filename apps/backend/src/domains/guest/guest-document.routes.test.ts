@@ -60,6 +60,10 @@ function makeStubGuestRepo(): GuestRepo {
 			// biome-ignore lint/suspicious/noExplicitAny: minimal stub
 			return { tenantId, id, firstName: 'Test', lastName: 'Guest' } as any
 		},
+		// 2026-05-29 — from-scan back-fill вызывает update (документ из скана →
+		// guest). Stub no-op чтобы существующие тесты не падали; capture-вариант
+		// в [F8].
+		update: async () => null,
 	} as unknown as GuestRepo
 }
 
@@ -214,6 +218,35 @@ describe('guest-document.routes — POST /guests/:guestId/documents/from-scan', 
 			headers: { 'content-type': 'application/json' },
 		})
 		expect(res.status).toBe(400)
+	})
+
+	test('[F9] from-scan дописывает документ гостя (pending → реальный, convergence)', async () => {
+		const updateCalls: Array<{ id: string; patch: Record<string, unknown> }> = []
+		const guestRepo = {
+			getById: async (tenantId: string, id: string) =>
+				({ tenantId, id, firstName: 'Test', lastName: 'Guest' }) as unknown,
+			update: async (_tenantId: string, id: string, patch: Record<string, unknown>) => {
+				updateCalls.push({ id, patch })
+				return null
+			},
+		} as unknown as GuestRepo
+		const documentRepo = makeStubDocumentRepo({})
+		const app = createTestRouter(ctxFor('owner')).route(
+			'/api/v1',
+			createGuestDocumentRoutesInner({ guestRepo, documentRepo }),
+		)
+		app.onError(onError)
+		await app.request('/api/v1/guests/gst-1/documents/from-scan', {
+			method: 'POST',
+			body: JSON.stringify(VALID_BODY),
+			headers: { 'content-type': 'application/json' },
+		})
+		expect(updateCalls.length).toBe(1)
+		expect(updateCalls[0]?.id).toBe('gst-1')
+		// passport_paper → 'Паспорт РФ'; реальный номер/серия из скана.
+		expect(updateCalls[0]?.patch.documentType).toBe('Паспорт РФ')
+		expect(updateCalls[0]?.patch.documentNumber).toBe('123456')
+		expect(updateCalls[0]?.patch.documentSeries).toBe('4608')
 	})
 })
 

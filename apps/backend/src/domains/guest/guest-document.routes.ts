@@ -75,6 +75,20 @@ export interface GuestDocumentRoutesDeps {
 }
 
 /**
+ * identityMethod → человекочитаемый documentType (RU) для записи гостя.
+ * Скан = авторитетный источник: после него guest.documentType отражает реальный
+ * тип распознанного документа (а не введённый вручную / placeholder).
+ */
+const IDENTITY_METHOD_DOCUMENT_TYPE: Record<
+	'passport_paper' | 'passport_zagran' | 'driver_license',
+	string
+> = {
+	passport_paper: 'Паспорт РФ',
+	passport_zagran: 'Загранпаспорт',
+	driver_license: 'Водительское удостоверение',
+}
+
+/**
  * Inner router без auth/tenant middleware — для testing inject c.var.tenantId.
  * Production wrapper `createGuestDocumentRoutes` adds the chain.
  */
@@ -120,6 +134,18 @@ export function createGuestDocumentRoutesInner(deps: GuestDocumentRoutesDeps) {
 						ocrSource: body.ocrSource,
 						photoConsentLogId: body.photoConsentLogId,
 						createdBy: operatorUserId,
+					})
+
+					// 2026-05-29 — Convergence: скан = авторитетный документ. Дописываем
+					// document-поля гостя (заменяет Phase-1 'pending' deferral sentinel
+					// реальным распознанным документом). Без этого скан писал guestDocument,
+					// но guest.documentNumber оставался placeholder'ом — ручной ввод и скан
+					// не сходились. Имя/гражданство НЕ трогаем (введены оператором при
+					// создании; guest-self-scan flow добавит их back-fill позже).
+					await guestRepo.update(tenantId, guestId, {
+						documentType: IDENTITY_METHOD_DOCUMENT_TYPE[body.identityMethod],
+						documentNumber: body.documentNumber,
+						documentSeries: body.documentSeries ?? null,
 					})
 
 					c.var.logger.info(
