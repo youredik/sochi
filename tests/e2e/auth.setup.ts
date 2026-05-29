@@ -8,12 +8,14 @@ import { getMagicLinkUrl, purgeMailpit } from './_mailpit-helper.ts'
  *
  * **Passwordless canon 2026-05-13** per `[[auth-passwordless-canon]]`: BA
  * `emailAndPassword` removed wholesale. Sole signup flow:
- *   1. /signup → MagicLinkSignUpForm: email + orgName + consent + (captcha)
+ *   1. /signup → MagicLinkSignUpForm: email + consent + (captcha). Round
+ *      14.6.2 (2026-05-28): NO orgName field — hotel name comes later via
+ *      ИНН/DaData lookup (one source of truth, zero retyping).
  *   2. Backend sends magic-link via MailpitAdapter (dev SMTP 1125)
  *   3. Test fetches the link out of Mailpit HTTP API (port 8125), visits it
- *   4. BA verify creates user JIT + sets cookie → 302 to /welcome?n=<orgName>
- *   5. /welcome auto-confirms orgName from query, user clicks «Создать
- *      гостиницу →» → organization.create → navigate /o/$slug/setup
+ *   4. BA verify creates user JIT + sets cookie → 302 to /welcome
+ *   5. /welcome beforeLoad AUTO-creates org (placeholder name + `org-<base36>`
+ *      slug) и redirects — NO UI interaction → /o/$slug/setup
  *   6. 2-screen onboarding wizard runs (identify ИНН → inventory)
  *   7. Land on /o/$slug/grid → save per-worker storageState
  *
@@ -34,7 +36,6 @@ setup(
 		const ts = Date.now()
 		const workerIdx = setupInfo.workerIndex
 		const email = `e2e-owner-${ts}-w${workerIdx}@sochi.local`
-		const orgName = `E2E Hotel ${ts} W${workerIdx}`
 
 		// Purge Mailpit at setup start so `getMagicLinkUrl(email)` matches the
 		// freshly-sent message, not stale seed emails из prior runs.
@@ -45,31 +46,23 @@ setup(
 		await expect(page.getByRole('heading', { name: 'Регистрация' })).toBeVisible()
 
 		await page.getByLabel('Email').fill(email)
-		await page.getByLabel('Название гостиницы').fill(orgName)
 		await page.getByLabel(/согласие/).check()
 
 		await page.getByRole('button', { name: 'Получить ссылку для регистрации' }).click()
-		// Confirmation state surfaces «Письмо отправлено» + the typed orgName
-		// for re-verification before the user opens their inbox.
+		// Round 14.6.2: signup captures ONLY email + consent (no orgName). The
+		// confirmation surfaces «Письмо отправлено» + the email (НЕ orgName).
 		await expect(page.getByText('Письмо отправлено')).toBeVisible()
-		await expect(page.getByText(orgName)).toBeVisible()
+		await expect(page.getByText(email)).toBeVisible()
 
 		// --- Fetch magic-link URL out of Mailpit + visit it ---
 		const magicLinkUrl = await getMagicLinkUrl(request, email)
 		await page.goto(magicLinkUrl)
 
-		// --- /welcome: confirm orgName + create organization ---
-		await expect(page.getByRole('heading', { name: 'Почти готово' })).toBeVisible()
-		const orgNameInput = page.getByLabel('Название гостиницы')
-		await expect(orgNameInput).toHaveValue(orgName)
-		await Promise.all([
-			page.waitForURL(/\/o\/e2e-hotel-\d+-w\d+(?:\/setup)?$/),
-			page.getByRole('button', { name: 'Создать гостиницу →' }).click(),
-		])
-
-		// Empty-tenant dashboard guard at `/o/$slug/` redirects to /setup —
-		// either we land on /setup directly OR / route resolves к /setup.
-		await page.waitForURL(/\/o\/e2e-hotel-\d+-w\d+\/setup$/)
+		// --- /welcome: beforeLoad AUTO-creates org (placeholder name + `org-<base36>`
+		// slug) and redirects — NO UI interaction (Round 14.6.2). The empty-tenant
+		// dashboard guard at `/o/$slug/` then redirects to /setup. Slug is `org-…`,
+		// NOT derived from any typed name, so the URL match is generic. ---
+		await page.waitForURL(/\/o\/[^/?]+\/setup$/)
 		const match = page.url().match(/\/o\/([^/?]+)\/setup$/)
 		const orgSlug = match?.[1] ?? ''
 		expect(orgSlug).not.toBe('')
@@ -99,18 +92,29 @@ setup(
 		await expect(page.getByLabel('Сколько номеров?')).toHaveValue('10')
 		await expect(page.getByLabel('Цена за ночь, ₽')).toHaveValue('3500')
 
+		// Round 14.6 wow-flow: finishing the wizard lands on the per-tenant /demo
+		// OTA showcase (NOT /grid directly). The session is fully provisioned here.
 		await Promise.all([
-			page.waitForURL(/\/o\/[^/]+\/grid$/),
+			page.waitForURL(/\/o\/[^/]+\/demo$/),
 			page.getByRole('button', { name: /Готово/ }).click(),
 		])
 
+		// Privacy-preserving cookie choice (decline analytics). Dismissing here
+		// persists the localStorage flag into storageState → downstream tests get
+		// a clean viewport без баннера, перехватывающего клики по футеру форм.
+		const declineCookies = page.getByRole('button', { name: 'Только необходимые' })
+		if (await declineCookies.isVisible().catch(() => false)) {
+			await declineCookies.click()
+		}
+
 		// --- Grid landing — empirical end-to-end gate ---
-		// 2026-05-24 fix: «Стандартный» rowheader appears asynchronously после
-		// CDC consumers drain inventory create event. Was 5s implicit toBeVisible
-		// timeout — bumped к 15s. Plus fallback к gridrole-only assertion если
-		// rowheader timing flake.
+		// An onboarded tenant MUST see its own «Стандартный» room type on the grid
+		// (10 rooms seeded at wizard step). If it doesn't appear, that is a REAL
+		// product bug (new hotelier can't see their inventory), NOT a test concern
+		// to weaken away. Appears asynchronously после CDC drains inventory-create.
+		await page.goto(`/o/${orgSlug}/grid`)
 		const rowheader = page.getByRole('rowheader', { name: 'Стандартный' })
-		await expect(rowheader).toBeVisible({ timeout: 15_000 })
+		await expect(rowheader).toBeVisible({ timeout: 30_000 })
 		await expect(page.getByRole('grid')).toHaveAttribute('aria-colcount', '16')
 
 		await page.context().storageState({ path: `tests/.auth/owner-w${workerIdx}.json` })

@@ -241,4 +241,23 @@ test.describe('booking-create G1 — real-bug-hunt fixes', () => {
 		await expect(total).toContainText('Итого:')
 		await expect(total).toContainText('₽')
 	})
+
+	test('create sheet: AI passport-scan button + hidden file input present (scan-first)', async ({
+		page,
+	}) => {
+		await page.goto('/')
+		await page.locator('[data-section-id="grid"]').first().click()
+		await expect(page).toHaveURL(/\/grid$/)
+		// День 13 — пустая ячейка (другие тесты бронируют ~день 5), без коллизий.
+		const targetDate = futureIso(13)
+		await page.locator(`button[data-cell-date="${targetDate}"]`).click()
+		const dialog = page.getByRole('dialog')
+		await expect(dialog).toBeVisible()
+		await expect(dialog.getByRole('heading', { name: /Новое бронирование/ })).toBeVisible()
+		// Scan-first entry point — оператор не вводит данные вручную, их извлекает
+		// Vision OCR. Полный upload→Vision→autofill проверяется на живом demo
+		// browser-walk (как и существующий passport-scan.spec defers OCR submit).
+		await expect(dialog.getByRole('button', { name: /Сканировать паспорт/ })).toBeVisible()
+		await expect(dialog.locator('[data-testid="passport-scan-input"]')).toHaveCount(1)
+	})
 })
