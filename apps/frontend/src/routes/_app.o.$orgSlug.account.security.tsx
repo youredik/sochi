@@ -31,12 +31,12 @@ function AccountSecurityPage() {
 		try {
 			const res = await authClient.passkey.deletePasskey({ id })
 			if (res?.error) {
-				toast.error(res.error.message ?? 'Не удалось удалить passkey')
+				toast.error('Не удалось удалить passkey')
 				return
 			}
 			toast.success('Passkey удалён')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка удаления')
+		} catch {
+			toast.error('Не удалось удалить passkey')
 		} finally {
 			setDeletingId(null)
 		}

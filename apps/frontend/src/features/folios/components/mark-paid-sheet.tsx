@@ -47,6 +47,7 @@ import {
 	ResponsiveSheetTitle,
 } from '../../../components/ui/responsive-sheet.tsx'
 import { formatMoney, moneyKopecksSchema } from '../../../lib/format-ru.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 import { useMarkPaid } from '../hooks/use-folio-queries.ts'
 
 /* ============================================================== schema */
@@ -137,7 +138,7 @@ export function MarkPaidSheet({
 				toast.success(`Платёж принят: ${formatMoney(BigInt(payment.capturedMinor))}`)
 				onOpenChange(false)
 			} catch (err) {
-				toast.error(err instanceof Error ? err.message : 'Ошибка приёма платежа')
+				toast.error(userMessageFor(err, 'Не удалось принять платёж'))
 			}
 		},
 	})

@@ -51,13 +51,14 @@ describe('PasskeySigninButton', () => {
 		})
 	})
 
-	it('[E1] result.error.message → toast.error', async () => {
+	it('[E1] result.error → RU toast (англоязычный better-auth message НЕ показываем)', async () => {
 		signInPasskeyMock.mockResolvedValueOnce({ error: { message: 'No credential' } })
 		render(<PasskeySigninButton />)
 		await userEvent.setup().click(screen.getByRole('button', { name: /Войти через passkey/ }))
 		await waitFor(() => {
-			expect(toastError).toHaveBeenCalledWith('No credential')
+			expect(toastError).toHaveBeenCalledWith('Не удалось войти через passkey')
 		})
+		expect(toastError).not.toHaveBeenCalledWith('No credential')
 	})
 
 	it('[E2] thrown exception → toast.error', async () => {

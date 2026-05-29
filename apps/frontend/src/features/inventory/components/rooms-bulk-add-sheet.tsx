@@ -29,6 +29,7 @@ import {
 } from '../../../components/ui/responsive-sheet.tsx'
 import { useBulkCreateRooms } from '../hooks/use-rooms.ts'
 import { intRangeFieldSchema } from '../../../lib/forms/int-range-field-schema.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 
 interface FormValues {
 	startNumber: string
@@ -101,7 +102,7 @@ export function RoomsBulkAddSheet({
 					toast.warning(`Создано ${res.created.length}, не удалось ${res.failed.length}`)
 				}
 			} catch (err) {
-				toast.error(err instanceof Error ? err.message : 'Не удалось создать номера')
+				toast.error(userMessageFor(err, 'Не удалось создать номера'))
 			}
 		},
 	})

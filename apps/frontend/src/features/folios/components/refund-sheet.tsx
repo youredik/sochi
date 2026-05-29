@@ -45,6 +45,7 @@ import { Separator } from '../../../components/ui/separator.tsx'
 import { Textarea } from '../../../components/ui/textarea.tsx'
 import { authClient } from '../../../lib/auth-client.ts'
 import { formatDateShort, formatMoney, moneyKopecksSchema } from '../../../lib/format-ru.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 import { paymentRefundsQueryOptions, useCreateRefund } from '../hooks/use-folio-queries.ts'
 
 /* ============================================================== schema */
@@ -130,7 +131,7 @@ export function RefundSheet({ open, onOpenChange, payment, folioId }: RefundShee
 				onOpenChange(false)
 				setStep('form')
 			} catch (err) {
-				toast.error(err instanceof Error ? err.message : 'Ошибка возврата')
+				toast.error(userMessageFor(err, 'Не удалось оформить возврат'))
 			}
 		},
 	})

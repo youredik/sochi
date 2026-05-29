@@ -23,6 +23,7 @@ import type { Room, RoomType } from '@horeca/shared'
 import { ChevronDown, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useId, useState } from 'react'
 import { toast } from 'sonner'
+import { userMessageFor } from '../../../lib/user-message.ts'
 import { Button } from '../../../components/ui/button.tsx'
 import { roomTypesQueryOptions, useDeleteRoomType } from '../hooks/use-room-types.ts'
 import { roomsQueryOptions, useDeleteRoom } from '../hooks/use-rooms.ts'
@@ -68,7 +69,7 @@ export function InventoryRoomsPage({ propertyId }: InventoryRoomsPageProps) {
 			toast.success(`Категория «${deleteTarget.name}» удалена`)
 			setDeleteTarget(null)
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Не удалось удалить категорию')
+			toast.error(userMessageFor(err, 'Не удалось удалить категорию'))
 		}
 	}
 
@@ -79,7 +80,7 @@ export function InventoryRoomsPage({ propertyId }: InventoryRoomsPageProps) {
 			toast.success(`Номер ${deleteRoomTarget.number} удалён`)
 			setDeleteRoomTarget(null)
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Не удалось удалить номер')
+			toast.error(userMessageFor(err, 'Не удалось удалить номер'))
 		}
 	}
 

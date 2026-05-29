@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
 import { type ApiError, errorFromResponse } from '../../../lib/api-errors.ts'
 import { logger } from '../../../lib/logger.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 
 /**
  * Wire shape — `priceMicros` serialized as string (BigInt). Hook unwraps
@@ -74,7 +75,7 @@ export function useCreateAddon(propertyId: string) {
 		},
 		onError: (err: ApiError) => {
 			logger.warn('addon.create failed', { code: err.code, message: err.message })
-			toast.error(err.message)
+			toast.error(userMessageFor(err, 'Не удалось сохранить услугу'))
 		},
 	})
 }
@@ -106,7 +107,7 @@ export function usePatchAddon(propertyId: string) {
 		},
 		onError: (err: ApiError) => {
 			logger.warn('addon.patch failed', { code: err.code, message: err.message })
-			toast.error(err.message)
+			toast.error(userMessageFor(err, 'Не удалось сохранить услугу'))
 		},
 	})
 }
@@ -132,7 +133,7 @@ export function useDeleteAddon(propertyId: string) {
 		},
 		onError: (err: ApiError) => {
 			logger.warn('addon.delete failed', { code: err.code, message: err.message })
-			toast.error(err.message)
+			toast.error(userMessageFor(err, 'Не удалось сохранить услугу'))
 		},
 	})
 }

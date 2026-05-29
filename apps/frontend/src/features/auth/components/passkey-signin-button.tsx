@@ -37,7 +37,8 @@ export function PasskeySigninButton({ onSuccess, autoFill = false }: Props = {})
 		try {
 			const result = await authClient.signIn.passkey({ autoFill })
 			if (result?.error) {
-				toast.error(result.error.message ?? 'Не удалось войти через passkey')
+				// better-auth message англоязычный — не показываем, только RU.
+				toast.error('Не удалось войти через passkey')
 				return
 			}
 			onSuccess?.()

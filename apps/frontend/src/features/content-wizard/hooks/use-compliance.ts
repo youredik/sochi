@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
 import { type ApiError, errorFromResponse } from '../../../lib/api-errors.ts'
 import { logger } from '../../../lib/logger.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 
 /**
  * Wire shape — backend serializes `annualRevenueEstimateMicroRub` as a
@@ -96,7 +97,7 @@ export function usePatchCompliance() {
 		},
 		onError: (err: ApiError) => {
 			logger.warn('compliance.patch failed', { code: err.code, message: err.message })
-			toast.error(err.message)
+			toast.error(userMessageFor(err, 'Не удалось сохранить настройки соответствия'))
 		},
 	})
 }

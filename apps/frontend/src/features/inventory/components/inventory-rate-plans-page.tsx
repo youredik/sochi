@@ -14,6 +14,7 @@ import type { MealsIncluded, RatePlan } from '@horeca/shared'
 import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { userMessageFor } from '../../../lib/user-message.ts'
 import { Badge } from '../../../components/ui/badge.tsx'
 import { Button } from '../../../components/ui/button.tsx'
 import { ratePlansQueryOptions, useDeleteRatePlan } from '../hooks/use-rate-plans.ts'
@@ -62,7 +63,7 @@ export function InventoryRatePlansPage({ propertyId }: InventoryRatePlansPagePro
 			toast.success(`Тариф «${deleteTarget.name}» удалён`)
 			setDeleteTarget(null)
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Не удалось удалить тариф')
+			toast.error(userMessageFor(err, 'Не удалось удалить тариф'))
 		}
 	}
 

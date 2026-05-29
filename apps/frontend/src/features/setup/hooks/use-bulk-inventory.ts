@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
 import { type ApiError, errorFromResponse } from '../../../lib/api-errors.ts'
 import { logger } from '../../../lib/logger.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 
 export interface BulkInventoryInput {
 	property: {
@@ -58,7 +59,7 @@ export function useBulkInventory() {
 		},
 		onError: (err) => {
 			logger.warn('onboarding.inventory failed', { code: err.code, message: err.message })
-			toast.error(err.message)
+			toast.error(userMessageFor(err, 'Не удалось сохранить инвентарь'))
 		},
 	})
 }

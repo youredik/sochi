@@ -5,6 +5,7 @@ import { api } from '../../../lib/api.ts'
 import { getApiBaseUrl } from '../../../lib/api-base-url.ts'
 import { type ApiError, errorFromResponse } from '../../../lib/api-errors.ts'
 import { logger } from '../../../lib/logger.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 
 /**
  * Wire shape — backend serializes `fileSizeBytes` as string (BigInt).
@@ -215,7 +216,7 @@ export function useUploadMedia(propertyId: string) {
 		},
 		onError: (err: ApiError) => {
 			logger.warn('media.upload failed', { code: err.code, message: err.message })
-			toast.error(err.message)
+			toast.error(userMessageFor(err, 'Не удалось обработать фото'))
 		},
 	})
 }
@@ -255,7 +256,7 @@ export function usePatchMedia(propertyId: string) {
 		},
 		onError: (err: ApiError) => {
 			logger.warn('media.patch failed', { code: err.code, message: err.message })
-			toast.error(err.message)
+			toast.error(userMessageFor(err, 'Не удалось обработать фото'))
 		},
 	})
 }
@@ -281,7 +282,7 @@ export function useDeleteMedia(propertyId: string) {
 		},
 		onError: (err: ApiError) => {
 			logger.warn('media.delete failed', { code: err.code, message: err.message })
-			toast.error(err.message)
+			toast.error(userMessageFor(err, 'Не удалось обработать фото'))
 		},
 	})
 }
@@ -309,7 +310,7 @@ export function useSetHero(propertyId: string) {
 		},
 		onError: (err: ApiError) => {
 			logger.warn('media.hero failed', { code: err.code, message: err.message })
-			toast.error(err.message)
+			toast.error(userMessageFor(err, 'Не удалось обработать фото'))
 		},
 	})
 }

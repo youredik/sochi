@@ -35,7 +35,8 @@ export function PasskeyEnrollButton({ defaultName, onEnrolled }: Props = {}) {
 			const name = defaultName ?? deriveDeviceName()
 			const result = await authClient.passkey.addPasskey({ name })
 			if (result?.error) {
-				toast.error(result.error.message ?? 'Не удалось добавить passkey')
+				// better-auth message англоязычный — не показываем, только RU.
+				toast.error('Не удалось добавить passkey')
 				return
 			}
 			toast.success(`Passkey «${name}» добавлен`)

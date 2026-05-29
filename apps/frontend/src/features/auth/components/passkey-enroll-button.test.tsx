@@ -67,13 +67,15 @@ describe('PasskeyEnrollButton — passkey enrollment flow', () => {
 		})
 	})
 
-	it('[E1] result.error.message → toast.error', async () => {
+	it('[E1] result.error → RU toast (англоязычный better-auth message НЕ показываем)', async () => {
 		addPasskeyMock.mockResolvedValueOnce({ error: { message: 'WebAuthn cancelled' } })
 		render(<PasskeyEnrollButton />)
 		await userEvent.setup().click(screen.getByRole('button', { name: /Добавить passkey/ }))
 		await waitFor(() => {
-			expect(toastError).toHaveBeenCalledWith('WebAuthn cancelled')
+			expect(toastError).toHaveBeenCalledWith('Не удалось добавить passkey')
 		})
+		// Утечка англ. message закрыта — НЕ показываем сырой текст better-auth.
+		expect(toastError).not.toHaveBeenCalledWith('WebAuthn cancelled')
 	})
 
 	it('[E2] thrown exception → toast.error', async () => {
