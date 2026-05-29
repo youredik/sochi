@@ -99,7 +99,8 @@ export function useGridData(from: string, to: string) {
 		// straight wizard→/demo→grid, so the first fetch can race the commit. Poll
 		// until it appears so the operator never gets stuck on an infinite skeleton
 		// (without this, the empty result cached for staleTime=30s never refetched).
-		refetchInterval: (query) => emptyListRefetchInterval(query.state.data),
+		refetchInterval: (query) =>
+			emptyListRefetchInterval(query.state.data, query.state.dataUpdateCount),
 	})
 	const propertyId = property.data?.[0]?.id ?? null
 
