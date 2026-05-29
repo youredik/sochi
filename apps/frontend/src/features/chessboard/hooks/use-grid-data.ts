@@ -10,6 +10,7 @@ import type {
 import { isRussianCitizenship } from '@horeca/shared'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../../lib/api.ts'
+import { emptyListRefetchInterval } from '../lib/poll-while-empty.ts'
 import { maskGuestNameRu } from '../lib/booking-palette.ts'
 
 /**
@@ -98,8 +99,7 @@ export function useGridData(from: string, to: string) {
 		// straight wizard→/demo→grid, so the first fetch can race the commit. Poll
 		// until it appears so the operator never gets stuck on an infinite skeleton
 		// (without this, the empty result cached for staleTime=30s never refetched).
-		refetchInterval: (query) =>
-			Array.isArray(query.state.data) && query.state.data.length === 0 ? 2_000 : false,
+		refetchInterval: (query) => emptyListRefetchInterval(query.state.data),
 	})
 	const propertyId = property.data?.[0]?.id ?? null
 
