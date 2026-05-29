@@ -28,6 +28,7 @@ import { useCreateBooking, useCreateGuest, useRatePlans } from '../hooks/use-boo
 import {
 	type BookingCreateSheetInput,
 	buildScanAutofillPatch,
+	buildScanReviewHints,
 	defaultCheckOut,
 	generateIdempotencyKey,
 	nightsCount,
@@ -227,12 +228,16 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 			if (patch.documentType !== undefined) form.setFieldValue('documentType', patch.documentType)
 			if (patch.documentNumber !== undefined)
 				form.setFieldValue('documentNumber', patch.documentNumber)
+			// Field-level review guidance (2026 HITL): какие поля Vision НЕ извлёк →
+			// оператору точно куда смотреть, а не «проверьте всё».
+			const hints = buildScanReviewHints(result.entities)
+			const fill = hints.length > 0 ? ` Заполните вручную: ${hints.join(', ')}.` : ''
 			if (result.outcome === 'low_confidence') {
-				toast.warning('Распознано неуверенно — проверьте поля.')
+				toast.warning(`Распознано неуверенно — проверьте поля.${fill}`)
 			} else if (result.outcome === 'invalid_document') {
-				toast.warning('Страна документа вне списка — проверьте поля.')
+				toast.warning(`Страна документа вне списка — проверьте поля.${fill}`)
 			} else {
-				toast.success('Паспорт распознан — проверьте поля.')
+				toast.success(`Паспорт распознан — проверьте поля.${fill}`)
 			}
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Не удалось распознать паспорт')

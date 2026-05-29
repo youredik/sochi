@@ -220,6 +220,24 @@ export function buildScanAutofillPatch(
 }
 
 /**
+ * Field-level review hints для скан-автозаполнения (2026 HITL canon — research
+ * Agent A: оператору надо точно знать, КУДА смотреть, а не «проверьте всё»).
+ * Возвращает RU-метки полей, которые Vision НЕ извлёк (autofill оставил пустыми) —
+ * именно их оператор должен заполнить/проверить вручную.
+ *
+ * Yandex Vision НЕ отдаёт per-field confidence (research Agent C), поэтому сигнал =
+ * присутствие поля (extracted vs null), а не score. Pure → тестируемо.
+ */
+export function buildScanReviewHints(entities: RecognizePassportResponse['entities']): string[] {
+	const hints: string[] = []
+	if (!entities.surname) hints.push('фамилия')
+	if (!entities.name) hints.push('имя')
+	if (!entities.documentNumber) hints.push('номер документа')
+	if (!entities.citizenshipIso3) hints.push('гражданство')
+	return hints
+}
+
+/**
  * Inclusive-exclusive nights count (checkIn .. checkOut-1). Used for
  * dialog affordance ("3 ночи") and optimistic-band width sanity.
  */

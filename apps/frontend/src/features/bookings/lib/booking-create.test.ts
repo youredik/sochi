@@ -8,6 +8,7 @@ import {
 	buildGuestSnapshot,
 	buildOptimisticBand,
 	buildScanAutofillPatch,
+	buildScanReviewHints,
 	defaultCheckOut,
 	generateIdempotencyKey,
 	nightsCount,
@@ -557,5 +558,52 @@ describe('buildScanAutofillPatch — OCR entities → form patch', () => {
 	it('identityMethod по умолчанию passport_paper', () => {
 		const patch = buildScanAutofillPatch(fullEntities)
 		expect(patch.documentType).toBe('Паспорт РФ')
+	})
+})
+
+describe('buildScanReviewHints — поля, которые Vision не извлёк', () => {
+	const full = {
+		surname: 'Иванов',
+		name: 'Иван',
+		middleName: 'Иванович',
+		gender: 'male' as const,
+		citizenshipIso3: 'rus',
+		birthDate: '1984-06-15',
+		birthPlace: 'г. Сочи',
+		documentNumber: '4608 123456',
+		issueDate: '2015-03-10',
+		expirationDate: null,
+	}
+
+	it('все ключевые поля извлечены → нет хинтов', () => {
+		expect(buildScanReviewHints(full)).toEqual([])
+	})
+
+	it('пустые поля → хинты в каноничном порядке', () => {
+		expect(buildScanReviewHints({ ...full, surname: null, documentNumber: null })).toEqual([
+			'фамилия',
+			'номер документа',
+		])
+	})
+
+	it('полностью пустые entities → все 4 хинта', () => {
+		const empty = {
+			surname: null,
+			name: null,
+			middleName: null,
+			gender: null,
+			citizenshipIso3: null,
+			birthDate: null,
+			birthPlace: null,
+			documentNumber: null,
+			issueDate: null,
+			expirationDate: null,
+		}
+		expect(buildScanReviewHints(empty)).toEqual([
+			'фамилия',
+			'имя',
+			'номер документа',
+			'гражданство',
+		])
 	})
 })
