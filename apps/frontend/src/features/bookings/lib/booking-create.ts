@@ -168,11 +168,6 @@ export function buildGuestCreateBody(guest: {
 	return body
 }
 
-/** True если документ — отложенный sentinel (для UI «не указан» / re-scan). */
-export function isPendingDocument(documentType: string, documentNumber: string): boolean {
-	return documentType === PENDING_DOCUMENT_TYPE || documentNumber.startsWith('pending_')
-}
-
 /**
  * Inclusive-exclusive nights count (checkIn .. checkOut-1). Used for
  * dialog affordance ("3 ночи") and optimistic-band width sanity.

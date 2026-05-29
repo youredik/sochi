@@ -9,7 +9,6 @@ import {
 	buildOptimisticBand,
 	defaultCheckOut,
 	generateIdempotencyKey,
-	isPendingDocument,
 	nightsCount,
 	pickDefaultRatePlan,
 	pluralNights,
@@ -271,12 +270,6 @@ describe('buildGuestCreateBody — guest POST wire', () => {
 			})
 			expect(body.documentType).toBe('Паспорт РФ')
 			expect(body.documentNumber).toBe('4510123456')
-		})
-
-		it('isPendingDocument распознаёт sentinel и реальный', () => {
-			expect(isPendingDocument('pending', 'pending_d_abc')).toBe(true)
-			expect(isPendingDocument('Паспорт РФ', 'pending_w_xyz')).toBe(true)
-			expect(isPendingDocument('Паспорт РФ', '4510123456')).toBe(false)
 		})
 	})
 })
