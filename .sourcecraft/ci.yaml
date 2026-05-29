@@ -222,6 +222,44 @@ tasks:
           paths:
             - apps/backend/coverage/lcov.info
 
+      # sbom — Software Bill of Materials (CI audit 2026-05-29, P0.5 supply-chain).
+      # «Список ингредиентов» — полный граф npm-зависимостей из pnpm-lock.yaml.
+      # Зачем: при новом CVE в любой transitive-зависимости мгновенно видно,
+      # затронуты ли мы (EU CRA / EO 14028 table-stakes 2026).
+      #
+      # Syft filesystem-mode (читает pnpm-lock.yaml) — НЕ image-mode: убирает
+      # registry-auth + image-pull (классы ошибок, мучившие scan-gate #149-150).
+      # OS-пакеты образа покрыты YC scanner (scan-gate, 0 CVE). Syft из get.anchore.io
+      # (redirect к github releases — тот же домен что рабочий osv-scanner curl).
+      # CycloneDX-json → артефакт (SourceCraft 14-day). Shares install workspace.
+      # allow_failure: SBOM = visibility-артефакт, не gate — не блокирует deploy.
+      - name: sbom
+        needs: [install]
+        allow_failure: true
+        image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
+        script:
+          - set -e
+          - apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
+          - curl -sSfL https://get.anchore.io/syft | sh -s -- -b /usr/local/bin
+          - syft version
+          # excludes MANDATORY: без них syft walk'ит node_modules-файлы → 29MB
+          # bloat. С excludes читает pnpm-lock.yaml catalog → lean depgraph.
+          # Empirical (local 2026-05-29): 3MB, 2192 components (1648 npm + go-bins
+          # типа esbuild). Verified локально перед push (canon: не CI-debug-цикл).
+          - |
+            syft scan dir:. \
+              --exclude './**/node_modules/**' \
+              --exclude './.git/**' \
+              --exclude './**/dist/**' \
+              --exclude './**/.stryker-tmp/**' \
+              --exclude './**/coverage/**' \
+              --source-name sepshn-monorepo \
+              -o cyclonedx-json=sbom.cdx.json
+          - 'echo "SBOM: $(wc -c < sbom.cdx.json) bytes"'
+        artifacts:
+          paths:
+            - sbom.cdx.json
+
   # ---------------------------------------------------------------------------
   # INFRA — tofu plan/apply (auth via get-iam-token cube → IAM_TOKEN)
   # ---------------------------------------------------------------------------
