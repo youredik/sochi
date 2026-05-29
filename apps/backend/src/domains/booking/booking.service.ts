@@ -20,7 +20,7 @@ import type {
 	TourismTaxReport,
 	TourismTaxReportParams,
 } from '@horeca/shared'
-import { isRussianCitizenship } from '@horeca/shared'
+import { isForeignCitizenship, isRussianCitizenship } from '@horeca/shared'
 import { decimalToMicros } from '../../db/ydb-helpers.ts'
 import {
 	InvalidBookingAmendStateError,
@@ -297,7 +297,9 @@ export function createBookingService(
 			// Gate skipped когда guestDocumentRepo undefined (test mode only).
 			if (guestDocumentRepo) {
 				const current = await repo.getById(tenantId, id)
-				if (current && !isRussianCitizenship(current.guestSnapshot.citizenship)) {
+				// Fail-closed shared detector — unknown/empty citizenship → foreign →
+				// scan required (mirrors frontend booking-edit-sheet gate).
+				if (current && isForeignCitizenship(current.guestSnapshot.citizenship)) {
 					const active = await guestDocumentRepo.findActiveForGuest(
 						tenantId,
 						current.primaryGuestId,

@@ -15,7 +15,7 @@
  *        не affect canonical semantics (immutability invariant)
  */
 import { describe, expect, it } from 'bun:test'
-import { isRussianCitizenship, RUSSIAN_CITIZENSHIP_CODES } from './guest.ts'
+import { isForeignCitizenship, isRussianCitizenship, RUSSIAN_CITIZENSHIP_CODES } from './guest.ts'
 
 describe('isRussianCitizenship — recognises both ISO alpha-2 + alpha-3', () => {
 	it('[R1] RU alpha-2 → true', () => {
@@ -79,5 +79,33 @@ describe('RUSSIAN_CITIZENSHIP_CODES — immutability invariant', () => {
 		// But the exported type is `ReadonlySet` — so callers can't .add() at
 		// compile time. This test documents that runtime mutation IS possible
 		// (warning: never do this in callers) — TypeScript-only safety.
+	})
+})
+
+describe('isForeignCitizenship — fail-closed МВД gate detector', () => {
+	it('[F1] RU citizen (alpha-2/3, any case) → NOT foreign', () => {
+		for (const ru of ['RU', 'RUS', 'ru', 'rus', 'Rus']) {
+			expect(isForeignCitizenship(ru)).toBe(false)
+		}
+	})
+
+	it('[F2] foreign codes → foreign', () => {
+		for (const code of ['US', 'USA', 'BY', 'KAZ', 'DEU']) {
+			expect(isForeignCitizenship(code)).toBe(true)
+		}
+	})
+
+	it('[F3] FAIL-CLOSED — unknown/empty/null/undefined → foreign (require scan)', () => {
+		// 109-ФЗ: missing citizenship MUST err toward requiring a passport scan.
+		expect(isForeignCitizenship('')).toBe(true)
+		expect(isForeignCitizenship('   ')).toBe(true)
+		expect(isForeignCitizenship(null)).toBe(true)
+		expect(isForeignCitizenship(undefined)).toBe(true)
+	})
+
+	it('[F4] exact inverse of isRussianCitizenship for present values', () => {
+		for (const c of ['RU', 'RUS', 'US', 'USA', 'BY']) {
+			expect(isForeignCitizenship(c)).toBe(!isRussianCitizenship(c))
+		}
 	})
 })

@@ -1,7 +1,7 @@
 import { useForm } from '@tanstack/react-form'
 import { useId, useState } from 'react'
 import type { BookingGuestSnapshot } from '@horeca/shared'
-import { isRussianCitizenship } from '@horeca/shared'
+import { isForeignCitizenship } from '@horeca/shared'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -373,12 +373,12 @@ function ActionView(props: {
 	// excluded server-side (entitiesAnonymizedAt + photoConsentLog.revokedAt
 	// dual filter).
 	const activeDocQ = useActiveGuestDocument(booking.primaryGuestId ?? null)
-	// Sprint C+ Round 7 Senior P0 fix: alpha-2 ('RU') AND alpha-3 ('RUS') case-
-	// insensitive — shared `isRussianCitizenship` canonical detector. Previously
-	// hardcoded `toUpperCase() !== 'RU'` mis-classified 'RUS' as foreign.
-	const isForeign =
-		booking.guestSnapshot?.citizenship != null &&
-		!isRussianCitizenship(booking.guestSnapshot.citizenship)
+	// **Fail-closed** (2026-05-29): unknown/empty/null citizenship → treated as
+	// foreign (require passport scan). Was `citizenship != null && !isRussian` —
+	// fail-OPEN: a snapshot без гражданства (legacy / OTA import) slipped the МВД
+	// gate (Заезд enabled без скана) → 109-ФЗ ст.22 риск (штраф 400-500к₽). Shared
+	// `isForeignCitizenship` handles alpha-2/3 case-insensitive + null/empty.
+	const isForeign = isForeignCitizenship(booking.guestSnapshot?.citizenship)
 	// Sprint C+ Round 7 Senior P0 fix: **fail-closed** during loading.
 	// Previously optimistic-allow → operator с fast click можно проскочить
 	// gate за ~150ms latency window → 109-ФЗ violation risk. Now: loading

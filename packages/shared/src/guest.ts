@@ -54,6 +54,22 @@ export function isRussianCitizenship(citizenship: string): boolean {
 	return RUSSIAN_CITIZENSHIP_CODES.has(citizenship.toUpperCase())
 }
 
+/**
+ * Foreign-citizen detector — **fail-closed** counterpart к isRussianCitizenship.
+ *
+ * Unknown/empty/null citizenship → treated as FOREIGN (true). Rationale: МВД-учёт
+ * gate (109-ФЗ ст.22 ч.3 — уведомление о прибытии в течение 1 раб. дня, штраф
+ * 400-500к₽ ст.18.9 КоАП) MUST err toward REQUIRING a passport scan when
+ * citizenship is missing. Over-requiring a scan for an unknown guest is safe;
+ * skipping it for an actually-foreign guest is a compliance violation.
+ *
+ * Use this (NOT `!isRussianCitizenship(x)`) wherever `citizenship` may be absent
+ * — booking snapshot (`?.`), OTA imports без гражданства, legacy rows.
+ */
+export function isForeignCitizenship(citizenship: string | null | undefined): boolean {
+	return !isRussianCitizenship(citizenship ?? '')
+}
+
 export const guestCreateInput = z.object({
 	lastName: nameSchema,
 	firstName: nameSchema,
