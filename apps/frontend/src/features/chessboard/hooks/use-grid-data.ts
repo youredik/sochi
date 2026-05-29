@@ -91,6 +91,15 @@ export function useGridData(from: string, to: string) {
 			return body.data
 		},
 		staleTime: 30_000,
+		// Self-heal read-after-write lag (2026-05-29). A tenant that reaches the
+		// grid ALWAYS has a property (the dashboard guard redirects property-less
+		// tenants к /setup). An empty list here means the just-onboarded property
+		// write hasn't propagated to the read path yet — Round 14.6 sends the user
+		// straight wizard→/demo→grid, so the first fetch can race the commit. Poll
+		// until it appears so the operator never gets stuck on an infinite skeleton
+		// (without this, the empty result cached for staleTime=30s never refetched).
+		refetchInterval: (query) =>
+			Array.isArray(query.state.data) && query.state.data.length === 0 ? 2_000 : false,
 	})
 	const propertyId = property.data?.[0]?.id ?? null
 
