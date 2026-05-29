@@ -611,19 +611,21 @@ tasks:
             --environment YDB_CONNECTION_STRING="$YDB_CONNECTION_STRING"
             --environment YDB_METADATA_CREDENTIALS=1
             --environment PAYMENT_PROVIDER=stub
-            --environment VISION_PROVIDER=mock
+            --environment VISION_PROVIDER=yandex
             --environment POSTBOX_ENABLED=true
             --environment POSTBOX_ENDPOINT=https://postbox.cloud.yandex.net
             --environment EMAIL_FROM_ADDRESS=noreply@sepshn.ru
             --environment EMAIL_FROM_NAME="Сэпшн"
             --environment EMAIL_REPLY_TO_ADDRESS=hi@sepshn.ru
-            --environment APP_MODE_PERMITTED_MOCK_ADAPTERS="email.demo-inbox,sms.demo-inbox,payment.stub,vision.mock"
+            --environment APP_MODE_PERMITTED_MOCK_ADAPTERS="email.demo-inbox,sms.demo-inbox,payment.stub"
             --environment S3_ENDPOINT=https://storage.yandexcloud.net
             --environment S3_REGION=ru-central1
             --environment S3_BUCKET="$S3_BUCKET"
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=BETTER_AUTH_SECRET,environment-variable=BETTER_AUTH_SECRET
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=S3_ACCESS_KEY_ID,environment-variable=S3_ACCESS_KEY_ID
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=S3_SECRET_ACCESS_KEY,environment-variable=S3_SECRET_ACCESS_KEY
+            --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=YC_VISION_API_KEY,environment-variable=YC_VISION_API_KEY
+            --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=YC_VISION_FOLDER_ID,environment-variable=YC_VISION_FOLDER_ID
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=POSTBOX_ACCESS_KEY_ID,environment-variable=POSTBOX_ACCESS_KEY_ID
             --secret id=$YC_LOCKBOX_ID,version-id=$YC_LOCKBOX_VERSION_ID,key=POSTBOX_SECRET_ACCESS_KEY,environment-variable=POSTBOX_SECRET_ACCESS_KEY
             --secret id=e6qa4in4mep35ubimi6c,version-id=e6qvbn4ajnl1fcff7h9q,key=SMARTCAPTCHA_SERVER_KEY,environment-variable=SMARTCAPTCHA_SERVER_KEY
