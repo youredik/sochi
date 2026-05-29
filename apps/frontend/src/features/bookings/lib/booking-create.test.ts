@@ -7,6 +7,7 @@ import {
 	buildGuestCreateBody,
 	buildGuestSnapshot,
 	buildOptimisticBand,
+	buildScanAutofillPatch,
 	defaultCheckOut,
 	generateIdempotencyKey,
 	nightsCount,
@@ -476,5 +477,85 @@ describe('applyOptimisticBand — pure cache transform', () => {
 	it('empty previous → result is just [band]', () => {
 		const out = applyOptimisticBand([], newBand)
 		expect(out).toEqual([newBand])
+	})
+})
+
+describe('buildScanAutofillPatch — OCR entities → form patch', () => {
+	const fullEntities = {
+		surname: 'Сидоров',
+		name: 'Иван',
+		middleName: 'Петрович',
+		gender: 'male' as const,
+		citizenshipIso3: 'rus',
+		birthDate: '1984-06-15',
+		birthPlace: 'г. Сочи',
+		documentNumber: '4608 123456',
+		issueDate: '2015-03-10',
+		expirationDate: null,
+	}
+
+	it('maps все непустые поля; citizenship → UPPERCASE; documentType из identityMethod', () => {
+		const patch = buildScanAutofillPatch(fullEntities, 'passport_paper')
+		expect(patch).toEqual({
+			firstName: 'Иван',
+			lastName: 'Сидоров',
+			middleName: 'Петрович',
+			citizenship: 'RUS',
+			documentNumber: '4608 123456',
+			documentType: 'Паспорт РФ',
+		})
+	})
+
+	it('null-поля НЕ попадают в патч (частичный скан не затирает ввод оператора)', () => {
+		const patch = buildScanAutofillPatch(
+			{ ...fullEntities, middleName: null, citizenshipIso3: null },
+			'passport_paper',
+		)
+		expect(patch).not.toHaveProperty('middleName')
+		expect(patch).not.toHaveProperty('citizenship')
+		expect(patch.firstName).toBe('Иван')
+	})
+
+	it('documentType ставится ТОЛЬКО при наличии documentNumber', () => {
+		const patch = buildScanAutofillPatch(
+			{ ...fullEntities, documentNumber: null },
+			'passport_paper',
+		)
+		expect(patch).not.toHaveProperty('documentNumber')
+		expect(patch).not.toHaveProperty('documentType')
+	})
+
+	it('загранпаспорт → documentType "Загранпаспорт"', () => {
+		const patch = buildScanAutofillPatch(fullEntities, 'passport_zagran')
+		expect(patch.documentType).toBe('Загранпаспорт')
+	})
+
+	it('иностранное гражданство → UPPERCASE alpha-3 (foreign-gate сработает)', () => {
+		const patch = buildScanAutofillPatch(
+			{ ...fullEntities, citizenshipIso3: 'usa' },
+			'passport_paper',
+		)
+		expect(patch.citizenship).toBe('USA')
+	})
+
+	it('полностью пустые entities → пустой патч {} (ничего не подставляем)', () => {
+		const empty = {
+			surname: null,
+			name: null,
+			middleName: null,
+			gender: null,
+			citizenshipIso3: null,
+			birthDate: null,
+			birthPlace: null,
+			documentNumber: null,
+			issueDate: null,
+			expirationDate: null,
+		}
+		expect(buildScanAutofillPatch(empty, 'passport_paper')).toEqual({})
+	})
+
+	it('identityMethod по умолчанию passport_paper', () => {
+		const patch = buildScanAutofillPatch(fullEntities)
+		expect(patch.documentType).toBe('Паспорт РФ')
 	})
 })

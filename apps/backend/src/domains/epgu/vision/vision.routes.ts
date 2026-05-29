@@ -124,6 +124,66 @@ const scanPassportSchema = z.object({
 	}),
 })
 
+/**
+ * Preview-scan body — OCR-only автозаполнение формы создания брони.
+ *
+ * Отличие от `scanPassportSchema`: НЕТ `guestId`/consent. На этапе создания
+ * брони гостя ещё нет (guestId появляется только после POST /guests). Это
+ * TRANSIENT распознавание: байты уходят в Yandex Vision (x-data-logging
+ * disabled), у нас НЕ сохраняются, consent/photo/document НЕ persist'ятся.
+ *
+ * 152-ФЗ правовой базис: ст.6 ч.1 п.5 (обработка для исполнения договора +
+ * 109-ФЗ обязанность учёта) — тот же, что у ручного ввода тех же полей. Ничего
+ * не хранится → нет биометрии ст.11 → отдельное согласие здесь не требуется.
+ * Биометрическое согласие (ст.11) + photo storage + guestDocument INSERT +
+ * audit-row происходят на ЗАЕЗДЕ через /passport/scan + /guests/:id/documents/
+ * from-scan (существующий flow). Preview эквивалентен «оператор посмотрел в
+ * паспорт и напечатал поля», только быстрее и без опечаток.
+ */
+const previewScanSchema = z.object({
+	imageBase64: z.string().min(1, 'imageBase64 не может быть пустым'),
+	mimeType: z.enum(['image/jpeg', 'image/png', 'application/pdf']),
+	countryHint: z.string().min(2).max(3).nullable().optional(),
+	identityMethod: identityMethodSchema.optional(),
+})
+
+/** Не-OCR identityMethods — биометрия/QR, не проходят через Vision. */
+const NON_OCR_IDENTITY_METHODS = new Set(['ebs', 'digital_id_max', 'mfsoi'])
+
+/**
+ * Decode base64 image + magic-byte sniff. Общий для /passport/scan и
+ * /passport/preview-scan (DRY — раньше дублировалось inline в scan-handler).
+ * Pure: без I/O и логирования (caller логирует и маппит на HTTP-ответ).
+ *
+ *   1. RFC 4648 strict base64 (Buffer.from lenient mode молча роняет мусор —
+ *      `////` декодируется в 3 байта и проходит length-check; strict regex
+ *      отвергает до decode, чтобы не жечь rate-limit budget на garbage).
+ *   2. Непустой результат decode.
+ *   3. Magic-byte sniff — отвергает MIME-spoof / HEIC (frontend транскодирует).
+ */
+function decodeAndSniffImage(
+	imageBase64: string,
+	mimeType: 'image/jpeg' | 'image/png' | 'application/pdf',
+):
+	| { readonly ok: true; readonly bytes: Uint8Array }
+	| { readonly ok: false; readonly message: string } {
+	if (!/^[A-Za-z0-9+/]+={0,2}$/.test(imageBase64)) {
+		return {
+			ok: false,
+			message: 'imageBase64 содержит недопустимые символы (RFC 4648 base64-canonical strict mode)',
+		}
+	}
+	const bytes = Uint8Array.from(Buffer.from(imageBase64, 'base64'))
+	if (bytes.length === 0) {
+		return { ok: false, message: 'imageBase64 декодируется в пустой массив' }
+	}
+	const mimeCheck = assertMimeMatchesBytes(mimeType, bytes)
+	if (!mimeCheck.ok) {
+		return { ok: false, message: mimeCheck.reason }
+	}
+	return { ok: true, bytes }
+}
+
 export interface VisionRoutesDeps {
 	readonly visionAdapter: VisionOcrAdapter
 	readonly rklAdapter: RklCheckAdapter
@@ -161,387 +221,541 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 	const { visionAdapter, rklAdapter, idempotency, guestRepo, photoStorage, passportScanFactory } =
 		deps
 
-	return new Hono<AppEnv>().post(
-		'/passport/scan',
-		bodyLimit({
-			maxSize: BODY_LIMIT_BYTES,
-			onError: (c) =>
-				c.json(
-					{
-						error: {
-							code: 'PAYLOAD_TOO_LARGE',
-							message: `Файл превышает лимит ${Math.floor(BODY_LIMIT_BYTES / 1024 / 1024)} МБ. Используйте client-side compression (PWA автоматически перекодирует).`,
-						},
-					},
-					413,
-				),
-		}),
-		rateLimiter<AppEnv>({
-			windowMs: RATE_LIMIT_WINDOW_MS,
-			limit: RATE_LIMIT_MAX,
-			// Round 4 self-review YDB P0-RL-1 fix: per-IP fallback when tenantId
-			// is null. Previous `'anonymous'` sentinel funneled ALL unauthenticated
-			// requests в single bucket → first attacker exhausts для everyone.
-			// Now per-IP (resolveClientIpSync canon) — separate buckets per source.
-			keyGenerator: (c) =>
-				c.var.tenantId ?? `ip:${extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)}`,
-			standardHeaders: 'draft-7',
-			statusCode: 429,
-			message: rateLimitMessage,
-		}),
-		idempotency,
-		requirePermission({ guest: ['update'] }),
-		zValidator('json', scanPassportSchema),
-		async (c) => {
-			// Sprint C: 428 Precondition Required per IETF draft-ietf-httpapi-idempotency-
-			// key-header-07 + Stripe canon (НЕ 400 — 400 = bad body shape, 428 = client must
-			// add precondition header). Closes multi-instance rate-limit gap: idempotency
-			// middleware writes к YDB глобально → даже multi-instance Serverless deduplicates.
-			if (!c.req.header('Idempotency-Key')) {
-				return c.json(
-					{
-						error: {
-							code: 'IDEMPOTENCY_KEY_REQUIRED',
-							message: 'Header `Idempotency-Key` обязателен для /passport/scan',
-						},
-					},
-					428,
-				)
-			}
-
-			const body = c.req.valid('json')
-			const tenantId = c.var.tenantId
-			const operatorUserId = c.var.session?.userId ?? c.var.user?.id ?? 'unknown'
-
-			// (a) Decode base64 — strict validation + guard empty.
-			// Round 2 self-review Senior P0-5: Buffer.from(s, 'base64') silently
-			// drops invalid characters per RFC 4648 lenient mode. Adversarial
-			// `////` decodes к 3 bytes, passes length check, fails magic-sniff
-			// — но counts к rate-limit budget. Strict pre-check rejects garbage
-			// payloads до decoding.
-			if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body.imageBase64)) {
-				return c.json(
-					{
-						error: {
-							code: 'BAD_REQUEST',
-							message:
-								'imageBase64 содержит недопустимые символы (RFC 4648 base64-canonical strict mode)',
-						},
-					},
-					400,
-				)
-			}
-			const archive = Uint8Array.from(Buffer.from(body.imageBase64, 'base64'))
-			if (archive.length === 0) {
-				return c.json(
-					{
-						error: {
-							code: 'BAD_REQUEST',
-							message: 'imageBase64 декодируется в пустой массив',
-						},
-					},
-					400,
-				)
-			}
-
-			// (b) Magic-byte sniffing — reject MIME spoof / HEIC.
-			const mimeCheck = assertMimeMatchesBytes(body.mimeType, archive)
-			if (!mimeCheck.ok) {
-				return c.json(
-					{
-						error: {
-							code: 'BAD_REQUEST',
-							message: mimeCheck.reason,
-						},
-					},
-					400,
-				)
-			}
-
-			// (c) Reject не-OCR identityMethods early. Sprint C+ legal-expert audit
-			// 2026-05-23d: added `mfsoi` (canonical ПП-1912 МФСОИ value, since
-			// 2026-05-23d). All three are biometric/QR-style flows that don't pass
-			// through Vision OCR — caller must use dedicated biometric/QR route.
-			if (
-				body.identityMethod === 'ebs' ||
-				body.identityMethod === 'digital_id_max' ||
-				body.identityMethod === 'mfsoi'
-			) {
-				return c.json(
-					{
-						error: {
-							code: 'BAD_REQUEST',
-							message: `Тип документа '${body.identityMethod}' не сканируется через OCR — используйте biometric/QR flow (ЕБС / Госуслуги-МАХ через МФСОИ)`,
-						},
-					},
-					400,
-				)
-			}
-
-			// (c.5) Cross-tenant guestId ownership check. Round 3 finding —
-			// operator из tenant A мог scan guest из tenant B, audit log
-			// заражается cross-tenant references. Strict 404 если guest не
-			// найден в текущем tenant context.
-			const guest = await guestRepo.getById(tenantId, body.guestId)
-			if (guest === null) {
-				return c.json(
-					{
-						error: {
-							code: 'NOT_FOUND',
-							message: 'Гость не найден в текущем тенант-контексте',
-						},
-					},
-					404,
-				)
-			}
-
-			// (d) Server-clock + server-resolved IP + UA для consent audit trail.
-			const ipAddress = extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)
-			const userAgent = c.req.header('user-agent') ?? 'unknown'
-
-			// (e) Vision call — wrap audit-ensuring try/catch.
-			const identityMethod = body.identityMethod ?? 'passport_paper'
-			const apiModel =
-				identityMethod === 'passport_zagran'
-					? 'page'
-					: identityMethod === 'driver_license'
-						? 'driver-license-front'
-						: 'passport'
-
-			let visionResult: Awaited<ReturnType<VisionOcrAdapter['recognizePassport']>> | null = null
-			let visionError: Error | null = null
-			try {
-				visionResult = await visionAdapter.recognizePassport({
-					bytes: archive,
-					mimeType: body.mimeType,
-					countryHint: body.countryHint ?? null,
-					identityMethod,
-				})
-			} catch (err) {
-				visionError = err instanceof Error ? err : new Error(String(err))
-			}
-
-			// (f) RKL check — graceful (не throw'ает).
-			const rklEval = visionResult
-				? await evaluateRklForScan(rklAdapter, {
-						detectedCountryIso3: visionResult.detectedCountryIso3,
-						entities: visionResult.entities,
-						identityMethod,
-					})
-				: {
-						status: 'check_failed' as const,
-						matchType: null,
-						registryRevision: null,
-						latencyMs: 0,
-					}
-
-			// Sprint C+ legal audit 2026-05-23d: normalize separateConsents to drop
-			// optional legacy `citizenshipSpecial` field when undefined. Required because
-			// tsconfig.exactOptionalPropertyTypes=true forbids passing `{key: undefined}`
-			// to interface with `key?: boolean`. Strips field cleanly when omitted by
-			// new clients (2-checkbox model); preserves it when sent by old clients.
-			const normalizedSeparateConsents =
-				body.separateConsents.citizenshipSpecial === undefined
-					? {
-							generalPdn: body.separateConsents.generalPdn,
-							biometricPhoto: body.separateConsents.biometricPhoto,
-						}
-					: {
-							generalPdn: body.separateConsents.generalPdn,
-							biometricPhoto: body.separateConsents.biometricPhoto,
-							citizenshipSpecial: body.separateConsents.citizenshipSpecial,
-						}
-
-			// (f.5+g) ATOMIC consent + audit write FIRST, upload AFTER (Sprint C+
-			// Senior P0-2 fix 2026-05-23d). Round 4 had reverse order — upload before
-			// atomic write — which produced this orphan-PII failure mode:
-			//   1. upload bytes к S3 → objectKey X
-			//   2. atomic consent+audit insert fails (transient YDB error)
-			//   3. compensating S3 delete of X attempted
-			//   4. compensating delete ALSO fails (e.g. S3 rate-limit)
-			//   5. result: S3 object X exists with PII, NO audit row points to it,
-			//      RTBF cascade cannot find it. 90-day lifecycle is last-resort backstop
-			//      but есть window of 152-ФЗ ст.21 ч.4 forensic gap.
-			// Reversed order eliminates this race entirely: NO upload happens until
-			// audit row is committed. If subsequent upload fails, audit row stays
-			// with inputObjectKey=null — no orphan possible.
-			//
-			// 152-ФЗ ст.21 ч.4 atomicity: consent + audit MUST be both present OR
-			// both absent. Factory's sql.begin guarantees this. Routes don't import
-			// db/ directly per depcruise canon.
-			const atomicResult = await passportScanFactory.recordConsentAndAuditAtomic({
-				consent: {
-					tenantId,
-					guestId: body.guestId,
-					version: body.consent152fzVersion,
-					scope: 'passport_ocr',
-					acceptedAt: new Date(), // server clock — НЕ от frontend (clock skew)
-					ipAddress,
-					userAgent,
-					textSnapshot: body.consent152fzTextSnapshot,
-					separateConsents: normalizedSeparateConsents,
-				},
-				audit: {
-					tenantId,
-					operatorUserId,
-					guestId: body.guestId,
-					bookingId: null,
-					documentId: null,
-					inputMimeType: body.mimeType,
-					inputSizeBytes: archive.length,
-					// Sprint C+ Senior P0-2: always null initially — set via repo.setObjectKey
-					// AFTER successful S3 upload (next step). Prevents orphan PII.
-					inputObjectKey: null,
-					apiEndpoint: VISION_API_ENDPOINT,
-					apiModel,
-					httpStatus: visionResult?.httpStatus ?? 0,
-					latencyMs: visionResult?.latencyMs ?? 0,
-					entities: visionResult?.entities ?? null,
-					detectedCountryIso3: visionResult?.detectedCountryIso3 ?? null,
-					isCountryWhitelisted: visionResult?.isCountryWhitelisted ?? false,
-					apiConfidenceRaw: visionResult?.apiConfidenceRaw ?? null,
-					confidenceHeuristic: visionResult?.confidenceHeuristic ?? null,
-					outcome: visionResult?.outcome ?? 'api_error',
-					// Round 2 Legal P0-4 fix: persist Vision response shape для ст.21 ч.4
-					// «возможность установления содержания обработанных данных».
-					rawResponseJson:
-						visionResult === null
-							? null
-							: {
-									detectedCountryIso3: visionResult.detectedCountryIso3,
-									isCountryWhitelisted: visionResult.isCountryWhitelisted,
-									entities: visionResult.entities,
-									apiConfidenceRaw: visionResult.apiConfidenceRaw,
-									confidenceHeuristic: visionResult.confidenceHeuristic,
-									outcome: visionResult.outcome,
-									latencyMs: visionResult.latencyMs,
-									httpStatus: visionResult.httpStatus,
-								},
-				},
-			})
-			const auditWriteFailed = !atomicResult.success
-			if (auditWriteFailed) {
-				c.var.logger.error(
-					{
-						event: 'passport_scan.atomic_write_failed',
-						tenantId,
-						guestId: body.guestId,
-						errName: atomicResult.errName,
-					},
-					'consent+audit atomic write failed — 152-ФЗ ст.21 ч.4 forensic gap',
-				)
-			}
-
-			// (g.5) Photo storage upload — ONLY after atomic write succeeded.
-			// Two failure modes are now safe:
-			//   (a) Upload fails → audit row stays with inputObjectKey=null. No orphan
-			//       in S3. Operator sees OCR result; logged warning for forensic trail.
-			//   (b) Upload succeeds but PATCH `setObjectKey` fails (rare — UPDATE with
-			//       `WHERE inputObjectKey IS NULL` is idempotent) → orphan possible.
-			//       Mitigation: lifecycle policy 90-day GC catches это. Empirically rare
-			//       because PATCH is single-row UPDATE on PK (no contention).
-			// Storage mode 'disabled' = skip upload entirely (test/dev fixtures).
-			// 90-day retention в Object Storage для МВД-аудита (152-ФЗ ст.21 ч.4 +
-			// bucket lifecycle policy native YC).
-			let inputObjectKey: string | null = null
-			let uploadFailed = false
-			if (
-				!auditWriteFailed &&
-				atomicResult.auditId !== null &&
-				photoStorage.mode !== 'disabled' &&
-				visionResult !== null &&
-				visionResult.outcome !== 'api_error'
-			) {
-				try {
-					inputObjectKey = await photoStorage.put({
-						tenantId,
-						bytes: archive,
-						contentType: body.mimeType,
-					})
-					// PATCH audit row to attach uploaded objectKey. Idempotent via
-					// `WHERE inputObjectKey IS NULL` — repeat call cannot mutate.
-					await passportScanFactory.auditRepo.setObjectKey(
-						tenantId,
-						atomicResult.auditId,
-						inputObjectKey,
-					)
-				} catch (err) {
-					// Storage failure → audit row stays with inputObjectKey=null. Operator
-					// видит OCR result, но photo не retrievable для МВД re-audit. Logged
-					// here для forensic trail. No orphan possible (nothing committed pre-fail).
-					uploadFailed = true
-					c.var.logger.warn(
+	return new Hono<AppEnv>()
+		.post(
+			'/passport/scan',
+			bodyLimit({
+				maxSize: BODY_LIMIT_BYTES,
+				onError: (c) =>
+					c.json(
 						{
-							event: 'passport_scan.storage_upload_failed',
-							tenantId,
-							guestId: body.guestId,
-							auditId: atomicResult.auditId,
-							err: err instanceof Error ? err.message : String(err),
+							error: {
+								code: 'PAYLOAD_TOO_LARGE',
+								message: `Файл превышает лимит ${Math.floor(BODY_LIMIT_BYTES / 1024 / 1024)} МБ. Используйте client-side compression (PWA автоматически перекодирует).`,
+							},
 						},
-						'photo storage upload failed AFTER audit committed — audit row preserved with null objectKey',
+						413,
+					),
+			}),
+			rateLimiter<AppEnv>({
+				windowMs: RATE_LIMIT_WINDOW_MS,
+				limit: RATE_LIMIT_MAX,
+				// Round 4 self-review YDB P0-RL-1 fix: per-IP fallback when tenantId
+				// is null. Previous `'anonymous'` sentinel funneled ALL unauthenticated
+				// requests в single bucket → first attacker exhausts для everyone.
+				// Now per-IP (resolveClientIpSync canon) — separate buckets per source.
+				keyGenerator: (c) =>
+					c.var.tenantId ?? `ip:${extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)}`,
+				standardHeaders: 'draft-7',
+				statusCode: 429,
+				message: rateLimitMessage,
+			}),
+			idempotency,
+			requirePermission({ guest: ['update'] }),
+			zValidator('json', scanPassportSchema),
+			async (c) => {
+				// Sprint C: 428 Precondition Required per IETF draft-ietf-httpapi-idempotency-
+				// key-header-07 + Stripe canon (НЕ 400 — 400 = bad body shape, 428 = client must
+				// add precondition header). Closes multi-instance rate-limit gap: idempotency
+				// middleware writes к YDB глобально → даже multi-instance Serverless deduplicates.
+				if (!c.req.header('Idempotency-Key')) {
+					return c.json(
+						{
+							error: {
+								code: 'IDEMPOTENCY_KEY_REQUIRED',
+								message: 'Header `Idempotency-Key` обязателен для /passport/scan',
+							},
+						},
+						428,
 					)
 				}
-			}
 
-			// (h.5) Sprint C: structured ops observability — single canonical log line
-			// для YC Cloud Logging dashboards. PII fields НЕ логируются (redact paths
-			// в logger.ts защищают defense-in-depth, плюс мы здесь явно НЕ передаём
-			// entities/imageBase64/raw response). Pino redact list catches accidents.
-			//
-			// Канонические dashboards (YC Cloud Logging filter examples):
-			//   - "passport_scan.outcome=api_error" — Vision API regression / cost spike
-			//   - "passport_scan.rklStatus=match" — РКЛ blocks / fraud signal
-			//   - "passport_scan.atomicWriteFailed=true" — 152-ФЗ ст.21 ч.4 breach risk
-			//   - p99 of "passport_scan.latencyMs" — Yandex Vision SLA monitoring
-			c.var.logger.info(
-				{
-					event: 'passport_scan',
-					tenantId,
-					guestId: body.guestId,
-					identityMethod,
-					apiModel,
-					mimeType: body.mimeType,
-					inputSizeBytes: archive.length,
-					httpStatus: visionResult?.httpStatus ?? 0,
-					latencyMs: visionResult?.latencyMs ?? 0,
-					outcome: visionResult?.outcome ?? 'api_error',
-					confidenceHeuristic: visionResult?.confidenceHeuristic ?? null,
-					isCountryWhitelisted: visionResult?.isCountryWhitelisted ?? false,
-					rklStatus: rklEval.status,
-					rklMatchType: rklEval.matchType,
-					inputObjectKeySet: inputObjectKey !== null,
-					atomicWriteFailed: auditWriteFailed,
-					uploadFailed,
-					visionError: visionError === null ? null : visionError.name,
-				},
-				'passport_scan',
-			)
+				const body = c.req.valid('json')
+				const tenantId = c.var.tenantId
+				const operatorUserId = c.var.session?.userId ?? c.var.user?.id ?? 'unknown'
 
-			// (h.6) Sprint C: ops-metrics emission для future YC Monitoring exporter.
-			// Buffer drained M11+. Labels low-cardinality (no tenantId/guestId).
-			const outcomeForMetric = visionResult?.outcome ?? 'api_error'
-			emitPassportScanMetric({
-				kind: 'attempts',
-				outcome: outcomeForMetric,
-				identityMethod,
-				apiModel,
-				rklStatus: rklEval.status,
-				value: 1,
-			})
-			if (visionResult !== null) {
+				// (a) Decode base64 — strict validation + guard empty.
+				// Round 2 self-review Senior P0-5: Buffer.from(s, 'base64') silently
+				// drops invalid characters per RFC 4648 lenient mode. Adversarial
+				// `////` decodes к 3 bytes, passes length check, fails magic-sniff
+				// — но counts к rate-limit budget. Strict pre-check rejects garbage
+				// payloads до decoding.
+				const decoded = decodeAndSniffImage(body.imageBase64, body.mimeType)
+				if (!decoded.ok) {
+					return c.json({ error: { code: 'BAD_REQUEST', message: decoded.message } }, 400)
+				}
+				const archive = decoded.bytes
+
+				// (c) Reject не-OCR identityMethods early. Sprint C+ legal-expert audit
+				// 2026-05-23d: `mfsoi` (canonical ПП-1912 МФСОИ value). Все три —
+				// biometric/QR flows, не проходят через Vision OCR — caller использует
+				// dedicated biometric/QR route.
+				if (
+					body.identityMethod !== undefined &&
+					NON_OCR_IDENTITY_METHODS.has(body.identityMethod)
+				) {
+					return c.json(
+						{
+							error: {
+								code: 'BAD_REQUEST',
+								message: `Тип документа '${body.identityMethod}' не сканируется через OCR — используйте biometric/QR flow (ЕБС / Госуслуги-МАХ через МФСОИ)`,
+							},
+						},
+						400,
+					)
+				}
+
+				// (c.5) Cross-tenant guestId ownership check. Round 3 finding —
+				// operator из tenant A мог scan guest из tenant B, audit log
+				// заражается cross-tenant references. Strict 404 если guest не
+				// найден в текущем tenant context.
+				const guest = await guestRepo.getById(tenantId, body.guestId)
+				if (guest === null) {
+					return c.json(
+						{
+							error: {
+								code: 'NOT_FOUND',
+								message: 'Гость не найден в текущем тенант-контексте',
+							},
+						},
+						404,
+					)
+				}
+
+				// (d) Server-clock + server-resolved IP + UA для consent audit trail.
+				const ipAddress = extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)
+				const userAgent = c.req.header('user-agent') ?? 'unknown'
+
+				// (e) Vision call — wrap audit-ensuring try/catch.
+				const identityMethod = body.identityMethod ?? 'passport_paper'
+				const apiModel =
+					identityMethod === 'passport_zagran'
+						? 'page'
+						: identityMethod === 'driver_license'
+							? 'driver-license-front'
+							: 'passport'
+
+				let visionResult: Awaited<ReturnType<VisionOcrAdapter['recognizePassport']>> | null = null
+				let visionError: Error | null = null
+				try {
+					visionResult = await visionAdapter.recognizePassport({
+						bytes: archive,
+						mimeType: body.mimeType,
+						countryHint: body.countryHint ?? null,
+						identityMethod,
+					})
+				} catch (err) {
+					visionError = err instanceof Error ? err : new Error(String(err))
+				}
+
+				// (f) RKL check — graceful (не throw'ает).
+				const rklEval = visionResult
+					? await evaluateRklForScan(rklAdapter, {
+							detectedCountryIso3: visionResult.detectedCountryIso3,
+							entities: visionResult.entities,
+							identityMethod,
+						})
+					: {
+							status: 'check_failed' as const,
+							matchType: null,
+							registryRevision: null,
+							latencyMs: 0,
+						}
+
+				// Sprint C+ legal audit 2026-05-23d: normalize separateConsents to drop
+				// optional legacy `citizenshipSpecial` field when undefined. Required because
+				// tsconfig.exactOptionalPropertyTypes=true forbids passing `{key: undefined}`
+				// to interface with `key?: boolean`. Strips field cleanly when omitted by
+				// new clients (2-checkbox model); preserves it when sent by old clients.
+				const normalizedSeparateConsents =
+					body.separateConsents.citizenshipSpecial === undefined
+						? {
+								generalPdn: body.separateConsents.generalPdn,
+								biometricPhoto: body.separateConsents.biometricPhoto,
+							}
+						: {
+								generalPdn: body.separateConsents.generalPdn,
+								biometricPhoto: body.separateConsents.biometricPhoto,
+								citizenshipSpecial: body.separateConsents.citizenshipSpecial,
+							}
+
+				// (f.5+g) ATOMIC consent + audit write FIRST, upload AFTER (Sprint C+
+				// Senior P0-2 fix 2026-05-23d). Round 4 had reverse order — upload before
+				// atomic write — which produced this orphan-PII failure mode:
+				//   1. upload bytes к S3 → objectKey X
+				//   2. atomic consent+audit insert fails (transient YDB error)
+				//   3. compensating S3 delete of X attempted
+				//   4. compensating delete ALSO fails (e.g. S3 rate-limit)
+				//   5. result: S3 object X exists with PII, NO audit row points to it,
+				//      RTBF cascade cannot find it. 90-day lifecycle is last-resort backstop
+				//      but есть window of 152-ФЗ ст.21 ч.4 forensic gap.
+				// Reversed order eliminates this race entirely: NO upload happens until
+				// audit row is committed. If subsequent upload fails, audit row stays
+				// with inputObjectKey=null — no orphan possible.
+				//
+				// 152-ФЗ ст.21 ч.4 atomicity: consent + audit MUST be both present OR
+				// both absent. Factory's sql.begin guarantees this. Routes don't import
+				// db/ directly per depcruise canon.
+				const atomicResult = await passportScanFactory.recordConsentAndAuditAtomic({
+					consent: {
+						tenantId,
+						guestId: body.guestId,
+						version: body.consent152fzVersion,
+						scope: 'passport_ocr',
+						acceptedAt: new Date(), // server clock — НЕ от frontend (clock skew)
+						ipAddress,
+						userAgent,
+						textSnapshot: body.consent152fzTextSnapshot,
+						separateConsents: normalizedSeparateConsents,
+					},
+					audit: {
+						tenantId,
+						operatorUserId,
+						guestId: body.guestId,
+						bookingId: null,
+						documentId: null,
+						inputMimeType: body.mimeType,
+						inputSizeBytes: archive.length,
+						// Sprint C+ Senior P0-2: always null initially — set via repo.setObjectKey
+						// AFTER successful S3 upload (next step). Prevents orphan PII.
+						inputObjectKey: null,
+						apiEndpoint: VISION_API_ENDPOINT,
+						apiModel,
+						httpStatus: visionResult?.httpStatus ?? 0,
+						latencyMs: visionResult?.latencyMs ?? 0,
+						entities: visionResult?.entities ?? null,
+						detectedCountryIso3: visionResult?.detectedCountryIso3 ?? null,
+						isCountryWhitelisted: visionResult?.isCountryWhitelisted ?? false,
+						apiConfidenceRaw: visionResult?.apiConfidenceRaw ?? null,
+						confidenceHeuristic: visionResult?.confidenceHeuristic ?? null,
+						outcome: visionResult?.outcome ?? 'api_error',
+						// Round 2 Legal P0-4 fix: persist Vision response shape для ст.21 ч.4
+						// «возможность установления содержания обработанных данных».
+						rawResponseJson:
+							visionResult === null
+								? null
+								: {
+										detectedCountryIso3: visionResult.detectedCountryIso3,
+										isCountryWhitelisted: visionResult.isCountryWhitelisted,
+										entities: visionResult.entities,
+										apiConfidenceRaw: visionResult.apiConfidenceRaw,
+										confidenceHeuristic: visionResult.confidenceHeuristic,
+										outcome: visionResult.outcome,
+										latencyMs: visionResult.latencyMs,
+										httpStatus: visionResult.httpStatus,
+									},
+					},
+				})
+				const auditWriteFailed = !atomicResult.success
+				if (auditWriteFailed) {
+					c.var.logger.error(
+						{
+							event: 'passport_scan.atomic_write_failed',
+							tenantId,
+							guestId: body.guestId,
+							errName: atomicResult.errName,
+						},
+						'consent+audit atomic write failed — 152-ФЗ ст.21 ч.4 forensic gap',
+					)
+				}
+
+				// (g.5) Photo storage upload — ONLY after atomic write succeeded.
+				// Two failure modes are now safe:
+				//   (a) Upload fails → audit row stays with inputObjectKey=null. No orphan
+				//       in S3. Operator sees OCR result; logged warning for forensic trail.
+				//   (b) Upload succeeds but PATCH `setObjectKey` fails (rare — UPDATE with
+				//       `WHERE inputObjectKey IS NULL` is idempotent) → orphan possible.
+				//       Mitigation: lifecycle policy 90-day GC catches это. Empirically rare
+				//       because PATCH is single-row UPDATE on PK (no contention).
+				// Storage mode 'disabled' = skip upload entirely (test/dev fixtures).
+				// 90-day retention в Object Storage для МВД-аудита (152-ФЗ ст.21 ч.4 +
+				// bucket lifecycle policy native YC).
+				let inputObjectKey: string | null = null
+				let uploadFailed = false
+				if (
+					!auditWriteFailed &&
+					atomicResult.auditId !== null &&
+					photoStorage.mode !== 'disabled' &&
+					visionResult !== null &&
+					visionResult.outcome !== 'api_error'
+				) {
+					try {
+						inputObjectKey = await photoStorage.put({
+							tenantId,
+							bytes: archive,
+							contentType: body.mimeType,
+						})
+						// PATCH audit row to attach uploaded objectKey. Idempotent via
+						// `WHERE inputObjectKey IS NULL` — repeat call cannot mutate.
+						await passportScanFactory.auditRepo.setObjectKey(
+							tenantId,
+							atomicResult.auditId,
+							inputObjectKey,
+						)
+					} catch (err) {
+						// Storage failure → audit row stays with inputObjectKey=null. Operator
+						// видит OCR result, но photo не retrievable для МВД re-audit. Logged
+						// here для forensic trail. No orphan possible (nothing committed pre-fail).
+						uploadFailed = true
+						c.var.logger.warn(
+							{
+								event: 'passport_scan.storage_upload_failed',
+								tenantId,
+								guestId: body.guestId,
+								auditId: atomicResult.auditId,
+								err: err instanceof Error ? err.message : String(err),
+							},
+							'photo storage upload failed AFTER audit committed — audit row preserved with null objectKey',
+						)
+					}
+				}
+
+				// (h.5) Sprint C: structured ops observability — single canonical log line
+				// для YC Cloud Logging dashboards. PII fields НЕ логируются (redact paths
+				// в logger.ts защищают defense-in-depth, плюс мы здесь явно НЕ передаём
+				// entities/imageBase64/raw response). Pino redact list catches accidents.
+				//
+				// Канонические dashboards (YC Cloud Logging filter examples):
+				//   - "passport_scan.outcome=api_error" — Vision API regression / cost spike
+				//   - "passport_scan.rklStatus=match" — РКЛ blocks / fraud signal
+				//   - "passport_scan.atomicWriteFailed=true" — 152-ФЗ ст.21 ч.4 breach risk
+				//   - p99 of "passport_scan.latencyMs" — Yandex Vision SLA monitoring
+				c.var.logger.info(
+					{
+						event: 'passport_scan',
+						tenantId,
+						guestId: body.guestId,
+						identityMethod,
+						apiModel,
+						mimeType: body.mimeType,
+						inputSizeBytes: archive.length,
+						httpStatus: visionResult?.httpStatus ?? 0,
+						latencyMs: visionResult?.latencyMs ?? 0,
+						outcome: visionResult?.outcome ?? 'api_error',
+						confidenceHeuristic: visionResult?.confidenceHeuristic ?? null,
+						isCountryWhitelisted: visionResult?.isCountryWhitelisted ?? false,
+						rklStatus: rklEval.status,
+						rklMatchType: rklEval.matchType,
+						inputObjectKeySet: inputObjectKey !== null,
+						atomicWriteFailed: auditWriteFailed,
+						uploadFailed,
+						visionError: visionError === null ? null : visionError.name,
+					},
+					'passport_scan',
+				)
+
+				// (h.6) Sprint C: ops-metrics emission для future YC Monitoring exporter.
+				// Buffer drained M11+. Labels low-cardinality (no tenantId/guestId).
+				const outcomeForMetric = visionResult?.outcome ?? 'api_error'
 				emitPassportScanMetric({
-					kind: 'duration_ms',
+					kind: 'attempts',
 					outcome: outcomeForMetric,
 					identityMethod,
 					apiModel,
 					rklStatus: rklEval.status,
-					value: visionResult.latencyMs,
+					value: 1,
 				})
-				// Yandex Vision pricing — model-aware (passport/page/driver-license-* all
-				// 0.71 ₽ = 71 копеек per Yandex AI Studio 2026-Q2). Self-review P1.4:
-				// hardcoded `71` removed; passportScanCostKopecks() returns null for
-				// unknown models so мы don't emit wrong cost.
-				if (visionResult.outcome === 'success' || visionResult.outcome === 'low_confidence') {
+				if (visionResult !== null) {
+					emitPassportScanMetric({
+						kind: 'duration_ms',
+						outcome: outcomeForMetric,
+						identityMethod,
+						apiModel,
+						rklStatus: rklEval.status,
+						value: visionResult.latencyMs,
+					})
+					// Yandex Vision pricing — model-aware (passport/page/driver-license-* all
+					// 0.71 ₽ = 71 копеек per Yandex AI Studio 2026-Q2). Self-review P1.4:
+					// hardcoded `71` removed; passportScanCostKopecks() returns null for
+					// unknown models so мы don't emit wrong cost.
+					if (visionResult.outcome === 'success' || visionResult.outcome === 'low_confidence') {
+						const costKop = passportScanCostKopecks(apiModel)
+						if (costKop !== null) {
+							emitPassportScanMetric({
+								kind: 'cost_kopecks',
+								outcome: outcomeForMetric,
+								identityMethod,
+								apiModel,
+								value: costKop,
+							})
+						}
+					}
+				}
+				// Sprint C+ Senior P0-2: replaced `orphan_compensation_failed` metric with
+				// `upload_failed`. Reverse-order flow means no compensating delete needed —
+				// upload failures don't create orphans (audit row stays valid с null key).
+				if (uploadFailed) {
+					emitPassportScanMetric({
+						kind: 'upload_failed',
+						outcome: outcomeForMetric,
+						identityMethod,
+						apiModel,
+						value: 1,
+					})
+				}
+
+				// (h) Response. Если vision throw'нул — surface as 500 с generic message
+				// (НЕ leak error.message что может содержать bytes/PII).
+				if (visionError !== null || visionResult === null) {
+					return c.json(
+						{
+							error: {
+								code: 'VISION_API_ERROR',
+								message: 'Сканирование документа временно недоступно. Попробуйте позже.',
+							},
+						},
+						500,
+					)
+				}
+
+				// Round 4 self-review Senior P0-1 fix: if atomic consent+audit write
+				// failed, operator MUST NOT receive 200 + entities. Otherwise frontend
+				// saves данные гостя без consent/audit proof → 152-ФЗ ст.21 ч.4
+				// breach + ст.9 ч.4 «оператор обязан доказать получение» violated.
+				// Compensating S3 delete already ran (line 419 above). Operator UI
+				// will surface 500 → они retry → новый Idempotency-Key → fresh attempt.
+				if (auditWriteFailed) {
+					return c.json(
+						{
+							error: {
+								code: 'CONSENT_AUDIT_PERSIST_FAILED',
+								message:
+									'Согласие и аудит записать не удалось. Сканирование отменено. ' +
+									'Попробуйте ещё раз; если ошибка повторяется — обратитесь к администратору.',
+							},
+						},
+						500,
+					)
+				}
+
+				return c.json(
+					{
+						data: {
+							...visionResult,
+							rklStatus: rklEval.status,
+							rklMatchType: rklEval.matchType,
+							rklRegistryRevision: rklEval.registryRevision,
+							// Sprint C+ Senior P0-1 fix 2026-05-23d: expose photoConsentLogId
+							// so frontend can pass it to POST /guests/:id/documents/from-scan,
+							// linking the new guestDocument row для RTBF cascade.
+							photoConsentLogId: atomicResult.consentId,
+						},
+					},
+					200,
+				)
+			},
+		)
+		.post(
+			'/passport/preview-scan',
+			bodyLimit({
+				maxSize: BODY_LIMIT_BYTES,
+				onError: (c) =>
+					c.json(
+						{
+							error: {
+								code: 'PAYLOAD_TOO_LARGE',
+								message: `Файл превышает лимит ${Math.floor(BODY_LIMIT_BYTES / 1024 / 1024)} МБ. Используйте client-side compression (PWA автоматически перекодирует).`,
+							},
+						},
+						413,
+					),
+			}),
+			rateLimiter<AppEnv>({
+				windowMs: RATE_LIMIT_WINDOW_MS,
+				limit: RATE_LIMIT_MAX,
+				keyGenerator: (c) =>
+					c.var.tenantId ?? `ip:${extractClientIpFromContext(c, env.TRUSTED_PROXY_CIDRS)}`,
+				standardHeaders: 'draft-7',
+				statusCode: 429,
+				message: rateLimitMessage,
+			}),
+			requirePermission({ guest: ['update'] }),
+			zValidator('json', previewScanSchema),
+			async (c) => {
+				// Preview-scan = OCR-only автозаполнение формы создания брони. НЕТ
+				// guestId/consent/persist: гостя ещё нет, изображение transient (уходит
+				// в Vision, у нас не хранится). Биометрическое согласие ст.11 + photo
+				// storage + guestDocument INSERT + audit-row остаются на ЗАЕЗДЕ (POST
+				// /passport/scan + /guests/:id/documents/from-scan). Идемпотентность не
+				// нужна — запрос не мутирует состояние, повтор безвреден.
+				const body = c.req.valid('json')
+				const tenantId = c.var.tenantId
+
+				// (a+b) decode base64 + magic-byte sniff (общий helper).
+				const decoded = decodeAndSniffImage(body.imageBase64, body.mimeType)
+				if (!decoded.ok) {
+					return c.json({ error: { code: 'BAD_REQUEST', message: decoded.message } }, 400)
+				}
+
+				// (c) Reject не-OCR identityMethods (biometric/QR не идут через Vision).
+				if (
+					body.identityMethod !== undefined &&
+					NON_OCR_IDENTITY_METHODS.has(body.identityMethod)
+				) {
+					return c.json(
+						{
+							error: {
+								code: 'BAD_REQUEST',
+								message: `Тип документа '${body.identityMethod}' не сканируется через OCR — используйте biometric/QR flow (ЕБС / Госуслуги-МАХ через МФСОИ)`,
+							},
+						},
+						400,
+					)
+				}
+
+				const identityMethod = body.identityMethod ?? 'passport_paper'
+				const apiModel =
+					identityMethod === 'passport_zagran'
+						? 'page'
+						: identityMethod === 'driver_license'
+							? 'driver-license-front'
+							: 'passport'
+
+				// Vision OCR — transient. graceful try/catch (как в scan).
+				let visionResult: Awaited<ReturnType<VisionOcrAdapter['recognizePassport']>> | null = null
+				let visionError: Error | null = null
+				try {
+					visionResult = await visionAdapter.recognizePassport({
+						bytes: decoded.bytes,
+						mimeType: body.mimeType,
+						countryHint: body.countryHint ?? null,
+						identityMethod,
+					})
+				} catch (err) {
+					visionError = err instanceof Error ? err : new Error(String(err))
+				}
+
+				// Structured no-PII лог (152-ФЗ: bytes/entities redact'ятся Pino).
+				c.var.logger.info(
+					{
+						event: 'passport_preview_scan',
+						tenantId,
+						identityMethod,
+						apiModel,
+						mimeType: body.mimeType,
+						inputSizeBytes: decoded.bytes.length,
+						httpStatus: visionResult?.httpStatus ?? 0,
+						latencyMs: visionResult?.latencyMs ?? 0,
+						outcome: visionResult?.outcome ?? 'api_error',
+						confidenceHeuristic: visionResult?.confidenceHeuristic ?? null,
+						visionError: visionError === null ? null : visionError.name,
+					},
+					'passport_preview_scan',
+				)
+
+				// Cost/attempt metrics — preview Vision calls стоят столько же, что scan.
+				const outcomeForMetric = visionResult?.outcome ?? 'api_error'
+				emitPassportScanMetric({
+					kind: 'attempts',
+					outcome: outcomeForMetric,
+					identityMethod,
+					apiModel,
+					value: 1,
+				})
+				if (
+					visionResult !== null &&
+					(visionResult.outcome === 'success' || visionResult.outcome === 'low_confidence')
+				) {
 					const costKop = passportScanCostKopecks(apiModel)
 					if (costKop !== null) {
 						emitPassportScanMetric({
@@ -553,71 +767,36 @@ export function createVisionRoutesInner(deps: VisionRoutesDeps) {
 						})
 					}
 				}
-			}
-			// Sprint C+ Senior P0-2: replaced `orphan_compensation_failed` metric with
-			// `upload_failed`. Reverse-order flow means no compensating delete needed —
-			// upload failures don't create orphans (audit row stays valid с null key).
-			if (uploadFailed) {
-				emitPassportScanMetric({
-					kind: 'upload_failed',
-					outcome: outcomeForMetric,
-					identityMethod,
-					apiModel,
-					value: 1,
-				})
-			}
 
-			// (h) Response. Если vision throw'нул — surface as 500 с generic message
-			// (НЕ leak error.message что может содержать bytes/PII).
-			if (visionError !== null || visionResult === null) {
+				// Vision throw / null → generic 500 (НЕ leak error.message с возможным PII).
+				if (visionError !== null || visionResult === null) {
+					return c.json(
+						{
+							error: {
+								code: 'VISION_API_ERROR',
+								message: 'Сканирование документа временно недоступно. Попробуйте позже.',
+							},
+						},
+						500,
+					)
+				}
+
+				// OCR-only autofill payload. Оператор авторизован (guest:update) — entities
+				// возвращаются ему для проверки/правки во форме. Ничего не сохранено.
 				return c.json(
 					{
-						error: {
-							code: 'VISION_API_ERROR',
-							message: 'Сканирование документа временно недоступно. Попробуйте позже.',
+						data: {
+							entities: visionResult.entities,
+							detectedCountryIso3: visionResult.detectedCountryIso3,
+							isCountryWhitelisted: visionResult.isCountryWhitelisted,
+							confidenceHeuristic: visionResult.confidenceHeuristic,
+							outcome: visionResult.outcome,
 						},
 					},
-					500,
+					200,
 				)
-			}
-
-			// Round 4 self-review Senior P0-1 fix: if atomic consent+audit write
-			// failed, operator MUST NOT receive 200 + entities. Otherwise frontend
-			// saves данные гостя без consent/audit proof → 152-ФЗ ст.21 ч.4
-			// breach + ст.9 ч.4 «оператор обязан доказать получение» violated.
-			// Compensating S3 delete already ran (line 419 above). Operator UI
-			// will surface 500 → они retry → новый Idempotency-Key → fresh attempt.
-			if (auditWriteFailed) {
-				return c.json(
-					{
-						error: {
-							code: 'CONSENT_AUDIT_PERSIST_FAILED',
-							message:
-								'Согласие и аудит записать не удалось. Сканирование отменено. ' +
-								'Попробуйте ещё раз; если ошибка повторяется — обратитесь к администратору.',
-						},
-					},
-					500,
-				)
-			}
-
-			return c.json(
-				{
-					data: {
-						...visionResult,
-						rklStatus: rklEval.status,
-						rklMatchType: rklEval.matchType,
-						rklRegistryRevision: rklEval.registryRevision,
-						// Sprint C+ Senior P0-1 fix 2026-05-23d: expose photoConsentLogId
-						// so frontend can pass it to POST /guests/:id/documents/from-scan,
-						// linking the new guestDocument row для RTBF cascade.
-						photoConsentLogId: atomicResult.consentId,
-					},
-				},
-				200,
-			)
-		},
-	)
+			},
+		)
 }
 
 export function createVisionRoutes(deps: VisionRoutesDeps) {

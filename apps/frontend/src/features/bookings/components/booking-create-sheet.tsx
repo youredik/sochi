@@ -1,6 +1,7 @@
 import { useForm, useStore } from '@tanstack/react-form'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useId, useMemo } from 'react'
+import { type ChangeEvent, useEffect, useId, useMemo, useRef } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
@@ -26,12 +27,15 @@ import { intRangeNumberValidator } from '../../../lib/forms/int-range-field-sche
 import { useCreateBooking, useCreateGuest, useRatePlans } from '../hooks/use-booking-mutations'
 import {
 	type BookingCreateSheetInput,
+	buildScanAutofillPatch,
 	defaultCheckOut,
 	generateIdempotencyKey,
 	nightsCount,
 	pickDefaultRatePlan,
 	pluralNights,
 } from '../lib/booking-create'
+import { useScanPassportPreview } from '../../passport-scan/hooks/use-scan-passport-preview'
+import { fileToBase64, transcodeToJpegForVision } from '../../passport-scan/lib/transcode-image'
 
 // Server-side bound mirror: `bookingCreateInput.guestsCount` is
 // `z.coerce.number().int().min(1).max(20)` per `packages/shared/src/booking.ts`.
@@ -170,6 +174,56 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 
 	const isPending = createGuest.isPending || createBooking.isPending
 
+	// 2026-05-29 — Скан-first автозаполнение (ИИ). Оператор фотографирует паспорт →
+	// Yandex Vision OCR → поля подставляются. Это TRANSIENT preview (backend ничего
+	// не хранит, 152-ФЗ ст.6); полное согласие ст.11 + photo storage + guestDocument
+	// собираются на ЗАЕЗДЕ через PassportScanDialog. Закрывает «дважды вводить данные».
+	const scanPreview = useScanPassportPreview()
+	const fileInputRef = useRef<HTMLInputElement>(null)
+
+	async function handleScanFile(e: ChangeEvent<HTMLInputElement>) {
+		const file = e.target.files?.[0]
+		// Сброс value — повторный выбор того же файла снова триггерит change.
+		e.target.value = ''
+		if (!file) return
+		try {
+			// HEIC→JPEG транскод + resize ≤2048px + EXIF strip (transcode-image canon).
+			const { file: jpeg } = await transcodeToJpegForVision(file)
+			const imageBase64 = await fileToBase64(jpeg)
+			const result = await scanPreview.mutateAsync({
+				imageBase64,
+				mimeType: 'image/jpeg',
+				identityMethod: 'passport_paper',
+			})
+			if (result.outcome === 'api_error') {
+				toast.error('Не удалось распознать паспорт. Заполните поля вручную.')
+				return
+			}
+			const patch = buildScanAutofillPatch(result.entities, 'passport_paper')
+			if (Object.keys(patch).length === 0) {
+				toast.error('Не удалось извлечь данные из фото. Заполните поля вручную.')
+				return
+			}
+			// Подставляем только распознанные поля (null от Vision → не трогаем ввод).
+			if (patch.firstName !== undefined) form.setFieldValue('firstName', patch.firstName)
+			if (patch.lastName !== undefined) form.setFieldValue('lastName', patch.lastName)
+			if (patch.middleName !== undefined) form.setFieldValue('middleName', patch.middleName)
+			if (patch.citizenship !== undefined) form.setFieldValue('citizenship', patch.citizenship)
+			if (patch.documentType !== undefined) form.setFieldValue('documentType', patch.documentType)
+			if (patch.documentNumber !== undefined)
+				form.setFieldValue('documentNumber', patch.documentNumber)
+			if (result.outcome === 'low_confidence') {
+				toast.warning('Распознано неуверенно — проверьте поля.')
+			} else if (result.outcome === 'invalid_document') {
+				toast.warning('Страна документа вне списка — проверьте поля.')
+			} else {
+				toast.success('Паспорт распознан — проверьте поля.')
+			}
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Не удалось распознать паспорт')
+		}
+	}
+
 	return (
 		<ResponsiveSheet open={props.open} onOpenChange={props.onOpenChange}>
 			<ResponsiveSheetContent side="right" className="sm:max-w-lg overflow-y-auto">
@@ -245,6 +299,35 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 							</div>
 						)}
 					</form.Field>
+
+					{/* 2026-05-29 — Скан-first (ИИ). Фото паспорта → Vision OCR →
+					   автозаполнение ФИО/гражданства/документа. Закрывает «человек делает
+					   работу ИИ»: оператор не печатает данные вручную, правит при нужде. */}
+					<input
+						ref={fileInputRef}
+						type="file"
+						accept="image/*"
+						className="sr-only"
+						onChange={handleScanFile}
+						aria-hidden="true"
+						tabIndex={-1}
+						data-testid="passport-scan-input"
+					/>
+					<div className="space-y-1.5">
+						<Button
+							type="button"
+							variant="secondary"
+							className="w-full"
+							onClick={() => fileInputRef.current?.click()}
+							disabled={isPending || scanPreview.isPending}
+						>
+							{scanPreview.isPending ? 'Распознаём паспорт…' : 'Сканировать паспорт (ИИ)'}
+						</Button>
+						<p className="text-muted-foreground text-xs">
+							Сфотографируйте паспорт — ИИ заполнит ФИО, гражданство и документ. Поля можно
+							отредактировать.
+						</p>
+					</div>
 
 					{/* G3 guest section — moved BELOW dates/rate per Mews canon
 					   (dates+rate establish booking shape ДО guest data entry). */}

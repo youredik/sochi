@@ -3,6 +3,7 @@ import type {
 	BookingStatus,
 	GuestCreateInput,
 	RatePlan,
+	RecognizePassportResponse,
 } from '@horeca/shared'
 import { addDays, diffDays } from '../../chessboard/lib/date-range.ts'
 
@@ -166,6 +167,56 @@ export function buildGuestCreateBody(guest: {
 		body.middleName = guest.middleName.trim()
 	}
 	return body
+}
+
+/**
+ * Распознанный OCR identityMethod → человекочитаемый documentType (RU).
+ * Только три OCR-типа (ЕБС/digital_id_max/МФСОИ не проходят через Vision).
+ * Зеркалит backend `IDENTITY_METHOD_DOCUMENT_TYPE` (guest-document.routes.ts).
+ */
+const OCR_DOCUMENT_TYPE: Record<'passport_paper' | 'passport_zagran' | 'driver_license', string> = {
+	passport_paper: 'Паспорт РФ',
+	passport_zagran: 'Загранпаспорт',
+	driver_license: 'Водительское удостоверение',
+}
+
+/** Поля формы создания, которые умеет автозаполнить скан паспорта. */
+export interface ScanAutofillPatch {
+	firstName?: string
+	lastName?: string
+	middleName?: string
+	citizenship?: string
+	documentType?: string
+	documentNumber?: string
+}
+
+/**
+ * Map OCR-entities → патч полей формы создания брони. Pure — тестируемо без
+ * мока Vision/формы.
+ *
+ * Дисциплина:
+ *   - Подставляем ТОЛЬКО непустые поля — частичное распознавание не затирает
+ *     уже введённое оператором (`null` от Vision → поле не трогаем).
+ *   - `citizenship` приводим к UPPERCASE: Vision отдаёт ISO-3 lowercase ('rus'),
+ *     форма ждёт `^[A-Z]{2,3}$`; backend `isRussianCitizenship` делает toUpperCase
+ *     и принимает и alpha-2, и alpha-3 — 'RUS' проходит МВД-гейт корректно.
+ *   - `documentType` ставим лишь когда распознан `documentNumber` (иначе скан без
+ *     номера не должен навязывать тип документа).
+ */
+export function buildScanAutofillPatch(
+	entities: RecognizePassportResponse['entities'],
+	identityMethod: 'passport_paper' | 'passport_zagran' | 'driver_license' = 'passport_paper',
+): ScanAutofillPatch {
+	const patch: ScanAutofillPatch = {}
+	if (entities.name) patch.firstName = entities.name
+	if (entities.surname) patch.lastName = entities.surname
+	if (entities.middleName) patch.middleName = entities.middleName
+	if (entities.citizenshipIso3) patch.citizenship = entities.citizenshipIso3.toUpperCase()
+	if (entities.documentNumber) {
+		patch.documentNumber = entities.documentNumber
+		patch.documentType = OCR_DOCUMENT_TYPE[identityMethod]
+	}
+	return patch
 }
 
 /**
