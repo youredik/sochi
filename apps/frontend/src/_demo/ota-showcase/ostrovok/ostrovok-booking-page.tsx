@@ -104,7 +104,7 @@ export function OstrovokBookingPage({
 			const message =
 				err instanceof OstrovokApiError
 					? `Не удалось подтвердить бронирование: ${err.code}`
-					: `Не удалось подтвердить бронирование: ${err instanceof Error ? err.message : String(err)}`
+					: 'Не удалось подтвердить бронирование. Попробуйте ещё раз.'
 			setState({ kind: 'error', message })
 		}
 	}

@@ -219,7 +219,13 @@ export function startNotificationDispatcher(
 				timer = null
 			}
 			const pending = inFlight
-			if (pending !== null) await pending.catch(() => {})
+			if (pending !== null)
+				await pending.catch((err) =>
+					log.warn(
+						{ err: err instanceof Error ? err.message : String(err) },
+						'notification-dispatcher: in-flight task failed during shutdown',
+					),
+				)
 			log.info({}, 'notification-dispatcher: stopped')
 		},
 		pollOnce,
