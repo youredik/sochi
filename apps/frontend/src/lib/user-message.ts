@@ -66,6 +66,16 @@ const CODE_TO_RU: Readonly<Record<string, string>> = {
 	INVALID_PAYMENT_TRANSITION: 'Это действие недоступно для текущего статуса платежа.',
 	PAYMENT_VERSION_CONFLICT: 'Платёж изменился в другом окне. Обновите страницу.',
 	REFUND_EXCEEDS_CAPTURE: 'Сумма возврата превышает сумму платежа.',
+	INVALID_FOLIO_LINE_TRANSITION: 'Этот переход недоступен для позиции счёта.',
+	INVALID_REFUND_TRANSITION: 'Это действие недоступно для текущего статуса возврата.',
+	REFUND_VERSION_CONFLICT: 'Возврат изменился в другом окне. Обновите страницу.',
+	REFUND_CAUSALITY_COLLISION: 'Возврат с такой причиной уже создан для этого платежа.',
+	PAYMENT_IDEMPOTENCY_KEY_TAKEN: 'Платёж с таким ключом уже создан.',
+	PROVIDER_PAYMENT_ID_TAKEN: 'Этот платёж уже зарегистрирован у провайдера.',
+	PROVIDER_REFUND_ID_TAKEN: 'Этот возврат уже зарегистрирован у провайдера.',
+	// — уведомления / виджет —
+	NOTIFICATION_ALREADY_SENT: 'Уведомление уже отправлено — повторная отправка невозможна.',
+	WIDGET_CONSENT_MISSING: 'Требуется согласие гостя на обработку персональных данных.',
 	// — клиентская валидация (фронтовые билдеры) —
 	CLIENT_VALIDATION: 'Проверьте корректность введённых данных.',
 }
