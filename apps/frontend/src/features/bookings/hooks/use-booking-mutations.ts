@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
 import { type ApiError, errorFromResponse, extractApiError } from '../../../lib/api-errors.ts'
 import { logger } from '../../../lib/logger.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 import {
 	applyOptimisticBand,
 	type BookingCreateSheetInput,
@@ -119,14 +120,9 @@ export function useCreateGuest() {
 			// G-B1 fix (real-bug-hunt 2026-05-15): previously only `logger.warn`
 			// → operator saw nothing on failure. Sheet stayed open, spinner stopped,
 			// user re-clicked Submit. Symmetric с `useCreateBooking` onError canon.
+			// Raw message — ТОЛЬКО в лог (диагностика). В UI — только из словаря.
 			logger.warn('guest.create failed', { code: err.code, message: err.message })
-			const msg =
-				err.code === 'VALIDATION_ERROR'
-					? 'Проверьте корректность данных гостя'
-					: err.message
-						? `Не удалось создать гостя: ${err.message}`
-						: 'Не удалось создать гостя'
-			toast.error(msg)
+			toast.error(userMessageFor(err, 'Не удалось создать гостя'))
 		},
 	})
 }
@@ -193,14 +189,9 @@ export function useCreateBooking(propertyId: string | null, windowFrom: string, 
 		onError: (err: ApiError, _args, ctx) => {
 			// Rollback: restore the snapshot captured in onMutate.
 			if (ctx?.previous) queryClient.setQueryData(bookingsKey, ctx.previous)
+			// Raw message — только в лог. UI — из словаря (закрывает leak `err.message`).
 			logger.warn('booking.create failed', { code: err.code, message: err.message })
-			const msg =
-				err.code === 'NO_INVENTORY'
-					? 'На эти даты нет свободных номеров'
-					: err.code === 'IDEMPOTENCY_KEY_CONFLICT'
-						? 'Повторный запрос с другими данными — перезагрузите диалог'
-						: err.message
-			toast.error(msg)
+			toast.error(userMessageFor(err, 'Не удалось создать бронь'))
 		},
 		onSettled: async () => {
 			// Reconcile with server truth — replaces optimistic placeholder

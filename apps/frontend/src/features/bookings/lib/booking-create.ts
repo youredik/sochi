@@ -110,10 +110,30 @@ export function buildBookingCreateBody(input: BookingCreateSheetInput) {
 }
 
 /**
- * Build the POST /guests body. Required: lastName, firstName,
- * citizenship, documentType, documentNumber. RU default citizenship
- * because non-RU triggers МВД registrationStatus=pending — we ask
- * the user explicitly (via dialog) rather than guess.
+ * Sentinel для отложенного документа (паттерн виджета `booking-create.service`).
+ * Документ при создании брони НЕ обязателен — он собирается на ЗАЕЗДЕ (скан
+ * паспорта), а для иностранцев это hard-gate в booking.service. Schema требует
+ * непустой `documentNumber` (`min(1)` + DB NOT NULL + unique index), поэтому
+ * вместо реального значения подставляем уникальный sentinel; UI рендерит его
+ * как «не указан», а скан перезапишет реальными данными.
+ */
+const PENDING_DOCUMENT_TYPE = 'pending'
+
+/** Клиентская валидационная ошибка — `code` маршрутизирует через `userMessageFor`. */
+export class GuestInputError extends Error {
+	readonly code = 'CLIENT_VALIDATION'
+	constructor(message: string) {
+		super(message)
+		this.name = 'GuestInputError'
+	}
+}
+
+/**
+ * Build the POST /guests body. Обязательны ТОЛЬКО `firstName` + `lastName`
+ * (минимум для брони — как у OTA/виджет-потоков). `documentNumber` ОПЦИОНАЛЕН:
+ * пустой → отложенный sentinel (`documentType='pending'`, `documentNumber=
+ * 'pending_d_<nonce>'`), реальный документ собирается сканом на заезде. RU
+ * citizenship default; non-RU триггерит МВД-учёт (gate на check-in).
  */
 export function buildGuestCreateBody(guest: {
 	firstName: string
@@ -126,20 +146,31 @@ export function buildGuestCreateBody(guest: {
 	const trimFirst = guest.firstName.trim()
 	const trimLast = guest.lastName.trim()
 	const trimDoc = guest.documentNumber.trim()
-	if (!trimFirst) throw new Error('buildGuestCreateBody: firstName required')
-	if (!trimLast) throw new Error('buildGuestCreateBody: lastName required')
-	if (!trimDoc) throw new Error('buildGuestCreateBody: documentNumber required')
+	const trimType = guest.documentType.trim()
+	if (!trimFirst) throw new GuestInputError('Укажите имя гостя')
+	if (!trimLast) throw new GuestInputError('Укажите фамилию гостя')
+	// Документ опционален: пустой номер → отложенный sentinel (collision-safe nonce).
+	const hasDocument = trimDoc.length > 0
+	const documentNumber = hasDocument
+		? trimDoc
+		: `pending_d_${crypto.randomUUID().replace(/-/g, '')}`
+	const documentType = hasDocument ? trimType || 'Паспорт РФ' : PENDING_DOCUMENT_TYPE
 	const body: GuestCreateInput = {
 		firstName: trimFirst,
 		lastName: trimLast,
 		citizenship: guest.citizenship,
-		documentType: guest.documentType,
-		documentNumber: trimDoc,
+		documentType,
+		documentNumber,
 	}
 	if (guest.middleName?.trim()) {
 		body.middleName = guest.middleName.trim()
 	}
 	return body
+}
+
+/** True если документ — отложенный sentinel (для UI «не указан» / re-scan). */
+export function isPendingDocument(documentType: string, documentNumber: string): boolean {
+	return documentType === PENDING_DOCUMENT_TYPE || documentNumber.startsWith('pending_')
 }
 
 /**

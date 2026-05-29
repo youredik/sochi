@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { api } from '../../../lib/api.ts'
 import { type ApiError, errorFromResponse } from '../../../lib/api-errors.ts'
 import { logger } from '../../../lib/logger.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 import {
 	applyOptimisticStatusUpdate,
 	type BookingTransition,
@@ -141,11 +142,7 @@ function useTransitionMutation<Vars>(
 				code: err.code,
 				message: err.message,
 			})
-			const msg =
-				err.code === 'INVALID_BOOKING_TRANSITION'
-					? 'Это действие недоступно в текущем статусе брони'
-					: err.message
-			toast.error(msg)
+			toast.error(userMessageFor(err, 'Не удалось изменить статус брони'))
 		},
 		onSettled: async () => {
 			await queryClient.invalidateQueries({ queryKey: ['bookings', deps.propertyId] })
@@ -228,7 +225,8 @@ function amendErrorMessage(err: ApiError, defaultMsg: string): string {
 	if (err.code === 'NOT_FOUND') {
 		return 'Бронь или тариф не найдены'
 	}
-	return err.message || defaultMsg
+	// Никогда не показываем raw err.message — словарь или контекстный fallback.
+	return userMessageFor(err, defaultMsg)
 }
 
 function useAmendMutation<Vars>(
@@ -392,7 +390,8 @@ function assignErrorMessage(err: ApiError, defaultMsg: string): string {
 	if (err.code === 'NOT_FOUND') {
 		return 'Бронь или номер не найдены'
 	}
-	return err.message || defaultMsg
+	// Никогда не показываем raw err.message — словарь или контекстный fallback.
+	return userMessageFor(err, defaultMsg)
 }
 
 export function useAssignRoom(deps: AmendDeps) {

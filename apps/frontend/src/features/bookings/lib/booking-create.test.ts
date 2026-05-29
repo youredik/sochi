@@ -9,6 +9,7 @@ import {
 	buildOptimisticBand,
 	defaultCheckOut,
 	generateIdempotencyKey,
+	isPendingDocument,
 	nightsCount,
 	pickDefaultRatePlan,
 	pluralNights,
@@ -193,8 +194,8 @@ describe('buildGuestCreateBody — guest POST wire', () => {
 		expect(body).not.toHaveProperty('middleName')
 	})
 
-	describe('adversarial — required-field rejection', () => {
-		it('rejects empty firstName', () => {
+	describe('adversarial — name required, RU message + CLIENT_VALIDATION code', () => {
+		it('rejects empty firstName с RU-сообщением (GuestInputError)', () => {
 			expect(() =>
 				buildGuestCreateBody({
 					firstName: '   ',
@@ -203,10 +204,10 @@ describe('buildGuestCreateBody — guest POST wire', () => {
 					documentType: 'Паспорт РФ',
 					documentNumber: '4510123456',
 				}),
-			).toThrow(/firstName required/)
+			).toThrow(/Укажите имя/)
 		})
 
-		it('rejects empty lastName', () => {
+		it('rejects empty lastName с RU-сообщением', () => {
 			expect(() =>
 				buildGuestCreateBody({
 					firstName: 'Иван',
@@ -215,19 +216,67 @@ describe('buildGuestCreateBody — guest POST wire', () => {
 					documentType: 'Паспорт РФ',
 					documentNumber: '4510123456',
 				}),
-			).toThrow(/lastName required/)
+			).toThrow(/Укажите фамилию/)
 		})
 
-		it('rejects whitespace-only documentNumber', () => {
-			expect(() =>
+		it('GuestInputError несёт code=CLIENT_VALIDATION (для userMessageFor)', () => {
+			try {
 				buildGuestCreateBody({
-					firstName: 'Иван',
+					firstName: '',
 					lastName: 'Иванов',
 					citizenship: 'RU',
 					documentType: 'Паспорт РФ',
-					documentNumber: '\t\t',
-				}),
-			).toThrow(/documentNumber required/)
+					documentNumber: '4510123456',
+				})
+				throw new Error('expected GuestInputError')
+			} catch (e) {
+				expect((e as { code?: string }).code).toBe('CLIENT_VALIDATION')
+			}
+		})
+	})
+
+	describe('документ ОПЦИОНАЛЕН — пустой → отложенный sentinel (как OTA/виджет)', () => {
+		it('пустой documentNumber → НЕ throw, ставит pending sentinel', () => {
+			const body = buildGuestCreateBody({
+				firstName: 'Иван',
+				lastName: 'Иванов',
+				citizenship: 'RU',
+				documentType: 'Паспорт РФ',
+				documentNumber: '   ',
+			})
+			expect(body.documentType).toBe('pending')
+			expect(body.documentNumber.startsWith('pending_d_')).toBe(true)
+		})
+
+		it('пустой документ → уникальный nonce (collision-safe для unique index)', () => {
+			const base = {
+				firstName: 'Иван',
+				lastName: 'Иванов',
+				citizenship: 'RU',
+				documentType: '',
+				documentNumber: '',
+			}
+			const a = buildGuestCreateBody(base)
+			const b = buildGuestCreateBody(base)
+			expect(a.documentNumber).not.toBe(b.documentNumber)
+		})
+
+		it('реальный documentNumber → используется как есть (не sentinel)', () => {
+			const body = buildGuestCreateBody({
+				firstName: 'Иван',
+				lastName: 'Иванов',
+				citizenship: 'RU',
+				documentType: 'Паспорт РФ',
+				documentNumber: '4510123456',
+			})
+			expect(body.documentType).toBe('Паспорт РФ')
+			expect(body.documentNumber).toBe('4510123456')
+		})
+
+		it('isPendingDocument распознаёт sentinel и реальный', () => {
+			expect(isPendingDocument('pending', 'pending_d_abc')).toBe(true)
+			expect(isPendingDocument('Паспорт РФ', 'pending_w_xyz')).toBe(true)
+			expect(isPendingDocument('Паспорт РФ', '4510123456')).toBe(false)
 		})
 	})
 })

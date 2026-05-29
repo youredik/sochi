@@ -261,12 +261,23 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 						{(field) => <TextField field={field} label="Отчество (опционально)" />}
 					</form.Field>
 
+					{/* 2026-05-29 — документ ОПЦИОНАЛЕН при создании брони. По домену он
+					    нужен только на заезде (для иностранцев — hard-gate). Реальные
+					    данные собираются сканом паспорта при заезде (ИИ-распознавание).
+					    Пустой номер → отложенный sentinel (buildGuestCreateBody). Это
+					    совпадает с OTA/виджет-потоками, где документа при брони тоже нет. */}
 					<div className="grid grid-cols-2 gap-3">
 						<form.Field name="documentType">
-							{(field) => <TextField field={field} label="Документ" required />}
+							{(field) => <TextField field={field} label="Документ (опционально)" />}
 						</form.Field>
 						<form.Field name="documentNumber">
-							{(field) => <TextField field={field} label="Номер документа" required />}
+							{(field) => (
+								<TextField
+									field={field}
+									label="Номер документа (опционально)"
+									description="Можно не заполнять — данные подставит скан паспорта при заезде."
+								/>
+							)}
 						</form.Field>
 					</div>
 
