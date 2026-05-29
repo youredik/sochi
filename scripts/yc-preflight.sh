@@ -16,16 +16,29 @@ EXPECTED_CLOUD="b1gisf466novulsg0a0n"          # sepshn cloud (new, 2026-05-20+)
 EXPECTED_FOLDER="b1gp4bo808jr6qvrnltu"          # infra folder (consolidated)
 EXPECTED_ORG="bpfar26apvm2ljel57ta"             # org Сэпшн
 
-actual_cloud="$(yc config get cloud-id 2>/dev/null || true)"
-actual_folder="$(yc config get folder-id 2>/dev/null || true)"
-active_profile="$(yc config profile list 2>/dev/null | awk '/ACTIVE/{print $1}')"
+# Point-profile override: honor YC_PROFILE WITHOUT `yc config profile activate`
+# (activate мутирует shared global state → ломает параллельный stankoff dev, см.
+# [[feedback_yc_profile_no_activate_canon]]). ВАЖНО: yc CLI НЕ honor'ит YC_PROFILE
+# *env var* напрямую (verified 2026-05-29 — `yc config get` возвращает active
+# profile, не YC_PROFILE), поэтому транслируем env → флаг `--profile`.
+yc_cfg() {
+    if [[ -n "${YC_PROFILE:-}" ]]; then
+        yc --profile "$YC_PROFILE" "$@"
+    else
+        yc "$@"
+    fi
+}
+
+actual_cloud="$(yc_cfg config get cloud-id 2>/dev/null || true)"
+actual_folder="$(yc_cfg config get folder-id 2>/dev/null || true)"
+active_profile="${YC_PROFILE:-$(yc config profile list 2>/dev/null | awk '/ACTIVE/{print $1}')}"
 
 ok=1
 if [[ "$actual_cloud" != "$EXPECTED_CLOUD" ]]; then
     echo "❌ yc CLI cloud mismatch:"
     echo "   expected: $EXPECTED_CLOUD (sepshn-new)"
     echo "   actual:   $actual_cloud  (profile=$active_profile)"
-    echo "   fix:      yc config profile activate sepshn-new"
+    echo "   fix:      push via 'YC_PROFILE=sepshn-new git push' (НЕ activate — ломает stankoff)"
     ok=0
 fi
 
@@ -33,7 +46,7 @@ if [[ "$actual_folder" != "$EXPECTED_FOLDER" ]]; then
     echo "❌ yc CLI folder mismatch:"
     echo "   expected: $EXPECTED_FOLDER (infra — TF-consolidated)"
     echo "   actual:   $actual_folder"
-    echo "   fix:      yc config set folder-id $EXPECTED_FOLDER"
+    echo "   fix:      push via 'YC_PROFILE=sepshn-new git push' (НЕ 'yc config set' — global mutation)"
     ok=0
 fi
 
