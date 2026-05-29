@@ -34,12 +34,26 @@ import {
 	pickDefaultRatePlan,
 	pluralNights,
 } from '../lib/booking-create'
+import { CitizenshipSelect } from '../../passport-scan/components/citizenship-select'
 import { useScanPassportPreview } from '../../passport-scan/hooks/use-scan-passport-preview'
 import { fileToBase64, transcodeToJpegForVision } from '../../passport-scan/lib/transcode-image'
 
 // Server-side bound mirror: `bookingCreateInput.guestsCount` is
 // `z.coerce.number().int().min(1).max(20)` per `packages/shared/src/booking.ts`.
 const validateGuestsCount = intRangeNumberValidator({ min: 1, max: 20 })
+
+/**
+ * Канонический набор типов документа (Select вместо free-text — убирает МВД-value
+ * chaos). Первые три совпадают с OCR identityMethod-маппингом (OCR_DOCUMENT_TYPE
+ * в booking-create.ts) — скан автозаполняет именно их.
+ */
+const DOCUMENT_TYPE_OPTIONS = [
+	'Паспорт РФ',
+	'Загранпаспорт',
+	'Водительское удостоверение',
+	'Вид на жительство',
+	'Иностранный паспорт',
+] as const
 
 /**
  * Click-to-create booking side-Sheet (M5e.1 + G3 + G3.bis 2026-05-15).
@@ -97,6 +111,7 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 	// defaults unmount on close via Radix Portal).
 	const idempotencyKey = useMemo(() => generateIdempotencyKey(), [])
 	const ratePlanFieldId = useId()
+	const documentTypeFieldId = useId()
 
 	const ratePlansQ = useRatePlans(props.propertyId, props.roomTypeId)
 	const createGuest = useCreateGuest()
@@ -121,7 +136,7 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 			middleName: '',
 			documentType: 'Паспорт РФ',
 			documentNumber: '',
-			citizenship: 'RU',
+			citizenship: 'rus',
 			guestsCount: 1,
 			checkIn: props.checkIn,
 			checkOut: defaultCheckOut(props.checkIn),
@@ -346,19 +361,35 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 
 					{/* 2026-05-29 — документ ОПЦИОНАЛЕН при создании брони. По домену он
 					    нужен только на заезде (для иностранцев — hard-gate). Реальные
-					    данные собираются сканом паспорта при заезде (ИИ-распознавание).
+					    данные собираются сканом (кнопка «Сканировать паспорт» выше) или на заезде.
 					    Пустой номер → отложенный sentinel (buildGuestCreateBody). Это
 					    совпадает с OTA/виджет-потоками, где документа при брони тоже нет. */}
 					<div className="grid grid-cols-2 gap-3">
 						<form.Field name="documentType">
-							{(field) => <TextField field={field} label="Документ (опционально)" />}
+							{(field) => (
+								<div className="space-y-1.5">
+									<Label htmlFor={documentTypeFieldId}>Документ (опционально)</Label>
+									<Select value={field.state.value} onValueChange={(v) => field.handleChange(v)}>
+										<SelectTrigger id={documentTypeFieldId} aria-label="Тип документа">
+											<SelectValue placeholder="Выберите тип" />
+										</SelectTrigger>
+										<SelectContent>
+											{DOCUMENT_TYPE_OPTIONS.map((t) => (
+												<SelectItem key={t} value={t}>
+													{t}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+							)}
 						</form.Field>
 						<form.Field name="documentNumber">
 							{(field) => (
 								<TextField
 									field={field}
 									label="Номер документа (опционально)"
-									description="Можно не заполнять — данные подставит скан паспорта при заезде."
+									description="Можно не заполнять — подставит скан паспорта (кнопка выше) или заезд."
 								/>
 							)}
 						</form.Field>
@@ -366,13 +397,10 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 
 					<form.Field name="citizenship">
 						{(field) => (
-							<TextField
-								field={field}
-								label="Гражданство (ISO)"
-								description="RU, BY, KZ, USA… Не-RU триггерит МВД-регистрацию."
-								pattern="^[A-Z]{2,3}$"
-								maxLength={3}
-								required
+							<CitizenshipSelect
+								value={field.state.value}
+								onChange={(v) => field.handleChange(v)}
+								label="Гражданство"
 							/>
 						)}
 					</form.Field>

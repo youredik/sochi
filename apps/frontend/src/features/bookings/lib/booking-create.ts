@@ -197,9 +197,9 @@ export interface ScanAutofillPatch {
  * Дисциплина:
  *   - Подставляем ТОЛЬКО непустые поля — частичное распознавание не затирает
  *     уже введённое оператором (`null` от Vision → поле не трогаем).
- *   - `citizenship` приводим к UPPERCASE: Vision отдаёт ISO-3 lowercase ('rus'),
- *     форма ждёт `^[A-Z]{2,3}$`; backend `isRussianCitizenship` делает toUpperCase
- *     и принимает и alpha-2, и alpha-3 — 'RUS' проходит МВД-гейт корректно.
+ *   - `citizenship` — iso3 lowercase AS-IS ('rus'): CitizenshipSelect в форме
+ *     хранит iso3 lowercase (PASSPORT_COUNTRY_WHITELIST_RU); backend
+ *     `isForeignCitizenship` принимает любой регистр + alpha-2/3 — МВД-гейт ok.
  *   - `documentType` ставим лишь когда распознан `documentNumber` (иначе скан без
  *     номера не должен навязывать тип документа).
  */
@@ -211,7 +211,7 @@ export function buildScanAutofillPatch(
 	if (entities.name) patch.firstName = entities.name
 	if (entities.surname) patch.lastName = entities.surname
 	if (entities.middleName) patch.middleName = entities.middleName
-	if (entities.citizenshipIso3) patch.citizenship = entities.citizenshipIso3.toUpperCase()
+	if (entities.citizenshipIso3) patch.citizenship = entities.citizenshipIso3
 	if (entities.documentNumber) {
 		patch.documentNumber = entities.documentNumber
 		patch.documentType = OCR_DOCUMENT_TYPE[identityMethod]

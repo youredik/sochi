@@ -494,13 +494,13 @@ describe('buildScanAutofillPatch — OCR entities → form patch', () => {
 		expirationDate: null,
 	}
 
-	it('maps все непустые поля; citizenship → UPPERCASE; documentType из identityMethod', () => {
+	it('maps все непустые поля; citizenship iso3 as-is; documentType из identityMethod', () => {
 		const patch = buildScanAutofillPatch(fullEntities, 'passport_paper')
 		expect(patch).toEqual({
 			firstName: 'Иван',
 			lastName: 'Сидоров',
 			middleName: 'Петрович',
-			citizenship: 'RUS',
+			citizenship: 'rus',
 			documentNumber: '4608 123456',
 			documentType: 'Паспорт РФ',
 		})
@@ -530,12 +530,12 @@ describe('buildScanAutofillPatch — OCR entities → form patch', () => {
 		expect(patch.documentType).toBe('Загранпаспорт')
 	})
 
-	it('иностранное гражданство → UPPERCASE alpha-3 (foreign-gate сработает)', () => {
+	it('иностранное гражданство → iso3 as-is (foreign-gate сработает)', () => {
 		const patch = buildScanAutofillPatch(
 			{ ...fullEntities, citizenshipIso3: 'usa' },
 			'passport_paper',
 		)
-		expect(patch.citizenship).toBe('USA')
+		expect(patch.citizenship).toBe('usa')
 	})
 
 	it('полностью пустые entities → пустой патч {} (ничего не подставляем)', () => {

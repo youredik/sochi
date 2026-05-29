@@ -38,7 +38,7 @@ import type {
 	RecognizePassportResponse,
 	RklStatusForScan,
 } from '@horeca/shared'
-import { PASSPORT_COUNTRY_WHITELIST_RU } from '@horeca/shared'
+import { CitizenshipSelect } from './citizenship-select.tsx'
 import { useId, useMemo, useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '../../../components/ui/alert.tsx'
 import {
@@ -64,13 +64,6 @@ import {
 import { Input } from '../../../components/ui/input.tsx'
 import { Label } from '../../../components/ui/label.tsx'
 import { RadioGroup, RadioGroupItem } from '../../../components/ui/radio-group.tsx'
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from '../../../components/ui/select.tsx'
 import { generateUuid } from '../../../lib/uuid-fallback.ts'
 import { type ScanPassportResult, useScanPassport } from '../hooks/use-scan-passport.ts'
 import { CONSENT_152FZ_VERSION } from '../lib/consent-version.ts'
@@ -841,7 +834,7 @@ function ConfirmStage({
 				invalid={birthDateInvalid && validationError !== null}
 				errorMessage={birthDateInvalid ? 'Формат ДД.ММ.ГГГГ' : null}
 			/>
-			<CitizenshipRow
+			<CitizenshipSelect
 				value={entities.citizenshipIso3 ?? ''}
 				onChange={(v) => update('citizenshipIso3', v.length === 0 ? null : v)}
 			/>
@@ -890,70 +883,6 @@ function ConfirmStage({
 				invalid={expirationInvalid && validationError !== null}
 				errorMessage={expirationInvalid ? 'Формат ДД.ММ.ГГГГ — обязательно для загран/ВУ' : null}
 			/>
-		</div>
-	)
-}
-
-/**
- * Citizenship Select — shadcn Select с 20-country whitelist (ISO-3 + RU labels).
- *
- * Sprint C UX: вместо raw text input, оператор выбирает из dropdown. Снижает
- * вероятность typo + matches PASSPORT_COUNTRY_WHITELIST_SET на backend.
- * «Другая страна» — special value 'OTHER' → оператор оставляет field как
- * raw input (для неклассифицированных passport templates).
- */
-function CitizenshipRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-	const id = useId()
-	const errorId = useId()
-	const knownValues = useMemo(() => new Set(PASSPORT_COUNTRY_WHITELIST_RU.map((c) => c.iso3)), [])
-	// Если OCR вернул unknown ISO-3 — pre-select 'OTHER'.
-	const isKnown = value.length === 0 || knownValues.has(value)
-	const selectValue = value.length === 0 ? '' : isKnown ? value : 'OTHER'
-	const [showRawInput, setShowRawInput] = useState(!isKnown)
-
-	return (
-		<div>
-			<Label htmlFor={id} className="text-sm">
-				Гражданство (ISO-3)
-			</Label>
-			<Select
-				value={selectValue}
-				onValueChange={(v) => {
-					if (v === 'OTHER') {
-						setShowRawInput(true)
-						onChange('')
-					} else {
-						setShowRawInput(false)
-						onChange(v)
-					}
-				}}
-			>
-				<SelectTrigger id={id} className="mt-1 w-full">
-					<SelectValue placeholder="Выберите страну" />
-				</SelectTrigger>
-				<SelectContent>
-					{PASSPORT_COUNTRY_WHITELIST_RU.map((c) => (
-						<SelectItem key={c.iso3} value={c.iso3}>
-							{c.labelRu} ({c.iso3.toUpperCase()})
-						</SelectItem>
-					))}
-					<SelectItem value="OTHER">Другая страна — ввести вручную</SelectItem>
-				</SelectContent>
-			</Select>
-			{showRawInput ? (
-				<Input
-					value={value}
-					placeholder="ISO 3166-1 alpha-3 (например, jpn)"
-					onChange={(e) => onChange(e.target.value.toLowerCase().slice(0, 3))}
-					className="mt-2"
-					maxLength={3}
-					aria-describedby={errorId}
-					aria-label="ISO-3 код страны вручную"
-				/>
-			) : null}
-			<p id={errorId} className="sr-only">
-				Введите 3-буквенный ISO 3166-1 alpha-3 код страны
-			</p>
 		</div>
 	)
 }
