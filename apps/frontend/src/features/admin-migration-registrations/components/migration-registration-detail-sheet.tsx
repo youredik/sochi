@@ -28,6 +28,7 @@ import {
 } from '../../../components/ui/responsive-sheet.tsx'
 import { Textarea } from '../../../components/ui/textarea.tsx'
 import { formatDateShort } from '../../../lib/format-ru.ts'
+import { userMessageFor } from '../../../lib/user-message.ts'
 import type { OperatorIdentity } from '../../passport-scan/components/consent-152fz-modal.tsx'
 import { useSaveDocumentFromScan } from '../../passport-scan/hooks/use-save-document-from-scan.ts'
 import { useCompliance } from '../../content-wizard/hooks/use-compliance.ts'
@@ -238,7 +239,9 @@ function OperatorNoteEditor({ row }: { row: MigrationRegistration }) {
 			{patchMut.isError ? (
 				<Alert variant="destructive" className="mt-2">
 					<AlertTitle>Ошибка сохранения</AlertTitle>
-					<AlertDescription>{patchMut.error.message}</AlertDescription>
+					<AlertDescription>
+						{userMessageFor(patchMut.error, 'Не удалось сохранить изменения')}
+					</AlertDescription>
 				</Alert>
 			) : null}
 		</section>
@@ -288,25 +291,25 @@ function RescanSection({ row }: { row: MigrationRegistration }) {
 						OCR данные получены{savedDocumentId ? ' • документ сохранён' : ''}
 					</AlertTitle>
 					<AlertDescription className="text-xs space-y-1 mt-1">
+						{/* 152-ФЗ ст.18 — ПДн маскируются (как в booking-edit-sheet). Полное
+						    ФИО/номер НЕ рендерим в DOM (screenshot/screenshare risk). */}
 						<div>
-							Гость: {lastScan.entities.surname} {lastScan.entities.name}{' '}
-							{lastScan.entities.middleName ?? ''}
+							Гость: {(lastScan.entities.surname ?? '?').charAt(0).toUpperCase()}.{' '}
+							{(lastScan.entities.name ?? '?').charAt(0).toUpperCase()}.
 						</div>
 						<div>
-							Документ: {lastScan.entities.documentNumber} • {lastScan.entities.citizenshipIso3}
+							Документ: №…
+							{(lastScan.entities.documentNumber ?? '').replace(/\s+/g, '').slice(-4) || '—'} •{' '}
+							{(lastScan.entities.citizenshipIso3 ?? '—').toUpperCase()}
 						</div>
 						<div className="text-muted-foreground">
-							Уверенность: {(lastScan.confidenceHeuristic * 100).toFixed(0)}% • outcome:{' '}
-							{lastScan.outcome}
+							Уверенность: {(lastScan.confidenceHeuristic * 100).toFixed(0)}%
 						</div>
 						<div className="text-muted-foreground">
 							152-ФЗ согласие v{lastScan.consent152fzVersion} от {lastScan.consent152fzAcceptedAt}
 						</div>
 						{savedDocumentId ? (
-							<div className="text-muted-foreground">
-								guestDocument.id = <code>{savedDocumentId}</code> — связан с согласием
-								<code className="ml-1">{lastScan.photoConsentLogId}</code>.
-							</div>
+							<div className="text-muted-foreground">Документ сохранён и связан с согласием.</div>
 						) : null}
 					</AlertDescription>
 				</Alert>
@@ -458,7 +461,9 @@ function CancelSection({
 			{cancelMut.isError ? (
 				<Alert variant="destructive" className="mt-2">
 					<AlertTitle>Ошибка отзыва</AlertTitle>
-					<AlertDescription>{cancelMut.error.message}</AlertDescription>
+					<AlertDescription>
+						{userMessageFor(cancelMut.error, 'Не удалось отменить регистрацию')}
+					</AlertDescription>
 				</Alert>
 			) : null}
 		</section>
