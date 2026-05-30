@@ -238,6 +238,25 @@ export function buildScanReviewHints(entities: RecognizePassportResponse['entiti
 }
 
 /**
+ * Build the toast после скан-preview в форме создания: текст по outcome +
+ * перечень незаполненных полей (из buildScanReviewHints). Pure → тестируемо
+ * (закрывает gap: раньше строка тоста собиралась inline в компоненте, без теста).
+ */
+export function scanResultToast(
+	outcome: RecognizePassportResponse['outcome'],
+	hints: string[],
+): { readonly kind: 'success' | 'warning'; readonly message: string } {
+	const fill = hints.length > 0 ? ` Заполните вручную: ${hints.join(', ')}.` : ''
+	if (outcome === 'low_confidence') {
+		return { kind: 'warning', message: `Распознано неуверенно — проверьте поля.${fill}` }
+	}
+	if (outcome === 'invalid_document') {
+		return { kind: 'warning', message: `Страна документа вне списка — проверьте поля.${fill}` }
+	}
+	return { kind: 'success', message: `Паспорт распознан — проверьте поля.${fill}` }
+}
+
+/**
  * Inclusive-exclusive nights count (checkIn .. checkOut-1). Used for
  * dialog affordance ("3 ночи") and optimistic-band width sanity.
  */

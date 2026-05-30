@@ -10,6 +10,7 @@ import {
 	buildScanAutofillPatch,
 	buildScanReviewHints,
 	defaultCheckOut,
+	scanResultToast,
 	generateIdempotencyKey,
 	nightsCount,
 	pickDefaultRatePlan,
@@ -605,5 +606,32 @@ describe('buildScanReviewHints — поля, которые Vision не извл
 			'номер документа',
 			'гражданство',
 		])
+	})
+})
+
+describe('scanResultToast — текст тоста + перечень незаполненных полей', () => {
+	it('success без пропусков → success, базовый текст', () => {
+		expect(scanResultToast('success', [])).toEqual({
+			kind: 'success',
+			message: 'Паспорт распознан — проверьте поля.',
+		})
+	})
+
+	it('low_confidence с пропусками → warning + перечень полей', () => {
+		expect(scanResultToast('low_confidence', ['фамилия', 'номер документа'])).toEqual({
+			kind: 'warning',
+			message:
+				'Распознано неуверенно — проверьте поля. Заполните вручную: фамилия, номер документа.',
+		})
+	})
+
+	it('invalid_document → warning', () => {
+		expect(scanResultToast('invalid_document', []).kind).toBe('warning')
+	})
+
+	it('success с пропусками → success + перечень', () => {
+		expect(scanResultToast('success', ['гражданство']).message).toContain(
+			'Заполните вручную: гражданство.',
+		)
 	})
 })

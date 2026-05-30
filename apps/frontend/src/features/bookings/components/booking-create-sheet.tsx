@@ -29,6 +29,7 @@ import {
 	type BookingCreateSheetInput,
 	buildScanAutofillPatch,
 	buildScanReviewHints,
+	scanResultToast,
 	defaultCheckOut,
 	generateIdempotencyKey,
 	nightsCount,
@@ -228,17 +229,11 @@ export function BookingCreateSheet(props: BookingCreateSheetProps) {
 			if (patch.documentType !== undefined) form.setFieldValue('documentType', patch.documentType)
 			if (patch.documentNumber !== undefined)
 				form.setFieldValue('documentNumber', patch.documentNumber)
-			// Field-level review guidance (2026 HITL): какие поля Vision НЕ извлёк →
-			// оператору точно куда смотреть, а не «проверьте всё».
-			const hints = buildScanReviewHints(result.entities)
-			const fill = hints.length > 0 ? ` Заполните вручную: ${hints.join(', ')}.` : ''
-			if (result.outcome === 'low_confidence') {
-				toast.warning(`Распознано неуверенно — проверьте поля.${fill}`)
-			} else if (result.outcome === 'invalid_document') {
-				toast.warning(`Страна документа вне списка — проверьте поля.${fill}`)
-			} else {
-				toast.success(`Паспорт распознан — проверьте поля.${fill}`)
-			}
+			// Field-level review guidance (2026 HITL) — pure scanResultToast: текст по
+			// outcome + перечень незаполненных полей. Логика вынесена + покрыта тестом.
+			const t = scanResultToast(result.outcome, buildScanReviewHints(result.entities))
+			if (t.kind === 'warning') toast.warning(t.message)
+			else toast.success(t.message)
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Не удалось распознать паспорт')
 		}
