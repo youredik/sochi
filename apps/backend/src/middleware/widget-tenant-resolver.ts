@@ -23,6 +23,7 @@
  * exclusively для mutating endpoints где idempotency middleware needs tenantId.
  */
 
+import { sql as globalSql } from '../db/index.ts'
 import { factory } from '../factory.ts'
 import { type ResolvedTenant, resolveTenantBySlug } from '../lib/tenant-resolver.ts'
 
@@ -33,13 +34,13 @@ declare module 'hono' {
 	}
 }
 
-export function widgetTenantResolverMiddleware() {
+export function widgetTenantResolverMiddleware(sqlClient = globalSql) {
 	return factory.createMiddleware(async (c, next) => {
 		const slug = c.req.param('tenantSlug')
 		if (!slug) {
 			return c.json({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } }, 404)
 		}
-		const resolved = await resolveTenantBySlug(slug)
+		const resolved = await resolveTenantBySlug(slug, sqlClient)
 		if (!resolved) {
 			return c.json({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } }, 404)
 		}

@@ -15,7 +15,7 @@
 #                              serves registry.terraform.io/yandex-cloud/yandex
 #                              v0.204, opentofu.org namespace empty for yandex)
 #   gcr.io/go-containerregistry/crane:debug — mirror MCR→cr.yandex (Google canon)
-#   pnpm@10.33.4 via corepack (latest 10.x patch)
+#   pnpm@10.34.1 via corepack (latest 10.x patch, security-hardening minor)
 #   bun 1.3.14 — npm install -g (test-fast cube, sochi-specific)
 #   cr.yandex/sepshn/playwright:v1.60.0-noble — MCR mirror (anon pull, run #30)
 #   YC sourcecraft images :latest — internal Yandex registry, trusted
@@ -151,21 +151,21 @@ tasks:
       - name: install
         image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
-          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - corepack enable && corepack prepare pnpm@10.34.1 --activate
           - pnpm install --frozen-lockfile
 
       - name: typecheck
         needs: [install]
         image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
-          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - corepack enable && corepack prepare pnpm@10.34.1 --activate
           - pnpm typecheck
 
       - name: lint
         needs: [install]
         image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
-          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - corepack enable && corepack prepare pnpm@10.34.1 --activate
           - pnpm lint
           - pnpm format:check
 
@@ -176,7 +176,7 @@ tasks:
         image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
           - set -e
-          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - corepack enable && corepack prepare pnpm@10.34.1 --activate
           - npm install -g bun@1.3.14
           - bun --version
           - pnpm test:fast
@@ -194,7 +194,7 @@ tasks:
         image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
           - set -e
-          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - corepack enable && corepack prepare pnpm@10.34.1 --activate
           - 'pnpm audit --audit-level=high --json > /tmp/audit.json || { echo "FAIL: pnpm audit high/critical vulnerabilities"; cat /tmp/audit.json; exit 1; }'
           - apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
           - curl -fsSL -o /usr/local/bin/osv-scanner
@@ -214,7 +214,7 @@ tasks:
         needs: [install]
         image: cr.yandex/crp4um8fg84qoro1voi6/node:24-slim
         script:
-          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - corepack enable && corepack prepare pnpm@10.34.1 --activate
           - npm install -g bun@1.3.14
           - bun --version
           - bash scripts/coverage-gate.sh
@@ -603,6 +603,7 @@ tasks:
             --environment APP_MODE=sandbox
             --environment NODE_ENV=production
             --environment LOG_LEVEL=info
+            --environment GIT_COMMIT_SHA=${SHA}
             --environment DEMO_DEPLOYMENT=true
             --environment HOST=demo.sepshn.ru
             --environment PUBLIC_BASE_URL=https://demo.sepshn.ru
@@ -666,7 +667,7 @@ tasks:
           # nothing (silent regression). User clicks Accept, NO tracking fires.
           VITE_YANDEX_METRIKA_ID: '109307396'
         script:
-          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - corepack enable && corepack prepare pnpm@10.34.1 --activate
           - pnpm install --frozen-lockfile
           - pnpm --filter @horeca/frontend build
 
@@ -729,6 +730,13 @@ tasks:
           # между попытками (built-in exponential backoff). --retry-all-errors =
           # retry на HTTP 5xx тоже. Заменяет хрупкий `sleep 20` — cold-start под
           # нагрузкой может превысить 20s.
+          #
+          # Drain-window readiness (2026-05-30): a draining old revision now
+          # returns 503 on /health/ready (lib/lifecycle.ts), so the
+          # `--retry-all-errors` /health/ready probe below auto-retries until a
+          # NON-draining (ready) instance answers — no separate revision-SHA gate
+          # needed. The app-layer 503-not-500 (drain-guard) plus the smoke's own
+          # retries make the rolling-deploy window safe to test through.
           - 'CURL="curl -sf --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10"'
           - '$CURL https://demo.sepshn.ru/health | grep -q ''"status":"ok"'' && echo "ok /health"'
           - '$CURL https://demo.sepshn.ru/health/live | grep -q ''"status":"ok"'' && echo "ok /health/live"'
@@ -758,6 +766,6 @@ tasks:
           # Lockbox `sepshn-sws-bypass-token` feeds оба слоя.
           SWS_BYPASS_TOKEN: ${{ secrets.SWS_BYPASS_TOKEN }}
         script:
-          - corepack enable && corepack prepare pnpm@10.33.4 --activate
+          - corepack enable && corepack prepare pnpm@10.34.1 --activate
           - pnpm install --frozen-lockfile
           - pnpm exec playwright test smoke.spec.ts --project smoke --reporter=line

@@ -15,8 +15,18 @@ minimumReleaseAge: 1440
 # 2026-05-27: tmp@0.2.6 (GHSA-ph9p-34f9-6g65 high severity path traversal,
 # fix needed для прохождения ratchet audit gate). Re-evaluate after 24h
 # release age достигнут.
+#
+# 2026-05-30: better-auth + @better-auth/* 1.6.12 (released 2026-05-30 00:31
+# UTC) — security fix applicable к нам (cookie-replay → 2FA-bypass #9639 при
+# enabled cookieCache; atomic passkey anti-replay #9622; cookie-parse-behind-
+# proxy #9543, мы за YC Gateway). Excluded per user directive — apply NOW, не
+# ждать 24h cooldown. Glob `@better-auth/*` покрывает family (passkey +
+# transitive drizzle-adapter etc, released в один timestamp). REMOVE after
+# 2026-05-31 00:31 UTC (natural maturity достигнута) — keep exclude-list lean.
 minimumReleaseAgeExclude:
   - tmp
+  - better-auth
+  - '@better-auth/*'
 
 # Запретить exotic subdeps (git:/tarball: URL в transitive deps) — vector для
 # typosquat-attacks через compromised package.json subdeps.

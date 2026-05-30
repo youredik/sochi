@@ -13,7 +13,7 @@
  * Props are pure — no router coupling. Consumer (search-and-pick.tsx) maps
  * onChange to URL search params.
  */
-import { ru } from 'date-fns/locale'
+import { ru } from 'date-fns/locale/ru'
 import { CalendarIcon } from 'lucide-react'
 import { useState } from 'react'
 import type { DateRange } from 'react-day-picker'

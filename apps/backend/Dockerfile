@@ -28,7 +28,7 @@
 # --- Stage 1: base (pnpm setup) ---
 FROM node:24-alpine AS base
 ENV PNPM_HOME="/pnpm" PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@10.33.4 --activate
+RUN corepack enable && corepack prepare pnpm@10.34.1 --activate
 WORKDIR /app
 
 # --- Stage 2: deps (lockfile-cached layer) ---

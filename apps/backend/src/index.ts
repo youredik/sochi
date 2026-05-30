@@ -10,8 +10,11 @@ import {
 	assertNoDemoInProduction,
 	assertProductionCaptchaConfigured,
 } from './lib/production-guards.ts'
-import { createShutdownHandler } from './lib/shutdown.ts'
+import { beginDraining } from './lib/lifecycle.ts'
+import { createShutdownHandler, DEFAULT_DRAIN_DELAY_MS } from './lib/shutdown.ts'
 import { logger } from './logger.ts'
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function main(): Promise<void> {
 	// Pre-warm YDB connection so /health/db is fast on first call.
@@ -101,10 +104,17 @@ async function main(): Promise<void> {
 	)
 
 	// Single-owner SIGTERM/SIGINT teardown via testable factory (see lib/shutdown.ts).
+	// Drain delay: keep serving through YC's post-SIGTERM routing tail in
+	// production (4 s); 0 locally so dev restarts are instant.
+	const drainDelayMs =
+		env.SHUTDOWN_DRAIN_DELAY_MS ?? (env.NODE_ENV === 'production' ? DEFAULT_DRAIN_DELAY_MS : 0)
 	const shutdown = createShutdownHandler({
 		server,
 		closeDriver,
 		stopApp,
+		beginDraining,
+		drainDelayMs,
+		sleep,
 		exit: (code) => process.exit(code),
 		logger,
 	})

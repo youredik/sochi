@@ -108,6 +108,32 @@ test.describe('Demo funnel — empirical против prod', () => {
 		return undefined
 	}
 
+	/**
+	 * POST the magic-link request, retrying up to 5× with 3s backoff on any
+	 * non-200. Backend can be intermittently 5xx: demo-inbox rate-limit, cold-
+	 * start (~5s), OR — the case this guards — a DRAINING old revision during a
+	 * rolling deploy returns a retryable 503 (lib/drain-guard.ts). Retrying lands
+	 * the POST on the live new revision so the magic-link actually gets sent +
+	 * captured. Shared by [E1] and BOTH [E2] visits (previously [E2] fired a
+	 * single un-retried POST → a drain-window 503 stranded it → flaky red).
+	 */
+	async function postMagicLink(
+		request: import('@playwright/test').APIRequestContext,
+		email: string,
+		callbackURL: string,
+	): Promise<import('@playwright/test').APIResponse> {
+		let res: import('@playwright/test').APIResponse | undefined
+		for (let attempt = 0; attempt < 5; attempt++) {
+			res = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
+				data: { email, callbackURL },
+				headers: getSmokeHeaders(),
+			})
+			if (res.status() === 200) return res
+			await new Promise((r) => setTimeout(r, 3000))
+		}
+		return res as import('@playwright/test').APIResponse
+	}
+
 	test('[E1] fresh signup → magic-link → auto-create org → /setup → DaData lookup', async ({
 		page,
 		request,
@@ -122,19 +148,8 @@ test.describe('Demo funnel — empirical против prod', () => {
 		// IdentifyStep. Single source of truth для hotel name = DaData party
 		// lookup в IdentifyStep (canon 2026-05-22 «DaData party wins»).
 		const callbackURL = `${PROD_BASE}/welcome`
-		// Retry magic-link POST до 5 раз с 3s backoff — backend бывает
-		// intermittently 5xx (rate-limit demo-inbox MAX_TOTAL_RECIPIENTS=500
-		// ИЛИ cold-start serverless container ~5s).
-		let signupRes: import('@playwright/test').APIResponse | undefined
-		for (let attempt = 0; attempt < 5; attempt++) {
-			signupRes = await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
-				data: { email, callbackURL },
-				headers: getSmokeHeaders(),
-			})
-			if (signupRes.status() === 200) break
-			await new Promise((r) => setTimeout(r, 3000))
-		}
-		expect(signupRes?.status(), `Final attempt body: ${await signupRes?.text()}`).toBe(200)
+		const signupRes = await postMagicLink(request, email, callbackURL)
+		expect(signupRes.status(), `Final attempt body: ${await signupRes.text()}`).toBe(200)
 
 		// Poll DemoInbox для captured URL
 		const magicLink = await fetchMagicLink(request, email)
@@ -185,10 +200,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		// === FIRST VISIT — auto-create tenant via /welcome beforeLoad ===
 		// Round 14.6.2 — no orgName URL param; placeholder applied automatically.
 		const callbackURL1 = `${PROD_BASE}/welcome`
-		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
-			data: { email, callbackURL: callbackURL1 },
-			headers: getSmokeHeaders(),
-		})
+		await postMagicLink(request, email, callbackURL1)
 		const magicLink1 = await fetchMagicLink(request, email)
 		expect(magicLink1, 'First visit: magic-link не captured').toBeTruthy()
 
@@ -205,10 +217,7 @@ test.describe('Demo funnel — empirical против prod', () => {
 		// resolveWelcomeRedirect sees orgs.length > 0 → set-active-and-redirect
 		// → SAME tenant (no auto-create-org duplicate).
 		const callbackURL2 = `${PROD_BASE}/welcome`
-		await request.post(`${PROD_BASE}/api/auth/sign-in/magic-link`, {
-			data: { email, callbackURL: callbackURL2 },
-			headers: getSmokeHeaders(),
-		})
+		await postMagicLink(request, email, callbackURL2)
 		// Round 7 v3 fix 2026-05-25 — pass first capturedAt as `since` filter.
 		// Race-free: backend returns ONLY captures after this timestamp, even
 		// if BA reused magic-link token (identical URL). URL-equality assertion

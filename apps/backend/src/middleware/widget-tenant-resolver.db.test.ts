@@ -58,7 +58,7 @@ describe('widget-tenant-resolver middleware', () => {
 
 	function buildApp() {
 		const app = new Hono<AppEnv>()
-			.use('/widget/:tenantSlug/*', widgetTenantResolverMiddleware())
+			.use('/widget/:tenantSlug/*', widgetTenantResolverMiddleware(getTestSql()))
 			.post('/widget/:tenantSlug/booking', (c) => {
 				return c.json(
 					{
@@ -116,7 +116,7 @@ describe('widget-tenant-resolver middleware', () => {
 	test('[WTR5] Unknown slug → 404, handler не достигнут', async () => {
 		const handler = mock(() => Response.json({ ok: true }))
 		const app = new Hono<AppEnv>()
-			.use('/widget/:tenantSlug/*', widgetTenantResolverMiddleware())
+			.use('/widget/:tenantSlug/*', widgetTenantResolverMiddleware(getTestSql()))
 			.post('/widget/:tenantSlug/booking', handler)
 
 		const res = await app.request(`/widget/never-exists-${Date.now()}/booking`, {
@@ -152,7 +152,7 @@ describe('widget-tenant-resolver middleware', () => {
 		await seedTenant({ slug })
 		const repo = createIdempotencyRepo(getTestSql())
 		const app = new Hono<AppEnv>()
-			.use('/widget/:tenantSlug/*', widgetTenantResolverMiddleware())
+			.use('/widget/:tenantSlug/*', widgetTenantResolverMiddleware(getTestSql()))
 			.use('/widget/:tenantSlug/*', idempotencyMiddleware(repo))
 			.post('/widget/:tenantSlug/booking', (c) => c.json({ ok: true, t: Date.now() }, 200))
 

@@ -47,6 +47,14 @@ export const envSchema = z.object({
 	PORT: z.coerce.number().int().min(1).max(65535).default(8787),
 	LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 
+	// Pre-drain delay (ms) on SIGTERM before tearing down server + YDB driver.
+	// YC Serverless Containers keep routing to the old instance for ~2-3 s after
+	// SIGTERM (no readiness signal — see lib/shutdown.ts). We stay alive this long
+	// so late requests are 503'd by the drain guard, not 500'd by a dead driver.
+	// Unset → index.ts defaults to 4000 in production, 0 elsewhere (fast local
+	// restart). Max 9 min — under YC's 10-min long-lived grace budget.
+	SHUTDOWN_DRAIN_DELAY_MS: z.coerce.number().int().min(0).max(540000).optional(),
+
 	// PWA + WebAuthn host identity (M9.4 Risk #15 pre-condition).
 	//
 	// `HOST` — bare hostname WITHOUT protocol/port (WebAuthn `rpID` requirement

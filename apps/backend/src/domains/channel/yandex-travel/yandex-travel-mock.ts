@@ -522,7 +522,7 @@ export function createYandexTravelMock(opts: YandexTravelMockOptions): YandexTra
 			const data = event.data as Record<string, unknown> | undefined
 			if (data) {
 				const consent = data.consent as Record<string, unknown> | undefined
-				if (!consent || consent.processing !== true || consent.transferToHotel !== true) {
+				if (consent?.processing !== true || consent?.transferToHotel !== true) {
 					return {
 						ok: false,
 						reason: 'consent_missing_required_checkboxes',

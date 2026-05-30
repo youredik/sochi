@@ -1,4 +1,4 @@
-import { ru } from 'date-fns/locale'
+import { ru } from 'date-fns/locale/ru'
 import { CalendarIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'

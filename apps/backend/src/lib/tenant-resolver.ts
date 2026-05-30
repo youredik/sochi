@@ -10,7 +10,17 @@
  *   - Unknown slug → null (route handler returns 404)
  *   - Returns `{ tenantId, mode }` so handler may gate behaviour для demo vs production
  */
-import { sql } from '../db/index.ts'
+import { sql as globalSql } from '../db/index.ts'
+
+/**
+ * Injectable YDB client. Defaults to the production global `sql` (db/index.ts).
+ * Tests MUST pass `getTestSql()` instead: under `bun test` the module-load-time
+ * global driver's `createClient` reads back `undefined` (separate `@ydbjs` client
+ * surface than `@ydbjs/query` binds at query time), so the global `sql` throws
+ * `driver.createClient is not a function`. The runtime-constructed test client
+ * works — see `tests/db-setup.ts`.
+ */
+type SqlClient = typeof globalSql
 
 export interface ResolvedTenant {
 	readonly tenantId: string
@@ -33,10 +43,15 @@ export function normalizeSlug(input: string): string | null {
 	return trimmed
 }
 
-export async function resolveTenantBySlug(rawSlug: string): Promise<ResolvedTenant | null> {
+export async function resolveTenantBySlug(
+	rawSlug: string,
+	sqlClient: SqlClient = globalSql,
+): Promise<ResolvedTenant | null> {
 	const slug = normalizeSlug(rawSlug)
 	if (slug === null) return null
-	const [rows = []] = await sql<{ id: string; slug: string; name: string; mode: string | null }[]>`
+	const [rows = []] = await sqlClient<
+		{ id: string; slug: string; name: string; mode: string | null }[]
+	>`
 		SELECT o.id AS id, o.slug AS slug, o.name AS name, p.mode AS mode
 		FROM organization AS o
 		LEFT JOIN organizationProfile AS p ON p.organizationId = o.id

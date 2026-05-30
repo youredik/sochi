@@ -99,6 +99,8 @@ import { createDcrRoutes } from './lib/oauth/dcr.routes.ts'
 import { createYdbDcrStore } from './lib/oauth/dcr.ydb.repo.ts'
 import { createOpenApiRoutes } from './lib/openapi/routes.ts'
 import { createReadinessEvaluator } from './lib/readiness.ts'
+import { isDraining } from './lib/lifecycle.ts'
+import { drainGuard } from './middleware/drain-guard.ts'
 import { createMcpRoutes } from './mcp/server.ts'
 import { logger } from './logger.ts'
 import { magicLinkRateLimit, orgCreateRateLimit } from './middleware/auth-signup-rate-limit.ts'
@@ -914,6 +916,19 @@ app.use('*', requestId())
 // hono-pino picks up `requestId` from the context automatically via referRequestIdKey.
 app.use('*', pinoLogger({ pino: logger }))
 
+// Drain guard (2026-05-30) — once SIGTERM has flipped the lifecycle flag, reject
+// NEW traffic with a retryable 503 + Retry-After BEFORE any handler issues a YDB
+// query. YC Serverless Containers keep routing to the old instance for ~2-3 s
+// after SIGTERM (no readiness probe / no «stop routing me» signal — verified vs
+// yandex.cloud docs), and `@ydbjs@6 Driver.close()` does NOT drain in-flight
+// queries → a late request would otherwise hit a dead gRPC channel and 500
+// («Channel has been shut down»), losing e.g. a prospect's magic-link capture.
+// 503 is retryable: the platform/Envoy re-issues to the live new revision.
+//
+// `/health*` is exempt: liveness (/health/live) MUST stay 200 so YC does not
+// treat the process as dead, and /health/ready returns its own draining 503.
+app.use('*', drainGuard)
+
 // Sprint B 2026-05-22 — native Hono security headers (Strict-Transport-Security,
 // X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
 // Defaults are sane для backend API: blocks framing, content-type sniffing, MITM.
@@ -1279,6 +1294,20 @@ const routes = app
 		),
 	)
 	.get('/health/ready', async (c) => {
+		// Draining short-circuit (2026-05-30): once SIGTERM flipped the lifecycle
+		// flag, report not-ready immediately WITHOUT probing YDB (the driver is
+		// about to close). YC ignores this (no readiness routing), but the CI
+		// deploy-verify gate + any external monitor see the drain truthfully.
+		if (isDraining()) {
+			return c.json(
+				{
+					status: 'degraded' as const,
+					checks: [{ name: 'draining', ok: false }],
+					time: new Date().toISOString(),
+				},
+				503,
+			)
+		}
 		// Composite readiness via cached evaluator (see lib/readiness.ts).
 		// Public payload contract pinned by lib/readiness.test.ts. Cache TTL +
 		// AbortSignal timeout protect YDB от probe-storm and probe-hang both.

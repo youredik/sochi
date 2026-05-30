@@ -1,10 +1,13 @@
 /**
- * Strict unit tests для createShutdownHandler (B7 race-fix, 2026-05-19).
+ * Strict unit tests для createShutdownHandler.
  *
- * Empirically verifies the SIGTERM teardown order canon. Previous codepath had
- * a fire-and-forget `void stopApp()` racing с `process.exit(0)` — these tests
- * pin the await sequence so any future regression к the race breaks here, not
- * in a flaky k8s drain.
+ * Pins the drain-safe SIGTERM teardown canon (2026-05-30 rewrite):
+ *   beginDraining → sleep(drainDelay) → stopApp → server.close (awaited) +
+ *   closeIdleConnections → closeDriver → exit(0).
+ *
+ * Any regression к the old «server.close() fire-and-forget then closeDriver()»
+ * race (which produced «Channel has been shut down» 500s during YC revision
+ * deploys) breaks here, not в a flaky prod drain.
  */
 
 import { describe, expect, mock, test } from 'bun:test'
@@ -16,16 +19,21 @@ interface LoggedEntry {
 }
 
 function makeDeps(
-	overrides: Partial<ShutdownDeps> & { callOrder?: string[] } = {},
-): ShutdownDeps & {
-	callOrder: string[]
-} {
+	overrides: Partial<ShutdownDeps> & { callOrder?: string[]; closeCallsCallback?: boolean } = {},
+): ShutdownDeps & { callOrder: string[] } {
 	const callOrder = overrides.callOrder ?? []
+	// By default server.close fires its callback synchronously (all connections
+	// closed) so closeServer resolves via the «closed» branch, not the timeout.
+	const closeCallsCallback = overrides.closeCallsCallback ?? true
 	return {
 		callOrder,
 		server: overrides.server ?? {
-			close: () => {
+			close: (cb?: (err?: Error) => void) => {
 				callOrder.push('server.close')
+				if (closeCallsCallback) cb?.()
+			},
+			closeIdleConnections: () => {
+				callOrder.push('closeIdleConnections')
 			},
 		},
 		closeDriver:
@@ -37,6 +45,21 @@ function makeDeps(
 			overrides.stopApp ??
 			(async () => {
 				callOrder.push('stopApp')
+			}),
+		beginDraining:
+			overrides.beginDraining ??
+			(() => {
+				callOrder.push('beginDraining')
+			}),
+		drainDelayMs: overrides.drainDelayMs ?? 4000,
+		serverCloseTimeoutMs: overrides.serverCloseTimeoutMs ?? 8000,
+		// Instant sleep — records the requested ms so order/duration is assertable
+		// without real timers. `closed` (sync callback) wins the race over this.
+		sleep:
+			overrides.sleep ??
+			((ms: number) => {
+				callOrder.push(`sleep(${ms})`)
+				return Promise.resolve()
 			}),
 		exit:
 			overrides.exit ??
@@ -51,33 +74,73 @@ function makeDeps(
 	}
 }
 
-describe('createShutdownHandler — canonical teardown order', () => {
-	test('stopApp awaited BEFORE server.close + closeDriver + exit', async () => {
+describe('createShutdownHandler — drain-safe teardown order', () => {
+	test('full canonical sequence pinned', async () => {
 		const deps = makeDeps()
 		const shutdown = createShutdownHandler(deps)
 		await expect(shutdown('SIGTERM')).rejects.toThrow('test-exit-marker')
-		// Canon order pinned: stopApp drains CDC FIRST, then server stops
-		// accepting new requests, then driver closed, then process exits.
-		expect(deps.callOrder).toEqual(['stopApp', 'server.close', 'closeDriver', 'exit(0)'])
+		expect(deps.callOrder).toEqual([
+			'beginDraining',
+			'sleep(4000)',
+			'stopApp',
+			'server.close',
+			'closeIdleConnections',
+			'sleep(8000)',
+			'closeDriver',
+			'exit(0)',
+		])
 	})
 
-	test('async stopApp delays subsequent steps (not fire-and-forget)', async () => {
+	test('beginDraining runs FIRST — before the pre-drain sleep + everything else', async () => {
 		const deps = makeDeps()
-		// Simulate slow stopApp — server.close MUST wait, not race.
-		deps.stopApp = (async () => {
-			await new Promise((r) => setTimeout(r, 30))
-			deps.callOrder.push('stopApp')
-		}) as ShutdownDeps['stopApp']
 		const shutdown = createShutdownHandler(deps)
-		const start = Date.now()
 		await expect(shutdown('SIGTERM')).rejects.toThrow('test-exit-marker')
-		// Total time ≥ 30ms (stopApp delay) — server.close did not run before stopApp.
-		expect(Date.now() - start).toBeGreaterThanOrEqual(25)
-		expect(deps.callOrder[0]).toBe('stopApp')
-		expect(deps.callOrder[1]).toBe('server.close')
+		expect(deps.callOrder[0]).toBe('beginDraining')
+		// Pre-drain sleep happens before CDC drain (stopApp).
+		expect(deps.callOrder.indexOf('sleep(4000)')).toBeLessThan(deps.callOrder.indexOf('stopApp'))
 	})
 
-	test('exit called with code 0 (clean shutdown)', async () => {
+	test('closeDriver runs AFTER server.close (no in-flight query can hit a dead driver)', async () => {
+		const deps = makeDeps()
+		const shutdown = createShutdownHandler(deps)
+		await expect(shutdown('SIGTERM')).rejects.toThrow('test-exit-marker')
+		expect(deps.callOrder.indexOf('server.close')).toBeLessThan(
+			deps.callOrder.indexOf('closeDriver'),
+		)
+	})
+
+	test('server.close is AWAITED — closeDriver waits for the close callback', async () => {
+		const callOrder: string[] = []
+		// server.close fires its callback asynchronously (in-flight drain takes time).
+		const deps = makeDeps({
+			callOrder,
+			server: {
+				close: (cb?: (err?: Error) => void) => {
+					callOrder.push('server.close:start')
+					setTimeout(() => {
+						callOrder.push('server.close:done')
+						cb?.()
+					}, 20)
+				},
+				closeIdleConnections: () => callOrder.push('closeIdleConnections'),
+			},
+		})
+		const shutdown = createShutdownHandler(deps)
+		await expect(shutdown('SIGTERM')).rejects.toThrow('test-exit-marker')
+		// closeDriver MUST come after the async close callback resolved.
+		expect(callOrder.indexOf('server.close:done')).toBeLessThan(callOrder.indexOf('closeDriver'))
+	})
+
+	test('drainDelayMs=0 skips the pre-drain sleep (test/dev fast path)', async () => {
+		const deps = makeDeps({ drainDelayMs: 0 })
+		const shutdown = createShutdownHandler(deps)
+		await expect(shutdown('SIGTERM')).rejects.toThrow('test-exit-marker')
+		expect(deps.callOrder).not.toContain('sleep(0)')
+		expect(deps.callOrder[0]).toBe('beginDraining')
+		expect(deps.callOrder[1]).toBe('stopApp')
+	})
+
+	test('exit called once with code 0', async () => {
 		const deps = makeDeps()
 		const exitSpy = mock<(code: number) => never>(((code: number) => {
 			deps.callOrder.push(`exit(${code})`)
@@ -91,80 +154,85 @@ describe('createShutdownHandler — canonical teardown order', () => {
 	})
 })
 
-describe('createShutdownHandler — shuttingDown re-entry guard', () => {
-	test('second invocation = no-op (k8s/ALB redelivery defense)', async () => {
-		const deps = makeDeps()
-		// Slow stopApp so second call arrives during first execution.
+describe('createShutdownHandler — server.close timeout bound', () => {
+	test('server.close that never settles → forced after serverCloseTimeoutMs + logged', async () => {
+		const loggedErrors: LoggedEntry[] = []
+		const callOrder: string[] = []
+		const deps = makeDeps({
+			callOrder,
+			closeCallsCallback: false, // close callback NEVER fires (wedged socket)
+			logger: {
+				info: () => undefined,
+				error: (obj, msg) => loggedErrors.push({ obj, msg }),
+			},
+		})
+		const shutdown = createShutdownHandler(deps)
+		await expect(shutdown('SIGTERM')).rejects.toThrow('test-exit-marker')
+		// Timeout sleep wins the race → still proceeds к closeDriver + exit.
+		expect(callOrder).toContain('closeDriver')
+		expect(callOrder).toContain('exit(0)')
+		const timeoutLog = loggedErrors.find((e) => /server.close exceeded timeout/.test(e.msg ?? ''))
+		expect(timeoutLog?.msg).toContain('forcing driver close')
+		expect(timeoutLog?.obj.timeoutMs).toBe(8000)
+	})
+})
+
+describe('createShutdownHandler — re-entry guard', () => {
+	test('second signal during slow drain = no-op (YC/ALB redelivery defense)', async () => {
 		let stopAppCalls = 0
-		deps.stopApp = (async () => {
-			stopAppCalls += 1
-			await new Promise((r) => setTimeout(r, 20))
-			deps.callOrder.push('stopApp')
-		}) as ShutdownDeps['stopApp']
+		const deps = makeDeps({
+			stopApp: (async () => {
+				stopAppCalls += 1
+				await new Promise((r) => setTimeout(r, 20))
+			}) as ShutdownDeps['stopApp'],
+			// Real-ish sleep so the second signal arrives mid-drain.
+			sleep: ((ms: number) =>
+				new Promise<void>((r) => setTimeout(r, Math.min(ms, 10)))) as ShutdownDeps['sleep'],
+		})
 		const shutdown = createShutdownHandler(deps)
 		const p1 = shutdown('SIGTERM').catch(() => undefined)
 		const p2 = shutdown('SIGTERM').catch(() => undefined)
 		await Promise.all([p1, p2])
-		// Only ONE stopApp invocation despite two signal deliveries.
 		expect(stopAppCalls).toBe(1)
-		// callOrder reflects single teardown sequence.
-		expect(deps.callOrder.filter((c) => c === 'server.close')).toHaveLength(1)
 		expect(deps.callOrder.filter((c) => c === 'closeDriver')).toHaveLength(1)
-		expect(deps.callOrder.filter((c) => c === 'exit(0)')).toHaveLength(1)
-	})
-
-	test('different signals (SIGINT then SIGTERM) still collapsed by guard', async () => {
-		const deps = makeDeps()
-		let stopAppCalls = 0
-		deps.stopApp = (async () => {
-			stopAppCalls += 1
-			await new Promise((r) => setTimeout(r, 20))
-			deps.callOrder.push('stopApp')
-		}) as ShutdownDeps['stopApp']
-		const shutdown = createShutdownHandler(deps)
-		const p1 = shutdown('SIGINT').catch(() => undefined)
-		const p2 = shutdown('SIGTERM').catch(() => undefined)
-		await Promise.all([p1, p2])
-		expect(stopAppCalls).toBe(1)
 	})
 })
 
 describe('createShutdownHandler — failure-mode robustness', () => {
-	test('stopApp throw → logged + shutdown continues (no process hang)', async () => {
-		const deps = makeDeps()
+	test('stopApp throw → logged + teardown still completes (no hang past grace budget)', async () => {
 		const loggedErrors: LoggedEntry[] = []
-		deps.logger = {
-			info: () => undefined,
-			error: (obj: Record<string, unknown>, msg?: string) => {
-				loggedErrors.push({ obj, msg })
+		const deps = makeDeps({
+			logger: {
+				info: () => undefined,
+				error: (obj, msg) => loggedErrors.push({ obj, msg }),
 			},
-		}
-		deps.stopApp = (async () => {
-			throw new Error('CDC consumer drain failed')
-		}) as ShutdownDeps['stopApp']
+			stopApp: (async () => {
+				throw new Error('CDC consumer drain failed')
+			}) as ShutdownDeps['stopApp'],
+		})
 		const shutdown = createShutdownHandler(deps)
 		await expect(shutdown('SIGTERM')).rejects.toThrow('test-exit-marker')
-		// stopApp failure must NOT block server.close + closeDriver + exit —
-		// otherwise process hangs past terminationGracePeriodSeconds → SIGKILL.
-		expect(deps.callOrder).toEqual(['server.close', 'closeDriver', 'exit(0)'])
-		// And error MUST be logged via structured logger.error.
-		expect(loggedErrors).toHaveLength(1)
-		expect((loggedErrors[0]?.obj.err as Error).message).toBe('CDC consumer drain failed')
-		expect(loggedErrors[0]?.msg).toMatch(/stopApp failed/)
+		// Driver still closed + clean exit despite stopApp failure.
+		expect(deps.callOrder).toContain('server.close')
+		expect(deps.callOrder).toContain('closeDriver')
+		expect(deps.callOrder).toContain('exit(0)')
+		expect(deps.callOrder).not.toContain('stopApp')
+		const stopAppErr = loggedErrors.find((e) => /stopApp failed/.test(e.msg ?? ''))
+		expect((stopAppErr?.obj.err as Error).message).toBe('CDC consumer drain failed')
 	})
 
-	test('shutdown logs signal label на entry (operator audit)', async () => {
-		const deps = makeDeps()
+	test('logs signal label + drainDelayMs on entry (operator audit)', async () => {
 		const loggedInfo: LoggedEntry[] = []
-		deps.logger = {
-			info: (obj: Record<string, unknown>, msg?: string) => {
-				loggedInfo.push({ obj, msg })
+		const deps = makeDeps({
+			logger: {
+				info: (obj, msg) => loggedInfo.push({ obj, msg }),
+				error: () => undefined,
 			},
-			error: () => undefined,
-		}
+		})
 		const shutdown = createShutdownHandler(deps)
 		await expect(shutdown('SIGTERM')).rejects.toThrow('test-exit-marker')
 		expect(loggedInfo[0]?.obj.signal).toBe('SIGTERM')
+		expect(loggedInfo[0]?.obj.drainDelayMs).toBe(4000)
 		expect(loggedInfo[0]?.msg).toMatch(/Shutting down/)
 	})
 })

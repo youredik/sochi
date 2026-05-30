@@ -140,7 +140,7 @@ describe('resolveTenantBySlug — integration', () => {
 		const id = newId('organization')
 		const slug = `r1-${Date.now().toString(36)}`
 		await seedOrg({ id, slug, name: 'Test R1 Hotel', mode: 'demo' })
-		const result = await resolveTenantBySlug(slug)
+		const result = await resolveTenantBySlug(slug, getTestSql())
 		expect(result).not.toBeNull()
 		expect(result?.tenantId).toBe(id)
 		expect(result?.slug).toBe(slug)
@@ -152,13 +152,13 @@ describe('resolveTenantBySlug — integration', () => {
 		const id = newId('organization')
 		const slug = `r2-${Date.now().toString(36)}`
 		await seedOrg({ id, slug, name: 'Test R2', mode: 'production' })
-		const result = await resolveTenantBySlug(slug.toUpperCase())
+		const result = await resolveTenantBySlug(slug.toUpperCase(), getTestSql())
 		expect(result).not.toBeNull()
 		expect(result?.tenantId).toBe(id)
 	})
 
 	test('[R3] unknown slug → null (not throw)', async () => {
-		const result = await resolveTenantBySlug(`nonexistent-${Date.now()}`)
+		const result = await resolveTenantBySlug(`nonexistent-${Date.now()}`, getTestSql())
 		expect(result).toBeNull()
 	})
 
@@ -172,7 +172,7 @@ describe('resolveTenantBySlug — integration', () => {
 		const id = newId('organization')
 		const slug = `r5-${Date.now().toString(36)}`
 		await seedOrg({ id, slug, name: 'Test R5' }) // no profile
-		const result = await resolveTenantBySlug(slug)
+		const result = await resolveTenantBySlug(slug, getTestSql())
 		expect(result).not.toBeNull()
 		expect(result?.mode).toBeNull()
 	})
@@ -197,35 +197,35 @@ describe('resolveTenantBySlug — integration', () => {
 
 	test('[R6] mode=empty string → mode=null (whitelist rejects)', async () => {
 		const { slug } = await seedOrgWithRawMode('')
-		const result = await resolveTenantBySlug(slug)
+		const result = await resolveTenantBySlug(slug, getTestSql())
 		expect(result).not.toBeNull()
 		expect(result?.mode).toBeNull()
 	})
 
 	test('[R7] mode="DEMO" uppercase → mode=null (case-sensitive whitelist)', async () => {
 		const { slug } = await seedOrgWithRawMode('DEMO')
-		const result = await resolveTenantBySlug(slug)
+		const result = await resolveTenantBySlug(slug, getTestSql())
 		expect(result).not.toBeNull()
 		expect(result?.mode).toBeNull()
 	})
 
 	test('[R8] mode="demo " trailing space → mode=null (no auto-trim)', async () => {
 		const { slug } = await seedOrgWithRawMode('demo ')
-		const result = await resolveTenantBySlug(slug)
+		const result = await resolveTenantBySlug(slug, getTestSql())
 		expect(result).not.toBeNull()
 		expect(result?.mode).toBeNull()
 	})
 
 	test('[R9] mode="staging" (future-tense) → mode=null (whitelist closed)', async () => {
 		const { slug } = await seedOrgWithRawMode('staging')
-		const result = await resolveTenantBySlug(slug)
+		const result = await resolveTenantBySlug(slug, getTestSql())
 		expect(result).not.toBeNull()
 		expect(result?.mode).toBeNull()
 	})
 
 	test('[R10] mode="Demo" mixed-case → mode=null (case-sensitive whitelist)', async () => {
 		const { slug } = await seedOrgWithRawMode('Demo')
-		const result = await resolveTenantBySlug(slug)
+		const result = await resolveTenantBySlug(slug, getTestSql())
 		expect(result).not.toBeNull()
 		expect(result?.mode).toBeNull()
 	})

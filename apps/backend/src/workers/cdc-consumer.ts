@@ -71,6 +71,7 @@ import type { Driver } from '@ydbjs/core'
 import type { TX } from '@ydbjs/query'
 import { createTopicReader } from '@ydbjs/topic/reader'
 import type { sql as SQL } from '../db/index.ts'
+import { isDraining } from '../lib/lifecycle.ts'
 import { logger } from '../logger.ts'
 import type { CdcEvent } from './cdc-handlers.ts'
 
@@ -157,7 +158,7 @@ export function startCdcConsumer(driver: Driver, sql: SqlInstance, config: Consu
 				if (stopped) break
 				await new Promise((r) => setTimeout(r, 100))
 			} catch (err) {
-				if (stopped || controller.signal.aborted) break
+				if (stopped || controller.signal.aborted || isDraining()) break
 				logger.warn(
 					{ err, topic: config.topic, consumer: config.consumer },
 					`cdc-consumer ${config.label}: batch failed — backing off ${ERROR_BACKOFF_MS}ms`,
