@@ -239,11 +239,14 @@ export function buildScanReviewHints(entities: RecognizePassportResponse['entiti
 
 /**
  * Build the toast после скан-preview в форме создания: текст по outcome +
- * перечень незаполненных полей (из buildScanReviewHints). Pure → тестируемо
- * (закрывает gap: раньше строка тоста собиралась inline в компоненте, без теста).
+ * перечень незаполненных полей (из buildScanReviewHints). Pure → тестируемо.
+ *
+ * `outcome` сужен Exclude<…, 'api_error'>: api_error отсекается РАНЬШЕ в handleScanFile
+ * (toast.error + return), сюда не доходит. Сужение делает функцию корректной-по-типу
+ * (иначе api_error молча уехал бы в success-ветку).
  */
 export function scanResultToast(
-	outcome: RecognizePassportResponse['outcome'],
+	outcome: Exclude<RecognizePassportResponse['outcome'], 'api_error'>,
 	hints: string[],
 ): { readonly kind: 'success' | 'warning'; readonly message: string } {
 	const fill = hints.length > 0 ? ` Заполните вручную: ${hints.join(', ')}.` : ''

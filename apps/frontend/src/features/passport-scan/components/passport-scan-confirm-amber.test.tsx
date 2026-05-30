@@ -79,4 +79,10 @@ describe('ConfirmStage — amber per-field advisory', () => {
 		const surname = screen.getByLabelText(/Фамилия/) as HTMLInputElement
 		expect(document.activeElement).toBe(surname)
 	})
+
+	test('несколько слабых → фокус на ПЕРВОМ по порядку (фамилия ок, имя+номер слабые → имя)', () => {
+		renderConfirm({ ...base, name: null, documentNumber: 'ЖЖЖ' })
+		const name = screen.getByLabelText(/^Имя/) as HTMLInputElement
+		expect(document.activeElement).toBe(name)
+	})
 })

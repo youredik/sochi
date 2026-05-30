@@ -11,12 +11,13 @@
  *
  * WCAG 2.2 AA tags: wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa.
  */
+import type { PassportEntities } from '@horeca/shared'
 import { cleanup, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import axe from 'axe-core'
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { Consent152FzModal } from './consent-152fz-modal.tsx'
-import { PassportScanDialog } from './passport-scan-dialog.tsx'
+import { ConfirmStage, PassportScanDialog } from './passport-scan-dialog.tsx'
 
 afterEach(cleanup)
 
@@ -80,6 +81,37 @@ describe('axe-core a11y — PassportScanDialog', () => {
 			<PassportScanDialog open={true} onClose={mock()} onSave={mock()} guestId="guest_test" />,
 		)
 		const violations = await auditA11y(container, 'scan-dialog-initial')
+		expect(violations.length).toBe(0)
+	})
+})
+
+describe('axe-core a11y — ConfirmStage (amber per-field advisory)', () => {
+	test('[A4] confirm stage с amber-слабыми полями → no WCAG 2.2 AA violations', async () => {
+		// Слабые: фамилия (пусто), гражданство (пусто), номер (не РФ-формат) → amber.
+		const entities: PassportEntities = {
+			surname: null,
+			name: 'Иван',
+			middleName: null,
+			gender: 'male',
+			citizenshipIso3: null,
+			birthDate: '1984-06-15',
+			birthPlace: null,
+			documentNumber: 'ЖЖЖ',
+			issueDate: null,
+			expirationDate: null,
+		}
+		const { container } = render(
+			<ConfirmStage
+				entities={entities}
+				confidenceHeuristic={0.6}
+				outcome="low_confidence"
+				rklStatus="clean"
+				identityMethod="passport_paper"
+				onChange={mock()}
+				validationError={null}
+			/>,
+		)
+		const violations = await auditA11y(container, 'confirm-stage-amber')
 		expect(violations.length).toBe(0)
 	})
 })
