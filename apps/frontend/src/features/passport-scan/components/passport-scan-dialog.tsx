@@ -39,6 +39,7 @@ import type {
 	RklStatusForScan,
 } from '@horeca/shared'
 import { CitizenshipSelect } from './citizenship-select.tsx'
+import { passportFieldReview } from '../lib/passport-field-review.ts'
 import { useId, useMemo, useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '../../../components/ui/alert.tsx'
 import {
@@ -738,6 +739,9 @@ function ConfirmStage({
 		v !== null && (/^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{2}\.\d{2}\.\d{4}$/.test(v))
 	const birthDateInvalid = !dateOk(entities.birthDate)
 	const expirationInvalid = expirationRequired && !dateOk(entities.expirationDate)
+	// 2026 HITL (research Agent A): per-field amber «проверьте» — направить взгляд
+	// оператора на немногие слабые поля. NON-blocking (≠ красный invalid/save-gate).
+	const review = passportFieldReview(entities, identityMethod)
 
 	return (
 		<div className="space-y-3">
@@ -804,6 +808,7 @@ function ConfirmStage({
 				required={true}
 				invalid={surnameInvalid && validationError !== null}
 				errorMessage={surnameInvalid ? 'Заполните фамилию' : null}
+				needsReview={review.surname}
 			/>
 			<EntityRow
 				label="Имя"
@@ -813,6 +818,7 @@ function ConfirmStage({
 				required={true}
 				invalid={nameInvalid && validationError !== null}
 				errorMessage={nameInvalid ? 'Заполните имя' : null}
+				needsReview={review.name}
 			/>
 			<EntityRow
 				label="Отчество"
@@ -833,6 +839,7 @@ function ConfirmStage({
 				required={true}
 				invalid={birthDateInvalid && validationError !== null}
 				errorMessage={birthDateInvalid ? 'Формат ДД.ММ.ГГГГ' : null}
+				needsReview={review.birthDate}
 			/>
 			<CitizenshipSelect
 				value={entities.citizenshipIso3 ?? ''}
@@ -848,6 +855,7 @@ function ConfirmStage({
 				required={true}
 				invalid={documentNumberInvalid && validationError !== null}
 				errorMessage={documentNumberInvalid ? 'Заполните номер документа' : null}
+				needsReview={review.documentNumber}
 			/>
 			<EntityRow
 				label="Дата выдачи"
@@ -882,6 +890,7 @@ function ConfirmStage({
 				required={expirationRequired}
 				invalid={expirationInvalid && validationError !== null}
 				errorMessage={expirationInvalid ? 'Формат ДД.ММ.ГГГГ — обязательно для загран/ВУ' : null}
+				needsReview={review.expirationDate}
 			/>
 		</div>
 	)
@@ -897,6 +906,7 @@ function EntityRow({
 	required,
 	invalid,
 	errorMessage,
+	needsReview,
 }: {
 	label: string
 	value: string
@@ -907,9 +917,12 @@ function EntityRow({
 	required?: boolean
 	invalid?: boolean
 	errorMessage?: string | null
+	/** Amber «распознано неуверенно — проверьте». НЕ блокирует сохранение (≠ invalid). */
+	needsReview?: boolean
 }) {
 	const id = useId()
 	const errorId = useId()
+	const reviewId = useId()
 	// Sprint C+1 self-review A6 fix: blur-triggered validation. Field-level error
 	// предотвращён до пользователь leaves field — WCAG 3.3.1 «errors identified
 	// when detected». `touched` flag bridges "first focus" → user не сразу видит
@@ -920,6 +933,9 @@ function EntityRow({
 	const showError = invalid === true && typeof errorMessage === 'string' && errorMessage.length > 0
 	const shouldHighlight =
 		invalid === true || (touched && required === true && value.trim().length === 0)
+	// Amber advisory (2026 HITL — research Agent A): «распознано неуверенно, проверьте».
+	// НЕ блокирует сохранение (в отличие от красного `invalid`); red имеет приоритет.
+	const advisory = needsReview === true && !shouldHighlight
 	return (
 		<div>
 			<Label htmlFor={id} className="text-sm">
@@ -939,17 +955,26 @@ function EntityRow({
 				// Round 2 A11y P0-3: scroll-margin-bottom prevents iOS sticky-footer
 				// overlap при focused input на mobile keyboard. WCAG 2.4.11 Focus
 				// Not Obscured (NEW 2.2 AA). 5rem = footer height + gap.
-				className="mt-1 [scroll-margin-bottom:5rem]"
+				className={`mt-1 [scroll-margin-bottom:5rem]${
+					advisory
+						? ' border-amber-400 focus-visible:border-amber-500 focus-visible:ring-amber-400/30'
+						: ''
+				}`}
 				autoComplete={autoComplete}
 				inputMode={inputMode}
 				required={required === true ? true : undefined}
 				aria-required={required === true ? true : undefined}
 				aria-invalid={shouldHighlight ? true : undefined}
-				aria-describedby={showError ? errorId : undefined}
+				aria-describedby={showError ? errorId : advisory ? reviewId : undefined}
 			/>
 			{showError ? (
 				<p id={errorId} className="text-xs text-destructive mt-1" role="alert">
 					{errorMessage}
+				</p>
+			) : null}
+			{advisory ? (
+				<p id={reviewId} className="mt-1 text-xs text-amber-600 dark:text-amber-500" role="status">
+					Проверьте — распознано неуверенно
 				</p>
 			) : null}
 		</div>
