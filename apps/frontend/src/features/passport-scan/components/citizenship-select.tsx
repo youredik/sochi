@@ -27,18 +27,23 @@ export function CitizenshipSelect({
 	value,
 	onChange,
 	label = 'Гражданство (ISO-3)',
+	needsReview,
 }: {
 	readonly value: string
 	readonly onChange: (v: string) => void
 	readonly label?: string
+	/** Amber «проверьте — не распознано». NON-blocking (для скан-формы заезда). */
+	readonly needsReview?: boolean
 }) {
 	const id = useId()
 	const errorId = useId()
+	const reviewId = useId()
 	const knownValues = useMemo(() => new Set(PASSPORT_COUNTRY_WHITELIST_RU.map((c) => c.iso3)), [])
 	// Если value — unknown ISO-3 (напр. OCR вернул не-whitelist страну) → 'OTHER'.
 	const isKnown = value.length === 0 || knownValues.has(value)
 	const selectValue = value.length === 0 ? '' : isKnown ? value : 'OTHER'
 	const [showRawInput, setShowRawInput] = useState(!isKnown)
+	const advisory = needsReview === true
 
 	return (
 		<div className="space-y-1.5">
@@ -57,7 +62,11 @@ export function CitizenshipSelect({
 					}
 				}}
 			>
-				<SelectTrigger id={id} className="w-full">
+				<SelectTrigger
+					id={id}
+					className={`w-full${advisory ? ' border-amber-400 focus-visible:ring-amber-400/30' : ''}`}
+					aria-describedby={advisory ? reviewId : undefined}
+				>
 					<SelectValue placeholder="Выберите страну" />
 				</SelectTrigger>
 				<SelectContent>
@@ -83,6 +92,11 @@ export function CitizenshipSelect({
 				Введите 3-буквенный ISO 3166-1 alpha-3 код страны. Не-РФ гражданство требует миграционного
 				учёта МВД.
 			</p>
+			{advisory ? (
+				<p id={reviewId} className="text-xs text-amber-600 dark:text-amber-500" role="status">
+					Проверьте — гражданство не распознано
+				</p>
+			) : null}
 		</div>
 	)
 }

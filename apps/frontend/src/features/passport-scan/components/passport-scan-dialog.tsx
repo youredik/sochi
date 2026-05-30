@@ -690,7 +690,7 @@ export function PassportScanDialog({
 	)
 }
 
-function ConfirmStage({
+export function ConfirmStage({
 	entities,
 	confidenceHeuristic,
 	outcome,
@@ -742,6 +742,19 @@ function ConfirmStage({
 	// 2026 HITL (research Agent A): per-field amber «проверьте» — направить взгляд
 	// оператора на немногие слабые поля. NON-blocking (≠ красный invalid/save-gate).
 	const review = passportFieldReview(entities, identityMethod)
+	// Авто-фокус на первое слабое текстовое поле (2026 HITL — направить взгляд оператора
+	// сразу к тому, что вероятнее всего неверно). Citizenship — Select, его не фокусируем.
+	const firstWeak = review.surname
+		? 'surname'
+		: review.name
+			? 'name'
+			: review.birthDate
+				? 'birthDate'
+				: review.documentNumber
+					? 'documentNumber'
+					: review.expirationDate
+						? 'expirationDate'
+						: null
 
 	return (
 		<div className="space-y-3">
@@ -809,6 +822,7 @@ function ConfirmStage({
 				invalid={surnameInvalid && validationError !== null}
 				errorMessage={surnameInvalid ? 'Заполните фамилию' : null}
 				needsReview={review.surname}
+				autoFocus={firstWeak === 'surname'}
 			/>
 			<EntityRow
 				label="Имя"
@@ -819,6 +833,7 @@ function ConfirmStage({
 				invalid={nameInvalid && validationError !== null}
 				errorMessage={nameInvalid ? 'Заполните имя' : null}
 				needsReview={review.name}
+				autoFocus={firstWeak === 'name'}
 			/>
 			<EntityRow
 				label="Отчество"
@@ -840,10 +855,12 @@ function ConfirmStage({
 				invalid={birthDateInvalid && validationError !== null}
 				errorMessage={birthDateInvalid ? 'Формат ДД.ММ.ГГГГ' : null}
 				needsReview={review.birthDate}
+				autoFocus={firstWeak === 'birthDate'}
 			/>
 			<CitizenshipSelect
 				value={entities.citizenshipIso3 ?? ''}
 				onChange={(v) => update('citizenshipIso3', v.length === 0 ? null : v)}
+				needsReview={review.citizenship}
 			/>
 			<EntityRow
 				label={docNumberLabel}
@@ -856,6 +873,7 @@ function ConfirmStage({
 				invalid={documentNumberInvalid && validationError !== null}
 				errorMessage={documentNumberInvalid ? 'Заполните номер документа' : null}
 				needsReview={review.documentNumber}
+				autoFocus={firstWeak === 'documentNumber'}
 			/>
 			<EntityRow
 				label="Дата выдачи"
@@ -891,6 +909,7 @@ function ConfirmStage({
 				invalid={expirationInvalid && validationError !== null}
 				errorMessage={expirationInvalid ? 'Формат ДД.ММ.ГГГГ — обязательно для загран/ВУ' : null}
 				needsReview={review.expirationDate}
+				autoFocus={firstWeak === 'expirationDate'}
 			/>
 		</div>
 	)
@@ -907,6 +926,7 @@ function EntityRow({
 	invalid,
 	errorMessage,
 	needsReview,
+	autoFocus,
 }: {
 	label: string
 	value: string
@@ -919,6 +939,8 @@ function EntityRow({
 	errorMessage?: string | null
 	/** Amber «распознано неуверенно — проверьте». НЕ блокирует сохранение (≠ invalid). */
 	needsReview?: boolean
+	/** Авто-фокус на первое слабое поле (2026 HITL — направить взгляд оператора). */
+	autoFocus?: boolean
 }) {
 	const id = useId()
 	const errorId = useId()
@@ -962,6 +984,7 @@ function EntityRow({
 				}`}
 				autoComplete={autoComplete}
 				inputMode={inputMode}
+				autoFocus={autoFocus}
 				required={required === true ? true : undefined}
 				aria-required={required === true ? true : undefined}
 				aria-invalid={shouldHighlight ? true : undefined}
