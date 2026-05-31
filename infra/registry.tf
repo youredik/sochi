@@ -37,13 +37,16 @@ resource "yandex_container_repository" "backend" {
 # Policy runs nightly via YC scheduler — declarative canon (no imperative
 # `yc image delete` loops, which safety classifier blocks anyway).
 #
-# Vulnerability scanning: DONE via CI scan-gate 2026-05-29 (NOT scan-on-push
-# policy — TF provider ~>0.204 has no scan-policy resource). The `.sourcecraft/
-# ci.yaml` deploy-backend `scan-gate` cube runs `yc container image scan` on the
-# exact :SHA image between build-push and revision-deploy, blocking on CRITICAL.
-# Empirical: claude SA holds container-registry.admin (scanner covered); current
-# backend image = 0 CVE. Prefer-CI-gate over registry policy = scans the precise
-# artifact being deployed, no provider dependency.
+# Vulnerability scanning: the per-deploy image scan-gate was REMOVED 2026-05-31.
+# The YC `yc container image scan` (run in the ci.yaml deploy-backend scan-gate
+# cube) cost ~29 ₽/day ("Первичное сканирование Docker-образов" = ~61% of the
+# daily YC bill) for a demo. The app-dependency CVE surface stays scanned FREE
+# by OSV-Scanner + Syft SBOM in the quality workflow. Only the image's OS-package
+# CVE gate is dropped (node:24-slim base is patched via the dependency-freshness
+# sweep). YC TF provider ~>0.204 has no scan-policy resource either. For
+# app.sepshn.ru prod, re-add a free image scanner (Trivy/Grype) — Trivy was
+# validated locally 2026-05-31 (alpine + github-binary install + cr.yandex auth
+# via TRIVY_USERNAME=iam; just sort the CI-SA pull perms first).
 resource "yandex_container_repository_lifecycle_policy" "backend_retention" {
   name          = "backend-stankoff-canon"
   status        = "active"
