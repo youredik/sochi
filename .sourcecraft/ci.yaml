@@ -731,12 +731,34 @@ tasks:
           # retry на HTTP 5xx тоже. Заменяет хрупкий `sleep 20` — cold-start под
           # нагрузкой может превысить 20s.
           #
-          # Drain-window readiness (2026-05-30): a draining old revision now
-          # returns 503 on /health/ready (lib/lifecycle.ts), so the
-          # `--retry-all-errors` /health/ready probe below auto-retries until a
-          # NON-draining (ready) instance answers — no separate revision-SHA gate
-          # needed. The app-layer 503-not-500 (drain-guard) plus the smoke's own
-          # retries make the rolling-deploy window safe to test through.
+          # Drain-window readiness (2026-05-30): a draining old revision returns
+          # 503 on /health/ready (lib/lifecycle.ts), so the `--retry-all-errors`
+          # probe auto-retries until a non-draining instance answers.
+          #
+          # Rollout-settled gate (2026-05-31): that probe ALONE is NOT enough.
+          # Empirically (Run #157/#159 false-failed deploy) during a rolling
+          # revision switch the OLD instance answers /health ok while a heavy
+          # request (signup/oauth) to a still-warming NEW instance gets a GATEWAY
+          # 500 — confirmed: ZERO 5xx in the CONTAINER logs for that window, so it
+          # is the gateway mid-switch, NOT code (OAuth-register returns 201 once
+          # warm). Gate the heavy playwright-smoke on a STABLE single-revision
+          # fleet: /health must report the SAME commit 5x in a row (~15s) before
+          # proceeding. (Supersedes the earlier "no revision-SHA gate needed"
+          # assumption, which the data refuted.)
+          - |
+            PREV=""; STABLE=0
+            for i in $(seq 1 40); do
+              C=$(curl -sf --max-time 10 https://demo.sepshn.ru/health 2>/dev/null | grep -o '"commit":"[^"]*"' || echo none)
+              if [ "$C" != none ] && [ "$C" = "$PREV" ]; then
+                STABLE=$((STABLE + 1))
+              else
+                STABLE=1; PREV="$C"
+              fi
+              echo "rollout probe $i: $C (stable=$STABLE/5)"
+              if [ "$STABLE" -ge 5 ]; then echo "ok rollout settled on $C"; break; fi
+              sleep 3
+            done
+            [ "$STABLE" -ge 5 ] || { echo "FAIL: rollout did not settle in ~135s"; exit 1; }
           - 'CURL="curl -sf --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10"'
           - '$CURL https://demo.sepshn.ru/health | grep -q ''"status":"ok"'' && echo "ok /health"'
           - '$CURL https://demo.sepshn.ru/health/live | grep -q ''"status":"ok"'' && echo "ok /health/live"'
