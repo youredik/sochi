@@ -15,9 +15,7 @@
  * Requires local YDB Docker (`docker-compose up ydb`) + migration 0050
  * (channelConnection) + 0057 (webhookSecret) applied.
  */
-import { afterAll, beforeAll, describe, expect, jest, test } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { getTestSql, setupTestDb, teardownTestDb } from '../tests/db-setup.ts'
 import { demoPropertyIdForOrg, seedDemoChannelInfraCore } from './demo-channel-seed.ts'

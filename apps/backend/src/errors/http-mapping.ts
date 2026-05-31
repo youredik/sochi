@@ -59,4 +59,11 @@ export const HTTP_STATUS_MAP: Record<string, ContentfulStatusCode> = {
 	// в 21 регионе + Сириус. 428 Precondition Required (mirrors ПП-1951
 	// semantic: client must complete missing precondition).
 	GUEST_HOUSE_FZ127_NOT_REGISTERED: 428,
+	// AI review-reply feature (2026-05-30). AI-генерация недоступна (нет ключей /
+	// upstream-ошибка / неразбираемый ответ) → 503 (временно, можно повторить).
+	REVIEW_AI_UNAVAILABLE: 503,
+	// Публикация/сохранение пустого ответа — нечего публиковать.
+	REVIEW_REPLY_REQUIRED: 422,
+	// Канал отклонил публикацию ответа (upstream) — bad gateway.
+	REVIEW_PUBLISH_FAILED: 502,
 }

@@ -22,6 +22,22 @@ export interface CdcEvent {
 }
 
 /**
+ * Coerce a CDC-event value (`key[]` component or `*Image` field, parsed from
+ * untrusted changefeed JSON, hence `unknown`) to a string. Honest about the
+ * `unknown` type while giving a SAFE failure mode: a scalar stringifies normally;
+ * an unexpected object becomes JSON (never the useless `[object Object]` in a log
+ * line or a record key); nullish → `''`. Replaces the verbose
+ * `x === undefined ? '' : String(x)` / `String(x ?? '')` idioms across the CDC
+ * handlers and removes the oxlint `no-base-to-string` class for these sites.
+ */
+export function cdcStr(v: unknown): string {
+	if (v === undefined || v === null) return ''
+	if (typeof v === 'object') return JSON.stringify(v)
+	if (typeof v === 'string') return v
+	return String(v as number | boolean | bigint)
+}
+
+/**
  * Columns that should NOT generate `fieldChange` activities — they're either
  * server-populated audit metadata (captured elsewhere) or derivable from
  * state-transition timestamps (`checkedInAt`/`cancelledAt`/… → statusChange).
@@ -163,23 +179,23 @@ function extractIdentity(
 		// channelInbox PK = (source, eventId); tenantId is a non-PK column.
 		// Read identity from newImage/oldImage. Composite recordId = source:eventId.
 		const image = event.newImage ?? event.oldImage ?? {}
-		const tenantId = String(image.tenantId ?? '')
+		const tenantId = cdcStr(image.tenantId)
 		const key = event.key ?? []
-		const source = key[0] === undefined ? '' : String(key[0])
-		const eventId = key[1] === undefined ? '' : String(key[1])
+		const source = cdcStr(key[0])
+		const eventId = cdcStr(key[1])
 		if (!tenantId || !source || !eventId) return null
 		return { tenantId, recordId: `${source}:${eventId}` }
 	}
 	const key = event.key ?? []
-	const tenantId = key[0] === undefined ? '' : String(key[0])
+	const tenantId = cdcStr(key[0])
 	let recordId = ''
 	if (FOUR_D_PK_DOMAINS.has(objectType)) {
-		recordId = key[3] === undefined ? '' : String(key[3])
+		recordId = cdcStr(key[3])
 	} else if (THREE_D_PK_DOMAINS.has(objectType)) {
-		recordId = key[2] === undefined ? '' : String(key[2])
+		recordId = cdcStr(key[2])
 	} else {
 		// Single-PK domains: `(tenantId, id)` → key[0]=tenantId, key[1]=id.
-		recordId = key[1] === undefined ? '' : String(key[1])
+		recordId = cdcStr(key[1])
 	}
 	if (!tenantId || !recordId) return null
 	return { tenantId, recordId }

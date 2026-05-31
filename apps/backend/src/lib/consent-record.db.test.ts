@@ -24,9 +24,7 @@
  */
 
 import { newId } from '@horeca/shared'
-import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { getTestSql, setupTestDb, teardownTestDb } from '../tests/db-setup.ts'
 import { listConsentsForGuest, recordConsents } from './consent-record.ts'

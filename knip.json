@@ -11,6 +11,7 @@
 		"@stryker-mutator/command-runner",
 		"amaro"
 	],
+	"ignoreBinaries": ["vitest"],
 	"ignoreExportsUsedInFile": true,
 	"workspaces": {
 		"apps/backend": {

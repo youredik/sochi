@@ -48,7 +48,7 @@ const deleteMutateAsync = mock<
 const upsertState = { isPending: false }
 const deleteState = { isPending: false }
 
-mock.module('@tanstack/react-query', () => ({
+await mock.module('@tanstack/react-query', () => ({
 	useMutation: (() => {
 		// Distinguish via mutationFn identity: hook calls differ by mutationFn ref.
 		// Simpler: per-instance return matching real shapes.
@@ -69,7 +69,7 @@ mock.module('@tanstack/react-query', () => ({
 	queryOptions: <T,>(opts: T) => opts,
 }))
 
-mock.module('sonner', () => ({
+await mock.module('sonner', () => ({
 	toast: { success: () => {}, error: () => {} },
 }))
 

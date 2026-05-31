@@ -47,12 +47,12 @@ import {
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, type Mock, test, mock } from 'bun:test'
 
-mock.module('../../../lib/use-can.ts', () => ({
+await mock.module('../../../lib/use-can.ts', () => ({
 	useCan: mock(() => true),
 	useCurrentRole: mock(() => 'owner'),
 }))
 
-mock.module('../hooks/use-amenities.ts', () => ({
+await mock.module('../hooks/use-amenities.ts', () => ({
 	useAmenities: mock(() => ({ data: [], isLoading: false, error: null })),
 	useSetAmenities: mock(() => ({ mutateAsync: mock(), isPending: false })),
 }))

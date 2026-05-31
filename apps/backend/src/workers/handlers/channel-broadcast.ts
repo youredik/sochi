@@ -15,7 +15,7 @@ import type { createChannelDispatchRepo } from '../../domains/channel/dispatch.r
 import { orchestrateAriBroadcast } from '../../domains/channel/sync-orchestrator.ts'
 import { buildEventType, buildSourceUrn } from '../../lib/channel-manager/cloud-events.ts'
 import { logger } from '../../logger.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 
 export interface ChannelBroadcastDeps {
 	readonly connectionRepo: ReturnType<typeof createChannelConnectionRepo>
@@ -34,9 +34,9 @@ export function createChannelBroadcastHandler(deps: ChannelBroadcastDeps) {
 		if (!isInsert || !event.newImage) return // only fan-out new bookings
 
 		const newImage = event.newImage
-		const tenantId = String(newImage.tenantId ?? '')
-		const propertyId = String(newImage.propertyId ?? '')
-		const bookingId = String(newImage.id ?? event.key?.[3] ?? '')
+		const tenantId = cdcStr(newImage.tenantId)
+		const propertyId = cdcStr(newImage.propertyId)
+		const bookingId = cdcStr(newImage.id ?? event.key?.[3])
 		if (!tenantId || !propertyId || !bookingId) return
 
 		const cdcVersion = event.ts ? `${event.ts[0]}-${event.ts[1]}` : Date.now().toString()

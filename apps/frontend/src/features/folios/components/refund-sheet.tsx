@@ -206,9 +206,10 @@ export function RefundSheet({ open, onOpenChange, payment, folioId }: RefundShee
 												/>
 												<FieldDescription>Максимум: {formatMoney(availableMinor)}</FieldDescription>
 												{field.state.meta.errors.length > 0 ? (
-													<FieldError id={`${formId}-amount-err`}>
-														{String(field.state.meta.errors[0])}
-													</FieldError>
+													<FieldError
+														id={`${formId}-amount-err`}
+														errors={field.state.meta.errors}
+													/>
 												) : null}
 											</Field>
 										)}
@@ -234,9 +235,10 @@ export function RefundSheet({ open, onOpenChange, payment, folioId }: RefundShee
 													Сохраняется в журнале операций. До 500 символов.
 												</FieldDescription>
 												{field.state.meta.errors.length > 0 ? (
-													<FieldError id={`${formId}-reason-err`}>
-														{String(field.state.meta.errors[0])}
-													</FieldError>
+													<FieldError
+														id={`${formId}-reason-err`}
+														errors={field.state.meta.errors}
+													/>
 												) : null}
 											</Field>
 										)}
@@ -273,13 +275,14 @@ export function RefundSheet({ open, onOpenChange, payment, folioId }: RefundShee
 								className="min-w-32"
 								disabled={isFullyRefunded || refundsQuery.isLoading}
 								onClick={async () => {
-									// `validateAllFields` — TanStack Form 1.29 honest gate:
-									// прогоняет field-level + form-level validators и
-									// возвращает aggregate ValidationError[]. Чтение
-									// `form.state.errors` ловит ТОЛЬКО form-level — для
-									// step gate этого недостаточно. (2026-research round 4.)
-									const errors = await form.validateAllFields('submit')
-									if (errors.length === 0) {
+									// Gate the step on FORM-level validation. `validateAllFields`
+									// DELIBERATELY ignores form-level validators (per @tanstack/form-core
+									// FormApi JSDoc + TanStack docs, verified 2026-05) — using it here let
+									// an empty amount/reason slip straight to the confirm step. `validate`
+									// runs the Zod schema; on failure the per-field errors populate and
+									// surface inline via <FieldError>. Read the resulting `isValid`.
+									await form.validate('submit')
+									if (form.state.isValid) {
 										setStep('confirm')
 									}
 								}}

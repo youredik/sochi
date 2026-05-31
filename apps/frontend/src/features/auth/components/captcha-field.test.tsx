@@ -13,7 +13,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 import * as React from 'react'
 
-mock.module('@yandex/smart-captcha', () => ({
+await mock.module('@yandex/smart-captcha', () => ({
 	SmartCaptcha: (props: {
 		onSuccess?: (token: string) => void
 		onTokenExpired?: () => void

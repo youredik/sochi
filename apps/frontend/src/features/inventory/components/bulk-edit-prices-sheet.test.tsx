@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 
 const bulkMutateAsync = mock(async () => [])
 
-mock.module('@tanstack/react-query', () => ({
+await mock.module('@tanstack/react-query', () => ({
 	useMutation: () => ({ mutateAsync: bulkMutateAsync, isPending: false }),
 	useQuery: () => ({ data: undefined, error: null, isPending: false }),
 	useQueries: () => [],
@@ -33,7 +33,7 @@ mock.module('@tanstack/react-query', () => ({
 const toastError = mock()
 const toastInfo = mock()
 const toastSuccess = mock()
-mock.module('sonner', () => ({
+await mock.module('sonner', () => ({
 	toast: {
 		error: toastError,
 		info: toastInfo,

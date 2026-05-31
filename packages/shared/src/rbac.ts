@@ -67,6 +67,12 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		// retry/manual-cancel/notes — owner+manager (отзыв ЕПГУ-уведомления
 		// = legal action, требует операторской accountability).
 		migrationRegistration: ['create', 'read', 'manage'],
+		// AI review-reply (2026-05-30) — отзывы из каналов + ИИ-черновик ответа.
+		// `reply` (generate-draft / edit / publish) = owner+manager: ответ
+		// публикуется ПУБЛИЧНО от лица объекта (brand + legal voice), как
+		// notification:retry / compliance — операторски-elevated. Staff видит
+		// отзывы (read) для контекста в общении с гостем, но не публикует.
+		review: ['read', 'reply'],
 	},
 	manager: {
 		// Revenue + refund + reports; NO billing/manage, NO property delete
@@ -91,6 +97,9 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		media: ['create', 'read', 'update', 'delete'],
 		addon: ['create', 'read', 'update', 'delete'],
 		migrationRegistration: ['create', 'read', 'manage'],
+		// AI review-reply — manager публикует ответы наравне с owner (revenue +
+		// guest-comms операции в его зоне). См. owner-блок rationale.
+		review: ['read', 'reply'],
 	},
 	staff: {
 		// Front-desk operations: collect payments, NOT refund. Read-only org config.
@@ -114,6 +123,9 @@ const PERMISSIONS: Record<MemberRole, Record<string, readonly string[]>> = {
 		// Staff reads migration status (front-desk видимости заселения),
 		// but не trigger ЕПГУ submit / retry — operator-elevated action.
 		migrationRegistration: ['read'],
+		// review: NOT granted — отзывы = операторская guest-comms витрина
+		// (owner+manager), как report / notification / channels. Публичный
+		// ответ от лица объекта — brand+legal voice, не front-desk действие.
 	},
 }
 

@@ -41,7 +41,7 @@
 import { newId } from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
 import { NULL_TEXT, NULL_TIMESTAMP, toTs } from '../../db/ydb-helpers.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 import type { HandlerLogger } from './refund-creator.ts'
 
 const FOLIO_CREATOR_ACTOR_ID = 'system:folio_creator_writer'
@@ -71,10 +71,10 @@ export function createFolioCreatorHandler(log: HandlerLogger) {
 			log.warn({ key }, 'folio_creator: malformed booking event key — skipping')
 			return
 		}
-		const tenantId = String(key[0])
-		const propertyId = String(key[1])
+		const tenantId = cdcStr(key[0])
+		const propertyId = cdcStr(key[1])
 		// key[2] = checkIn (date), not used directly for folio
-		const bookingId = String(key[3])
+		const bookingId = cdcStr(key[3])
 
 		// Pull currency from newImage (booking-level Utf8 NOT NULL column).
 		const currency = event.newImage.currency

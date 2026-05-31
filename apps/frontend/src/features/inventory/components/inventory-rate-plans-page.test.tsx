@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 const roomTypesData: unknown = { current: { data: [] as unknown, error: null, isPending: false } }
 const ratePlansData: unknown = { current: { data: [] as unknown, error: null, isPending: false } }
 
-mock.module('@tanstack/react-query', () => ({
+await mock.module('@tanstack/react-query', () => ({
 	useQuery: (opts: { queryKey: readonly unknown[] }) => {
 		const kind = (opts.queryKey[1] as string | undefined) ?? ''
 		// biome-ignore lint/suspicious/noExplicitAny: test ref-pass-through
@@ -31,7 +31,7 @@ mock.module('@tanstack/react-query', () => ({
 	queryOptions: <T,>(opts: T) => opts,
 }))
 
-mock.module('sonner', () => ({
+await mock.module('sonner', () => ({
 	toast: { success: () => {}, error: () => {} },
 }))
 

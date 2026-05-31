@@ -23,9 +23,7 @@ import {
 	tenantCompliancePatchSchema,
 	USN_THRESHOLD_2026_MICRO_RUB,
 } from '@horeca/shared'
-import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import { createTenantComplianceRepo } from './compliance.repo.ts'

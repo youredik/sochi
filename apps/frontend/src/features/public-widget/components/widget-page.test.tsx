@@ -34,7 +34,7 @@ import { afterEach, describe, expect, test, mock, spyOn } from 'bun:test'
 
 // Mock TanStack Router Link so component tests don't require a RouterProvider
 // (M9.widget.2 — property cards link к sub-route via TanStack <Link>).
-mock.module('@tanstack/react-router', () => ({
+await mock.module('@tanstack/react-router', () => ({
 	Link: ({
 		children,
 		to,

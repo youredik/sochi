@@ -22,16 +22,16 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test'
 
 const navigateSpy = mock()
-mock.module('@tanstack/react-router', () => ({
+await mock.module('@tanstack/react-router', () => ({
 	useNavigate: () => navigateSpy,
 }))
 
-mock.module('./hooks/use-compliance.ts', () => ({
+await mock.module('./hooks/use-compliance.ts', () => ({
 	useCompliance: mock(() => ({ data: null, isLoading: false, error: null })),
 	usePatchCompliance: mock(() => ({ mutateAsync: mock(), isPending: false })),
 }))
 
-mock.module('../../lib/use-can.ts', () => ({
+await mock.module('../../lib/use-can.ts', () => ({
 	useCan: mock(() => true),
 	useCurrentRole: mock(() => 'owner'),
 }))

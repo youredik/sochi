@@ -38,7 +38,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 const createMutateAsync = mock(async () => ({}))
 const updateMutateAsync = mock(async () => ({}))
 
-mock.module('@tanstack/react-query', () => ({
+await mock.module('@tanstack/react-query', () => ({
 	useMutation: (() => {
 		let callIdx = 0
 		return () => {
@@ -55,7 +55,7 @@ mock.module('@tanstack/react-query', () => ({
 	queryOptions: <T,>(opts: T) => opts,
 }))
 
-mock.module('sonner', () => ({
+await mock.module('sonner', () => ({
 	toast: { success: () => {}, error: () => {} },
 }))
 

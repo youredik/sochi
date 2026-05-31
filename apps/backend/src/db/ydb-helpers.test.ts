@@ -13,7 +13,7 @@
 import * as fc from 'fast-check'
 import { Optional } from '@ydbjs/value/optional'
 import { describe, expect, test } from 'bun:test'
-import { dateOpt, decimalToMicros, microsToDecimal, toNumber } from './ydb-helpers.ts'
+import { dateOpt, decimalToMicros, int32Opt, microsToDecimal, toNumber } from './ydb-helpers.ts'
 
 describe('toNumber', () => {
 	test('returns null for null input (identity on null)', () => {
@@ -164,5 +164,41 @@ describe('dateOpt (nullable YDB `Date` binding helper)', () => {
 		expect(() => dateOpt('2028-02-29')).not.toThrow()
 		expect(() => dateOpt('2026-12-31')).not.toThrow()
 		expect(() => dateOpt('2027-01-01')).not.toThrow()
+	})
+})
+
+describe('int32Opt (nullable YDB `Int32` binding helper)', () => {
+	// Serialized Optional shape: { type, item } — `item` is null for NULL,
+	// otherwise `{ value: <int> }`. Verified empirically against @ydbjs/value.
+	type OptJson = { item: { value?: number } | null }
+
+	test('[I32-1] null input → Optional wrapping null (item === null)', () => {
+		const result = int32Opt(null)
+		expect(result).toBeInstanceOf(Optional)
+		const asJson = JSON.parse(JSON.stringify(result)) as OptJson
+		expect(asJson.item).toBeNull()
+	})
+
+	test('[I32-2] integer value → Optional carrying that exact value', () => {
+		const result = int32Opt(4)
+		expect(result).toBeInstanceOf(Optional)
+		const asJson = JSON.parse(JSON.stringify(result)) as OptJson
+		expect(asJson.item).not.toBeNull()
+		expect(asJson.item?.value).toBe(4)
+	})
+
+	test('[I32-3] boundary values (0, -1, full int32 range) do not throw', () => {
+		// ratingOverall lives in [1..5] but the helper backs any Int32 column.
+		expect(() => int32Opt(0)).not.toThrow()
+		expect(() => int32Opt(-1)).not.toThrow()
+		expect(() => int32Opt(2_147_483_647)).not.toThrow()
+		expect(() => int32Opt(-2_147_483_648)).not.toThrow()
+	})
+
+	test('[I32-4] rating domain values 1..5 each roundtrip the exact value', () => {
+		for (const rating of [1, 2, 3, 4, 5]) {
+			const asJson = JSON.parse(JSON.stringify(int32Opt(rating))) as OptJson
+			expect(asJson.item?.value).toBe(rating)
+		}
 	})
 })

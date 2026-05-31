@@ -35,9 +35,7 @@
  *     [AD6] listAddons — tenant.mode demo|production|null propagates в view
  */
 import { newId } from '@horeca/shared'
-import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { dateFromIso, NULL_INT32 } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'

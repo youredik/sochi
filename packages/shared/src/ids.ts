@@ -57,6 +57,9 @@ export const ID_PREFIXES = {
 	// blocks / Bnovo ремонт canon — 5 of 6 industry leaders model this as a
 	// distinct entity, not booking subtype). No guest PII, no folio.
 	propertyBlock: 'pblk',
+	// 2026-05-30 — AI review-reply feature: guest reviews ingested from channels
+	// (Островок / Авито / Яндекс), AI-drafted + host-published responses.
+	channelReview: 'rev',
 } as const
 
 export type EntityKind = keyof typeof ID_PREFIXES

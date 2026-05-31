@@ -204,9 +204,7 @@ export function MarkPaidSheet({
 									Доступно к оплате: {formatMoney(currentBalanceMinor)}
 								</FieldDescription>
 								{field.state.meta.errors.length > 0 ? (
-									<FieldError id={`${formId}-amount-err`}>
-										{String(field.state.meta.errors[0])}
-									</FieldError>
+									<FieldError id={`${formId}-amount-err`} errors={field.state.meta.errors} />
 								) : null}
 							</Field>
 						)}
@@ -265,14 +263,13 @@ export function MarkPaidSheet({
 						type="button"
 						className="min-w-32"
 						disabled={markPaid.isPending}
-						onClick={async () => {
-							// TanStack Form 1.29 #1990 + Radix portal pointer-events
-							// (round-5 web research): native form submit blocked, useId
-							// IDREF lookup unreliable under portal. Канон 2026:
-							//   onClick → validateAllFields('submit') → handleSubmit
-							// Same pattern as RefundSheet step gate.
-							await form.validateAllFields('submit')
-							await form.handleSubmit()
+						onClick={() => {
+							// Radix portal blocks native form submit + useId IDREF lookup
+							// (TanStack Form #1990, 2026 web research) — submit via onClick.
+							// `handleSubmit` runs the FORM-level Zod validator itself and, on
+							// failure, populates the per-field errors (surfaced via <FieldError>);
+							// no separate `validateAllFields`, which IGNORES form-level validators.
+							void form.handleSubmit()
 						}}
 					>
 						{markPaid.isPending ? (

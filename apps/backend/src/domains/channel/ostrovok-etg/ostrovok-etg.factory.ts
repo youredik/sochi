@@ -29,6 +29,7 @@ import { logger } from '../../../logger.ts'
 import type { HttpAttemptResult } from '../../../workers/channel-dispatcher.ts'
 import type { ChannelFactory } from '../channel.factory.ts'
 import { createOstrovokEtgMock } from './ostrovok-etg-mock.ts'
+import { cdcStr } from '../../../workers/cdc-handlers.ts'
 
 export interface OstrovokEtgRegistrationOptions {
 	/**
@@ -152,10 +153,10 @@ export function registerOstrovokEtgWithChannelFactory(
 							checkOut,
 							guestCount,
 							guest: {
-								firstName: String(guestSnapshot.firstName ?? ''),
-								lastName: String(guestSnapshot.lastName ?? ''),
-								email: String(guestSnapshot.email ?? ''),
-								phone: String(guestSnapshot.phone ?? ''),
+								firstName: cdcStr(guestSnapshot.firstName),
+								lastName: cdcStr(guestSnapshot.lastName),
+								email: cdcStr(guestSnapshot.email),
+								phone: cdcStr(guestSnapshot.phone),
 							},
 						})
 						const createResult = await adapter.createBooking({

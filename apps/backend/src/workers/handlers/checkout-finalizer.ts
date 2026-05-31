@@ -34,7 +34,7 @@
 
 import type { TX } from '@ydbjs/query'
 import { NULL_TEXT, NULL_TIMESTAMP, toTs } from '../../db/ydb-helpers.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 import { computeTourismTax, tourismTaxLineId } from '../lib/tourism-tax.ts'
 import type { HandlerLogger } from './refund-creator.ts'
 
@@ -56,9 +56,9 @@ export function createCheckoutFinalizerHandler(log: HandlerLogger) {
 			log.warn({ key }, 'tourism_tax: malformed booking event key — skipping')
 			return
 		}
-		const tenantId = String(key[0])
-		const propertyId = String(key[1])
-		const bookingId = String(key[3])
+		const tenantId = cdcStr(key[0])
+		const propertyId = cdcStr(key[1])
+		const bookingId = cdcStr(key[3])
 
 		// 2. Pull required fields from newImage. With MODE=NEW_AND_OLD_IMAGES the
 		// CDC event carries the full row image. totalMicros is the gross
@@ -80,7 +80,7 @@ export function createCheckoutFinalizerHandler(log: HandlerLogger) {
 			return
 		}
 
-		const totalMicros = BigInt(String(totalMicrosRaw))
+		const totalMicros = BigInt(cdcStr(totalMicrosRaw))
 		// Convert micros (×10^6 of base currency) to minor (kopecks for RUB).
 		// 1 RUB = 1_000_000 micros = 100 kopecks → divide by 10_000.
 		const baseMinor = totalMicros / 10_000n

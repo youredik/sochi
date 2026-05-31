@@ -29,10 +29,49 @@ import * as fc from 'fast-check'
 import { describe, expect, test } from 'bun:test'
 import {
 	buildActivitiesFromEvent,
+	cdcStr,
 	type CdcEvent,
 	diffFields,
 	SYSTEM_FIELDS,
 } from './cdc-handlers.ts'
+
+describe('cdcStr (pure) — safe coercion of untrusted CDC values', () => {
+	test('[CS1] nullish → empty string (absent PK component / null column)', () => {
+		expect(cdcStr(undefined)).toBe('')
+		expect(cdcStr(null)).toBe('')
+	})
+
+	test('[CS2] string passthrough (the common case: typeid PK / text column)', () => {
+		expect(cdcStr('org_abc')).toBe('org_abc')
+		expect(cdcStr('')).toBe('')
+		expect(cdcStr('book_123')).toBe('book_123')
+	})
+
+	test('[CS3] number PK/column → decimal string (Uint64/Int32 PKs per ydb.tech)', () => {
+		expect(cdcStr(42)).toBe('42')
+		expect(cdcStr(0)).toBe('0')
+		expect(cdcStr(-1)).toBe('-1')
+	})
+
+	test('[CS4] bigint → decimal string (Uint64 beyond Number.MAX_SAFE_INTEGER)', () => {
+		expect(cdcStr(123n)).toBe('123')
+		expect(cdcStr(9007199254740993n)).toBe('9007199254740993')
+	})
+
+	test('[CS5] boolean → "true"/"false"', () => {
+		expect(cdcStr(true)).toBe('true')
+		expect(cdcStr(false)).toBe('false')
+	})
+
+	test('[CS6] object/array → JSON, NEVER the useless "[object Object]"', () => {
+		// The whole reason cdcStr exists over bare String(): an unexpected object
+		// in a record key or a log line must stay diagnosable, not collapse to
+		// "[object Object]". This is the invariant the no-base-to-string lint guards.
+		expect(cdcStr({ a: 1 })).toBe('{"a":1}')
+		expect(cdcStr([1, 2])).toBe('[1,2]')
+		expect(cdcStr({ a: 1 })).not.toBe('[object Object]')
+	})
+})
 
 describe('diffFields (pure)', () => {
 	test('[D1] returns one entry per changed non-system field', () => {

@@ -25,7 +25,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test'
 import * as React from 'react'
 
 const magicLinkMock = mock()
-mock.module('@/lib/auth-client', () => ({
+await mock.module('@/lib/auth-client', () => ({
 	authClient: { signIn: { magicLink: magicLinkMock } },
 	// `use-auth-mutations.ts` imports `sessionQueryOptions` even though
 	// `useSignInMagicLink` doesn't read it — surrounding hooks evaluate at
@@ -33,11 +33,11 @@ mock.module('@/lib/auth-client', () => ({
 	sessionQueryOptions: { queryKey: ['auth', 'session'] as const },
 }))
 
-mock.module('@/features/auth/lib/captcha', () => ({
+await mock.module('@/features/auth/lib/captcha', () => ({
 	captchaEnforced: true,
 }))
 
-mock.module('@/features/auth/components/captcha-field', () => ({
+await mock.module('@/features/auth/components/captcha-field', () => ({
 	CaptchaField: (props: { onToken: (t: string) => void }) =>
 		React.createElement(
 			'button',

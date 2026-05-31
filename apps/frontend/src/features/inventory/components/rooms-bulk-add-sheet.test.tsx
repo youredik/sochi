@@ -53,7 +53,7 @@ const bulkMutateAsync = mock<(arg: BulkArg) => Promise<BulkResult>>(async () => 
 	failed: [],
 }))
 
-mock.module('@tanstack/react-query', () => ({
+await mock.module('@tanstack/react-query', () => ({
 	useMutation: () => ({ mutateAsync: bulkMutateAsync, isPending: false }),
 	useQuery: () => ({ data: undefined, error: null, isPending: false }),
 	useQueries: () => [],
@@ -61,7 +61,7 @@ mock.module('@tanstack/react-query', () => ({
 	queryOptions: <T,>(opts: T) => opts,
 }))
 
-mock.module('sonner', () => ({
+await mock.module('sonner', () => ({
 	toast: { success: () => {}, error: () => {}, warning: () => {} },
 }))
 

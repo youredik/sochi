@@ -49,6 +49,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../factory.ts'
 import { chatCompletion, readConfigFromEnv } from '../lib/ai/yandex-ai-studio.ts'
+import { generateReviewReply } from '../lib/ai/review-reply.ts'
 import { publicBodyCap } from '../middleware/public-body-cap.ts'
 import { extractClientIp } from '../middleware/widget-rate-limit.ts'
 import { checkAiRateLimit, MCP_AI_RATE_LIMIT_MESSAGE, mcpRpcRateLimit } from './rate-limit.ts'
@@ -97,6 +98,7 @@ interface ToolDescriptor {
 	readonly inputSchema: {
 		readonly type: 'object'
 		readonly properties: Record<string, unknown>
+		readonly required?: readonly string[]
 		readonly additionalProperties?: boolean
 	}
 	readonly outputSchema?: { readonly type: 'object'; readonly properties: Record<string, unknown> }
@@ -300,6 +302,118 @@ const TOOLS: ReadonlyArray<ToolDescriptor> = [
 					model: result.model,
 					usage: result.usage,
 				},
+			}
+		},
+	},
+	{
+		name: 'sepshn.ai.draft_review_reply',
+		title: 'Draft a guest-review reply (Yandex AI Studio)',
+		description:
+			"Given a guest review, drafts a professional reply AND classifies sentiment (positive/negative/mixed) + topics in one Yandex AI Studio call. Demonstrates Sepshn's AI review-reply feature for the OTA channels (Островок / Яндекс / Авито). Args: `{ reviewText: string (≤2000, required), propertyHint?: string (≤120), channel?: string }`. Returns `{ kind, sentiment, topics, reply, outputTokens }` or `{ isError: true }` with not_configured/rejected/error reason. PII shield rejects real guest emails/phones — demo / reserved-test text only.",
+		inputSchema: {
+			type: 'object',
+			properties: {
+				reviewText: {
+					type: 'string',
+					maxLength: 2000,
+					description:
+						'Guest review text to reply to (max 2000 chars). Must NOT contain real PII — outbound shield rejects real emails/phones.',
+				},
+				propertyHint: {
+					type: 'string',
+					maxLength: 120,
+					description: 'Optional property name for the reply (default: «гостевой дом 3*, Сочи»).',
+				},
+				channel: {
+					type: 'string',
+					maxLength: 40,
+					description: 'Optional source channel code (ostrovok / yandexTravel / avito).',
+				},
+			},
+			required: ['reviewText'],
+			additionalProperties: false,
+		},
+		outputSchema: {
+			type: 'object',
+			properties: {
+				kind: { type: 'string', enum: ['ok', 'not_configured', 'rejected', 'error'] },
+				sentiment: { type: 'string', enum: ['positive', 'negative', 'mixed'] },
+				topics: { type: 'array', items: { type: 'string' } },
+				reply: { type: 'string' },
+				outputTokens: { type: 'integer' },
+			},
+		},
+		annotations: { readOnlyHint: true, openWorldHint: true, idempotentHint: false },
+		async handler(args: unknown) {
+			const a = (args ?? {}) as { reviewText?: string; propertyHint?: string; channel?: string }
+			const reviewText = typeof a.reviewText === 'string' ? a.reviewText.trim() : ''
+			if (reviewText.length === 0) {
+				return {
+					structured: {
+						kind: 'rejected',
+						reason: 'reviewText_required',
+						message: 'reviewText is required (non-empty string)',
+					},
+					isError: true,
+				}
+			}
+			if (reviewText.length > 2000) {
+				return {
+					structured: {
+						kind: 'rejected',
+						reason: 'review_too_long',
+						message: 'reviewText must be ≤ 2000 chars',
+					},
+					isError: true,
+				}
+			}
+			const propertyName = (
+				typeof a.propertyHint === 'string' && a.propertyHint.trim() !== ''
+					? a.propertyHint.trim()
+					: 'гостевой дом 3*, Сочи'
+			).slice(0, 120)
+			const channel = typeof a.channel === 'string' ? a.channel.slice(0, 40) : undefined
+			// exactOptionalPropertyTypes: omit `channel` entirely when absent (passing
+			// `channel: undefined` is rejected by the optional-property type).
+			const ctx = channel !== undefined ? { propertyName, channel } : { propertyName }
+			const result = await generateReviewReply(reviewText, ctx, readConfigFromEnv())
+			switch (result.kind) {
+				case 'ok':
+					return {
+						structured: {
+							kind: 'ok',
+							sentiment: result.result.sentiment,
+							topics: result.result.topics,
+							reply: result.result.reply,
+							outputTokens: result.outputTokens,
+						},
+					}
+				case 'not_configured':
+					return {
+						structured: {
+							kind: 'not_configured',
+							reason: result.reason,
+							configHelp:
+								'Set YANDEX_AI_API_KEY + YANDEX_AI_FOLDER_ID env vars (Yandex Cloud Lockbox recommended).',
+						},
+						isError: true,
+					}
+				case 'rejected':
+					return {
+						structured: { kind: 'rejected', reason: 'pii_or_policy', message: result.message },
+						isError: true,
+					}
+				case 'unparseable':
+					return {
+						structured: {
+							kind: 'error',
+							reason: 'unparseable',
+							message: 'model returned unparseable output',
+						},
+						isError: true,
+					}
+				case 'error':
+					return { structured: { kind: 'error', message: result.message }, isError: true }
 			}
 		},
 	},

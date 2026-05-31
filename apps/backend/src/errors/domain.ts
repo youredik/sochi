@@ -644,3 +644,39 @@ export class PropertyBlockPastImmutableError extends ConflictError {
 		this.name = 'PropertyBlockPastImmutableError'
 	}
 }
+
+// ── AI review-reply feature (2026-05-30) ──────────────────────────────────
+
+export class ReviewNotFoundError extends NotFoundError {
+	constructor(id: string) {
+		super('Review', id)
+		this.name = 'ReviewNotFoundError'
+	}
+}
+
+/** AI-черновик недоступен: нет ключей Yandex / upstream-ошибка / неразбираемый ответ. */
+export class ReviewAiUnavailableError extends DomainError {
+	readonly code = 'REVIEW_AI_UNAVAILABLE'
+	constructor(detail: string) {
+		super(`AI review reply unavailable: ${detail}`)
+		this.name = 'ReviewAiUnavailableError'
+	}
+}
+
+/** Попытка сохранить/опубликовать пустой ответ. */
+export class ReviewReplyRequiredError extends DomainError {
+	readonly code = 'REVIEW_REPLY_REQUIRED'
+	constructor() {
+		super('Review reply text is required and cannot be empty')
+		this.name = 'ReviewReplyRequiredError'
+	}
+}
+
+/** Канал отклонил публикацию ответа (upstream). */
+export class ReviewPublishFailedError extends DomainError {
+	readonly code = 'REVIEW_PUBLISH_FAILED'
+	constructor(reason: string) {
+		super(`Channel rejected review reply publish: ${reason}`)
+		this.name = 'ReviewPublishFailedError'
+	}
+}

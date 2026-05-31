@@ -39,7 +39,7 @@ import {
 } from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
 import { NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from '../../db/ydb-helpers.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 import type { HandlerLogger } from './refund-creator.ts'
 
 const NOTIFICATION_WRITER_ACTOR_ID = 'system:notification_writer'
@@ -169,8 +169,8 @@ export function createNotificationHandler(log: HandlerLogger, source: Notificati
 			log.warn({ source, key }, 'notification_writer: malformed event key — skipping')
 			return
 		}
-		const tenantId = String(key[0])
-		const sourceObjectId = String(key[sourceIdSlot])
+		const tenantId = cdcStr(key[0])
+		const sourceObjectId = cdcStr(key[sourceIdSlot])
 
 		const dedupKey = buildNotificationDedupKey({
 			sourceObjectType: source,

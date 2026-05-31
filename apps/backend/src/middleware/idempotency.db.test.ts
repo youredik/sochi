@@ -43,10 +43,7 @@
  */
 import { newId } from '@horeca/shared'
 import { Hono } from 'hono'
-import { afterAll, beforeAll, beforeEach, describe, expect, test, mock, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
-
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import { onError } from '../errors/on-error.ts'
 import type { AppEnv } from '../factory.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../tests/db-setup.ts'
@@ -84,7 +81,7 @@ describe('idempotencyMiddleware', () => {
 	 * middleware tests).
 	 */
 	function mkApp(tenantId: string) {
-		const handler = mock(async (body: unknown) => ({ echoed: body, n: Math.random() }))
+		const handler = vi.fn(async (body: unknown) => ({ echoed: body, n: Math.random() }))
 		// All routes declared upfront — Hono freezes its matcher on first
 		// `app.request()`; late `.post(...)` after that throws.
 		const app = new Hono<AppEnv>()

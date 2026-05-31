@@ -30,6 +30,7 @@ import { Route as AppOOrgSlugIndexRouteImport } from './routes/_app.o.$orgSlug.i
 import { Route as WidgetTenantSlugPropertyIdGuestAndPayRouteImport } from './routes/widget.$tenantSlug_.$propertyId_.guest-and-pay'
 import { Route as WidgetTenantSlugPropertyIdExtrasRouteImport } from './routes/widget.$tenantSlug_.$propertyId_.extras'
 import { Route as AppOOrgSlugSetupRouteImport } from './routes/_app.o.$orgSlug.setup'
+import { Route as AppOOrgSlugReviewsRouteImport } from './routes/_app.o.$orgSlug.reviews'
 import { Route as AppOOrgSlugReceivablesRouteImport } from './routes/_app.o.$orgSlug.receivables'
 import { Route as AppOOrgSlugGridRouteImport } from './routes/_app.o.$orgSlug.grid'
 import { Route as AppOOrgSlugDemoRouteImport } from './routes/_app.o.$orgSlug.demo'
@@ -157,6 +158,11 @@ const WidgetTenantSlugPropertyIdExtrasRoute =
 const AppOOrgSlugSetupRoute = AppOOrgSlugSetupRouteImport.update({
   id: '/setup',
   path: '/setup',
+  getParentRoute: () => AppOOrgSlugRoute,
+} as any)
+const AppOOrgSlugReviewsRoute = AppOOrgSlugReviewsRouteImport.update({
+  id: '/reviews',
+  path: '/reviews',
   getParentRoute: () => AppOOrgSlugRoute,
 } as any)
 const AppOOrgSlugReceivablesRoute = AppOOrgSlugReceivablesRouteImport.update({
@@ -293,6 +299,7 @@ export interface FileRoutesByFullPath {
   '/o/$orgSlug/demo': typeof AppOOrgSlugDemoRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
+  '/o/$orgSlug/reviews': typeof AppOOrgSlugReviewsRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/widget/$tenantSlug/$propertyId/extras': typeof WidgetTenantSlugPropertyIdExtrasRoute
   '/widget/$tenantSlug/$propertyId/guest-and-pay': typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
@@ -333,6 +340,7 @@ export interface FileRoutesByTo {
   '/o/$orgSlug/demo': typeof AppOOrgSlugDemoRoute
   '/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
+  '/o/$orgSlug/reviews': typeof AppOOrgSlugReviewsRoute
   '/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/widget/$tenantSlug/$propertyId/extras': typeof WidgetTenantSlugPropertyIdExtrasRoute
   '/widget/$tenantSlug/$propertyId/guest-and-pay': typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
@@ -377,6 +385,7 @@ export interface FileRoutesById {
   '/_app/o/$orgSlug/demo': typeof AppOOrgSlugDemoRoute
   '/_app/o/$orgSlug/grid': typeof AppOOrgSlugGridRoute
   '/_app/o/$orgSlug/receivables': typeof AppOOrgSlugReceivablesRoute
+  '/_app/o/$orgSlug/reviews': typeof AppOOrgSlugReviewsRoute
   '/_app/o/$orgSlug/setup': typeof AppOOrgSlugSetupRoute
   '/widget/$tenantSlug_/$propertyId_/extras': typeof WidgetTenantSlugPropertyIdExtrasRoute
   '/widget/$tenantSlug_/$propertyId_/guest-and-pay': typeof WidgetTenantSlugPropertyIdGuestAndPayRoute
@@ -421,6 +430,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/demo'
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
+    | '/o/$orgSlug/reviews'
     | '/o/$orgSlug/setup'
     | '/widget/$tenantSlug/$propertyId/extras'
     | '/widget/$tenantSlug/$propertyId/guest-and-pay'
@@ -461,6 +471,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/demo'
     | '/o/$orgSlug/grid'
     | '/o/$orgSlug/receivables'
+    | '/o/$orgSlug/reviews'
     | '/o/$orgSlug/setup'
     | '/widget/$tenantSlug/$propertyId/extras'
     | '/widget/$tenantSlug/$propertyId/guest-and-pay'
@@ -504,6 +515,7 @@ export interface FileRouteTypes {
     | '/_app/o/$orgSlug/demo'
     | '/_app/o/$orgSlug/grid'
     | '/_app/o/$orgSlug/receivables'
+    | '/_app/o/$orgSlug/reviews'
     | '/_app/o/$orgSlug/setup'
     | '/widget/$tenantSlug_/$propertyId_/extras'
     | '/widget/$tenantSlug_/$propertyId_/guest-and-pay'
@@ -694,6 +706,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugSetupRouteImport
       parentRoute: typeof AppOOrgSlugRoute
     }
+    '/_app/o/$orgSlug/reviews': {
+      id: '/_app/o/$orgSlug/reviews'
+      path: '/reviews'
+      fullPath: '/o/$orgSlug/reviews'
+      preLoaderRoute: typeof AppOOrgSlugReviewsRouteImport
+      parentRoute: typeof AppOOrgSlugRoute
+    }
     '/_app/o/$orgSlug/receivables': {
       id: '/_app/o/$orgSlug/receivables'
       path: '/receivables'
@@ -862,6 +881,7 @@ interface AppOOrgSlugRouteChildren {
   AppOOrgSlugDemoRoute: typeof AppOOrgSlugDemoRoute
   AppOOrgSlugGridRoute: typeof AppOOrgSlugGridRoute
   AppOOrgSlugReceivablesRoute: typeof AppOOrgSlugReceivablesRoute
+  AppOOrgSlugReviewsRoute: typeof AppOOrgSlugReviewsRoute
   AppOOrgSlugSetupRoute: typeof AppOOrgSlugSetupRoute
   AppOOrgSlugIndexRoute: typeof AppOOrgSlugIndexRoute
   AppOOrgSlugAccountSecurityRoute: typeof AppOOrgSlugAccountSecurityRoute
@@ -878,6 +898,7 @@ const AppOOrgSlugRouteChildren: AppOOrgSlugRouteChildren = {
   AppOOrgSlugDemoRoute: AppOOrgSlugDemoRoute,
   AppOOrgSlugGridRoute: AppOOrgSlugGridRoute,
   AppOOrgSlugReceivablesRoute: AppOOrgSlugReceivablesRoute,
+  AppOOrgSlugReviewsRoute: AppOOrgSlugReviewsRoute,
   AppOOrgSlugSetupRoute: AppOOrgSlugSetupRoute,
   AppOOrgSlugIndexRoute: AppOOrgSlugIndexRoute,
   AppOOrgSlugAccountSecurityRoute: AppOOrgSlugAccountSecurityRoute,

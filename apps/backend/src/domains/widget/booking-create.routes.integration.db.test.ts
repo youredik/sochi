@@ -34,9 +34,7 @@
 
 import { newId } from '@horeca/shared'
 import { Hono } from 'hono'
-import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { dateFromIso } from '../../db/ydb-helpers.ts'
 import { onError } from '../../errors/on-error.ts'

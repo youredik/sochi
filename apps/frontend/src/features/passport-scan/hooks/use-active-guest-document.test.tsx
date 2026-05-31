@@ -16,7 +16,7 @@ import type { ReactNode } from 'react'
 
 // Hoist api mock BEFORE hook import (Bun mock order matters).
 const mockGet = mock<() => Promise<Response>>(async () => new Response('null'))
-mock.module('../../../lib/api', () => ({
+await mock.module('../../../lib/api', () => ({
 	api: {
 		api: {
 			v1: {

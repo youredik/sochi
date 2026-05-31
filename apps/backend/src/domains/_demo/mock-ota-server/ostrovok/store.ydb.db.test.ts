@@ -24,7 +24,7 @@
  * applied. Migration creates `mockOtaOstrovokBookHash`, `mockOtaOstrovokFormStage`,
  * `mockOtaOstrovokBooking` tables.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 
 import { getTestSql, setupTestDb, teardownTestDb } from '../../../../tests/db-setup.ts'
 import { createYdbOstrovokStore } from './store.ydb.ts'

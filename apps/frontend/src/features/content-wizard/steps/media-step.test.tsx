@@ -49,12 +49,12 @@ import { hasPermission, type MemberRole, type PropertyMedia } from '@horeca/shar
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, type Mock, test, mock } from 'bun:test'
 
-mock.module('../../../lib/use-can.ts', () => ({
+await mock.module('../../../lib/use-can.ts', () => ({
 	useCan: mock(() => true),
 	useCurrentRole: mock(() => 'owner'),
 }))
 
-mock.module('../hooks/use-media.ts', () => ({
+await mock.module('../hooks/use-media.ts', () => ({
 	useMediaList: mock(() => ({ data: [], isLoading: false, error: null })),
 	useUploadMedia: mock(() => ({ mutateAsync: mock(), isPending: false })),
 	usePatchMedia: mock(() => ({ mutate: mock() })),

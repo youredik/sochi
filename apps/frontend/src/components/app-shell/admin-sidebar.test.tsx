@@ -38,7 +38,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, mock, spyOn } f
 
 // Mock TanStack Router Link так чтобы AdminSidebar тестировался без
 // router-context (canonical pattern from `widget-page.test.tsx`).
-mock.module('@tanstack/react-router', () => ({
+await mock.module('@tanstack/react-router', () => ({
 	Link: ({
 		children,
 		to,
@@ -76,17 +76,17 @@ mock.module('@tanstack/react-router', () => ({
 // Stub heavy footer consumers to keep this test focused on AdminSidebar's
 // own logic (RBAC × 8 sections rendering + propertyId dispatch + footer
 // composition slots). Each stub is a self-identifying inert element.
-mock.module('@/features/auth/components/logout-button', () => ({
+await mock.module('@/features/auth/components/logout-button', () => ({
 	LogoutButton: () => (
 		<button type="button" data-stub="logout">
 			Выйти
 		</button>
 	),
 }))
-mock.module('@/features/tenancy/components/org-switcher', () => ({
+await mock.module('@/features/tenancy/components/org-switcher', () => ({
 	OrgSwitcher: () => <span data-stub="org-switcher">OrgSwitcher</span>,
 }))
-mock.module('@/components/mode-toggle', () => ({
+await mock.module('@/components/mode-toggle', () => ({
 	ModeToggle: () => (
 		<button type="button" data-stub="mode-toggle">
 			Тема
@@ -187,7 +187,7 @@ function getRenderedSectionIds(): string[] {
 /* -------------------------------------------------------------------------- */
 
 describe('AdminSidebar — RBAC × 3 roles (mounted section ids)', () => {
-	it('[R-owner] role=owner → 9 sections rendered (full incl. demo)', () => {
+	it('[R-owner] role=owner → 10 sections rendered (full incl. demo + reviews)', () => {
 		seed({ role: 'owner' })
 		renderSidebar()
 		const ids = getRenderedSectionIds().sort()
@@ -201,12 +201,13 @@ describe('AdminSidebar — RBAC × 3 roles (mounted section ids)', () => {
 				'notifications',
 				'profile',
 				'receivables',
+				'reviews',
 				'tax',
 			].sort(),
 		)
 	})
 
-	it('[R-manager] role=manager → 9 sections rendered (full incl. demo)', () => {
+	it('[R-manager] role=manager → 10 sections rendered (full incl. demo + reviews)', () => {
 		seed({ role: 'manager' })
 		renderSidebar()
 		const ids = getRenderedSectionIds().sort()
@@ -220,6 +221,7 @@ describe('AdminSidebar — RBAC × 3 roles (mounted section ids)', () => {
 				'notifications',
 				'profile',
 				'receivables',
+				'reviews',
 				'tax',
 			].sort(),
 		)
@@ -258,11 +260,20 @@ describe('AdminSidebar — loading states', () => {
 		renderSidebar()
 		const ids = getRenderedSectionIds()
 		expect(ids).not.toContain('profile')
-		// Other 7 sections still rendered (owner has all permissions); inventory
-		// also hidden because it needsPropertyId per I7 canon. demo doesn't need
-		// propertyId → renders.
+		// Other 8 sections still rendered (owner has all permissions); inventory
+		// also hidden because it needsPropertyId per I7 canon. demo + reviews don't
+		// need propertyId → render.
 		expect(ids.sort()).toEqual(
-			['channels', 'demo', 'grid', 'guests', 'notifications', 'receivables', 'tax'].sort(),
+			[
+				'channels',
+				'demo',
+				'grid',
+				'guests',
+				'notifications',
+				'receivables',
+				'reviews',
+				'tax',
+			].sort(),
 		)
 	})
 
@@ -285,7 +296,7 @@ describe('AdminSidebar — composition / structure', () => {
 		seed({ role: 'owner' })
 		renderSidebar()
 		const items = document.querySelectorAll('[data-sidebar="menu-item"]')
-		expect(items.length).toBe(9)
+		expect(items.length).toBe(10)
 		for (const item of items) {
 			const link = item.querySelector('[data-section-id]')
 			expect(link).not.toBeNull()

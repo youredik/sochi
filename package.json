@@ -24,8 +24,8 @@
 		"test:fast:frontend": "cd apps/frontend && bun test --parallel",
 		"test:fast:widget": "cd apps/widget-embed && pnpm test",
 		"test:fast:shared": "cd packages/shared && bun test --parallel",
-		"test:db": "cd apps/backend && bun test --parallel src/**/*.db.test.ts",
-		"test:serial": "cd apps/backend && bun test src/**/*.db.test.ts",
+		"test:db": "cd apps/backend && pnpm exec vitest run",
+		"test:serial": "cd apps/backend && pnpm exec vitest run --no-file-parallelism",
 		"test:watch": "cd apps/backend && bun test --watch",
 		"test:unit": "pnpm test:fast",
 		"test:full": "run-s test:fast test:db",
@@ -93,7 +93,8 @@
 			"tmp@<0.2.6": "^0.2.6",
 			"ws@<8.20.1": "^8.20.1",
 			"qs@<6.15.2": "^6.15.2",
-			"langsmith@<0.6.0": "^0.6.0"
+			"langsmith@<0.6.0": "^0.6.0",
+			"playwright-core": "$@playwright/test"
 		}
 	}
 }

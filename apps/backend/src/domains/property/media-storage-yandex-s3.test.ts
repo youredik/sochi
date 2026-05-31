@@ -20,7 +20,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 
 const sendMock = mock()
-mock.module('@aws-sdk/client-s3', () => ({
+await mock.module('@aws-sdk/client-s3', () => ({
 	S3Client: class {
 		send = sendMock
 	},
@@ -41,7 +41,7 @@ mock.module('@aws-sdk/client-s3', () => ({
 }))
 
 const getSignedUrlMock = mock()
-mock.module('@aws-sdk/s3-request-presigner', () => ({
+await mock.module('@aws-sdk/s3-request-presigner', () => ({
 	getSignedUrl: getSignedUrlMock,
 }))
 

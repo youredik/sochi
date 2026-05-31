@@ -13,9 +13,8 @@
  * Per `plans/m9_widget_4_canonical.md` §11 Pre-done audit checklist requirements.
  */
 import { newId } from '@horeca/shared'
-import { afterAll, beforeAll, describe, expect, jest, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
-jest.setTimeout(90_000)
 import { dateFromIso } from '../../db/ydb-helpers.ts'
 import { StaleAvailabilityError, WidgetConsentMissingError } from '../../errors/domain.ts'
 import { listConsentsForGuest } from '../../lib/consent-record.ts'

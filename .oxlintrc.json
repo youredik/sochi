@@ -30,6 +30,38 @@
 		"typescript/no-unsafe-return": "warn",
 		"typescript/strict-boolean-expressions": "off"
 	},
+	"overrides": [
+		{
+			"files": [
+				"**/*.test.ts",
+				"**/*.test.tsx",
+				"**/*.spec.ts",
+				"**/*.spec.tsx",
+				"**/tests/**",
+				"**/scripts/**"
+			],
+			"rules": {
+				"typescript/await-thenable": "off",
+				"typescript/no-unnecessary-type-assertion": "off",
+				"typescript/no-redundant-type-constituents": "off",
+				"typescript/no-useless-default-assignment": "off",
+				"typescript/no-meaningless-void-operator": "off",
+				"typescript/no-base-to-string": "off",
+				"typescript/unbound-method": "off",
+				"typescript/restrict-plus-operands": "off",
+				"typescript/restrict-template-expressions": "off",
+				"typescript/prefer-nullish-coalescing": "off",
+				"typescript/prefer-optional-chain": "off",
+				"typescript/no-unsafe-argument": "off",
+				"typescript/no-unsafe-assignment": "off",
+				"typescript/no-unsafe-call": "off",
+				"typescript/no-unsafe-member-access": "off",
+				"typescript/no-unsafe-return": "off",
+				"eslint/no-unused-vars": "off",
+				"eslint/no-unsafe-optional-chaining": "off"
+			}
+		}
+	],
 	"ignorePatterns": [
 		".artifacts/**",
 		"dist/**",

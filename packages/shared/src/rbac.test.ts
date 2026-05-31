@@ -105,6 +105,22 @@ describe('hasPermission — staff (CRITICAL: Apaleo+Cloudbeds canon)', () => {
 	})
 })
 
+describe('hasPermission — review (AI review-reply 2026-05-30)', () => {
+	test('owner + manager can read AND reply; staff neither', () => {
+		expect(hasPermission('owner', { review: ['read', 'reply'] })).toBe(true)
+		expect(hasPermission('manager', { review: ['read', 'reply'] })).toBe(true)
+		expect(hasPermission('staff', { review: ['read'] })).toBe(false)
+		expect(hasPermission('staff', { review: ['reply'] })).toBe(false)
+	})
+
+	test('reply gate is independent from read (full enum sweep)', () => {
+		const replyMatrix: Record<MemberRole, boolean> = { owner: true, manager: true, staff: false }
+		for (const role of ALL_ROLES) {
+			expect(hasPermission(role, { review: ['reply'] })).toBe(replyMatrix[role])
+		}
+	})
+})
+
 describe('hasPermission — adversarial paths', () => {
 	test('[HP5] unknown resource → false (no implicit allow)', () => {
 		expect(hasPermission('owner', { ghostResource: ['anything'] })).toBe(false)
@@ -196,6 +212,13 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 			report: ['read'],
 			notification: ['read', 'retry'],
 			billing: ['read', 'manage'],
+			compliance: ['read', 'update'],
+			amenity: ['create', 'read', 'update', 'delete'],
+			description: ['create', 'read', 'update', 'delete'],
+			media: ['create', 'read', 'update', 'delete'],
+			addon: ['create', 'read', 'update', 'delete'],
+			migrationRegistration: ['create', 'read', 'manage'],
+			review: ['read', 'reply'],
 		},
 		manager: {
 			property: ['read', 'update'],
@@ -210,6 +233,13 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 			report: ['read'],
 			notification: ['read', 'retry'],
 			billing: ['read'],
+			compliance: ['read'],
+			amenity: ['create', 'read', 'update', 'delete'],
+			description: ['create', 'read', 'update', 'delete'],
+			media: ['create', 'read', 'update', 'delete'],
+			addon: ['create', 'read', 'update', 'delete'],
+			migrationRegistration: ['create', 'read', 'manage'],
+			review: ['read', 'reply'],
 		},
 		staff: {
 			property: ['read'],
@@ -221,6 +251,12 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 			payment: ['create', 'read'],
 			receipt: ['read', 'resend'],
 			// notification: NOT granted to staff (admin-only).
+			amenity: ['read'],
+			description: ['read'],
+			media: ['read'],
+			addon: ['read'],
+			migrationRegistration: ['read'],
+			// compliance / review: NOT granted to staff (operator-elevated).
 		},
 	}
 
@@ -237,6 +273,13 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 		'report',
 		'notification',
 		'billing',
+		'compliance',
+		'amenity',
+		'description',
+		'media',
+		'addon',
+		'migrationRegistration',
+		'review',
 	] as const
 	const ALL_ACTIONS = [
 		'create',
@@ -248,6 +291,7 @@ describe('hasPermission — EXHAUSTIVE matrix sweep (M6.5.1 mutation gate)', () 
 		'manage',
 		'resend',
 		'retry',
+		'reply',
 	] as const
 
 	test.each([...ALL_ROLES])(

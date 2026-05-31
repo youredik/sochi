@@ -12,9 +12,8 @@
  */
 import { Hono } from 'hono'
 import sharp from 'sharp'
-import { afterAll, beforeAll, describe, expect, jest, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
-jest.setTimeout(60_000)
 import { onError } from '../../errors/on-error.ts'
 import type { AppEnv } from '../../factory.ts'
 import { createIdempotencyRepo } from '../../middleware/idempotency.repo.ts'

@@ -1,5 +1,5 @@
 import { expect, test as setup } from '@playwright/test'
-import { getMagicLinkUrl, purgeMailpit } from './_mailpit-helper.ts'
+import { signupToSetup } from './_onboarding-helper.ts'
 
 /**
  * Setup project: create a fresh owner user + org via the **passwordless
@@ -33,39 +33,12 @@ import { getMagicLinkUrl, purgeMailpit } from './_mailpit-helper.ts'
 setup(
 	'authenticate owner via magic-link + complete 2-step wizard',
 	async ({ page, request }, setupInfo) => {
-		const ts = Date.now()
 		const workerIdx = setupInfo.workerIndex
-		const email = `e2e-owner-${ts}-w${workerIdx}@sochi.local`
+		const email = `e2e-owner-${Date.now()}-w${workerIdx}@sochi.local`
 
-		// Purge Mailpit at setup start so `getMagicLinkUrl(email)` matches the
-		// freshly-sent message, not stale seed emails из prior runs.
-		await purgeMailpit(request)
-
-		// --- /signup → MagicLinkSignUpForm ---
-		await page.goto('/signup')
-		await expect(page.getByRole('heading', { name: 'Регистрация' })).toBeVisible()
-
-		await page.getByLabel('Email').fill(email)
-		await page.getByLabel(/согласие/).check()
-
-		await page.getByRole('button', { name: 'Получить ссылку для регистрации' }).click()
-		// Round 14.6.2: signup captures ONLY email + consent (no orgName). The
-		// confirmation surfaces «Письмо отправлено» + the email (НЕ orgName).
-		await expect(page.getByText('Письмо отправлено')).toBeVisible()
-		await expect(page.getByText(email)).toBeVisible()
-
-		// --- Fetch magic-link URL out of Mailpit + visit it ---
-		const magicLinkUrl = await getMagicLinkUrl(request, email)
-		await page.goto(magicLinkUrl)
-
-		// --- /welcome: beforeLoad AUTO-creates org (placeholder name + `org-<base36>`
-		// slug) and redirects — NO UI interaction (Round 14.6.2). The empty-tenant
-		// dashboard guard at `/o/$slug/` then redirects to /setup. Slug is `org-…`,
-		// NOT derived from any typed name, so the URL match is generic. ---
-		await page.waitForURL(/\/o\/[^/?]+\/setup$/)
-		const match = page.url().match(/\/o\/([^/?]+)\/setup$/)
-		const orgSlug = match?.[1] ?? ''
-		expect(orgSlug).not.toBe('')
+		// Passwordless signup → magic-link → land on /setup. Shared with the
+		// setup-wizard a11y audit (app-a11y.spec.ts) so the two can't drift.
+		const orgSlug = await signupToSetup(page, request, email)
 
 		// --- Wizard Screen 1: identify (ИНН lookup against dadata.mock) ---
 		await expect(page.getByRole('heading', { name: 'Заводим гостиницу' })).toBeVisible()

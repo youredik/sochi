@@ -181,7 +181,10 @@ export async function applyMigrations(opts: ApplyMigrationsOpts): Promise<Migrat
  */
 export function flattenIssueMessages(err: unknown): string {
 	if (err === null || err === undefined) return ''
-	if (typeof err !== 'object') return String(err)
+	// Narrowed to a non-null primitive here (typeof guards above exclude object).
+	// The cast tells the linter what the runtime guard guarantees — same honest
+	// idiom as `cdcStr` for the no-base-to-string class.
+	if (typeof err !== 'object') return String(err as string | number | boolean | bigint)
 	const e = err as { message?: unknown; issues?: unknown }
 	const parts: string[] = []
 	if (typeof e.message === 'string') parts.push(e.message)

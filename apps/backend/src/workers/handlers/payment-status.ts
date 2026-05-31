@@ -50,7 +50,7 @@ import {
 	canTransitionForProvider,
 	deriveRefundStatus,
 } from '../../domains/payment/lib/payment-transitions.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 import type { HandlerLogger } from './refund-creator.ts'
 
 const REFUND_SUCCEEDED_STATUS = 'succeeded'
@@ -108,8 +108,8 @@ export function createPaymentStatusHandler(log: HandlerLogger) {
 			log.warn({ key }, 'payment_status: malformed refund event key — skipping')
 			return
 		}
-		const tenantId = String(key[0])
-		const paymentId = String(key[1])
+		const tenantId = cdcStr(key[0])
+		const paymentId = cdcStr(key[1])
 
 		// Load parent payment via VIEW-less scan; PK starts with tenantId.
 		const [paymentRows = []] = await tx<PaymentRow[]>`

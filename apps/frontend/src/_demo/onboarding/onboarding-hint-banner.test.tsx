@@ -22,7 +22,7 @@ import type * as React from 'react'
 // hits ONLY this suite when run в parallel. We use `mock.module` для
 // the import but it's namespaced — TanStack router-using suites не
 // touched since we only stub here, before importing the component.
-mock.module('@tanstack/react-router', () => ({
+await mock.module('@tanstack/react-router', () => ({
 	Link: ({
 		to,
 		params,

@@ -18,7 +18,7 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 
-mock.module('@tanstack/react-router', () => ({
+await mock.module('@tanstack/react-router', () => ({
 	Link: (props: {
 		to: string
 		params?: Record<string, string>

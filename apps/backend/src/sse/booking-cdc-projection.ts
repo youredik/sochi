@@ -5,7 +5,7 @@ import type {
 	SseEventType,
 } from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
-import type { CdcEvent } from '../workers/cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../workers/cdc-handlers.ts'
 import type { BookingEventBroadcaster } from './booking-event-broadcaster.ts'
 
 /**
@@ -38,7 +38,7 @@ type CdcImage = Record<string, unknown>
 function asString(v: unknown): string | null {
 	if (v === null || v === undefined) return null
 	if (typeof v === 'string') return v
-	return String(v)
+	return cdcStr(v)
 }
 
 function deriveEventType(event: CdcEvent): SseEventType | null {
@@ -59,7 +59,7 @@ function deriveEventType(event: CdcEvent): SseEventType | null {
 
 function derivePayload(event: CdcEvent): SseBookingEventPayload | null {
 	const key = event.key ?? []
-	const bookingId = key[3] === undefined ? '' : String(key[3])
+	const bookingId = cdcStr(key[3])
 	if (!bookingId.startsWith('book_')) return null
 
 	const image = (event.newImage ?? event.oldImage ?? {}) as CdcImage
@@ -96,7 +96,7 @@ export function createBookingSseCdcHandler(broadcaster: BookingEventBroadcaster)
 		const payload = derivePayload(event)
 		if (!payload) return
 		const key = event.key ?? []
-		const propertyId = key[1] === undefined ? '' : String(key[1])
+		const propertyId = cdcStr(key[1])
 		if (!propertyId.startsWith('prop_')) return
 		const ts = event.ts
 		if (!ts || ts.length < 2) return

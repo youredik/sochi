@@ -74,7 +74,7 @@ const ratesState = {
 	isError: false,
 }
 
-mock.module('@tanstack/react-query', () => ({
+await mock.module('@tanstack/react-query', () => ({
 	useQuery: () => ratesState,
 	useMutation: () => ({ mutateAsync: async () => undefined, isPending: false }),
 	useQueryClient: () => ({
@@ -86,14 +86,14 @@ mock.module('@tanstack/react-query', () => ({
 	queryOptions: <T,>(opts: T) => opts,
 }))
 
-mock.module('../hooks/use-booking-mutations', () => ({
+await mock.module('../hooks/use-booking-mutations', () => ({
 	useRatePlans: () => ratePlansState,
 	useCreateGuest: () => ({ mutateAsync: createGuestMock, isPending: false }),
 	useCreateBooking: () => ({ mutateAsync: createBookingMock, isPending: false }),
 }))
 
 const toastErrorMock = mock()
-mock.module('sonner', () => ({
+await mock.module('sonner', () => ({
 	toast: { error: toastErrorMock, success: () => {}, warning: () => {}, info: () => {} },
 }))
 

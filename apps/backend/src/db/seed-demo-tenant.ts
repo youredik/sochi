@@ -39,6 +39,8 @@ import { frozenTimeProvider } from '../lib/time-provider.ts'
 import { sql } from './index.ts'
 import { assertSeedState } from './verify-seed.ts'
 import { demoPropertyIdForOrg } from '../lib/demo-channel-seed.ts'
+import { seedDemoReviewsCore } from '../domains/review/review.demo-seed.ts'
+import { createReviewRepo } from '../domains/review/review.repo.ts'
 import { dateFromIso, NULL_INT32, NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from './ydb-helpers.ts'
 
 const TENANT_ID = 'demo-sochi-sirius'
@@ -472,6 +474,9 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	await sql`DELETE FROM folio WHERE tenantId = ${TENANT_ID}`
 	await sql`DELETE FROM booking WHERE tenantId = ${TENANT_ID}`
 	await sql`DELETE FROM guest WHERE tenantId = ${TENANT_ID}`
+	// channelReview.create() uses newId() per row (non-idempotent) → wipe before
+	// re-seed so demo refresh produces identical review inbox, not duplicates.
+	await sql`DELETE FROM channelReview WHERE tenantId = ${TENANT_ID}`
 	// Sprint C+ Round 5 5-expert audit re-framing 2026-05-24:
 	//
 	// **Passport-related tables (photoConsentLog/passportOcrAudit/guestDocument/
@@ -955,6 +960,14 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 		`
 	}
 
+	// ─── Step 8/8 (2026-05-30): AI review-reply demo inbox ──────────────────
+	// Реалистичные отзывы из каналов (Островок / Яндекс / Авито), статус 'new' —
+	// хозяин жмёт «ИИ-ответ» (YandexGPT) → правит → «Опубликовать». ОБЩИЙ источник
+	// `seedDemoReviewsCore` (тот же, что lazy per-tenant demo-провизионинг в
+	// review.service.list) — single source of demo-review-набора.
+	console.log('  → Step 8/8: AI review-reply seed (5 отзывов из каналов, статус new)')
+	await seedDemoReviewsCore(createReviewRepo(sql), TENANT_ID, DEMO_PROPERTY_ID, now)
+
 	console.log(`✅ Demo tenant ready: tenantId=${TENANT_ID} slug=${SLUG} mode=demo`)
 	console.log(
 		'   M9.widget.2 seed: 1 property + 2 roomTypes + 4 ratePlans + 120 avail + 240 rates.',
@@ -964,6 +977,7 @@ export async function runSeedDemoTenant(): Promise<{ tenantId: string }> {
 	console.log(
 		'   M10 / A7.5.fix seed: 3 channel connections (TL/YT/ETG mock-mode, isEnabled=true).',
 	)
+	console.log('   AI review-reply seed: 5 reviews (ostrovok/yandexTravel/avito), status=new.')
 
 	// Post-seed invariant verification. CDC consumers project asynchronously so
 	// some downstream rows (folio, slot, occupancy) materialize after a short

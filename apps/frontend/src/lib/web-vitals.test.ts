@@ -15,7 +15,7 @@ const onINPMock = mock()
 const onLCPMock = mock()
 const onFCPMock = mock()
 const onTTFBMock = mock()
-mock.module('web-vitals', () => ({
+await mock.module('web-vitals', () => ({
 	onCLS: onCLSMock,
 	onINP: onINPMock,
 	onLCP: onLCPMock,
@@ -27,7 +27,7 @@ const startSpanMock = mock()
 const setAttributeMock = mock()
 const endMock = mock()
 const getTracerMock = mock(() => ({ startSpan: startSpanMock }))
-mock.module('@opentelemetry/api', () => ({
+await mock.module('@opentelemetry/api', () => ({
 	trace: { getTracer: getTracerMock },
 }))
 

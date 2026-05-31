@@ -24,7 +24,7 @@
  * downstream (Metrika initializer) can poll или subscribe.
  */
 
-const STORAGE_KEY = 'horeca-cookie-consent'
+export const STORAGE_KEY = 'horeca-cookie-consent'
 const SCHEMA_VERSION = '2026-05-24'
 
 export type ConsentCategory = 'necessary' | 'analytics' | 'marketing'
@@ -88,9 +88,16 @@ export function isGranted(category: ConsentCategory): boolean {
 	return getConsent().categories[category] === true
 }
 
-/** Set consent state атомарно (accept-all / reject-all / custom). */
-export function setConsent(categories: Partial<Record<ConsentCategory, boolean>>): void {
-	const next: ConsentState = {
+/**
+ * Build a fresh consent state — the SINGLE SOURCE OF TRUTH for the storage
+ * shape + schema version. Used by `setConsent` and by e2e seeding
+ * (`tests/e2e/_consent-helper.ts`) so tests can never hardcode/drift from the
+ * canonical schema (a version bump here flows through automatically).
+ */
+export function buildConsentState(
+	categories: Partial<Record<ConsentCategory, boolean>>,
+): ConsentState {
+	return {
 		version: SCHEMA_VERSION,
 		grantedAt: new Date().toISOString(),
 		categories: {
@@ -99,6 +106,11 @@ export function setConsent(categories: Partial<Record<ConsentCategory, boolean>>
 			marketing: categories.marketing === true,
 		},
 	}
+}
+
+/** Set consent state атомарно (accept-all / reject-all / custom). */
+export function setConsent(categories: Partial<Record<ConsentCategory, boolean>>): void {
+	const next = buildConsentState(categories)
 	cachedState = next
 	if (typeof window !== 'undefined') {
 		try {

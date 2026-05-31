@@ -20,8 +20,17 @@ export function SwUpdatePrompt() {
 		updateServiceWorker,
 	} = useRegisterSW({
 		onRegistered(r: ServiceWorkerRegistration | undefined) {
-			// Periodically check для new SW (every hour while tab open)
-			if (r) setInterval(() => r.update(), 60 * 60 * 1000)
+			// Periodically check для new SW (every hour while tab open). A failed
+			// `update()` (transient network blip) is non-actionable — swallow it so
+			// the periodic check never raises an unhandled promise rejection.
+			if (r) {
+				setInterval(
+					() => {
+						r.update().catch(() => {})
+					},
+					60 * 60 * 1000,
+				)
+			}
 		},
 	})
 

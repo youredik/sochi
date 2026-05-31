@@ -19,7 +19,7 @@ const onLCPMock = mock()
 const onFCPMock = mock()
 const onTTFBMock = mock()
 
-mock.module('web-vitals/attribution', () => ({
+await mock.module('web-vitals/attribution', () => ({
 	onCLS: onCLSMock,
 	onINP: onINPMock,
 	onLCP: onLCPMock,

@@ -43,9 +43,7 @@
  * Requires local YDB + migrations 0007-0016 applied.
  */
 import { newId } from '@horeca/shared'
-import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { NULL_FLOAT, NULL_TEXT, NULL_TIMESTAMP, toTs } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
@@ -469,14 +467,18 @@ describe('folio_balance_writer — cross-tenant isolation', () => {
 	test('[CT1] payment event in tenantA does not touch tenantB folio', async () => {
 		const a = await setupScenario()
 		const b = await setupScenario()
+		// Distinct amounts make any cross-tenant write UNAMBIGUOUS: A recomputes to
+		// 2000; B-untouched stays 0; a B that were ever (wrongly) recomputed would
+		// read 8000 (≠ A's 2000), so the assertion can't be satisfied by accidentally
+		// reading A's row instead of B's.
 		await seedFolioLine({ tenantId: a.tenantId, folioId: a.folioId, amountMinor: 7000n })
-		await seedFolioLine({ tenantId: b.tenantId, folioId: b.folioId, amountMinor: 7000n })
+		await seedFolioLine({ tenantId: b.tenantId, folioId: b.folioId, amountMinor: 9000n })
 		await seedPayment({ ...a, folioId: a.folioId, capturedMinor: 5000n, status: 'succeeded' })
-		await seedPayment({ ...b, folioId: b.folioId, capturedMinor: 5000n, status: 'succeeded' })
+		await seedPayment({ ...b, folioId: b.folioId, capturedMinor: 1000n, status: 'succeeded' })
 		await runHandler('payment', buildPaymentEvent({ ...a, folioId: a.folioId }))
 		const folioA = await getFolio(a.tenantId, a.folioId)
 		const folioB = await getFolio(b.tenantId, b.folioId)
-		expect(folioA?.balanceMinor).toBe('2000') // recomputed
+		expect(folioA?.balanceMinor).toBe('2000') // recomputed: 7000 − 5000
 		expect(folioB?.balanceMinor).toBe('0') // untouched (initial seed)
 		expect(folioB?.version).toBe(1) // untouched
 	})

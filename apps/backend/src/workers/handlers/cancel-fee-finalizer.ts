@@ -35,7 +35,7 @@
 
 import type { TX } from '@ydbjs/query'
 import { NULL_TEXT, NULL_TIMESTAMP, toTs } from '../../db/ydb-helpers.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 import { cancelFeeLineId, feeMicrosToMinor, noShowFeeLineId } from '../lib/cancel-fees.ts'
 import type { HandlerLogger } from './refund-creator.ts'
 
@@ -69,9 +69,9 @@ export function createCancelFeeFinalizerHandler(log: HandlerLogger) {
 			log.warn({ key }, 'cancel_fee: malformed booking event key — skipping')
 			return
 		}
-		const tenantId = String(key[0])
-		const propertyId = String(key[1])
-		const bookingId = String(key[3])
+		const tenantId = cdcStr(key[0])
+		const propertyId = cdcStr(key[1])
+		const bookingId = cdcStr(key[3])
 
 		// 3. Resolve fee snapshot from newImage. Json column → CDC delivers as
 		// parsed object, not string.

@@ -19,10 +19,7 @@
  */
 import { newId } from '@horeca/shared'
 import { Hono } from 'hono'
-import { afterAll, beforeAll, describe, expect, test, mock, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
-
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 import { onError } from '../errors/on-error.ts'
 import type { AppEnv } from '../factory.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../tests/db-setup.ts'
@@ -114,7 +111,7 @@ describe('widget-tenant-resolver middleware', () => {
 	})
 
 	test('[WTR5] Unknown slug → 404, handler не достигнут', async () => {
-		const handler = mock(() => Response.json({ ok: true }))
+		const handler = vi.fn(() => Response.json({ ok: true }))
 		const app = new Hono<AppEnv>()
 			.use('/widget/:tenantSlug/*', widgetTenantResolverMiddleware(getTestSql()))
 			.post('/widget/:tenantSlug/booking', handler)

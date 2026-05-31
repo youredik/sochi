@@ -1,7 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
-import { test } from './_fixtures.ts'
 import { expect } from '@playwright/test'
-import { getMagicLinkUrl, purgeMailpit } from './_mailpit-helper.ts'
+import { grantConsent } from './_consent-helper.ts'
+import { test } from './_fixtures.ts'
+import { signupToSetup } from './_onboarding-helper.ts'
 /**
  * App-wide WCAG 2.2 AA audit (M5e.3.4).
  *
@@ -208,30 +209,15 @@ test.describe('app-wide WCAG 2.2 AA audit (authenticated pages)', () => {
 		context,
 		request,
 	}) => {
-		// Fresh tenant so we can land on /setup mid-onboarding (owner.json's
-		// wizard is finished). Magic-link canon per [[auth-passwordless-canon]]
-		// 2026-05-13 — старый email+password flow здесь был removed wholesale.
+		// Fresh tenant so we audit /setup mid-onboarding. The signup→/setup flow
+		// lives in `signupToSetup` (shared with auth.setup.ts — see its doc for the
+		// Round 14.6.2 contract this audit had silently drifted from).
 		test.setTimeout(60_000)
+		// Log out of the owner storageState, then run the SHARED onboarding prefix
+		// (same helper auth.setup.ts uses → can't drift from the live flow).
 		await context.clearCookies()
-		await purgeMailpit(request)
-		const ts = Date.now()
-		const email = `a11y-wizard-${ts}@sochi.local`
-		const orgName = `A11y Wizard ${ts}`
-
-		await page.goto('/signup')
-		await page.getByLabel('Email').fill(email)
-		await page.getByLabel('Название гостиницы').fill(orgName)
-		await page.getByLabel(/согласие/).check()
-		await page.getByRole('button', { name: 'Получить ссылку для регистрации' }).click()
-		await expect(page.getByText('Письмо отправлено')).toBeVisible()
-
-		const magicLinkUrl = await getMagicLinkUrl(request, email)
-		await page.goto(magicLinkUrl)
-		await expect(page.getByRole('heading', { name: 'Почти готово' })).toBeVisible()
-		await Promise.all([
-			page.waitForURL(/\/o\/[^/]+\/setup$/),
-			page.getByRole('button', { name: 'Создать гостиницу →' }).click(),
-		])
+		await signupToSetup(page, request, `a11y-wizard-${Date.now()}@sochi.local`)
+		await expect(page.getByRole('heading', { name: 'Заводим гостиницу' })).toBeVisible()
 		await expect(page.getByLabel('ИНН гостиницы')).toBeVisible()
 		await runAxe(page, 'wizard-property-step')
 	})
@@ -296,6 +282,12 @@ test.describe('app-wide WCAG 2.2 AA audit (public pages, anonymous)', () => {
 	})
 
 	test('/ Yandex.Metrika integration smoke (deferred init wiring)', async ({ page }) => {
+		// Pre-grant analytics cookie-consent BEFORE any page script runs: Metrika
+		// init (main.tsx) is gated за 152-ФЗ opt-in `cookie-consent.isGranted
+		// ('analytics')` — without it `window.ym` is never created. The helper
+		// seeds the record using the app's OWN `buildConsentState` (single source
+		// of truth — no hardcoded schema here).
+		await grantConsent(page, { analytics: true })
 		// Mock external tag-script — никогда не hit'ить реальный CDN/counter
 		// из e2e (test traffic пачкал бы real analytics + offline-CI flake).
 		await page.route('**/mc.yandex.ru/metrika/**', (route) =>

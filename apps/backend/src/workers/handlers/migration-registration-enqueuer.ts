@@ -77,7 +77,7 @@ import {
 } from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
 import { dateFromIso, NULL_TEXT, NULL_TIMESTAMP, toJson, toTs } from '../../db/ydb-helpers.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 import type { HandlerLogger } from './refund-creator.ts'
 
 const ENQUEUER_ACTOR_ID = 'system:migration_registration_enqueuer'
@@ -169,8 +169,8 @@ export function createMigrationRegistrationEnqueuerHandler(log: HandlerLogger) {
 			log.warn({ key }, 'migration_registration_enqueuer: malformed booking event key — skipping')
 			return
 		}
-		const tenantId = String(key[0])
-		const bookingId = String(key[3])
+		const tenantId = cdcStr(key[0])
+		const bookingId = cdcStr(key[3])
 
 		const primaryGuestId = event.newImage.primaryGuestId
 		if (typeof primaryGuestId !== 'string' || primaryGuestId.length === 0) {

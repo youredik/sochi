@@ -46,9 +46,7 @@
  * Requires local YDB + migration 0038 (organizationProfile epgu cols).
  */
 import { newId } from '@horeca/shared'
-import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { NULL_TEXT, toTs } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'

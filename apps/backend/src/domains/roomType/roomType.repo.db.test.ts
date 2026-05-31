@@ -20,9 +20,7 @@
  * Requires local YDB (docker-compose up ydb).
  */
 import { roomTypeCreateInput } from '@horeca/shared'
-import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { NULL_TEXT } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'

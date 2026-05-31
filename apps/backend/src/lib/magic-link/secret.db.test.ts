@@ -16,11 +16,9 @@
  */
 
 import { newId } from '@horeca/shared'
-import { afterAll, beforeAll, describe, expect, jest, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import { createMagicLinkSecretResolver, generateMagicLinkSecret } from './secret.ts'
-
-jest.setTimeout(60_000)
 
 async function seedOrgProfile(
 	sql: ReturnType<typeof getTestSql>,

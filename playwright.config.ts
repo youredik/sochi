@@ -95,6 +95,16 @@ export default defineConfig({
 					timeout: 120_000,
 					stdout: 'pipe',
 					stderr: 'pipe',
+					// Metrika deferred-init smoke (app-a11y.spec.ts) needs a valid
+					// `VITE_YANDEX_METRIKA_ID` for `initYandexMetrika` to fire (no-op
+					// otherwise — main.tsx). Vite exposes process-env VITE_* vars with
+					// highest priority in dev (vite.dev/guide/env-and-mode). TEST-ONLY
+					// counter: the tag CDN is mocked in that spec + init is consent-gated
+					// (auth.setup declines analytics) → zero real traffic to any live
+					// counter. NOTE local `reuseExistingServer`: a dev frontend already
+					// running без этого env won't have it — restart it (or run with CI=1)
+					// to exercise the Metrika smoke locally.
+					env: { VITE_YANDEX_METRIKA_ID: '99999999' },
 				},
 			],
 })

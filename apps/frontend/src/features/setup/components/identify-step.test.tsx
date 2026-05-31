@@ -29,7 +29,7 @@ import type { DaDataParty } from '../lib/dadata.ts'
 const organizationUpdateMock = mock()
 const organizationListMock = mock()
 
-mock.module('@/lib/auth-client', () => ({
+await mock.module('@/lib/auth-client', () => ({
 	authClient: {
 		organization: {
 			update: organizationUpdateMock,

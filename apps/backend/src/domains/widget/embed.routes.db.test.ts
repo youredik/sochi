@@ -29,21 +29,22 @@
  */
 
 import { newId } from '@horeca/shared'
-import { afterAll, afterEach, beforeAll, describe, expect, it, mock, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
-
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { toJson, toTs } from '../../db/ydb-helpers.ts'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 
-// Mock auth.ts BEFORE importing embed.routes — vi.mock is hoisted.
-const mockGetSession = mock<
-	(input: { headers: Headers }) => Promise<{
-		user: { id: string }
-		session: { activeOrganizationId: string | null }
-	} | null>
->()
-mock.module('../../auth.ts', () => ({
+// Mock auth.ts BEFORE importing embed.routes. `vi.mock` is hoisted to the top of
+// the module, so the mock fn must be created inside `vi.hoisted` — a plain outer
+// const would be undefined at hoist time.
+const { mockGetSession } = vi.hoisted(() => ({
+	mockGetSession: vi.fn<
+		(input: { headers: Headers }) => Promise<{
+			user: { id: string }
+			session: { activeOrganizationId: string | null }
+		} | null>
+	>(),
+}))
+vi.mock('../../auth.ts', () => ({
 	auth: {
 		api: {
 			getSession: mockGetSession,

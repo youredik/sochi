@@ -13,11 +13,11 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 
 const signInPasskeyMock = mock()
-mock.module('@/lib/auth-client', () => ({
+await mock.module('@/lib/auth-client', () => ({
 	authClient: { signIn: { passkey: signInPasskeyMock } },
 }))
 const toastError = mock()
-mock.module('sonner', () => ({
+await mock.module('sonner', () => ({
 	toast: { error: toastError, success: mock() },
 }))
 

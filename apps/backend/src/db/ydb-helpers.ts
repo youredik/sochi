@@ -6,6 +6,7 @@ import {
 	Double,
 	DoubleType,
 	FloatType,
+	Int32,
 	Int32Type,
 	Int64,
 	Int64Type,
@@ -42,6 +43,15 @@ export const NULL_INT32 = new Optional(null, new Int32Type())
 
 /** Typed null for nullable `Int64` columns (e.g. `receipt.fdNumber`). */
 export const NULL_INT64 = new Optional(null, new Int64Type())
+
+/**
+ * Bind a number (or null) to a nullable `Int32` column (e.g. `channelReview.
+ * ratingOverall` 1–5). Bare `${num}` infers Int64 → mismatch на nullable Int32.
+ * Same wrap-or-NULL pattern as `int64Opt` / `textOpt`.
+ */
+export function int32Opt(value: number | null): Optional<Int32Type> {
+	return value === null ? NULL_INT32 : new Optional(new Int32(value), new Int32Type())
+}
 
 /** Typed null for nullable `Float` columns. */
 export const NULL_FLOAT = new Optional(null, new FloatType())

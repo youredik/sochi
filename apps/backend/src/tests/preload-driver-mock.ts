@@ -33,7 +33,7 @@ const fakeDriver = {
 	},
 } as unknown as import('@ydbjs/core').Driver
 
-mock.module('../db/driver.ts', () => ({
+await mock.module('../db/driver.ts', () => ({
 	driver: fakeDriver,
 	readyDriver: async () => {},
 	closeDriver: async () => {},

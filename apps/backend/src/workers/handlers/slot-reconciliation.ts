@@ -66,7 +66,7 @@
 
 import type { TX } from '@ydbjs/query'
 import { dateFromIso, toJson, toTs } from '../../db/ydb-helpers.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 import type { HandlerLogger } from './refund-creator.ts'
 
 /** Practical upper bound on slots per night — > any plausible hotel capacity. */
@@ -111,14 +111,14 @@ export function createSlotReconciliationHandler(log: HandlerLogger) {
 			log.warn({ key }, 'slot_reconciliation: malformed booking event key — skipping')
 			return
 		}
-		const tenantId = String(key[0])
-		const propertyId = String(key[1])
+		const tenantId = cdcStr(key[0])
+		const propertyId = cdcStr(key[1])
 		// PK shape (tenantId, propertyId, checkIn, id) per migration 0004 —
 		// checkIn lives в event.key[2], NOT event.newImage. YDB CDC emits PK
 		// fields в `key` only. Empirically caught 2026-05-18 (slot_reconciliation
 		// «missing or malformed dates» когда newImage.checkIn was always null).
 		const checkIn = asIsoDate(key[2])
-		const bookingId = String(key[3])
+		const bookingId = cdcStr(key[3])
 
 		const status = event.newImage.status
 		if (typeof status !== 'string') {

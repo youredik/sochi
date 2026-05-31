@@ -183,7 +183,7 @@ describe('MCP server (Round 13 + Round 14 self-review #3 + #4)', () => {
 		}
 	})
 
-	test('[MCP-E4-3] manifest exposes all 4 tools (3 demo + 1 AI)', async () => {
+	test('[MCP-E4-3] manifest exposes all 5 tools (3 demo + 2 AI)', async () => {
 		const app = mount()
 		const res = await app.request('/api/mcp/manifest')
 		const body = (await res.json()) as { tools: string[] }
@@ -191,6 +191,50 @@ describe('MCP server (Round 13 + Round 14 self-review #3 + #4)', () => {
 		expect(body.tools).toContain('sepshn.demo.get_property_summary')
 		expect(body.tools).toContain('sepshn.demo.list_recent_demo_bookings')
 		expect(body.tools).toContain('sepshn.ai.generate_property_description')
+		expect(body.tools).toContain('sepshn.ai.draft_review_reply')
+	})
+
+	test('[MCP-RR1] draft_review_reply: empty reviewText → isError (input-validated, no AI)', async () => {
+		const app = mount()
+		const res = await app.request('/api/mcp/rpc', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 'rr1',
+				method: 'tools/call',
+				params: { name: 'sepshn.ai.draft_review_reply', arguments: { reviewText: '   ' } },
+			}),
+		})
+		const body = (await res.json()) as {
+			result: { isError?: boolean; structuredContent: { kind: string; reason?: string } }
+		}
+		expect(body.result.isError).toBe(true)
+		expect(body.result.structuredContent.kind).toBe('rejected')
+		expect(body.result.structuredContent.reason).toBe('reviewText_required')
+	})
+
+	test('[MCP-RR2] draft_review_reply: reviewText > 2000 chars → isError (length cap, no AI)', async () => {
+		const app = mount()
+		const res = await app.request('/api/mcp/rpc', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 'rr2',
+				method: 'tools/call',
+				params: {
+					name: 'sepshn.ai.draft_review_reply',
+					arguments: { reviewText: 'я'.repeat(2001) },
+				},
+			}),
+		})
+		const body = (await res.json()) as {
+			result: { isError?: boolean; structuredContent: { kind: string; reason?: string } }
+		}
+		expect(body.result.isError).toBe(true)
+		expect(body.result.structuredContent.kind).toBe('rejected')
+		expect(body.result.structuredContent.reason).toBe('review_too_long')
 	})
 
 	test('[MCP7] tools/call с unknown tool name → -32601', async () => {

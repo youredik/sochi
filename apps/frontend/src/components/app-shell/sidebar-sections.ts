@@ -15,11 +15,13 @@
  *   | profile         |   ✓   |    ✓    |   ✓   | compliance:read OR amenity:read            |
  *   | inventory       |   ✓   |    ✓    |   ✗   | room:update                                |
  *   | guests          |   ✓   |    ✓    |   ✓   | migrationRegistration:read                 |
+ *   | reviews         |   ✓   |    ✓    |   ✗   | review:read                                |
  *   | channels        |   ✓   |    ✓    |   ✗   | report:read                                |
  *   | tax             |   ✓   |    ✓    |   ✗   | report:read                                |
  *   | notifications   |   ✓   |    ✓    |   ✗   | notification:read                          |
+ *   | demo            |   ✓   |    ✓    |   ✗   | room:update                                |
  *
- *   Staff sees 3 (grid + profile + guests). Manager + owner see all 8.
+ *   Staff sees 3 (grid + profile + guests). Manager + owner see all 10.
  *
  * Adding a new section:
  *   1. Land the route file under `apps/frontend/src/routes/`.
@@ -36,6 +38,7 @@ import {
 	FileSpreadsheetIcon,
 	LayersIcon,
 	type LucideIcon,
+	MessageSquareTextIcon,
 	NetworkIcon,
 	SparklesIcon,
 	UsersIcon,
@@ -119,6 +122,17 @@ export const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
 		icon: UsersIcon,
 		to: '/o/$orgSlug/admin/migration-registrations',
 		isVisible: (role) => hasPermission(role, { migrationRegistration: ['read'] }),
+	},
+	{
+		// AI review-reply (2026-05-30) — отзывы из каналов + ИИ-ответ (YandexGPT).
+		// owner+manager (guest-comms + публичный ответ от лица объекта); staff
+		// не видит — тот же predicate-класс что report / channels.
+		id: 'reviews',
+		labelRu: 'Отзывы',
+		ariaLabelRu: 'Отзывы гостей из каналов и ИИ-ответы',
+		icon: MessageSquareTextIcon,
+		to: '/o/$orgSlug/reviews',
+		isVisible: (role) => hasPermission(role, { review: ['read'] }),
 	},
 	{
 		id: 'channels',

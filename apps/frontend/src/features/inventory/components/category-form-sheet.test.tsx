@@ -46,7 +46,7 @@ const updateMutateAsync = mock(async () => ({}))
 const createState = { isPending: false }
 const updateState = { isPending: false }
 
-mock.module('@tanstack/react-query', () => ({
+await mock.module('@tanstack/react-query', () => ({
 	useMutation: (() => {
 		let callIdx = 0
 		return () => {
@@ -64,7 +64,7 @@ mock.module('@tanstack/react-query', () => ({
 	queryOptions: <T,>(opts: T) => opts,
 }))
 
-mock.module('sonner', () => ({
+await mock.module('sonner', () => ({
 	toast: { success: () => {}, error: () => {} },
 }))
 

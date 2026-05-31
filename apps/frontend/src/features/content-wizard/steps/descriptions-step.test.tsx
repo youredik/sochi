@@ -49,12 +49,12 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, type Mock, test, mock } from 'bun:test'
 
-mock.module('../../../lib/use-can.ts', () => ({
+await mock.module('../../../lib/use-can.ts', () => ({
 	useCan: mock(() => true),
 	useCurrentRole: mock(() => 'owner'),
 }))
 
-mock.module('../hooks/use-descriptions.ts', () => ({
+await mock.module('../hooks/use-descriptions.ts', () => ({
 	useDescriptions: mock(() => ({ data: [], isLoading: false, error: null })),
 	useUpsertDescription: mock(() => ({ mutateAsync: mock(), isPending: false })),
 }))

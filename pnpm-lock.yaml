@@ -15,6 +15,7 @@ overrides:
   ws@<8.20.1: ^8.20.1
   qs@<6.15.2: ^6.15.2
   langsmith@<0.6.0: ^0.6.0
+  playwright-core: 1.60.0
 
 importers:
 
@@ -22,7 +23,7 @@ importers:
     devDependencies:
       '@axe-core/playwright':
         specifier: 4.11.3
-        version: 4.11.3(playwright-core@1.61.0-alpha-2026-05-13)
+        version: 4.11.3(playwright-core@1.60.0)
       '@biomejs/biome':
         specifier: ^2.4.16
         version: 2.4.16
@@ -207,6 +208,9 @@ importers:
       read-excel-file:
         specifier: ^9.0.10
         version: 9.0.10
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(happy-dom@20.9.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@25.9.1)(typescript@6.0.3))(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.21.0)(yaml@2.9.0))
 
   apps/frontend:
     dependencies:
@@ -610,7 +614,7 @@ packages:
   '@axe-core/playwright@4.11.3':
     resolution: {integrity: sha512-h/kfksv4F0cVIDlKpT4700OehdRgpvuVskuQ2nb7/JmtWUXpe9ftHAPtwyXGvVSsa6SJ64A9ER7Zrzc/sIvC4w==}
     peerDependencies:
-      playwright-core: '>= 1.0.0'
+      playwright-core: 1.60.0
 
   '@babel/code-frame@7.29.0':
     resolution: {integrity: sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==}
@@ -7239,11 +7243,6 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  playwright-core@1.61.0-alpha-2026-05-13:
-    resolution: {integrity: sha512-TtywR1/PRVAwOYioKwIcn+TcRZqWLd2XRW7vrbG7qoiPWpk+f1JACLfgYHgn8dxUfQrUJhd5BoocmKO/uxPetg==}
-    engines: {node: '>=18'}
-    hasBin: true
-
   playwright@1.60.0:
     resolution: {integrity: sha512-hheHdokM8cdqCb0lcE3s+zT4t4W+vvjpGxsZlDnikarzx8tSzMebh3UiFtgqwFwnTnjYQcsyMF8ei2mCO/tpeA==}
     engines: {node: '>=18'}
@@ -9011,10 +9010,10 @@ snapshots:
 
   '@aws/lambda-invoke-store@0.2.4': {}
 
-  '@axe-core/playwright@4.11.3(playwright-core@1.61.0-alpha-2026-05-13)':
+  '@axe-core/playwright@4.11.3(playwright-core@1.60.0)':
     dependencies:
       axe-core: 4.11.4
-      playwright-core: 1.61.0-alpha-2026-05-13
+      playwright-core: 1.60.0
 
   '@babel/code-frame@7.29.0':
     dependencies:
@@ -15618,8 +15617,6 @@ snapshots:
 
   playwright-core@1.60.0: {}
 
-  playwright-core@1.61.0-alpha-2026-05-13: {}
-
   playwright@1.60.0:
     dependencies:
       playwright-core: 1.60.0
@@ -15628,7 +15625,7 @@ snapshots:
 
   playwright@1.61.0-alpha-2026-05-13:
     dependencies:
-      playwright-core: 1.61.0-alpha-2026-05-13
+      playwright-core: 1.60.0
     optionalDependencies:
       fsevents: 2.3.2
 

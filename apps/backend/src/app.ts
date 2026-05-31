@@ -66,6 +66,8 @@ import { createPropertyContentFactory } from './domains/property/property-conten
 import { createPropertyContentRoutes } from './domains/property/property-content.routes.ts'
 import { createPropertyBlockFactory } from './domains/property-block/property-block.factory.ts'
 import { createPropertyBlockRoutes } from './domains/property-block/property-block.routes.ts'
+import { createReviewFactory } from './domains/review/review.factory.ts'
+import { createReviewRoutes } from './domains/review/review.routes.ts'
 import { createRateFactory } from './domains/rate/rate.factory.ts'
 import { createRateRoutes } from './domains/rate/rate.routes.ts'
 import { createRatePlanFactory } from './domains/ratePlan/ratePlan.factory.ts'
@@ -277,6 +279,12 @@ const propertyBlockFactory = createPropertyBlockFactory(
 	propertyFactory.service,
 	roomFactory.service,
 )
+// AI review-reply (2026-05-30) — отзывы из каналов → YandexGPT-черновик ответа →
+// публикация обратно в канал. resolvePropertyName из propertyService для подписи.
+const reviewFactory = createReviewFactory(sql, async (tenantId, propertyId) => {
+	const property = await propertyFactory.service.getById(tenantId, propertyId)
+	return property?.name ?? null
+})
 const activityFactory = createActivityFactory(sql)
 const notificationFactory = createNotificationFactory(sql, activityFactory.repo)
 const folioFactory = createFolioFactory(sql)
@@ -1161,6 +1169,7 @@ const routes = app
 			idempotency,
 		),
 	)
+	.route('/api/v1', createReviewRoutes(reviewFactory.service))
 	// G10 (2026-05-16) — SSE real-time для chessboard. EventSource subscribes
 	// per propertyId; CDC consumer fans booking events out via broadcaster.
 	.route('/api/v1', createSseRoutes(bookingEventBroadcaster, propertyFactory.service))

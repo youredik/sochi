@@ -37,9 +37,7 @@
  */
 import type { FolioKind } from '@horeca/shared'
 import { newId } from '@horeca/shared'
-import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import {
 	FolioCurrencyMismatchError,

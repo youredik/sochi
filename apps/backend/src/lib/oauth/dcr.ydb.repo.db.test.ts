@@ -11,7 +11,7 @@
  * driver не доступен (CI without YDB sidecar).
  */
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { sql } from '../../db/index.ts'
 import type { DcrStore } from './dcr.ts'
 import { createYdbDcrStore, verifySecret } from './dcr.ydb.repo.ts'

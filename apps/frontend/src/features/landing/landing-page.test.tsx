@@ -40,7 +40,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 const reachGoalMock = mock()
-mock.module('../../lib/yandex-metrika.ts', () => ({
+await mock.module('../../lib/yandex-metrika.ts', () => ({
 	reachGoal: reachGoalMock,
 }))
 

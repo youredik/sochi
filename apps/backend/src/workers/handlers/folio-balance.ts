@@ -29,7 +29,7 @@ import type { FolioLine } from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
 import { NULL_TEXT, timestampOpt, toTs } from '../../db/ydb-helpers.ts'
 import { computeBalanceMinor, computeChargesMinor } from '../../domains/folio/lib/folio-balance.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 import type { HandlerLogger } from './refund-creator.ts'
 
 const FOLIO_BALANCE_WRITER_ACTOR_ID = 'system:folio_balance_writer'
@@ -95,7 +95,7 @@ export function createFolioBalanceHandler(log: HandlerLogger, source: FolioBalan
 
 		const key = event.key ?? []
 		if (key[0] === undefined) return
-		const tenantId = String(key[0])
+		const tenantId = cdcStr(key[0])
 
 		// Resolve folioId per source.
 		let folioId: string | null = null
@@ -107,11 +107,11 @@ export function createFolioBalanceHandler(log: HandlerLogger, source: FolioBalan
 				log.debug({ tenantId }, 'folio_balance: payment event has no folioId — skipping')
 				return
 			}
-			folioId = String(folioField)
+			folioId = cdcStr(folioField)
 		} else if (source === 'refund') {
 			// refund PK 3D: (tenantId, paymentId, id) → key[1] is paymentId.
 			if (key[1] === undefined) return
-			const paymentId = String(key[1])
+			const paymentId = cdcStr(key[1])
 			const [paymentRows = []] = await tx<{ folioId: string | null }[]>`
 				SELECT folioId FROM payment
 				WHERE tenantId = ${tenantId} AND id = ${paymentId} LIMIT 1

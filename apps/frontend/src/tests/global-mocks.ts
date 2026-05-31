@@ -73,7 +73,7 @@ export const globalMocks = _mocks
 // vi.mock factory snapshots the vi.fn ref at factory time and downstream
 // `globalMocks.navigate.mockReturnValue(...)` doesn't propagate
 // (canonical stankoff observation 2026-05-07).
-mock.module('@tanstack/react-router', () => {
+await mock.module('@tanstack/react-router', () => {
 	return {
 		...actualRouter,
 		useNavigate: () => _mocks.navigate,
@@ -123,7 +123,7 @@ mock.module('@tanstack/react-router', () => {
 
 // Mock sonner globally. `Toaster` returns null (unit tests don't render
 // notifications visually); `toast.*` are vi.fn so tests assert calls.
-mock.module('sonner', () => ({
+await mock.module('sonner', () => ({
 	toast: _mocks.toast,
 	Toaster: () => null,
 }))

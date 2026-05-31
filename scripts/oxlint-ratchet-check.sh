@@ -20,6 +20,15 @@ if [ ! -f "$BASELINE_FILE" ]; then
 fi
 
 OXLINT_OUT=$(pnpm exec oxlint --type-aware --format=github 2>&1 || true)
+
+# Fail-closed: a crashed oxlint (bad config / panic) emits NO `::warning` lines,
+# which would otherwise be miscounted as a clean 0 — a false-green. Detect it.
+if echo "$OXLINT_OUT" | grep -qiE "Failed to parse|panicked"; then
+	echo "ERROR: oxlint did not run cleanly (config parse / panic) — refusing to report 0."
+	echo "$OXLINT_OUT" | grep -iE "Failed to parse|panic" | head -5
+	exit 2
+fi
+
 OXLINT_ERR=$(echo "$OXLINT_OUT" | grep -c '^::error' || true)
 OXLINT_WARN=$(echo "$OXLINT_OUT" | grep -c '^::warning' || true)
 OXLINT_ERR=${OXLINT_ERR:-0}

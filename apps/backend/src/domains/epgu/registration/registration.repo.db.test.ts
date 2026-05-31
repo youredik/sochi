@@ -24,11 +24,9 @@
  *
  * Requires local YDB (docker-compose up ydb).
  */
-import { afterAll, beforeAll, describe, expect, jest, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { getTestSql, setupTestDb, teardownTestDb } from '../../../tests/db-setup.ts'
 import { createMigrationRegistrationRepo } from './registration.repo.ts'
-
-jest.setTimeout(60_000)
 
 const RUN_ID = Date.now().toString(36)
 const TENANT_A = `org_mreg_a_${RUN_ID}`

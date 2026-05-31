@@ -8,7 +8,7 @@
  * Empirically validates YDB persistence + multi-instance coherence
  * + cross-tenant isolation (no leak between tenantA + tenantB).
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 
 import { getTestSql, setupTestDb, teardownTestDb } from '../../../../tests/db-setup.ts'
 import { createYdbYandexStore } from './store.ydb.ts'

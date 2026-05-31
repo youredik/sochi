@@ -47,7 +47,7 @@
 import { newId } from '@horeca/shared'
 import type { TX } from '@ydbjs/query'
 import { NULL_TEXT, NULL_TIMESTAMP, toTs } from '../../db/ydb-helpers.ts'
-import type { CdcEvent } from '../cdc-handlers.ts'
+import { cdcStr, type CdcEvent } from '../cdc-handlers.ts'
 
 const DISPUTE_LOST_STATUS = 'lost'
 const REFUND_CREATOR_ACTOR_ID = 'system:refund_creator_writer'
@@ -84,9 +84,9 @@ export function createRefundCreatorHandler(log: HandlerLogger) {
 			log.warn({ key }, 'refund_creator: malformed dispute event key — skipping')
 			return
 		}
-		const tenantId = String(key[0])
-		const paymentId = String(key[1])
-		const disputeId = String(key[2])
+		const tenantId = cdcStr(key[0])
+		const paymentId = cdcStr(key[1])
+		const disputeId = cdcStr(key[2])
 
 		// Pull money/provider fields from newImage (PK columns are NOT in
 		// newImage per CDC contract — but amountMinor / currency / providerCode

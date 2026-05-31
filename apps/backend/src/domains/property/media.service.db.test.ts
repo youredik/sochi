@@ -17,9 +17,7 @@
  */
 import type { PropertyMediaCreateInput } from '@horeca/shared'
 import sharp from 'sharp'
-import { afterAll, beforeAll, describe, expect, test, jest } from 'bun:test'
-
-jest.setTimeout(60_000)
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { getTestSql, setupTestDb, teardownTestDb } from '../../tests/db-setup.ts'
 import { createMediaRepo } from './media.repo.ts'
